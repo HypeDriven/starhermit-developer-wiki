@@ -67,7 +67,7 @@ Base: `http://localhost:5000/api/v1/realtime/rooms` (some local setups use port 
 | POST | `/rooms/{id}/open` | host | Open to matchmaking; starts the backfill countdown |
 | POST | `/rooms/quick-join` | anyone | Join the oldest open room with a free seat for the game |
 | POST | `/rooms/{id}/start` | host | Backfill empty seats with AI, status → `Playing` |
-| POST | `/rooms/{id}/leave` | participants | Leave; host leaving in Lobby/Open transfers the host role |
+| POST | `/rooms/{id}/leave` | participants | Leave; in Lobby/Open the seat is removed, in Playing the seat converts to an AI participant |
 | POST | `/rooms/{id}/seats` | host | Re-balance seats before the match starts |
 | POST | `/rooms/{id}/result` | host | Submit the result; room → `Closed` |
 | GET | `/rooms/mine` | anyone | Caller's active room, if any (reconnect) |
@@ -111,7 +111,12 @@ Base: `http://localhost:5000/api/v1/realtime/rooms` (some local setups use port 
 
 `400` for seats outside the room's team/slot bounds or unknown participants; `409` if two participants would share a seat.
 
-`POST /rooms/{id}/leave`: marks the caller as left. If the **host** leaves while the room is in `Lobby`/`Open`, the host role transfers to the longest-serving remaining human participant; if no humans remain, the room is `Closed`. Returns the room.
+`POST /rooms/{id}/leave` behaves per room status:
+
+- **Lobby/Open**: the seat is removed. If the **host** leaves, the host role transfers to the longest-serving remaining human participant; if no humans remain, the room is `Closed`.
+- **Playing (AI takeover)**: the match continues — the leaver's seat is **not** removed. Their participant row is converted into an AI seat in place: `isAi: true`, `userId: null`, a fresh unique server-generated nickname, with the same participant `id`, `team`, `slot`, and `joinedAt`. The leaver is immediately freed (the one-active-room rule no longer counts them, so they can create or join another room) while the roster push tells every client an AI now occupies that seat. If the leaver is the **host** and at least one other human remains, the host role transfers to the longest-joined remaining human and the room stays `Playing` (client-side host migration is the game's concern); if no humans remain, the room is `Closed`.
+
+Returns the room.
 
 `POST /rooms/{id}/result` (host only, `Playing` only) records the outcome, closes the room, and fans the result out over the WebSocket:
 
@@ -165,9 +170,16 @@ The server pushes JSON text frames on its own:
 | `MessageTooBig` | Frame over the 8 KB (binary) / 4 KB (text) cap |
 | `PolicyViolation` | Rate-limit violation, disallowed/invalid control frame, connection superseded by a newer one |
 
-## Backfill worker
+## Background sweeps
 
-A background job sweeps every few seconds for `Open` rooms whose `openedAt + backfillAfterSeconds` deadline has passed and performs the same atomic start/backfill as `POST /rooms/{id}/start`. Host force-start and the worker share one code path, and start is idempotent, so a deadline start racing a force-start is safe. AI nicknames are drawn from a server-side name pool with uniqueness enforced per room.
+**Backfill worker.** A background job sweeps every few seconds for `Open` rooms whose `openedAt + backfillAfterSeconds` deadline has passed and performs the same atomic start/backfill as `POST /rooms/{id}/start`. Host force-start and the worker share one code path, and start is idempotent, so a deadline start racing a force-start is safe. AI nicknames are drawn from a server-side name pool with uniqueness enforced per room.
+
+**Stale-room sweep.** A second sweeper closes abandoned rooms, judging "connected" from the live WebSocket registry (not heartbeats):
+
+- A `Playing` room is closed when its host has had **no active WebSocket connection for more than 60 seconds** (a host who never connected is measured from `startedAt`). Guests still connected receive a final roster push showing the room closed.
+- A `Lobby`/`Open` room is closed when it has been **idle for more than 60 minutes** (from `createdAt`, or `openedAt` once open) with **no participants connected**.
+
+A participant who merely loses their connection is not affected: reconnecting the socket (newest connection supersedes) and `GET /rooms/mine` both keep working while the room is alive.
 
 ## Security summary
 
@@ -183,7 +195,8 @@ A background job sweeps every few seconds for `Open` rooms whose `openedAt + bac
 3. **Open**: the host calls `POST /rooms/{id}/open`. Solo players call `POST /rooms/quick-join` and land in the oldest open room with a free seat (on `404` they create and open their own room).
 4. **Connect**: everyone opens `ws/v1/realtime?roomId=…` and watches `roster`/`presence` pushes as seats fill.
 5. **Start**: at the backfill deadline (worker) or when the host force-starts, empty seats become AI participants and the roster freezes. Guests send inputs as binary frames (they reach only the host); the host broadcasts snapshots.
-6. **Finish**: the host POSTs the result; the server clamps scores, stores the result, pushes it to all sockets, and closes the room.
+6. **Leave mid-match**: a player who leaves during `Playing` is replaced where they sat by an AI participant (same seat, new server-generated nickname) and can immediately queue again; if the host leaves, the host role passes to the longest-joined remaining human. A host who simply drops their connection has 60 seconds to reconnect before the stale-room sweep closes the match.
+7. **Finish**: the host POSTs the result; the server clamps scores, stores the result, pushes it to all sockets, and closes the room.
 
 ## See also
 
