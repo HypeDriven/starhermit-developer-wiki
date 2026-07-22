@@ -66,7 +66,7 @@ The score is validated against the definition's `minScore`/`maxScore` and publis
 
 ## Scripted games and Elo
 
-Each scripted game has an elo leaderboard; its id comes from `GET /api/v1/games/{slug}` → `leaderboardId` (see [games.md](games.md)). Scores for it are written ONLY by the platform from the game script's `eloUpdates` — direct submit is refused. The chess client reads it with:
+Each scripted game has an elo leaderboard; its id comes from `GET /api/v1/games/{slug}` → `leaderboardId` (see [games.md](games.md)). Scores for it are written ONLY by the platform from the game script's `eloUpdates` — direct submit is refused. Game clients read entries through the standard paged endpoint; for example, the chess reference implementation requests:
 
 ```
 GET /api/v1/leaderboards/{leaderboardId}/entries?friendsOnly=true&page=1&pageSize=10

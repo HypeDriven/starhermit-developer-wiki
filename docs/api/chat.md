@@ -177,11 +177,11 @@ This is a **pure server→client push channel**: client frames are ignored (only
 | `message_deleted` | `MessageDto` |
 | `game_invite` | `{ "inviteId", "gameSlug", "gameName", "from": { "userId", "username" }, "createdAt" }` |
 
-## In-game chat
+## Chat inside a game session
 
-A game-scoped launch token **cannot** open `ws/v1/chat` — it is blocked because the socket streams all of a user's conversations. Launch tokens **may** use the chat REST API on conversations attached to their own game sessions: the session detail returns a `chatConversationId`, the conversation has type `"game"`, its participants are the two players, and friendship rules are bypassed.
+A game-scoped launch token **cannot** open `ws/v1/chat` — it is blocked because the socket streams all of a user's conversations. Launch tokens **may** use the chat REST API on conversations attached to their own game sessions: the session detail returns a `chatConversationId`, the conversation has type `"game"`, its participants are the session's players, and friendship rules are bypassed.
 
-The pattern used by the [chess reference client](../tutorials/chess-walkthrough.md) is therefore: load history over REST and poll every 5 seconds instead of using the socket.
+Game clients therefore typically load history over REST and poll for new messages instead of using the socket. For example, the [chess reference implementation](../tutorials/chess-walkthrough.md) polls every 5 seconds:
 
 ```http
 GET /api/v1/chat/conversations/{chatConversationId}/messages?page=1&pageSize=50

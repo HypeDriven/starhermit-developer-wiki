@@ -1,6 +1,6 @@
 # GitHub Games
 
-Publish a game straight from a GitHub repository: paste the repo URL, the platform reads the repo's `starhermit.txt` manifest, clones the repo, and serves it at `<slug>.starhermit.com`. Because `/api` and `/ws` are proxied same-origin from that subdomain, the game client needs **no CORS or API-base configuration**. A pinned commit controls which version is live. This is exactly how the [chess reference game](../tutorials/chess-walkthrough.md) is published.
+Publish a game straight from a GitHub repository: paste the repo URL, the platform reads the repo's `starhermit.txt` manifest, clones the repo, and serves it at `<slug>.starhermit.com`. Because `/api` and `/ws` are proxied same-origin from that subdomain, the game client needs **no CORS or API-base configuration**. A pinned commit controls which version is live. The [chess reference implementation](../tutorials/chess-walkthrough.md) is published this way and serves as the reference example of the model.
 
 Base URL: `http://localhost:5000` (some local setups use port `5050`). All routes are under `api/v1/...` and require a JWT unless noted.
 
@@ -139,11 +139,11 @@ Take ownership of a game when your linked GitHub login owns the repository. GitH
 5. **Pin a commit**: `PUT /api/v1/me/github-games/{id}/deployment` with `{ "commit": "<sha>" }`. The pinned commit controls the live version.
 6. **Players launch the game**: it is served at `<slug>.starhermit.com`. The platform launcher mints a launch token via `POST /api/v1/games/<slug>/launch-token` and opens `index.html#game_token=<jwt>` (optionally with `&session_id=<guid>` for invite deep-links).
 
-For the full client-side contract — how the game reads the launch token and talks to the API — see the [chess walkthrough](../tutorials/chess-walkthrough.md).
+For the full client-side contract — how the game reads the launch token and talks to the API — see the [chess walkthrough](../tutorials/chess-walkthrough.md) of the reference implementation.
 
 ## See also
 
 - [games.md](games.md) — game endpoints, launch tokens
 - [game-scripts.md](game-scripts.md) — server-side game scripts
 - [auth.md](auth.md) — JWT and OAuth identity linking
-- [tutorials/chess-walkthrough.md](../tutorials/chess-walkthrough.md) — end-to-end reference game
+- [tutorials/chess-walkthrough.md](../tutorials/chess-walkthrough.md) — end-to-end reference implementation

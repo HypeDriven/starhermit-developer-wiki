@@ -60,7 +60,7 @@ Returns the game definition plus the caller's stats for that game. `404` if no s
 
 ### `POST /api/v1/games/{slug}/launch-token`
 
-Mints a game-scoped JWT (default lifetime 60 minutes) carrying `game_scope={slug}` and no permission claims. A scoped token may re-mint a token for its own game — this is the client refresh pattern: refresh every 45 minutes.
+Mints a game-scoped JWT (default lifetime 60 minutes) carrying `game_scope={slug}` and no permission claims. A scoped token may re-mint a token for its own game — this is the client refresh pattern. Clients should refresh before the token expires; the chess reference client, for example, refreshes every 45 minutes.
 
 ```json
 {
@@ -255,6 +255,8 @@ The full final state JSON as archived by the platform. Participants only.
 
 ### Client → server
 
+The `cmd` envelope is the platform contract; the contents of `data` are defined by each game's script. For example, the chess reference implementation sends a move like this:
+
 ```json
 { "type": "cmd", "data": { "type": "move", "from": "e2", "to": "e4" } }
 ```
@@ -275,25 +277,25 @@ Every command runs through the game script's `onPlayerMessage`. **Nothing is rel
 
 ### Tick service
 
-`GameSessionTimerService` runs the script's `onTick` sweeps inside the Api process: platform default every 60 s (minimum 15 s); the per-game default is 300 s.
+The platform runs the script's `onTick` sweeps on a timer: platform default every 60 s (minimum 15 s); the per-game default is 300 s.
 
 ## Lifecycle of a game
 
-1. **Mint a launch token** — `POST /api/v1/games/{slug}/launch-token`. Refresh every 45 minutes.
+1. **Mint a launch token** — `POST /api/v1/games/{slug}/launch-token`. Clients should refresh it before expiry (the chess reference client refreshes every 45 minutes).
 2. **Fetch game state** — `GET /api/v1/games/{slug}` for info + your stats; `GET .../sessions/mine` for games in progress; `GET .../invites` and `GET /api/v1/me/game-invites` for pending invites; `GET .../replays/mine` for history.
 3. **Find an opponent**, one of three ways:
    - **Matchmaking:** `POST .../matchmaking`, then poll `GET .../matchmaking` every 3 s until `status` is `matched` (the response carries `sessionId`). `DELETE .../matchmaking` to cancel.
    - **Invite flow:** pick a friend from `GET /api/v1/me/friends` (see [Friends](friends.md)), `POST .../invites` with `{ "toUserId": "..." }`; the invitee calls `POST .../invites/{inviteId}/accept`, which creates the session.
    - **AI practice:** `POST .../sessions/ai`.
 4. **Load the session** — `GET .../sessions/{sessionId}`.
-5. **Connect the WebSocket** — `ws/v1/games?sessionId={guid}` with the launch token, then send an initial sync: `{"type":"cmd","data":{"type":"sync"}}`.
+5. **Connect the WebSocket** — `ws/v1/games?sessionId={guid}` with the launch token, then send whatever initial-sync command the game's script defines — the chess reference implementation, for example, sends `{"type":"cmd","data":{"type":"sync"}}`.
 6. **Play** — exchange `cmd`/`game` frames as defined by the game's script.
 7. **Result** — the script ends the game; the platform archives the replay and publishes elo updates to the leaderboard.
 8. **Replay** — `GET .../replays/{sessionId}` for the full final state.
 
 ### Example: chess command shapes
 
-The following payload shapes come from the [reference chess client](https://github.com/HypeDriven/starhermit-chess). **They are defined by each game's script, not by the platform.** The platform envelope is only `cmd` / `game` / `error` / `presence`; the contents of `data` are entirely script-owned.
+The following payload shapes are the example: how the chess [reference implementation](https://github.com/HypeDriven/starhermit-chess) fills in `data`. **They are defined by each game's script, not by the platform** — every game defines its own command set and broadcast payloads in its own script. The platform envelope is only `cmd` / `game` / `error` / `presence`; the contents of `data` are entirely script-owned.
 
 Client commands (sent as `{"type":"cmd","data":{...}}`):
 

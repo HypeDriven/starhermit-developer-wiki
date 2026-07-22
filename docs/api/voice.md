@@ -108,15 +108,15 @@ Envelope: `{ "event": "<name>", "data": { } }`.
 | `voice.speaking` | `{ "roomId", "userId", "speaking" }` |
 | `voice.rtc` | `{ "roomId", "from", "payload" }` |
 
-## Integration pattern from the chess client
+## Example integration pattern (from the chess reference implementation)
 
-Voice is opt-in per game session. The [chess reference client's](../tutorials/chess-walkthrough.md) `enable()` flow:
+Voice is opt-in per game session. A typical client `enable()` flow:
 
 1. `GET /api/v1/voice/rooms?conversationId=<chatConversationId>` to find an existing room, else `POST /api/v1/voice/rooms` to create one.
 2. `POST /api/v1/voice/rooms/{roomId}/join`.
 3. Open `ws/v1/voice?roomId=<guid>`.
 
-Audio runs over WebRTC P2P with perfect negotiation; signaling is exchanged through the `rtc` control messages (`{ "sdp": … }` / `{ "ice": … }` payloads). The server-relayed Opus binary path is the fallback.
+In the [chess reference implementation](../tutorials/chess-walkthrough.md), audio runs over WebRTC P2P with perfect negotiation; signaling is exchanged through the `rtc` control messages (`{ "sdp": … }` / `{ "ice": … }` payloads), with the server-relayed Opus binary path as the fallback.
 
 Game-scoped launch tokens **may** use the voice REST and WebSocket for rooms attached to their own game sessions.
 

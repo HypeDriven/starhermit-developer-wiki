@@ -1,6 +1,6 @@
 # Game Scripts
 
-Every StarHermit game is defined by a **single JavaScript file** executed server-side in a sandboxed [Jint](https://github.com/sebastienros/jint) engine. The script is the sole authority on the game's rules: it validates every player command, mutates state, decides what each client may see, computes Elo, and ends games. Clients have zero authority. This page documents the script contract; for the REST/WebSocket surface that clients use, see [Games API](games.md). The worked example throughout is the reference implementation, [HypeDriven/starhermit-chess](https://github.com/HypeDriven/starhermit-chess).
+Every StarHermit game is defined by a **single JavaScript file** executed server-side in a sandboxed [Jint](https://github.com/sebastienros/jint) engine. The script is the sole authority on the game's rules: it validates every player command, mutates state, decides what each client may see, computes Elo, and ends games. Clients have zero authority. This page documents the script contract every game implements; for the REST/WebSocket surface that clients use, see [Games API](games.md). The worked example throughout is chess — the reference implementation at [HypeDriven/starhermit-chess](https://github.com/HypeDriven/starhermit-chess).
 
 ## Execution model
 
@@ -41,7 +41,7 @@ ctx = {
   },
   message: {                       // onPlayerMessage only
     from: "7c9e6679-...",          // the authenticated user id — trusted
-    data: { type: "move", from: "e2", to: "e4" }  // client payload — untrusted
+    data: { type: "move", from: "e2", to: "e4" }  // client payload — untrusted (example: a chess move)
   }
 }
 ```
@@ -69,7 +69,7 @@ return {
     "7c9e6679-...": 1216,
     "9b2f8c1a-...": 1184
   },
-  result: { kind: "white-win", reason: "checkmate" }  // ends the session
+  result: { kind: "white-win", reason: "checkmate" }  // ends the session (example: a chess result)
 };
 ```
 
@@ -89,7 +89,7 @@ Scripts run under operator-tunable budgets:
 - A statement cap per invocation
 - A per-player state byte budget — all state documents must stay serializable and small
 
-The chess script keeps documents small on purpose: its per-player doc is
+The chess reference script keeps its documents small on purpose — as an example of staying within budget, its per-player doc is
 
 ```js
 {
@@ -119,6 +119,8 @@ sessionState.summary = {
 `GET /api/v1/games/{slug}/sessions/mine` reads `summary` to compute `myTurn` and `deadline` for the caller. Keep it accurate on every state change; keep everything else wherever your script likes.
 
 ## Worked example: the chess script
+
+Everything in this section is specific to the chess reference implementation — the state shape, board encoding, command set, game-over reasons, Elo constant, AI, and timeouts below are chess's own choices, defined in its script. None of it is platform behavior; your game defines its own equivalents.
 
 Session state:
 
@@ -171,10 +173,10 @@ Publishing flows through the GitHub integration — see [GitHub Games](github-ga
 ## Best practices
 
 - **Validate every command.** Treat `ctx.message.data` as hostile: check types, ranges, turn order, and game status before touching state.
-- **Keep invocations fast and state small.** You have ~250 ms and a byte budget per player doc; chess caps `recentGames` at 30 entries for this reason.
+- **Keep invocations fast and state small.** You have ~250 ms and a byte budget per player doc; the chess reference script, for example, caps `recentGames` at 30 entries for this reason.
 - **Use `ctx.now` / `ctx.random` only.** No `Date`, no `Math.random` — the host owns the clock and the dice.
 - **Design `broadcast` messages as the only client contract.** Clients must be able to render the entire game from what the script sends; anything not broadcast does not exist for them.
-- **One file, two surfaces.** The same file can double as client-side rules via a separate export: chess exposes `globalThis.chessRules` for the browser (move preview, validation hints) and `globalThis.game` for the host. One source of truth, zero authority on the client.
+- **One file, two surfaces.** The same file can double as client-side rules via a separate export: the chess reference implementation, for example, exposes `globalThis.chessRules` for the browser (move preview, validation hints) and `globalThis.game` for the host. One source of truth, zero authority on the client.
 - **Always end games via `result`** so the platform archives the replay and publishes Elo updates.
 
 See the [Chess Walkthrough](../tutorials/chess-walkthrough.md) for a line-by-line tour, and [AI Prompts](../tutorials/ai-prompts.md) for help generating your own script.

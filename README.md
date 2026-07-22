@@ -4,22 +4,24 @@ Documentation for the **StarHermit public API** — a game/software
 distribution + social platform: users & OAuth auth, friends, text chat, realtime voice,
 publishers, a software catalog with builds/assets, entitlements, achievements, leaderboards,
 a peer relay, and **scripted server-authoritative multiplayer games** whose rules live in a
-single JavaScript file executed server-side.
+single JavaScript file executed server-side. This wiki is a general integration guide for
+**any** game targeting the platform.
 
-The reference implementation used throughout this wiki is
+The reference example used throughout this wiki is
 [HypeDriven/starhermit-chess](https://github.com/HypeDriven/starhermit-chess) — a
 correspondence-chess game (no-build static site + one server-side JS rules file) that uses
 launch tokens, elo matchmaking, friend invites, the gameplay WebSocket, in-game chat, voice,
-leaderboards, and replays.
+leaderboards, and replays. It is one concrete implementation of the patterns described here,
+not the subject of the docs.
 
 ## Where to start
 
 - **[Getting started](docs/getting-started.md)** — base URLs, versioning, auth model, and the
   two ways to integrate (scripted platform game published from GitHub, or an external client
   calling the REST/WS API directly).
-- **[Tutorial: how the chess reference game uses StarHermit, feature by feature](docs/tutorials/chess-walkthrough.md)** —
-  the full lifecycle from launch token to replay viewer, with the exact calls the reference
-  client makes.
+- **[Tutorial: end-to-end integration walkthrough (using the chess reference example)](docs/tutorials/chess-walkthrough.md)** —
+  the full lifecycle from launch token to replay viewer, with the exact calls a game client
+  makes, illustrated by the chess reference implementation.
 - **[Tutorial: use AI to wire StarHermit into your game](docs/tutorials/ai-prompts.md)** —
   copy-pasteable prompts for an AI coding assistant, one per feature plus an all-together
   mega-prompt.

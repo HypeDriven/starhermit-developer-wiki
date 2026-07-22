@@ -9,6 +9,8 @@ How to use them:
 - **Give the AI the relevant wiki page as context.** Each section names the page; paste its contents into the conversation or point the tool at the file. The prompts reference exact endpoints, and the reference pages are the source of truth for field names.
 - Verify each feature against a running backend (`http://localhost:5000`) before moving on — see the tips at the end.
 
+These prompts work for any game. For reference code, point the AI at the chess reference implementation — [HypeDriven/starhermit-chess](https://github.com/HypeDriven/starhermit-chess) — a complete worked example of every pattern on this page.
+
 ## 1. Project bootstrap: manifest + same-origin net layer
 
 Context page: [github-games.md](../api/github-games.md), [auth.md](../api/auth.md), [games.md](../api/games.md).
@@ -222,14 +224,18 @@ Read docs/api/games.md (pasted below). Build a replay viewer:
 
 1. List my recent games with GET /api/v1/games/<slug>/replays/mine?limit=10.
 2. Opening one calls GET /api/v1/games/<slug>/replays/{sessionId}, which
-   returns { sessionId, players, finishedAt, result: { kind, reason, at,
-   …, moveCount, eloBefore, eloAfter }, state }.
-3. Step through state.game.moves (my game's move log) one move at a time,
-   applying each to the shared rules module from server.js running
+   returns { sessionId, players, finishedAt, result, state } — the
+   shapes of result and state are defined by my game's script.
+3. Step through my game's move log from state one move at a time (the
+   chess reference implementation stores it at state.game.moves; my
+   script defines its own shape), applying each to the shared rules
+   module from server.js running
    client-side — the same file the platform executes — so playback can
    never drift from the real rules. Add first/prev/next/last controls and
    auto-play.
-4. Show the result block (outcome, reason, elo before/after) as a header.
+4. Show the result block as a header (outcome, reason, and whatever
+   else my script's result object carries — the chess reference
+   implementation, for example, includes elo before/after).
 5. The viewer is entirely local after the initial GET — no per-move
    requests.
 ```
@@ -344,7 +350,7 @@ to verify it against http://localhost:5000.
 - **Keep prompts scoped to one feature.** The mega-prompt works, but one-feature prompts with a verification step between them fail less and are easier to debug when they do.
 - **Always hand the AI the exact wiki page.** The prompts reference endpoint paths, but the reference pages carry the field names and error shapes. Paste the page or point the tool at the file — don't paraphrase it from memory.
 - **Ask for a verification artifact per feature.** A small throwaway test page or a curl script exercised against a running backend at `http://localhost:5000` (or `5050` in some local setups) catches integration mistakes immediately.
-- **Launch tokens expire after 60 minutes.** For local testing, copy the pattern from chess's `index.html`: a small auth panel that takes a user JWT + slug + optional API base and calls `Net.launchToken(jwt, slug)` itself, storing to `localStorage['chess.apiBase']` and `sessionStorage['chess.gameToken']`. It saves you from re-minting tokens through the launcher on every test run.
+- **Launch tokens expire after 60 minutes.** For local testing, copy the local-dev panel pattern from the reference implementation (`index.html` in the [chess example repo](https://github.com/HypeDriven/starhermit-chess)): a small auth panel that takes a user JWT + slug + optional API base and mints a launch token itself, caching it under its own storage keys (the chess example uses `localStorage['chess.apiBase']` and `sessionStorage['chess.gameToken']` — substitute your own slug). It saves you from re-minting tokens through the launcher on every test run.
 - **Refresh cadence matters.** If your test sessions run long, make sure the 45-minute refresh is actually wired before you blame the backend for 401s.
 
-For the narrative version of how these pieces fit together in a shipped game, see the [chess walkthrough](chess-walkthrough.md); for first deploy, the [getting started guide](../getting-started.md).
+For the narrative version of how these pieces fit together in a shipped game, see the [chess walkthrough](chess-walkthrough.md) — the reference example; for first deploy, the [getting started guide](../getting-started.md).

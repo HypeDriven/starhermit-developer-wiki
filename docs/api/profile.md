@@ -1,6 +1,6 @@
 # Profile
 
-The profile API covers the authenticated user's own account (`/api/v1/me/...`), public lookups of other users, public keys, linked identities, privacy settings, entitlements, and the presence heartbeat. The `MeController` uses absolute routes and requires authorization at the class level; presence is handled by the `PresenceController`.
+The profile API covers the authenticated user's own account (`/api/v1/me/...`), public lookups of other users, public keys, linked identities, privacy settings, entitlements, and the presence heartbeat. All routes require authorization.
 
 Errors are returned as `{"error":"..."}` with standard status codes (400/401/403/404/409/422/429).
 
@@ -207,4 +207,4 @@ Everything else returns 403 under the game-scope fencing described in [Authentic
 
 ## Display-name convention
 
-The chess client displays **nicknames**, never usernames, and falls back to `"Player " + id.slice(0,8)` when no nickname is set. External game clients should follow the same convention when rendering opponents.
+Game UIs typically display **nicknames** rather than usernames when rendering opponents, falling back to something like `"Player " + id.slice(0,8)` when no nickname is set. The chess reference implementation follows this convention; other game clients should do the same.

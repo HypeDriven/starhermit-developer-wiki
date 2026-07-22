@@ -57,6 +57,6 @@ Returns 204. Requires an entitlement to the title (see [catalog.md](catalog.md))
 
 Publisher-side management — defining, updating, and deleting achievement definitions — lives in [publisher.md](publisher.md).
 
-Note: the chess reference game does NOT use achievements; they are for catalog-distributed titles (see [../tutorials/chess-walkthrough.md](../tutorials/chess-walkthrough.md)).
+Note: achievements target catalog-distributed titles; scripted GitHub games typically don't use them — the [chess reference implementation](../tutorials/chess-walkthrough.md), for example, does NOT use achievements.
 
 Errors are `{"error": "..."}` with standard status codes.

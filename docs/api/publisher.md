@@ -6,7 +6,7 @@ Base URL: `http://localhost:5000` (some local setups use port `5050`). All route
 
 ## Publishers and members
 
-Route prefix: `api/v1/publisher` (PublisherController).
+Route prefix: `api/v1/publisher`.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -122,7 +122,7 @@ Both endpoints return a JSON object mapping title id to count:
 
 ## Achievements
 
-PublisherAchievementsController — route `api/v1/publisher`, class-level `Permission-publisher.content.manage`.
+Route `api/v1/publisher`; all achievement-management routes require `Permission-publisher.content.manage`.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -153,7 +153,7 @@ PublisherAchievementsController — route `api/v1/publisher`, class-level `Permi
 
 ## Entitlements
 
-PublisherEntitlementsController — route `api/v1/publisher/entitlements`, class-level `Permission-publisher.content.manage`.
+Route `api/v1/publisher/entitlements`; both routes require `Permission-publisher.content.manage`.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -171,7 +171,7 @@ Body for both:
 
 ## Leaderboards
 
-PublisherLeaderboardsController — route `api/v1/publisher/leaderboards`, class-level `Permission-publisher.content.manage`.
+Route `api/v1/publisher/leaderboards`; all routes require `Permission-publisher.content.manage`.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|

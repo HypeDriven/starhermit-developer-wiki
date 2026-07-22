@@ -86,4 +86,4 @@ Because the relay is off by default, check with your platform operator that the 
 - [Games](games.md) — server-authoritative scripted games
 - [Game scripts](game-scripts.md) — writing game scripts
 - [Voice](voice.md) — voice rooms for in-game audio
-- [Chess walkthrough](../tutorials/chess-walkthrough.md) — the reference game integration
+- [Chess walkthrough](../tutorials/chess-walkthrough.md) — the reference implementation of a scripted-game integration
