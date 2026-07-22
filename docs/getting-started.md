@@ -14,6 +14,7 @@
 - **Entitlements** — per-user grants of catalog software (part of [Profile](api/profile.md)).
 - **Achievements & leaderboards** — see [Achievements](api/achievements.md) and [Leaderboards](api/leaderboards.md).
 - **Peer relay** — see [Relay](api/relay.md).
+- **Realtime rooms** — lobbies, matchmaking, AI backfill, and host-authoritative transport for fast-paced games; see [Realtime Rooms](api/realtime.md).
 - **Games & game scripts** — server-authoritative, scripted games hosted by the platform; see [Games](api/games.md) and [Game Scripts](api/game-scripts.md).
 
 ## Base URLs and ports
@@ -52,6 +53,7 @@ All REST routes are versioned: `api/v1/...`. WebSocket routes live under `ws/v1/
 - [Leaderboards](api/leaderboards.md)
 - [External Libraries](api/external-libraries.md)
 - [Relay](api/relay.md)
+- [Realtime Rooms](api/realtime.md)
 - [GitHub Games](api/github-games.md)
 - [Publisher](api/publisher.md)
 

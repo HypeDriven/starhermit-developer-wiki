@@ -48,6 +48,7 @@ Conventions shared by all endpoints: REST under `api/v1/...` at `http://localhos
 | Leaderboards | [leaderboards.md](docs/api/leaderboards.md) | Definitions, entries, friends-only views, script-owned elo boards |
 | External libraries | [external-libraries.md](docs/api/external-libraries.md) | Linking Steam/Epic/GOG libraries, external launch URIs |
 | Relay | [relay.md](docs/api/relay.md) | Opaque byte fan-out sessions for fast-paced game netcode (`ws/v1/relay`) |
+| Realtime rooms | [realtime.md](docs/api/realtime.md) | Lobbies, friend invites, quick-join matchmaking, AI-seat backfill, host-authoritative frame routing (`ws/v1/realtime`) |
 | GitHub games | [github-games.md](docs/api/github-games.md) | Publishing a game from a GitHub repo (`starhermit.txt` manifest, hosting, pinned deployments) |
 | Publisher | [publisher.md](docs/api/publisher.md) | Publisher/member management, title & build publishing, achievement/leaderboard/entitlement management |
 
@@ -56,3 +57,4 @@ Conventions shared by all endpoints: REST under `api/v1/...` at `http://localhos
 - The admin/moderation surface is **not** part of this API — it is a separate internal
   service and is not covered by this wiki.
 - The peer relay is disabled by default; voice is enabled by default.
+- Realtime rooms are enabled by default (unlike the peer relay).

@@ -83,6 +83,7 @@ Because the relay is off by default, check with your platform operator that the 
 
 ## See also
 
+- [Realtime rooms](realtime.md) — lobbies, matchmaking, AI backfill, and role-aware routing for fast-paced games
 - [Games](games.md) — server-authoritative scripted games
 - [Game scripts](game-scripts.md) — writing game scripts
 - [Voice](voice.md) — voice rooms for in-game audio
