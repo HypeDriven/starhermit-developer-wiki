@@ -1,6 +1,6 @@
 # Getting Started
 
-StarHermit is a game- and software-distribution platform with a built-in social layer, exposed over REST and WebSockets. This page gives you the lay of the land: what the platform does, where it listens, how authentication and versioning work, and the two ways your own game can integrate with it.
+[StarHermit](https://starhermit.com) is a game- and software-distribution platform with a built-in social layer, exposed over REST and WebSockets. This page gives you the lay of the land: what the platform does, where it listens, how authentication and versioning work, and the two ways your own game can integrate with it.
 
 ## What StarHermit provides
 
@@ -18,7 +18,8 @@ StarHermit is a game- and software-distribution platform with a built-in social 
 
 ## Base URLs and ports
 
-- REST base: `http://localhost:5000` (the default local port is 5000; some local setups use 5050).
+- Hosted platform: [https://starhermit.com](https://starhermit.com). Games published on it are served at `https://<slug>.starhermit.com` with `/api` and `/ws` proxied same-origin, so platform-hosted games use relative paths and never need to configure a base URL.
+- Local development: REST base `http://localhost:5000` (the default local port is 5000; some local setups use 5050). The `localhost` URLs throughout this wiki refer to a locally running backend.
 - WebSockets use the same host and port, under `ws/v1/...`.
 
 ## Versioning

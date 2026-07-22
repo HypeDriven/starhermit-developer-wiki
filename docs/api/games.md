@@ -201,6 +201,31 @@ Cross-game pending invites for the caller (max 50) — the poll fallback for the
 ]
 ```
 
+### Share links (invite by URL)
+
+The invite flow above requires the two players to already be friends. To invite someone who is **not on the platform yet** (or not a friend yet), a game can hand out a **share link** — a URL to the web dashboard that automates the whole onboarding:
+
+```
+https://dashboard.starhermit.com/game-invite/<userId>/<gameSlug>
+```
+
+- `<userId>` — the sharing player's user id. A game client already has it: it is the `sub` claim of its launch token (the chess reference implementation exposes it as `Net.userId`).
+- `<gameSlug>` — the game's slug (`game_scope` claim). Games without a server script use the GitHub game id (a GUID) instead; the dashboard accepts either.
+
+When the recipient opens the link, the **dashboard** (not the game) does the automated friend-invite part — no new backend endpoints are involved, it composes the existing APIs:
+
+1. Signs them in (Google OAuth), or reuses their existing session. The link intent survives the sign-in round trip.
+2. Shows a consent dialog naming the sharer and the game, then **friends the sharer**: it accepts the sharer's pending friend request if one exists, otherwise it sends one (`POST /api/v1/me/friend-requests`).
+3. Prompts them to pick a nickname if their account has none (games display profile nicknames — see [Profile](profile.md)).
+4. Launches the game (the platform-hosted `https://<game-id>.starhermit.com` copy, with a launch token in the `#game_token=` fragment as usual).
+5. Sends the **play invite back to the sharer** with `POST /api/v1/games/{slug}/invites` — so a share link ends as a normal game invite the sharer accepts (dashboard toast, desktop balloon, or the game's own invite list). If the friendship is still a pending request, the dashboard queues the play invite and sends it automatically once the sharer accepts.
+
+What this means for your game client:
+
+- **Offering the link costs one line of string building** — put a "Share invite link" button next to your invite-a-friend UI and copy the URL to the clipboard. See `shareInviteLink()` in the [chess reference implementation](https://github.com/HypeDriven/starhermit-chess).
+- **No special handling is needed on the receiving side.** The recipient's invite arrives through the normal invite flow: your `GET .../invites` polling shows the sharer the incoming invite, accepting it creates the session, and the recipient sees the session appear in `GET .../sessions/mine` (show pending outgoing invites so the wait is visible — the chess client's "invited — waiting" cards).
+- The dashboard also uses these URLs itself: every playable hosted game's details pane has a **Copy invite link** button, and the Windows client offers the same from a game's context menu.
+
 ## Replays
 
 ### `GET /api/v1/games/{slug}/replays/mine?limit=`

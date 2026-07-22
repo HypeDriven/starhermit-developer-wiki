@@ -40,7 +40,7 @@ owner=HypeDriven
 server=server.js
 ```
 
-The platform clones the repo, serves the static files at `<slug>.starhermit.com` — for the example slug `chess`, that is `chess.starhermit.com` — and proxies `/api` and `/ws` to the backend **same-origin**. That one decision removes an entire category of work: no CORS, no API-base configuration, no environment detection — game clients just use relative paths.
+The platform clones the repo, serves the static files at `<slug>.starhermit.com` — for the example slug `chess`, that is [chess.starhermit.com](https://chess.starhermit.com), where the reference game is playable live — and proxies `/api` and `/ws` to the backend **same-origin**. That one decision removes an entire category of work: no CORS, no API-base configuration, no environment detection — game clients just use relative paths.
 
 Full flow: [github-games.md](../api/github-games.md) and [publisher.md](../api/publisher.md).
 
@@ -193,6 +193,14 @@ POST /api/v1/games/chess/invites/{id}/decline  → 204
 ```
 
 Accepting is what creates the session. The `&session_id=` launch-hash deep-link (§3) drops the invited player straight into it.
+
+Friend invites only reach people who are already friends. To pull in someone who isn't (or isn't on the platform at all), the reference implementation also offers a **Share invite link** button (`App.shareInviteLink`): one line of string building that copies
+
+```
+https://dashboard.starhermit.com/game-invite/<Net.userId>/<slug>
+```
+
+to the clipboard. The web dashboard handles everything the recipient needs — sign-in, the friend request, a nickname, launching the game — and then sends the play invite back to the sharer, so it lands in this same invites list. See [Share links](../api/games.md#share-links-invite-by-url) for the full contract.
 
 ### c. The rule
 

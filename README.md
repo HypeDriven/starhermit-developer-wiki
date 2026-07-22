@@ -1,6 +1,6 @@
 # StarHermit Developer Wiki
 
-Documentation for the **StarHermit public API** — a game/software
+Documentation for the public API of **[StarHermit](https://starhermit.com)** — a game/software
 distribution + social platform: users & OAuth auth, friends, text chat, realtime voice,
 publishers, a software catalog with builds/assets, entitlements, achievements, leaderboards,
 a peer relay, and **scripted server-authoritative multiplayer games** whose rules live in a
@@ -11,7 +11,8 @@ The reference example used throughout this wiki is
 [HypeDriven/starhermit-chess](https://github.com/HypeDriven/starhermit-chess) — a
 correspondence-chess game (no-build static site + one server-side JS rules file) that uses
 launch tokens, elo matchmaking, friend invites, the gameplay WebSocket, in-game chat, voice,
-leaderboards, and replays. It is one concrete implementation of the patterns described here,
+leaderboards, and replays — playable live at [chess.starhermit.com](https://chess.starhermit.com).
+It is one concrete implementation of the patterns described here,
 not the subject of the docs.
 
 ## Where to start
