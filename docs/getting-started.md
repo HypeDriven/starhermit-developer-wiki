@@ -14,7 +14,7 @@
 - **Entitlements** — per-user grants of catalog software (part of [Profile](api/profile.md)).
 - **Achievements & leaderboards** — see [Achievements](api/achievements.md) and [Leaderboards](api/leaderboards.md).
 - **Peer relay** — see [Relay](api/relay.md).
-- **Realtime rooms** — lobbies, matchmaking, AI backfill, and host-authoritative transport for fast-paced games; see [Realtime Rooms](api/realtime.md).
+- **Realtime rooms** — lobbies, matchmaking, AI backfill, and realtime transport for fast-paced games; can also bridge into a room-bound scripted session for server-authoritative play; see [Realtime Rooms](api/realtime.md).
 - **Games & game scripts** — server-authoritative, scripted games hosted by the platform; see [Games](api/games.md) and [Game Scripts](api/game-scripts.md).
 
 ## Base URLs and ports

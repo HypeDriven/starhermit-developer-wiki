@@ -20,9 +20,9 @@ globalThis.game = {
 };
 ```
 
-- `createSession(ctx)` — called when a session is created (matchmaking, invite-accept, or AI practice).
+- `createSession(ctx)` — called when a session is created (matchmaking, invite-accept, AI practice, or a realtime room starting — see [Room-bound sessions](#room-bound-sessions)).
 - `onPlayerMessage(ctx)` — called for every client command received over the gameplay WebSocket.
-- `onTick(ctx)` — called by the platform's timer service (per-game default every 300 s; platform sweep default 60 s, min 15 s).
+- `onTick(ctx)` — called by the platform's timer service at the game's configured tick rate (see [Tick rate](#tick-rate)).
 
 ## Context object
 
@@ -47,7 +47,44 @@ ctx = {
 ```
 
 - The AI seat (if present) is flagged with `ai: true` on its player entry.
+- Room-bound sessions (started from a realtime room) get two additional ctx fields, `ctx.room` and `ctx.presence`, on **every** invocation — see [Room-bound sessions](#room-bound-sessions).
 - **Trust nothing from `ctx.message.data`.** The only trusted identity is `ctx.message.from`, which the server attaches from the authenticated connection — the client can never supply or spoof it.
+
+## Tick rate
+
+The platform runs `onTick` sweeps per active session at a configurable rate:
+
+- The rate is `GameDefinition.TickRateHz` (per game, set by the platform operator). The platform-wide default is **30 Hz** (system setting `games.max_tick_rate_hz`), and every value is **clamped to 1–1000 Hz**.
+- A deliberately configured per-game rate is an **override and may exceed the global default**; the scheduler follows the fastest active game and ticks each session at its own rate.
+- The invocation model does not change at high rates: fresh engine per invocation, all state through `sessionState`. A 30 Hz realtime game (the football reference implementation, for example) keeps its session document small and its per-tick work well under the ~250 ms CPU budget for this reason.
+
+## Room-bound sessions
+
+A session can be **bound to a realtime room** (`GameSession.RealtimeRoomId`, mirrored by `RealtimeRoom.GameSessionId`): when a [realtime room](realtime.md) for a game with a `server=` script starts, the platform creates one N-player session for the room — one `GameSessionPlayer` per **human** participant (AI seats are not session players; they exist only in the script-facing roster). This is how server-authoritative realtime games (e.g. football) run: rooms provide the lobby/matchmaking, the script runs the match. See [Realtime Rooms — the bridge](realtime.md#room-bound-scripted-sessions) for the room-side lifecycle.
+
+Every invocation (`createSession`, `onPlayerMessage`, `onTick`) of a room-bound session receives two extra ctx fields:
+
+```js
+ctx.room = {
+  roomId: "0f8fad5b-...",
+  metadata: { /* ... */ },        // the room's opaque config.metadata blob
+  roster: [                       // frozen match roster, humans AND AI seats,
+    { userId: "7c9e6679-...",     //   ordered by team then slot
+      name: "alice", team: 0, slot: 0, ai: false },
+    { userId: null,               // AI seat — never a session player
+      name: "Rafa Vento", team: 0, slot: 1, ai: true }
+  ]
+};
+ctx.presence = {                  // every user who is or was a human participant
+  "7c9e6679-...": { online: true, left: false }
+};
+```
+
+- `presence.online` — the user has a live socket on either connection registry (realtime rooms **or** `ws/v1/games`).
+- `presence.left` — the user no longer holds an active seat: they explicitly left and their seat was converted to an AI participant. `left` is permanent; `online` may flap. The script is expected to drive AI takeover / rejoin logic from these flags.
+- The roster is re-read on every invocation, so seat conversions (human → AI) show up as they happen.
+
+When a room-bound script returns `result`, the platform finishes the session, **stores the result on the room, and closes the room** — no host-submitted result is involved.
 
 ## Return shape
 

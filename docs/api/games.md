@@ -268,7 +268,7 @@ The full final state JSON as archived by the platform. Participants only.
 - Concurrent-session cap per player defaults to `20`.
 - Matchmaking ticket statuses: `queued` | `matched` | `cancelled`.
 - Invite statuses: `pending` | `accepted` | `declined` | `cancelled`.
-- **Sessions are created ONLY via matchmaking, invite-accept, or the AI endpoint** — there is no "create lobby" endpoint.
+- **Sessions are created via matchmaking, invite-accept, the AI endpoint, or a realtime room start** (room-bound sessions — see [Realtime Rooms](realtime.md#room-bound-scripted-sessions)) — there is no "create lobby" endpoint.
 - Elo is computed by the game script (`eloUpdates`), denormalized onto `GamePlayerState.Elo`, and published to the game's leaderboard (score type `elo`). **Clients can never submit scores to a game leaderboard directly** (see [Leaderboards](leaderboards.md)).
 
 ## Gameplay WebSocket
@@ -302,7 +302,7 @@ Every command runs through the game script's `onPlayerMessage`. **Nothing is rel
 
 ### Tick service
 
-The platform runs the script's `onTick` sweeps on a timer: platform default every 60 s (minimum 15 s); the per-game default is 300 s.
+The platform runs the script's `onTick` sweeps on a timer at the game's configured tick rate: `GameDefinition.TickRateHz` per game (platform default **30 Hz**, system setting `games.max_tick_rate_hz`), clamped to **1–1000 Hz**. A configured per-game rate may exceed the global default. See [Game Scripts — Tick rate](game-scripts.md#tick-rate).
 
 ## Lifecycle of a game
 

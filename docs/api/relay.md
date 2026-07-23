@@ -77,7 +77,7 @@ Limits:
 
 Use the relay for fast-paced games that want server fan-out without running a game script. It is deliberately dumb transport: the server neither parses nor validates your payloads.
 
-Contrast this with the [scripted games subsystem](games.md), which is server-authoritative and suited to turn-based style play. If your game needs the server to enforce rules and state, use game scripts; if it needs low-overhead byte relay between peers, use the relay.
+Contrast this with the [scripted games subsystem](games.md), which is server-authoritative and suited to anything from turn-based play to realtime tick rates. If your game needs the server to enforce rules and state, use game scripts; if it needs low-overhead byte relay between peers, use the relay.
 
 Because the relay is off by default, check with your platform operator that the relay is enabled before shipping a feature on it.
 
