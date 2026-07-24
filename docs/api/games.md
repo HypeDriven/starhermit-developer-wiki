@@ -286,7 +286,7 @@ The `cmd` envelope is the platform contract; the contents of `data` are defined 
 { "type": "cmd", "data": { "type": "move", "from": "e2", "to": "e4" } }
 ```
 
-Every command runs through the game script's `onPlayerMessage`. **Nothing is relayed to other players without script authorization.**
+Durable commands run through the game script's `onPlayerMessage`. A payload whose data is explicitly marked `{ "type": "input", "realtime": true, ... }` is treated as high-rate realtime state instead: the platform keeps one latest frame per authenticated sender and supplies the batch as `ctx.inputs` on the next `onTick`. The script still validates and authoritatively applies those inputs; clients are never allowed to relay state directly. See [Game Scripts — Context object](game-scripts.md#context-object).
 
 ### Server → client
 

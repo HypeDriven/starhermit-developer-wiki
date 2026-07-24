@@ -6,7 +6,7 @@ Every StarHermit game is defined by a **single JavaScript file** executed server
 
 - One JS file per game, executed in a **fresh sandboxed Jint engine per invocation**. Nothing persists in memory between calls — all state lives in the documents you return.
 - No `Date` access, no own RNG. Clock and randomness come from the host: `ctx.now` (ms epoch) and `ctx.random` (float in `[0, 1)`).
-- The platform invokes the script when a player sends a command, when a session is created, and on periodic `onTick` sweeps (see [Games API — Tick service](games.md#tick-service)).
+- The platform invokes the script when a player sends a durable command, when a session is created, and on periodic `onTick` sweeps (see [Games API — Tick service](games.md#tick-service)). Realtime `{type:"input", realtime:true}` frames are the exception: they are buffered latest-wins and delivered as a batch to the next tick.
 
 ## Entry points
 
@@ -21,8 +21,8 @@ globalThis.game = {
 ```
 
 - `createSession(ctx)` — called when a session is created (matchmaking, invite-accept, AI practice, or a realtime room starting — see [Room-bound sessions](#room-bound-sessions)).
-- `onPlayerMessage(ctx)` — called for every client command received over the gameplay WebSocket.
-- `onTick(ctx)` — called by the platform's timer service at the game's configured tick rate (see [Tick rate](#tick-rate)).
+- `onPlayerMessage(ctx)` — called for durable client commands received over the gameplay WebSocket. Inputs explicitly marked `realtime:true` bypass this entry point.
+- `onTick(ctx)` — called by the platform's timer service at the game's configured tick rate (see [Tick rate](#tick-rate)); latest realtime inputs are available in `ctx.inputs`.
 
 ## Context object
 
@@ -42,13 +42,18 @@ ctx = {
   message: {                       // onPlayerMessage only
     from: "7c9e6679-...",          // the authenticated user id — trusted
     data: { type: "move", from: "e2", to: "e4" }  // client payload — untrusted (example: a chess move)
-  }
+  },
+  inputs: [                        // onTick only; omitted when none are pending
+    { from: "7c9e6679-...",        // authenticated sender id — trusted
+      data: { type: "input", seq: 42, mx: 0.7, mz: -0.2 } }
+  ]
 }
 ```
 
 - The AI seat (if present) is flagged with `ai: true` on its player entry.
 - Room-bound sessions (started from a realtime room) get two additional ctx fields, `ctx.room` and `ctx.presence`, on **every** invocation — see [Room-bound sessions](#room-bound-sessions).
-- **Trust nothing from `ctx.message.data`.** The only trusted identity is `ctx.message.from`, which the server attaches from the authenticated connection — the client can never supply or spoof it.
+- **Trust nothing from `ctx.message.data` or `ctx.inputs[].data`.** The trusted identity is the corresponding `from`, which the server attaches from the authenticated connection — the client can never supply or spoof it.
+- Inputs opt into batching with `{type:"input", realtime:true, ...}`. Unmarked `input` commands remain durable `onPlayerMessage` calls for backward compatibility. Realtime inputs use one pending slot per sender: movement is latest-wins, while `pass`, `shoot`, and `tackle` action edges are merged so a following movement sample cannot erase them before the next tick. Scripts must clamp and validate every value when consuming the batch.
 
 ## Tick rate
 
@@ -56,7 +61,8 @@ The platform runs `onTick` sweeps per active session at a configurable rate:
 
 - The rate is `GameDefinition.TickRateHz` (per game, set by the platform operator). The platform-wide default is **30 Hz** (system setting `games.max_tick_rate_hz`), and every value is **clamped to 1–1000 Hz**.
 - A deliberately configured per-game rate is an **override and may exceed the global default**; the scheduler follows the fastest active game and ticks each session at its own rate.
-- The invocation model does not change at high rates: fresh engine per invocation, all state through `sessionState`. A 30 Hz realtime game (the football reference implementation, for example) keeps its session document small and its per-tick work well under the ~250 ms CPU budget for this reason.
+- Each tick still uses a fresh engine and round-trips `sessionState`, but high-rate realtime `input` messages are held in an in-memory mailbox rather than invoking Jint or persisting state individually. A 30 Hz realtime match therefore normally invokes its script 30 times per second regardless of how many players are sending movement.
+- Match snapshots are sent through per-connection latest-wins queues: a slow recipient may skip an obsolete snapshot but cannot delay the simulation or other recipients. Discrete events remain ordered reliable sends.
 
 ## Room-bound sessions
 
