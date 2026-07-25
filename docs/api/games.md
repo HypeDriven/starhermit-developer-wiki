@@ -12,6 +12,9 @@ All endpoints require authentication (`[Authorize]`) and work with both full use
 |---|---|---|---|
 | GET | `/api/v1/games/{slug}` | Bearer | Game info + caller's stats |
 | POST | `/api/v1/games/{slug}/launch-token` | Bearer | Mint a game-scoped launch token |
+| GET | `/api/v1/games/{slug}/controls` | Bearer | Get the caller's effective control bindings |
+| PUT | `/api/v1/games/{slug}/controls` | Bearer | Replace the caller's control overrides |
+| DELETE | `/api/v1/games/{slug}/controls` | Bearer | Reset the caller's controls to manifest defaults |
 | GET | `/api/v1/games/{slug}/sessions/mine` | Bearer | Caller's active sessions |
 | GET | `/api/v1/games/{slug}/sessions/{sessionId}` | Bearer | Session detail (participants only) |
 | POST | `/api/v1/games/{slug}/sessions/ai` | Bearer | Create a practice session vs the platform AI |
@@ -68,6 +71,60 @@ Mints a game-scoped JWT (default lifetime 60 minutes) carrying `game_scope={slug
   "expiresInSeconds": 3600
 }
 ```
+
+## Per-player control bindings
+
+Games can declare desktop-browser controls with `control.*` entries in
+[`starhermit.txt`](github-games.md#default-control-bindings). The controls API stores a
+separate override for each user and game. Full user JWTs and game-scoped launch tokens are
+accepted; a launch token's `game_scope` must match `{slug}`.
+
+### `GET /api/v1/games/{slug}/controls`
+
+Returns the effective bindings in manifest order. `codes` contains the user's override when
+one exists, otherwise `defaultCodes`. Returns `404` when the game declares no controls.
+
+```json
+{
+  "actions": [
+    {
+      "action": "up",
+      "label": "Run forward",
+      "defaultCodes": ["KeyW", "ArrowUp"],
+      "codes": ["KeyW", "ArrowUp"]
+    },
+    {
+      "action": "shoot",
+      "label": "Shoot",
+      "defaultCodes": ["Space"],
+      "codes": ["KeyJ"]
+    }
+  ]
+}
+```
+
+### `PUT /api/v1/games/{slug}/controls`
+
+Replaces the caller's overrides. The `bindings` object may contain a subset of the declared
+actions; omitted actions continue to use their defaults.
+
+```json
+{
+  "bindings": {
+    "up": ["KeyW", "ArrowUp"],
+    "shoot": ["KeyJ"]
+  }
+}
+```
+
+Each action must be declared by the game. Every action must have 1–4 valid
+`KeyboardEvent.code` values, and no code may be assigned to two actions in the resulting
+effective map. Invalid actions, codes, or conflicts return `400`.
+
+### `DELETE /api/v1/games/{slug}/controls`
+
+Deletes all of the caller's overrides and restores the manifest defaults. Returns `204`.
+Launch-token writes are intentional, so a hosted game may provide its own rebinding screen.
 
 ## Sessions
 
@@ -302,7 +359,7 @@ Durable commands run through the game script's `onPlayerMessage`. A payload whos
 
 ### Tick service
 
-The platform runs the script's `onTick` sweeps on a timer at the game's configured tick rate: `GameDefinition.TickRateHz` per game (platform default **30 Hz**, system setting `games.max_tick_rate_hz`), clamped to **1–1000 Hz**. A configured per-game rate may exceed the global default. See [Game Scripts — Tick rate](game-scripts.md#tick-rate).
+The platform runs the script's `onTick` sweeps on a timer at the game's effective tick rate, resolved in this order: an operator's per-game `GameDefinition.TickRateHz` (which may exceed the global default, up to the **1–1000 Hz** platform ceiling), else the rate the game's own script requested via `game.tickRateHz` (clamped to **0**–the global maximum; 0 means the game is never ticked), else the global maximum itself (platform default **30 Hz**, system setting `games.max_tick_rate_hz`). See [Game Scripts — Tick rate](game-scripts.md#tick-rate).
 
 ## Lifecycle of a game
 

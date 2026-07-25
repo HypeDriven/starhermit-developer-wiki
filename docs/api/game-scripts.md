@@ -57,10 +57,22 @@ ctx = {
 
 ## Tick rate
 
-The platform runs `onTick` sweeps per active session at a configurable rate:
+The platform runs `onTick` sweeps per active session at a configurable rate. **Your script asks for the rate it wants** by declaring a static `tickRateHz` on the game object, alongside the entry points:
 
-- The rate is `GameDefinition.TickRateHz` (per game, set by the platform operator). The platform-wide default is **30 Hz** (system setting `games.max_tick_rate_hz`), and every value is **clamped to 1–1000 Hz**.
-- A deliberately configured per-game rate is an **override and may exceed the global default**; the scheduler follows the fastest active game and ticks each session at its own rate.
+```js
+globalThis.game = {
+  tickRateHz: 15,          // ask the platform to tick this game 15x/second
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+```
+
+- The declaration is read **when your script is provisioned** (when you add or re-add the game from its repo), not on every tick. Change it and re-add the game to apply it.
+- It is **clamped to `0`–the platform maximum** (`games.max_tick_rate_hz`, **30 Hz** by default): ask for less than the maximum and you get it; ask for more and you run at the maximum. Ask for **0** and the game is never ticked at all — the right choice for a turn-based game that only reacts to player commands, since it costs the platform nothing. The value is floored to a whole Hz; anything that isn't a number (or a missing declaration) leaves the game on the default.
+- Because only the request is stored, lowering the platform maximum immediately slows every game that asked for more — no re-provisioning needed.
+- A platform operator can set `GameDefinition.TickRateHz` for your game from the admin dashboard. That override **wins over your declaration and may exceed the global maximum** (only the hard 1–1000 Hz platform ceiling applies) — it is how a game is granted a higher rate than the default allows.
+- The scheduler follows the fastest active game and ticks each session at its own rate; games resolving to 0 Hz are skipped entirely.
 - Each tick still uses a fresh engine and round-trips `sessionState`, but high-rate realtime `input` messages are held in an in-memory mailbox rather than invoking Jint or persisting state individually. A 30 Hz realtime match therefore normally invokes its script 30 times per second regardless of how many players are sending movement.
 - Match snapshots are sent through per-connection latest-wins queues: a slow recipient may skip an obsolete snapshot but cannot delay the simulation or other recipients. Discrete events remain ordered reliable sends.
 
