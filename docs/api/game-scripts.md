@@ -10,17 +10,25 @@ Every StarHermit game is defined by a **single JavaScript file** executed server
 
 ## Entry points
 
-Expose the handlers on `globalThis.game`. The optional static `tickRateHz` declaration asks the
-platform how often to invoke `onTick` (see [Tick rate](#tick-rate)):
+Expose the handlers on `globalThis.game`. Two optional **static** declarations sit alongside them:
+`tickRateHz` asks the platform how often to invoke `onTick` (see [Tick rate](#tick-rate)), and
+`achievements` registers the game's achievements (see [Achievements](#achievements)):
 
 ```js
 globalThis.game = {
   tickRateHz: 0, // turn-based: opt out of periodic ticks
+  achievements: [
+    { key: "first-win", name: "First Win", description: "Win a match.", points: 10 }
+  ],
   createSession(ctx) { /* ... */ },
   onPlayerMessage(ctx) { /* ... */ },
   onTick(ctx) { /* ... */ }
 };
 ```
+
+Both declarations are read by evaluating your script **at provision time** (when the game is added
+or re-added from its repo), not on every invocation — so they must be static values on the `game`
+object, and a change to either needs a re-provision to take effect.
 
 - `createSession(ctx)` — called when a session is created (matchmaking, invite-accept, AI practice, or a realtime room starting — see [Room-bound sessions](#room-bound-sessions)).
 - `onPlayerMessage(ctx)` — called for durable client commands received over the gameplay WebSocket. Inputs explicitly marked `realtime:true` bypass this entry point.
@@ -126,6 +134,9 @@ return {
     "7c9e6679-...": 1216,
     "9b2f8c1a-...": 1184
   },
+  achievements: {                  // server-authoritative unlocks, by player id
+    "7c9e6679-...": ["first-win", "flawless"]
+  },
   result: { kind: "white-win", reason: "checkmate" }  // ends the session (example: a chess result)
 };
 ```
@@ -135,7 +146,84 @@ Key rules:
 - `sessionState` and each entry of `playerStates` **replace** the stored documents — always return complete documents, never diffs.
 - Only messages listed in `broadcast` are delivered to clients, each addressed to explicit player ids or `"all"`. Nothing else leaks.
 - `eloUpdates` is the only way ratings change. The host denormalizes them onto `GamePlayerState.Elo` and publishes them to the game's leaderboard; clients can never submit scores directly (see [Leaderboards](leaderboards.md)).
+- `achievements` is the only way achievements are granted. Keys are resolved against the game's own declaration and persisted by the platform — see [Achievements](#achievements).
 - End games via `result`. The host then finishes the session and **archives the final `sessionState` as the replay** (served by `GET .../replays/{sessionId}` — see [Games API](games.md#replays)).
+
+## Achievements
+
+Your script is the **only** thing that can unlock your game's achievements. There is no client
+endpoint for them: `POST /api/v1/me/achievements/unlock` rejects game-scoped achievements outright,
+and the publisher CRUD endpoints refuse to touch them. This makes achievements as server-
+authoritative as the rest of the game, and it is the mechanism **any** game with a `server=` script
+should use — including one whose gameplay runs elsewhere (see
+[which games can use this](achievements.md#which-games-can-use-this)).
+
+### Declare
+
+A static `achievements` array on the `game` object. Only `key` is required:
+
+```js
+globalThis.game = {
+  achievements: [
+    { key: "first-win", name: "First Win", description: "Win a match.", points: 10 },
+    { key: "flawless",  name: "Flawless",  description: "Win without conceding.",
+      points: 50, secret: true, icon: "https://cdn.example/flawless.png" }
+  ],
+  // ...entry points
+};
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `key` | string | **Required.** Stable id, ≤ 128 chars, unique within the game. Duplicates after the first are ignored. |
+| `name` | string | Defaults to `key`. |
+| `description` | string | Defaults to `""`. |
+| `icon` | string | Optional URL. |
+| `secret` | boolean | Hidden from a player until *they* unlock it. Defaults to `false`. |
+| `points` | number | Clamped to 0–10000. Defaults to `0`. |
+
+The array is read at provision time and mirrored into the platform's definition registry:
+
+- Definitions **upsert by `key`** — editing a name, icon, points, or secret flag and re-provisioning updates the existing definition, and everyone who already earned it keeps it.
+- A key you stop declaring is deleted **only while nobody has unlocked it**. Earned history is never destroyed, so a retired achievement stays visible to the players who hold it.
+- At most **100** achievements per game; extras beyond that are dropped.
+- The declaration is **best effort**: a malformed entry is skipped and a script that fails to evaluate yields an empty list rather than failing the provision. Always confirm with `GET /api/v1/games/{slug}/achievements` after re-provisioning.
+
+### Unlock
+
+Return an `achievements` map from **any** entry point — `createSession`, `onPlayerMessage`, or
+`onTick`:
+
+```js
+onTick(ctx) {
+  const state = JSON.parse(JSON.stringify(ctx.sessionState));
+  const unlocks = {};
+  for (const p of ctx.players) {
+    if (!p.ai && state.scores[p.id] >= 10) unlocks[p.id] = ["ten-points"];
+  }
+  return { ok: true, sessionState: state, achievements: unlocks };
+}
+```
+
+- Unlocks are **idempotent** — re-asserting a key the player already holds is a no-op, so a script can safely award from a condition it re-evaluates on every tick instead of tracking "already awarded" in its own state.
+- Unknown keys (not in your declaration), users who are not participants of this session, and the AI seat are silently ignored.
+- At most **32** keys are accepted per player per invocation; further keys in the same array are dropped.
+- Rows are persisted with the rest of the invocation's writes, so an unlock cannot survive a failed invocation.
+
+### Delivery
+
+Each newly granted unlock is pushed to the earning player over `ws/v1/games` as a distinct frame —
+it is platform truth, not one of your `broadcast` messages:
+
+```json
+{ "type": "achievement",
+  "data": { "key": "first-win", "name": "First Win", "description": "Win a match.",
+            "icon": null, "points": 10, "unlockedAt": "2026-07-25T09:14:02Z" } }
+```
+
+Unlocks granted from `createSession` land before any socket exists, so they arrive with no frame —
+clients should read `GET /api/v1/games/{slug}/achievements` on load and treat the frame as the
+live-update path. Full surface in [Achievements](achievements.md).
 
 ## Budgets
 

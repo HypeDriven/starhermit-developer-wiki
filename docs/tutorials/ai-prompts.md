@@ -281,17 +281,52 @@ which runs its own logic client-side:
 4. Surface sync status (saved / saving / failed) in the UI.
 ```
 
-## 12. Achievements (catalog titles)
+## 12. Achievements
 
-Context page: [achievements.md](../api/achievements.md), [catalog.md](../api/catalog.md). Skip unless your game is distributed through the catalog.
+Context pages: [achievements.md](../api/achievements.md), [game-scripts.md](../api/game-scripts.md).
+Use **12a** if your game has a `server=` script (scripted, room-bound realtime, or host-routed with a
+script bound for authority) — that is the server-authoritative path and the one to prefer. Use **12b**
+only for a catalog-distributed title with no server script, where the client is the only observer.
+
+### 12a. Server-authoritative achievements (any game with a server script)
 
 ```text
-Read docs/api/achievements.md (pasted below). Wire achievements into
-[my game]:
+Read docs/api/achievements.md and docs/api/game-scripts.md (pasted below).
+Wire server-authoritative achievements into [my game]:
+
+1. In server.js, add a static game.achievements array declaring each
+   achievement as { key, name, description, points, secret?, icon? }.
+   Keys are stable ids (<=128 chars, unique, max 100 per game). Keep the
+   array next to the entry points so it is obvious it is static — it is
+   read once when the game is provisioned, not per invocation.
+2. Grant them from the script by returning
+   achievements: { "<userId>": ["<key>", ...] } from createSession,
+   onPlayerMessage, or onTick, alongside the usual sessionState. Unlocks
+   are idempotent, so evaluate the condition from the authoritative state
+   and re-assert it freely rather than tracking "already awarded" flags.
+   Never award from the client — there is no client unlock for these.
+3. In the client, render the achievement screen from
+   GET /api/v1/games/<slug>/achievements (returns locked and unlocked,
+   with unlocked/unlockedAt, secrets hidden until earned).
+4. Handle the {"type":"achievement","data":{...}} frame on ws/v1/games as
+   the live-unlock signal — show a toast with data.name/description/points.
+   Unlocks granted in createSession arrive with no frame, so always do the
+   GET on load too.
+5. After changing the declaration, re-add the game from its repo to
+   re-provision, then confirm with the GET that the definitions updated.
+```
+
+### 12b. Client-claimed achievements (catalog titles only)
+
+```text
+Read docs/api/achievements.md (pasted below). Wire catalog-title
+achievements into [my game]:
 
 1. Unlock with POST /api/v1/me/achievements/unlock at the moment each
    achievement's condition is met; treat "already unlocked" responses as
-   success, and queue retries offline if the call fails.
+   success, and queue retries offline if the call fails. This works only
+   for achievements owned by a catalog title the player is entitled to —
+   the endpoint rejects any achievement owned by a scripted game.
 2. List the player's achievements with
    GET /api/v1/me/achievements?titleId=<my title id> and render them in
    [my profile/awards screen], locked vs unlocked.

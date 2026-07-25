@@ -124,6 +124,11 @@ Both endpoints return a JSON object mapping title id to count:
 
 Route `api/v1/publisher`; all achievement-management routes require `Permission-publisher.content.manage`.
 
+These endpoints manage **catalog-title** achievements only. They also require the caller to be a
+member of the publisher that owns the title, and they **fail closed for achievements that belong to
+a scripted game** — those are declared by the game's own server script and are not publisher-managed
+(see [Achievements](achievements.md) and [Game Scripts](game-scripts.md#achievements)).
+
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | POST | `/api/v1/publisher/titles/{titleId}/achievements` | JWT | Create an achievement → `AchievementDto` |

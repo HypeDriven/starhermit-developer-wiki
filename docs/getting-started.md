@@ -12,7 +12,7 @@
 - **Publishers** — publisher accounts that own catalog entries; see [Publisher](api/publisher.md).
 - **Software catalog** — software titles with builds and downloadable assets; see [Catalog](api/catalog.md).
 - **Entitlements** — per-user grants of catalog software (part of [Profile](api/profile.md)).
-- **Achievements & leaderboards** — see [Achievements](api/achievements.md) and [Leaderboards](api/leaderboards.md).
+- **Achievements & leaderboards** — server-authoritative achievements for any game with a server script, plus client-claimed achievements for catalog titles; see [Achievements](api/achievements.md) and [Leaderboards](api/leaderboards.md).
 - **Peer relay** — see [Relay](api/relay.md).
 - **Realtime rooms** — lobbies, matchmaking, AI backfill, and realtime transport for fast-paced games; can also bridge into a room-bound scripted session for server-authoritative play; see [Realtime Rooms](api/realtime.md).
 - **Games & game scripts** — server-authoritative, scripted games hosted by the platform; see [Games](api/games.md) and [Game Scripts](api/game-scripts.md).
@@ -70,6 +70,28 @@ In the Development environment, Swagger UI is available at `/swagger` with three
 | GET | `/` | Anonymous | HTML landing page |
 | GET | `/health` | Anonymous | Health check |
 | GET | `/health/details` | Anonymous | Detailed health check |
+| GET | `/api/v1/time?clientTime=` | Anonymous | Server clock, for client time sync |
+
+### Server clock — `GET /api/v1/time`
+
+Deadlines the platform hands you (a session summary's `deadline`, a script's `ctx.now`) are on the
+**server's** clock, so a client rendering a countdown against its own clock will drift. This
+endpoint is anonymous on purpose — sync has to work before login — and is explicitly allowed for
+game-scoped launch tokens, so a hosted game can call it while fenced into its own surface.
+
+```json
+{
+  "serverTime": 1785060842000,
+  "serverTimeIso": "2026-07-25T09:14:02+00:00",
+  "clientTime": 1785060841200,
+  "skew": 800
+}
+```
+
+`clientTime` (unix ms, optional) is echoed back untouched so a response can be matched to its
+request; `skew` is the naive `serverTime - clientTime` for clients that don't want the round-trip
+math. For a real estimate, do it NTP-style: halve the round trip and compute
+`offset = serverTime + rtt/2 - now`.
 
 ## Cross-cutting behavior
 

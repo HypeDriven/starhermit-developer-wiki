@@ -12,6 +12,7 @@ All endpoints require authentication (`[Authorize]`) and work with both full use
 |---|---|---|---|
 | GET | `/api/v1/games/{slug}` | Bearer | Game info + caller's stats |
 | POST | `/api/v1/games/{slug}/launch-token` | Bearer | Mint a game-scoped launch token |
+| GET | `/api/v1/games/{slug}/achievements` | Bearer | The game's achievements + the caller's unlock state |
 | GET | `/api/v1/games/{slug}/controls` | Bearer | Get the caller's effective control bindings |
 | PUT | `/api/v1/games/{slug}/controls` | Bearer | Replace the caller's control overrides |
 | DELETE | `/api/v1/games/{slug}/controls` | Bearer | Reset the caller's controls to manifest defaults |
@@ -71,6 +72,36 @@ Mints a game-scoped JWT (default lifetime 60 minutes) carrying `game_scope={slug
   "expiresInSeconds": 3600
 }
 ```
+
+## Achievements
+
+### `GET /api/v1/games/{slug}/achievements`
+
+Every achievement the game's script declares, with the caller's unlock state. Secret achievements
+stay hidden until the caller unlocks them. Accepts a full user JWT or a game-scoped launch token.
+`404` when the slug has no scripted game.
+
+```json
+[
+  {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "key": "first-win",
+    "name": "First Win",
+    "description": "Win a match.",
+    "icon": null,
+    "secret": false,
+    "points": 10,
+    "unlocked": true,
+    "unlockedAt": "2026-07-25T09:14:02Z"
+  }
+]
+```
+
+Game achievements are **server-authoritative**: only the game's script grants them (by returning
+`achievements: {userId: [keys]}` from a lifecycle hook), and the client-claimed
+`POST /api/v1/me/achievements/unlock` endpoint refuses them. Live unlocks arrive on the gameplay
+socket as `{"type":"achievement"}` frames. Full contract in
+[Achievements](achievements.md) and [Game Scripts](game-scripts.md#achievements).
 
 ## Per-player control bindings
 
@@ -351,11 +382,16 @@ Durable commands run through the game script's `onPlayerMessage`. A payload whos
 { "type": "game", "data": { "...": "script-authorized message addressed to you" } }
 { "type": "error", "error": "Illegal move" }
 { "type": "presence", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "online": true }
+{ "type": "achievement", "data": { "key": "first-win", "name": "First Win", "description": "Win a match.", "icon": null, "points": 10, "unlockedAt": "2026-07-25T09:14:02Z" } }
 ```
 
 - `game` — a script-authorized message addressed to you.
 - `error` — an error from the platform or from your last command.
 - `presence` — broadcast to the other participants when someone joins or leaves.
+- `achievement` — an achievement the game's script just granted **you**, sent to the earning player
+  only. A separate frame type on purpose: this is platform truth, not script-relayed game data.
+  Emitted from both the command path and the tick sweep. See
+  [Achievements](achievements.md#server-authoritative-game-achievements).
 
 ### Tick service
 
@@ -364,14 +400,14 @@ The platform runs the script's `onTick` sweeps on a timer at the game's effectiv
 ## Lifecycle of a game
 
 1. **Mint a launch token** — `POST /api/v1/games/{slug}/launch-token`. Clients should refresh it before expiry (the chess reference client refreshes every 45 minutes).
-2. **Fetch game state** — `GET /api/v1/games/{slug}` for info + your stats; `GET .../sessions/mine` for games in progress; `GET .../invites` and `GET /api/v1/me/game-invites` for pending invites; `GET .../replays/mine` for history.
+2. **Fetch game state** — `GET /api/v1/games/{slug}` for info + your stats; `GET .../sessions/mine` for games in progress; `GET .../invites` and `GET /api/v1/me/game-invites` for pending invites; `GET .../replays/mine` for history; `GET .../achievements` for the achievement screen.
 3. **Find an opponent**, one of three ways:
    - **Matchmaking:** `POST .../matchmaking`, then poll `GET .../matchmaking` every 3 s until `status` is `matched` (the response carries `sessionId`). `DELETE .../matchmaking` to cancel.
    - **Invite flow:** pick a friend from `GET /api/v1/me/friends` (see [Friends](friends.md)), `POST .../invites` with `{ "toUserId": "..." }`; the invitee calls `POST .../invites/{inviteId}/accept`, which creates the session.
    - **AI practice:** `POST .../sessions/ai`.
 4. **Load the session** — `GET .../sessions/{sessionId}`.
 5. **Connect the WebSocket** — `ws/v1/games?sessionId={guid}` with the launch token, then send whatever initial-sync command the game's script defines — the chess reference implementation, for example, sends `{"type":"cmd","data":{"type":"sync"}}`.
-6. **Play** — exchange `cmd`/`game` frames as defined by the game's script.
+6. **Play** — exchange `cmd`/`game` frames as defined by the game's script, and surface any `achievement` frames the script grants along the way.
 7. **Result** — the script ends the game; the platform archives the replay and publishes elo updates to the leaderboard.
 8. **Replay** — `GET .../replays/{sessionId}` for the full final state.
 

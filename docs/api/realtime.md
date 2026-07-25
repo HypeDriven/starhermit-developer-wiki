@@ -59,7 +59,8 @@ All REST endpoints require authentication and work with both a full user token a
 
 ## REST endpoints
 
-Base: `http://localhost:5000/api/v1/realtime/rooms` (some local setups use port `5050`).
+Base: `http://localhost:5000/api/v1/realtime` (some local setups use port `5050`) — so
+`POST /rooms` below is `POST /api/v1/realtime/rooms`.
 
 | Method | Path | Who | Description |
 |---|---|---|---|
@@ -200,8 +201,10 @@ For a game that declares a `server=` script in its manifest, a realtime room can
 - **Session creation on room start.** When the room enters `Playing` (host force-start or the backfill worker), the platform creates an N-player [game session](games.md) — one `GameSessionPlayer` per *human* participant; AI seats are not session players, they exist only in the script-facing roster — and links the two rows both ways: `GameSession.RealtimeRoomId` and `RealtimeRoom.GameSessionId`. The room DTO and roster pushes expose `gameSessionId` so clients know which gameplay socket to open.
 - **Gameplay moves to `ws/v1/games`.** Clients connect to `ws/v1/games?sessionId=<gameSessionId>` and exchange `cmd`/`game` frames with the script, exactly like any scripted game; the realtime WS stays connected for roster/presence only. The session ticks at the game's effective rate — what its script asked for via `game.tickRateHz`, bounded by the platform maximum and any operator override (see [Game Scripts](game-scripts.md#tick-rate)).
 - **Extended script ctx.** Every invocation for a room-bound session (`createSession`, `onPlayerMessage`, `onTick`) additionally receives `ctx.room` (room id, metadata, and the frozen roster — humans *and* AI seats, ordered by team then slot) and `ctx.presence` (`{ "<userId>": { online, left } }` for every user who is or was a human participant). Details in [Game Scripts — Room-bound sessions](game-scripts.md#room-bound-sessions).
+- **Server-authoritative achievements.** Every hook of a bound session can grant achievements by returning `achievements: {userId: [keys]}`, exactly as in any scripted game — including from `createSession`, which fires the moment the room starts. Unlocks are pushed to the earning player over `ws/v1/games` as `{"type":"achievement"}` frames. See [Achievements](achievements.md#server-authoritative-game-achievements).
 - **The script ends the match.** When the script returns `result`, the platform finishes the session, stores the result on the room, and closes the room (final roster push included). `POST /rooms/{id}/result` is not used for room-bound games.
 - **Failure isolation.** A room stays playable if session creation fails — the bridge is best-effort at start and the room falls back to host-routed behavior.
+- **A host-routed game can bind a session purely for achievements.** The binary gameplay channel is never gated on a bound session, so a game that simulates on the host client can still ship a `server=` script whose only job is authoritative achievement (and elo) grants, while the fast path keeps flowing over `ws/v1/realtime`.
 
 ## How a game uses it
 

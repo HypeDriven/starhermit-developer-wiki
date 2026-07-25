@@ -410,7 +410,7 @@ AI games are rated normally, and in the reference implementation hal has its own
 
 The chess reference implementation touches none of these, but they are all available for games that need them:
 
-- **Achievements** — aimed at catalog titles that unlock platform-wide awards: [achievements.md](../api/achievements.md).
+- **Achievements** — any game with a `server=` script can declare them (`game.achievements`) and grant them server-authoritatively from any lifecycle hook; chess simply doesn't. Catalog titles have a separate client-claimed path: [achievements.md](../api/achievements.md), [game-scripts.md](../api/game-scripts.md#achievements).
 - **Catalog / entitlements** — for games distributed and sold through the catalog: [catalog.md](../api/catalog.md).
 - **Relay** — the high-frequency relay channel for fast-paced, real-time games where the per-command script round-trip is too slow: [relay.md](../api/relay.md).
 - **External libraries** — script sandbox escapes for heavier logic: [external-libraries.md](../api/external-libraries.md).
