@@ -10,10 +10,12 @@ Every StarHermit game is defined by a **single JavaScript file** executed server
 
 ## Entry points
 
-Expose three functions on `globalThis.game`:
+Expose the handlers on `globalThis.game`. The optional static `tickRateHz` declaration asks the
+platform how often to invoke `onTick` (see [Tick rate](#tick-rate)):
 
 ```js
 globalThis.game = {
+  tickRateHz: 0, // turn-based: opt out of periodic ticks
   createSession(ctx) { /* ... */ },
   onPlayerMessage(ctx) { /* ... */ },
   onTick(ctx) { /* ... */ }
@@ -22,7 +24,7 @@ globalThis.game = {
 
 - `createSession(ctx)` — called when a session is created (matchmaking, invite-accept, AI practice, or a realtime room starting — see [Room-bound sessions](#room-bound-sessions)).
 - `onPlayerMessage(ctx)` — called for durable client commands received over the gameplay WebSocket. Inputs explicitly marked `realtime:true` bypass this entry point.
-- `onTick(ctx)` — called by the platform's timer service at the game's configured tick rate (see [Tick rate](#tick-rate)); latest realtime inputs are available in `ctx.inputs`.
+- `onTick(ctx)` — called by the platform's timer service at the effective tick rate; latest realtime inputs are available in `ctx.inputs`. A game resolving to 0 Hz does not receive periodic calls, but the function should still be present to satisfy the script contract.
 
 ## Context object
 

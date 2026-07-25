@@ -108,20 +108,24 @@ host (JavaScript, no Node APIs, no imports, no network, no clock):
 
 1. Expose globalThis.game with createSession, onPlayerMessage, and onTick,
    matching the signatures in game-scripts.md.
-2. Determinism: use ONLY ctx.now() for time and ctx.random() for
+2. Set globalThis.game.tickRateHz deliberately: 0 for a turn-based game
+   that needs no periodic work, or the lowest whole-Hz rate that meets this
+   game's realtime/timer needs. Explain the choice. The platform may clamp
+   it to its configured maximum.
+3. Determinism: use ONLY ctx.now() for time and ctx.random() for
    randomness. Never use Date, Math.random, or any ambient API.
-3. Every handler returns an object shaped per the contract:
+4. Every handler returns an object shaped per the contract:
    { ok, error, sessionState, playerStates, broadcast, eloUpdates, result }.
    Validate every command against the current state and the sender; reject
    illegal input with { ok: false, error: "…" }.
-4. Define the command set the client may send (the "data" of cmd frames)
+5. Define the command set the client may send (the "data" of cmd frames)
    and the broadcast set the client will receive. Treat these as the
    client contract and document them in a comment at the top of the file.
-5. Maintain a summary object { turnPlayerId, deadline, status, moveCount }
+6. Maintain a summary object { turnPlayerId, deadline, status, moveCount }
    so the platform's sessions list can show whose turn it is.
-6. When the game ends, return a result object (so the platform records a
+7. When the game ends, return a result object (so the platform records a
    replay) and eloUpdates for the rated players.
-7. Also expose the pure rules functions as globalThis.[myGame]Rules so the
+8. Also expose the pure rules functions as globalThis.[myGame]Rules so the
    browser client can reuse this same file for rendering and replays —
    one file, one source of truth, zero rules authority on the client.
 ```
@@ -327,8 +331,9 @@ step before continuing:
    the cmd/sync pattern, 1s→30s exponential-backoff reconnect with re-sync,
    game/error/presence routing.
 6. Server script: globalThis.game per game-scripts.md implementing
-   [my game's rules], ctx.now/ctx.random only, summary object, result +
-   eloUpdates on game end, shared rules exposed client-side.
+   [my game's rules], an intentional tickRateHz (0 for no periodic ticks),
+   ctx.now/ctx.random only, summary object, result + eloUpdates on game end,
+   shared rules exposed client-side.
 7. Chat: session conversation via chatConversationId, REST GET/POST
    messages with 5 s polling (ws/v1/chat is blocked for scoped tokens).
 8. Voice: opt-in toggle, rooms REST + /ws/v1/voice, WebRTC perfect

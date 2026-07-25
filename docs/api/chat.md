@@ -19,8 +19,10 @@ Base: `http://localhost:5000/api/v1/chat` (some local setups use port `5050`).
 | POST | `/conversations/{id}/participants` | JWT | Add participants to a conversation |
 | DELETE | `/conversations/{id}/participants/{userId}` | JWT | Remove a participant (self: any member; others: group creator only) |
 | POST | `/conversations/{id}/leave` | JWT | Leave a conversation |
-| GET | `/conversations` | JWT | List your conversations |
-| GET | `/conversations/{id}` | JWT | Get a conversation |
+| GET | `/conversations` | JWT | List conversations, including each unread count |
+| GET | `/conversations/{id}` | JWT | Get a conversation, including its unread count |
+| GET | `/unread` | JWT | Get the total unread-message count |
+| POST | `/conversations/{id}/read` | JWT | Mark a conversation read |
 | GET | `/conversations/{id}/messages?page=&pageSize=` | JWT | Get paged message history |
 | POST | `/conversations/{id}/messages` | JWT | Send a message (rate-limited) |
 | PUT | `/conversations/{conversationId}/messages/{messageId}` | JWT | Edit a message |
@@ -109,11 +111,26 @@ All fields are optional. One friend participant creates a **direct** conversatio
   "joinPolicy": "closed",
   "createdAt": "2026-07-22T07:00:00Z",
   "participants": [{ "userId": "<guid>", "username": "alice" }],
-  "otherParticipant": { "userId": "<guid>", "username": "bob" }
+  "otherParticipant": { "userId": "<guid>", "username": "bob" },
+  "unreadCount": 3
 }
 ```
 
-`type` is one of `direct`, `group`, `game`. `name`, `createdByUserId`, and `otherParticipant` may be absent.
+`type` is one of `direct`, `group`, `game`. `name`, `createdByUserId`, and `otherParticipant` may be absent. `unreadCount` counts unread text messages sent by other members after the caller's per-conversation read horizon.
+
+### Unread state
+
+`GET /unread` returns the unread count across all of the caller's conversations:
+
+```json
+{ "total": 7 }
+```
+
+`POST /conversations/{id}/read` advances the caller's read horizon for that conversation.
+Use it after displaying the current transcript. The server emits a `conversation_read` event to
+all sockets belonging to the caller, allowing multiple signed-in clients to clear their badges.
+New and deleted messages may change the total, so clients should update from WebSocket events or
+periodically refetch `/unread`.
 
 ### Messages
 
@@ -175,6 +192,7 @@ This is a **pure server→client push channel**: client frames are ignored (only
 | `new_message` | `MessageDto` |
 | `message_updated` | `MessageDto` |
 | `message_deleted` | `MessageDto` |
+| `conversation_read` | Read-state change for the signed-in user; refetch unread counts |
 | `game_invite` | `{ "inviteId", "gameSlug", "gameName", "from": { "userId", "username" }, "createdAt" }` |
 
 ## Chat inside a game session
