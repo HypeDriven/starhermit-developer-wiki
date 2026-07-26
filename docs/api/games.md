@@ -26,7 +26,7 @@ All endpoints require authentication (`[Authorize]`) and work with both full use
 | GET | `/api/v1/games/{slug}/invites` | Bearer | Incoming pending + all outgoing invites |
 | POST | `/api/v1/games/{slug}/invites/{inviteId}/accept` | Bearer | Accept an invite (creates the session) |
 | POST | `/api/v1/games/{slug}/invites/{inviteId}/decline` | Bearer | Decline an invite |
-| GET | `/api/v1/me/game-invites` | Bearer | Cross-game pending invites (max 50) |
+| GET | `/api/v1/me/game-invites` | Bearer | All pending invites — every game, both invite systems (max 50) |
 | GET | `/api/v1/games/{slug}/replays/mine` | Bearer | Caller's finished sessions |
 | GET | `/api/v1/games/{slug}/replays/{sessionId}` | Bearer | Full replay state (participants only) |
 | WS | `/ws/v1/games?sessionId={guid}` | Bearer | Gameplay WebSocket |
@@ -239,7 +239,9 @@ Request body:
 { "toUserId": "9b2f8c1a-1111-4222-8333-444455556666" }
 ```
 
-The target must be a friend (`403` otherwise — see [Friends](friends.md)); `409` on a duplicate invite or when either player is at the session cap. The invitee also receives a `game_invite` event pushed over their chat socket (see [Chat](chat.md)).
+The target must be a friend (`403` otherwise — see [Friends](friends.md)); `409` on a duplicate invite or when either player is at the session cap. The invitee also receives a [`game_invite` event](chat.md#game_invite-one-event-for-both-invite-systems) pushed over their chat socket, with `kind: "session"`.
+
+**Which invite should you send?** Accepting this one *creates a new session* for the two players. If the inviter is already sitting in a [realtime room](realtime.md) (a lobby with seats), invite them into that room instead — `POST /api/v1/realtime/rooms/{id}/invites` — so accepting seats them at the table you are actually at. Both notify the invitee the same way, so never send both for one invitation: that notifies twice.
 
 Response:
 
@@ -250,9 +252,12 @@ Response:
   "to": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
   "status": "pending",
   "createdAt": "2026-07-20T14:10:00Z",
-  "sessionId": null
+  "sessionId": null,
+  "notified": true
 }
 ```
+
+`notified` reports whether the push reached a live connection (`false` = the invitee is not connected; the invite still stands and they will see it in their inbox). It is `null` on the list/accept/decline responses, where it does not apply.
 
 ### `GET /api/v1/games/{slug}/invites`
 
@@ -275,19 +280,36 @@ Returns `204`.
 
 ### `GET /api/v1/me/game-invites`
 
-Cross-game pending invites for the caller (max 50) — the poll fallback for the push notification.
+Every pending invite addressed to the caller (max 50, newest first) — the poll fallback for the push notification, and the one place to ask "what am I invited to?". It spans **both** invite systems: session invites from this page and [realtime-room invites](realtime.md#invites). Entries are exactly the [`game_invite` payloads](chat.md#game_invite-one-event-for-both-invite-systems), so a client renders push and poll results with the same code.
 
 ```json
 [
   {
     "inviteId": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+    "kind": "room",
+    "gameSlug": "poker",
+    "gameName": "StarHermit Poker",
+    "roomId": "b1d2c3e4-5f60-4a71-8b92-c3d4e5f60718",
+    "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
+    "createdAt": "2026-07-26T14:10:00Z",
+    "acceptPath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/accept",
+    "declinePath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/decline"
+  },
+  {
+    "inviteId": "c4a5b6d7-8e9f-4012-8345-6789abcdef01",
+    "kind": "session",
     "gameSlug": "chess",
     "gameName": "Chess",
+    "roomId": null,
     "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
-    "createdAt": "2026-07-20T14:10:00Z"
+    "createdAt": "2026-07-20T14:10:00Z",
+    "acceptPath": "/api/v1/games/chess/invites/c4a5b6d7-8e9f-4012-8345-6789abcdef01/accept",
+    "declinePath": "/api/v1/games/chess/invites/c4a5b6d7-8e9f-4012-8345-6789abcdef01/decline"
   }
 ]
 ```
+
+Answer each entry at its own `acceptPath`/`declinePath` — the two systems keep separate invite ids, so a room invite id at `/games/{slug}/invites/...` is a `404`. Room invites whose room has already started or closed are omitted; there is nothing left to accept.
 
 ### Share links (invite by URL)
 
@@ -403,7 +425,7 @@ The platform runs the script's `onTick` sweeps on a timer at the game's effectiv
 2. **Fetch game state** — `GET /api/v1/games/{slug}` for info + your stats; `GET .../sessions/mine` for games in progress; `GET .../invites` and `GET /api/v1/me/game-invites` for pending invites; `GET .../replays/mine` for history; `GET .../achievements` for the achievement screen.
 3. **Find an opponent**, one of three ways:
    - **Matchmaking:** `POST .../matchmaking`, then poll `GET .../matchmaking` every 3 s until `status` is `matched` (the response carries `sessionId`). `DELETE .../matchmaking` to cancel.
-   - **Invite flow:** pick a friend from `GET /api/v1/me/friends` (see [Friends](friends.md)), `POST .../invites` with `{ "toUserId": "..." }`; the invitee calls `POST .../invites/{inviteId}/accept`, which creates the session.
+   - **Invite flow:** pick a friend from `GET /api/v1/me/friends` (see [Friends](friends.md)), `POST .../invites` with `{ "toUserId": "..." }`; the invitee calls `POST .../invites/{inviteId}/accept`, which creates the session. (If your game seats players in a [realtime room](realtime.md) first, invite them to the room instead — same notification, but accepting puts them at the table you are already in.)
    - **AI practice:** `POST .../sessions/ai`.
 4. **Load the session** — `GET .../sessions/{sessionId}`.
 5. **Connect the WebSocket** — `ws/v1/games?sessionId={guid}` with the launch token, then send whatever initial-sync command the game's script defines — the chess reference implementation, for example, sends `{"type":"cmd","data":{"type":"sync"}}`.

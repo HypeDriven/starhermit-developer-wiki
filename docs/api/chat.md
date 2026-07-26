@@ -193,7 +193,37 @@ This is a **pure server→client push channel**: client frames are ignored (only
 | `message_updated` | `MessageDto` |
 | `message_deleted` | `MessageDto` |
 | `conversation_read` | Read-state change for the signed-in user; refetch unread counts |
-| `game_invite` | `{ "inviteId", "gameSlug", "gameName", "from": { "userId", "username" }, "createdAt" }` |
+| `game_invite` | `{ "inviteId", "kind", "gameSlug", "gameName", "roomId", "from": { "userId", "username" }, "createdAt", "acceptPath", "declinePath" }` — see below |
+
+### `game_invite`: one event for both invite systems
+
+Anyone can be invited to play in two ways, and this single event carries both — a client implements one toast, not two:
+
+| `kind` | Issued by | Accepting it |
+|---|---|---|
+| `"session"` | [`POST /games/{slug}/invites`](games.md#invites) | Creates a new game session for the two of you |
+| `"room"` | [`POST /realtime/rooms/{id}/invites`](realtime.md#invites) | Takes a seat in a room the inviter is already sitting in; `roomId` is that room |
+
+`acceptPath` and `declinePath` are the endpoints that answer **this** invite — use them and the distinction never matters. Answering at the other system's endpoint is a `404`: the two keep separate invite ids.
+
+```json
+{
+  "type": "game_invite",
+  "payload": {
+    "inviteId": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+    "kind": "room",
+    "gameSlug": "poker",
+    "gameName": "StarHermit Poker",
+    "roomId": "b1d2c3e4-5f60-4a71-8b92-c3d4e5f60718",
+    "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "alice" },
+    "createdAt": "2026-07-26T14:10:00Z",
+    "acceptPath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/accept",
+    "declinePath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/decline"
+  }
+}
+```
+
+`roomId` is `null` for `"session"` invites. A game-scoped launch token cannot open this socket, so game clients poll instead — `GET /api/v1/me/game-invites` returns the same payloads (both kinds), and `GET /api/v1/realtime/rooms/invites` returns the room invites alone.
 
 ## Chat inside a game session
 

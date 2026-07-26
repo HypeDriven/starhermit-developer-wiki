@@ -55,7 +55,7 @@ All REST endpoints require authentication and work with both a full user token a
 - `gameSessionId` is the bound scripted session, set when the room starts for a game with a `server=` script (see [the bridge](#room-bound-scripted-sessions)); `null` otherwise. It is also included in roster pushes.
 - `result` is the outcome, set when the room closes — host-submitted for host-routed games, script-returned for room-bound sessions.
 
-**Invite**: `{ "id", "roomId", "gameSlug", "fromUserId", "fromUsername", "toUserId", "status", "createdAt" }` with `status` one of `pending` | `accepted` | `declined` | `expired` (invites expire when the room closes or starts before they are answered).
+**Invite**: `{ "id", "roomId", "gameSlug", "fromUserId", "fromUsername", "toUserId", "status", "createdAt", "notified" }` with `status` one of `pending` | `accepted` | `declined` | `expired` (invites expire when the room closes or starts before they are answered). `notified` appears on the response to `POST /rooms/{id}/invites` and reports whether the invitee's notification reached a live connection; it is `null` when listing.
 
 ## REST endpoints
 
@@ -66,7 +66,7 @@ Base: `http://localhost:5000/api/v1/realtime` (some local setups use port `5050`
 |---|---|---|---|
 | POST | `/rooms` | anyone | Create a lobby; caller becomes host |
 | GET | `/rooms/{id}` | participants + invitees | Room + roster |
-| POST | `/rooms/{id}/invites` | participants | Invite a friend (`409` on duplicate) |
+| POST | `/rooms/{id}/invites` | participants | Invite a friend; notifies them (`409` on duplicate) |
 | GET | `/rooms/invites` | anyone | Caller's pending room invites (cross-game) |
 | POST | `/rooms/invites/{inviteId}/accept` | invitee | Join the room (seat assigned) |
 | POST | `/rooms/invites/{inviteId}/decline` | invitee | Decline (`204`) |
@@ -93,7 +93,11 @@ Base: `http://localhost:5000/api/v1/realtime` (some local setups use port `5050`
 
 `POST /rooms/{id}/invites` with `{ "toUserId": "<guid>" }`. Invites are **friends-only** (`403` otherwise; the same friendship rule as game invites), participants only, and only while the room is in `Lobby`/`Open`. `409` if the user is already in the room or already has a pending invite; `400` when inviting yourself. Returns the invite.
 
-`GET /rooms/invites` lists the caller's pending invites across all games (launch tokens see only their own game's). Use it as the invite inbox a game client polls.
+**The invitee is notified for you.** Sending a room invite emits a [`game_invite` push](chat.md#game_invite-one-event-for-both-invite-systems) on the invitee's chat socket and adds the invite to `GET /api/v1/me/game-invites`, so a friend who is in the StarHermit dashboard (or anywhere but your game) still hears about it. You do **not** need to also send a games-API invite — that would notify twice. The response's `notified` tells you whether the push reached a live connection; `false` just means the invitee is not connected right now and will see the invite from their inbox instead.
+
+Because one notification covers both invite systems, its payload carries `kind: "room"` plus `roomId` and the `acceptPath`/`declinePath` for **this** invite. Answer a room invite at the realtime endpoints below — a room invite id is not valid at `/games/{slug}/invites/...` and vice versa.
+
+`GET /rooms/invites` lists the caller's pending room invites across all games (launch tokens see only their own game's). Use it as the invite inbox a game client polls. It is room-invites-only; `GET /api/v1/me/game-invites` is the cross-*system* inbox and returns these too.
 
 `POST /rooms/invites/{inviteId}/accept` seats the caller and returns the room. **Party pinning**: invite-joins are seated on the host's team while space lasts, then overflow to other teams. `409` if the room is full, already started/closed, or the caller is in another active room.
 
@@ -209,7 +213,7 @@ For a game that declares a `server=` script in its manifest, a realtime room can
 ## How a game uses it
 
 1. **Create**: the lobby creator calls `POST /rooms` with its team layout and an opaque `metadata` blob, and becomes host.
-2. **Invite**: the host lists friends (`GET /api/v1/me/friends`) and sends `POST /rooms/{id}/invites`; friends poll `GET /rooms/invites` and `accept` — they are seated on the host's team.
+2. **Invite**: the host lists friends (`GET /api/v1/me/friends`) and sends `POST /rooms/{id}/invites`. The platform notifies each invitee (`game_invite` push + `GET /api/v1/me/game-invites`), so they can accept from the dashboard without having your game open; invitees already in the game see the same invites by polling `GET /rooms/invites`. Accepting seats them on the host's team.
 3. **Open**: the host calls `POST /rooms/{id}/open`. Solo players call `POST /rooms/quick-join` and land in the oldest open room with a free seat (on `404` they create and open their own room).
 4. **Connect**: everyone opens `ws/v1/realtime?roomId=…` and watches `roster`/`presence` pushes as seats fill.
 5. **Start**: at the backfill deadline (worker) or when the host force-starts, empty seats become AI participants and the roster freezes. **Host-routed game**: guests send inputs as binary frames (they reach only the host); the host broadcasts snapshots. **Room-bound scripted game**: everyone connects `ws/v1/games?sessionId=<gameSessionId>` and plays against the script with `cmd`/`game` frames.
