@@ -1,6 +1,6 @@
 # Realtime Rooms
 
-Realtime rooms are generalized lobbies for fast-paced multiplayer games: room creation, friend invites, quick-join matchmaking, AI-seat backfill, and a role-aware realtime transport (`ws/v1/realtime`). The subsystem is deliberately game-agnostic — rooms are scoped per game slug, the room `metadata` is an opaque per-game JSON blob, and `teamCount = 1` models free-for-all games.
+Realtime rooms are generalized lobbies for fast-paced multiplayer games: room creation, friend invites, quick-join matchmaking, AI players on demand plus AI-seat backfill, and a role-aware realtime transport (`ws/v1/realtime`). The subsystem is deliberately game-agnostic — rooms are scoped per game slug, the room `metadata` is an opaque per-game JSON blob, and `teamCount = 1` models free-for-all games.
 
 A match runs one of two ways:
 
@@ -26,6 +26,7 @@ All REST endpoints require authentication and work with both a full user token a
     "teamCount": 2,
     "seatsPerTeam": 5,
     "backfillAfterSeconds": 30,
+    "aiPlayers": 0,
     "metadata": { "map": "arena" }
   },
   "participants": [
@@ -50,6 +51,7 @@ All REST endpoints require authentication and work with both a full user token a
 ```
 
 - `config.metadata` is an opaque JSON blob the platform never interprets.
+- `config.aiPlayers` is how many AI players the creator asked the match to start with — they are seated when the room is created (see [below](#ai-players)). It records the request; the `participants` roster is authoritative for who actually holds a seat.
 - AI participants have `userId: null`, `isAi: true`, and a server-generated random nickname, unique within the room.
 - `(team, slot)` is a participant's seat coordinate; humans are seated in join order.
 - `gameSessionId` is the bound scripted session, set when the room starts for a game with a `server=` script (see [the bridge](#room-bound-scripted-sessions)); `null` otherwise. It is also included in roster pushes.
@@ -64,7 +66,7 @@ Base: `https://api.starhermit.com/api/v1/realtime` — so
 
 | Method | Path | Who | Description |
 |---|---|---|---|
-| POST | `/rooms` | anyone | Create a lobby; caller becomes host |
+| POST | `/rooms` | anyone | Create a lobby, optionally with AI players; caller becomes host |
 | GET | `/rooms/{id}` | participants + invitees | Room + roster |
 | POST | `/rooms/{id}/invites` | participants | Invite a friend; notifies them (`409` on duplicate) |
 | GET | `/rooms/invites` | anyone | Caller's pending room invites (cross-game) |
@@ -81,13 +83,34 @@ Base: `https://api.starhermit.com/api/v1/realtime` — so
 ### Create a room — `POST /rooms`
 
 ```json
-{ "gameSlug": "my-game", "teamCount": 2, "seatsPerTeam": 5, "backfillAfterSeconds": 30, "metadata": { "map": "arena" } }
+{ "gameSlug": "my-game", "teamCount": 2, "seatsPerTeam": 5, "backfillAfterSeconds": 30, "aiPlayers": 0, "metadata": { "map": "arena" } }
 ```
 
 - `gameSlug` is required for full user tokens. With a game-scoped launch token the slug is taken from the token's `game_scope` (a mismatching body value is rejected with `403`).
 - Caps: `teamCount` 1–2, `seatsPerTeam` 1–11, total seats ≤ 32. `backfillAfterSeconds` defaults to `30`.
+- `aiPlayers` defaults to `0`. Range `0`–`(teamCount × seatsPerTeam) − 1` — the host always needs a seat, so a fully-AI room is a `400`.
 - One active room per user: creating or joining while you are in any non-`Closed` room returns `409`.
 - The creator becomes the host, seated at team 0, slot 0. Returns the room.
+
+#### AI players
+
+`aiPlayers` says how many AI players the **match should start with**. They are not a promise redeemed later — the server seats them immediately, so the room you get back already contains them:
+
+- They are ordinary participants (`isAi: true`, `userId: null`, unique nickname) and appear in the roster and in every `roster` push from the moment the room exists.
+- They **occupy seats**, so they reduce the capacity left for humans: invites and quick-join fill only what remains, and `POST /rooms/invites/{id}/accept` returns `409` once no free seat is left. You get exactly the number of AI you asked for — never more from matchmaking.
+- Placement fills the **emptiest team first** (ties go to the lower team index), lowest free slot. So a `teamCount: 2, seatsPerTeam: 1` room with `aiPlayers: 1` puts the AI opposite the host, and bigger rooms stay balanced. Re-seat them however you like with `POST /rooms/{id}/seats` before the match starts.
+- Start-time backfill is unchanged: any seat nobody took still becomes an AI participant when the room starts.
+
+**Playing solo against the computer** is therefore two calls — create the room with every other seat as AI, then start it:
+
+```http
+POST /api/v1/realtime/rooms
+{ "gameSlug": "chess", "teamCount": 2, "seatsPerTeam": 1, "aiPlayers": 1 }
+
+POST /api/v1/realtime/rooms/{id}/start
+```
+
+AI seats are identities and seat reservations, not a bot service — nothing on the platform plays them for you. A host-routed game drives them in its own simulation; a game with a `server=` script finds them in `ctx.room.roster` flagged `ai: true` and plays them inside the script (see [Game Scripts](game-scripts.md#room-bound-sessions)).
 
 ### Invites
 
@@ -107,11 +130,13 @@ Because one notification covers both invite systems, its payload carries `kind: 
 
 `POST /rooms/{id}/open` (host only): `Lobby` → `Open`, sets `openedAt`, and starts the backfill countdown. Idempotent while already `Open`; `409` once `Playing`/`Closed`.
 
-`POST /rooms/quick-join` with `{ "gameSlug": "my-game", "seats": 1 }` places the caller in the **oldest open room with a free seat** for that game slug. `404` when no room qualifies — the client should then create its own room and open it. Only single-seat quick-join is supported (`seats` must be `1`).
+An `Open` room does not wait out its countdown once **every seat is taken** — by humans or by AI players configured at creation. It starts there and then, so the response to `open` (or to the join that filled the last seat) can already be a `Playing` room with `startedAt` set. A room created with AI in every seat but the host's therefore starts the moment it is opened.
+
+`POST /rooms/quick-join` with `{ "gameSlug": "my-game", "seats": 1 }` places the caller in the **oldest open room with a free seat** for that game slug — AI seats count as taken, so a room whose remaining seats are all AI is skipped. `404` when no room qualifies — the client should then create its own room and open it. Only single-seat quick-join is supported (`seats` must be `1`).
 
 ### Start, seats, leave, result
 
-`POST /rooms/{id}/start` (host only): fills every empty seat with an AI participant (`isAi: true`, `userId: null`, unique random nickname), freezes the roster, sets `status: "Playing"`, and returns the frozen roster. If the game has a `server=` script, this also creates the room-bound scripted session (see [the bridge](#room-bound-scripted-sessions)); the returned room and roster push carry `gameSessionId`. **Idempotent** — starting a `Playing` room returns the roster again. A room may start automatically when its backfill deadline passes.
+`POST /rooms/{id}/start` (host only): fills every **still-empty** seat with an AI participant (`isAi: true`, `userId: null`, unique random nickname) — AI players seated at creation keep their id, nickname, and seat — freezes the roster, sets `status: "Playing"`, and returns the frozen roster. If the game has a `server=` script, this also creates the room-bound scripted session (see [the bridge](#room-bound-scripted-sessions)); the returned room and roster push carry `gameSessionId`. **Idempotent** — starting a `Playing` room returns the roster again. A room may start automatically when its backfill deadline passes.
 
 `POST /rooms/{id}/seats` (host only, `Lobby`/`Open` only) re-seats participants:
 
@@ -183,6 +208,7 @@ The server pushes JSON text frames on its own:
 ## Automatic room lifecycle
 
 - An `Open` room starts automatically when its backfill deadline passes; empty seats become uniquely named AI participants.
+- An `Open` room also starts automatically as soon as every seat is taken — by humans, by AI players configured at creation, or a mix — without waiting for that deadline.
 - A `Playing` room closes when its host has no active WebSocket connection for more than 60 seconds. Connected guests receive a final roster push showing the room closed.
 - A `Lobby` or `Open` room closes after more than 60 minutes without connected participants.
 
@@ -192,7 +218,7 @@ A participant who merely loses their connection is not affected: reconnecting th
 
 - Every endpoint works with a full JWT **or** a game-scoped launch token; a launch token's `game_scope` must match the room's `gameSlug`, so two games can never see or join each other's rooms.
 - Reads are participant-only (plus pending invitees); `open`, `seats`, `start`, and `result` are host-only; invites are friends-only.
-- Validation: seat/team caps, one active room per user, idempotent start, result scores clamped to 0–50, invites expire with the room.
+- Validation: seat/team caps, an AI count that always leaves the host a seat, one active room per user, idempotent start, result scores clamped to 0–50, invites expire with the room.
 - Transport: server-tagged sender ids, role-based routing, frame size caps, per-connection rate limits, no server-side parsing of binary payloads.
 
 ## Room-bound scripted sessions
@@ -209,11 +235,11 @@ For a game that declares a `server=` script in its manifest, a realtime room can
 
 ## How a game uses it
 
-1. **Create**: the lobby creator calls `POST /rooms` with its team layout and an opaque `metadata` blob, and becomes host.
+1. **Create**: the lobby creator calls `POST /rooms` with its team layout, an opaque `metadata` blob, and however many `aiPlayers` the match should start with, and becomes host. Filling every other seat with AI here is the whole solo-versus-computer flow.
 2. **Invite**: the host lists friends (`GET /api/v1/me/friends`) and sends `POST /rooms/{id}/invites`. The platform notifies each invitee (`game_invite` push + `GET /api/v1/me/game-invites`), so they can accept from the dashboard without having your game open; invitees already in the game see the same invites by polling `GET /rooms/invites`. Accepting seats them on the host's team.
 3. **Open**: the host calls `POST /rooms/{id}/open`. Solo players call `POST /rooms/quick-join` and land in the oldest open room with a free seat (on `404` they create and open their own room).
 4. **Connect**: everyone opens `ws/v1/realtime?roomId=…` and watches `roster`/`presence` pushes as seats fill.
-5. **Start**: at the backfill deadline or when the host force-starts, empty seats become AI participants and the roster freezes. **Host-routed game**: guests send inputs as binary frames (they reach only the host); the host broadcasts snapshots. **Room-bound scripted game**: everyone connects `ws/v1/games?sessionId=<gameSessionId>` and plays against the script with `cmd`/`game` frames.
+5. **Start**: at the backfill deadline, as soon as every seat is taken, or when the host force-starts, any remaining empty seats become AI participants and the roster freezes. **Host-routed game**: guests send inputs as binary frames (they reach only the host); the host broadcasts snapshots. **Room-bound scripted game**: everyone connects `ws/v1/games?sessionId=<gameSessionId>` and plays against the script with `cmd`/`game` frames.
 6. **Leave mid-match**: a player who leaves during `Playing` is replaced where they sat by an AI participant (same seat, new server-generated nickname) and can immediately queue again; if the host leaves, the host role passes to the longest-joined remaining human. A host who drops their connection has 60 seconds to reconnect before the match closes.
 7. **Finish**: host-routed — the host POSTs the result; the server clamps scores, stores the result, pushes it to all sockets, and closes the room. Room-bound — the script returns `result` and the platform stores it and closes the room.
 
