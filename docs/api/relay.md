@@ -77,14 +77,15 @@ Limits:
 
 Use the relay for fast-paced games that want server fan-out without running a game script. It is deliberately dumb transport: the server neither parses nor validates your payloads.
 
-Contrast this with the [scripted games subsystem](games.md), which is server-authoritative and suited to anything from turn-based play to realtime tick rates. If your game needs the server to enforce rules and state, use game scripts; if it needs low-overhead byte relay between peers, use the relay.
+Contrast this with the [games subsystem](games.md), which is server-authoritative through a sandboxed script or container backend and suited to anything from turn-based play to realtime simulation. If your game needs the server to enforce rules and state, use an authoritative game runtime; if it needs low-overhead byte relay between peers, use the relay.
 
 Confirm relay availability before shipping a feature that depends on it.
 
 ## See also
 
 - [Realtime rooms](realtime.md) — lobbies, matchmaking, AI players and backfill, and role-aware routing for fast-paced games
-- [Games](games.md) — server-authoritative scripted games
+- [Games](games.md) — server-authoritative games
+- [Container Game Servers](container-games.md) — authoritative servers in other languages
 - [Game scripts](game-scripts.md) — writing game scripts
 - [Voice](voice.md) — voice rooms for in-game audio
 - [Chess walkthrough](../tutorials/chess-walkthrough.md) — the reference implementation of a scripted-game integration

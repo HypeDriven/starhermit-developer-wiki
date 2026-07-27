@@ -13,13 +13,18 @@ name=Your Game
 slug=yourgame            # URL-safe id; endpoints live under /api/v1/games/<slug>/…
 launch=index.html        # repo-relative HTML entry
 owner=<starhermit username or user id>
-server=server.js         # optional; omit for a pure browser game; declares the server-side game script (see game-scripts.md)
+# Choose at most one authoritative backend, or omit both for a browser-only game:
+server=server.js         # sandboxed JavaScript; see game-scripts.md
+# container.image=ghcr.io/owner/game@sha256:<64 lowercase hex>; see container-games.md
+
 control.up=KeyW+ArrowUp | Move forward
 control.shoot=Space | Shoot
 ```
 
 - `slug` determines the subdomain (`<slug>.starhermit.com`) and the game API namespace (`/api/v1/games/<slug>/…`).
-- `server` is optional. Omit it for a pure browser game. When present, it declares the server-side game script; see [game-scripts.md](game-scripts.md).
+- `server` declares a sandboxed JavaScript backend; see [game-scripts.md](game-scripts.md).
+- `container.image` declares a container backend; see [container-games.md](container-games.md). It must be digest-pinned, hosted in the verified GitHub owner's namespace on an allowlisted registry, and may be accompanied by `container.port`, `container.health`, `container.memory_mb`, `container.cpu`, and non-secret `container.env.*` values.
+- Both backend keys are optional for a pure browser game, but they are mutually exclusive with each other.
 
 ### Default control bindings
 
@@ -79,10 +84,10 @@ Despite its historical name, `repoUrl` accepts three launch sources:
 - `displayName` and `launchPath` are optional fallbacks. They are useful for a third-party repo
   without trusted manifest metadata; a direct hosted URL is itself the launch location.
 - For verified repository owners the platform validates `starhermit.txt`.
-- An optional server script path provisions a scripted game (`gameSlug`); see [game-scripts.md](game-scripts.md).
+- An optional `server=` script or `container.image=` backend provisions an authoritative game (`gameSlug`); see [game-scripts.md](game-scripts.md) and [container-games.md](container-games.md). Container hosting may be restricted to approved developers.
 - Limits: 100 games per user. Registering a duplicate returns `409`.
 
-Registration/deployment statuses include: `InvalidUrl`, `LimitReached`, `Duplicate`, `MissingManualMetadata`, `MissingStarhermitTxt`, `InvalidLaunchPath`, `InvalidServerScriptPath`, `ServerProvisionConflict`, `RemovedByOwner`.
+Registration/deployment statuses include: `InvalidUrl`, `LimitReached`, `Duplicate`, `MissingManualMetadata`, `MissingStarhermitTxt`, `InvalidLaunchPath`, `InvalidServerScriptPath`, `InvalidContainerImage`, `ServerProvisionConflict`, `RemovedByOwner`.
 
 Errors use the standard shape:
 
@@ -142,7 +147,7 @@ Take ownership of a game when your linked GitHub login owns the repository. GitH
 }
 ```
 
-- `serverScriptPath` and `gameSlug` are only present when a server script is declared.
+- `serverScriptPath` is present only for a JavaScript backend. `gameSlug` may be present for either a script or container backend. The current DTO does not expose a container image reference.
 - `SharedGitHubGameDto` extends `GitHubGameDto` with `submittedByUserId` and `submittedByUsername`.
 
 ```json
@@ -162,18 +167,19 @@ Take ownership of a game when your linked GitHub login owns the repository. GitH
 
 ## Publish your own game: walkthrough
 
-1. **Choose a source**: push a repo containing `starhermit.txt` at the root (plus an optional `server.js`), or prepare the public URL of an already-hosted browser game.
+1. **Choose a source**: push a repo containing `starhermit.txt` at the root (optionally declaring either a `server.js` script or container image), or prepare the public URL of an already-hosted browser game.
 2. **Link your GitHub identity** via the OAuth flow (see [auth.md](auth.md)); verify with `GET /api/v1/me/github`.
 3. **Register the game**: `POST /api/v1/me/github-games` with the repository or hosted-game URL in `repoUrl`.
 4. **Repository games only — enable hosting**: `PUT /api/v1/me/github-games/{id}/hosting` with `{ "enabled": true }`.
 5. **Repository games only — pin a commit**: `PUT /api/v1/me/github-games/{id}/deployment` with `{ "commit": "<sha>" }`. The pinned commit controls the live version.
-6. **Players launch the game**: a deployed repository game is served at `<slug>.starhermit.com`; a direct hosted game opens its submitted URL. Scripted platform games receive a launch token from `POST /api/v1/games/<slug>/launch-token` in the URL fragment (optionally with `&session_id=<guid>` for invite deep-links).
+6. **Players launch the game**: a deployed repository game is served at `<slug>.starhermit.com`; a direct hosted game opens its submitted URL. Games with either authoritative backend receive a launch token from `POST /api/v1/games/<slug>/launch-token` in the URL fragment (optionally with `&session_id=<guid>` for invite deep-links).
 
 For the full client-side contract — how the game reads the launch token and talks to the API — see the [chess walkthrough](../tutorials/chess-walkthrough.md) of the reference implementation.
 
 ## See also
 
 - [games.md](games.md) — game endpoints, launch tokens
-- [game-scripts.md](game-scripts.md) — server-side game scripts
+- [game-scripts.md](game-scripts.md) — sandboxed JavaScript game servers
+- [container-games.md](container-games.md) — container-hosted game servers
 - [auth.md](auth.md) — JWT and OAuth identity linking
 - [tutorials/chess-walkthrough.md](../tutorials/chess-walkthrough.md) — end-to-end reference implementation

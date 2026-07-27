@@ -19,7 +19,9 @@ Context page: [github-games.md](../api/github-games.md), [auth.md](../api/auth.m
 Read docs/api/github-games.md and docs/api/auth.md (pasted below), then:
 
 1. Create a starhermit.txt manifest at the repo root with keys name, slug,
-   launch, owner, and server. Use slug "[my-game]" and launch "index.html".
+   launch, and owner. Use slug "[my-game]" and launch "index.html". Add
+   either server=server.js for section 4 or container.image=... for section
+   4b; never declare both.
 2. Create a net module (match this repo's language/module style) that:
    - Reads the JWT from the URL hash fragment #game_token=<jwt> exactly once,
      then strips it from the URL with history.replaceState. Also parse an
@@ -128,6 +130,41 @@ host (JavaScript, no Node APIs, no imports, no network, no clock):
 8. Also expose the pure rules functions as globalThis.[myGame]Rules so the
    browser client can reuse this same file for rendering and replays —
    one file, one source of truth, zero rules authority on the client.
+```
+
+### 4b. Alternative: authoring a container game server
+
+Use this instead of section 4 when the authoritative server needs Rust, Go, C++, or another
+runtime. Container hosting may be limited to approved developers.
+
+Context page: [container-games.md](../api/container-games.md) — this protocol is mandatory.
+
+```text
+Read docs/api/container-games.md (pasted below) carefully. Implement a
+StarHermit game protocol v1 server for [one-paragraph game description] in
+[this repository's language]:
+
+1. Add a digest-pinned container.image to starhermit.txt plus only the
+   resource requests the server needs. Do not add server= or any secrets.
+2. Implement authenticated /health, /describe, POST /sessions,
+   GET /sessions/{id}/snapshot, DELETE /sessions/{id}, WS /control, and a
+   small WS /stream pool. Reject requests whose X-Starhermit-Invoke-Key
+   does not match STARHERMIT_INVOKE_KEY.
+3. Keep every live session keyed by session id. Validate the type-1 binary
+   frame's platform-stamped user id as the command sender and emit only
+   valid JSON payloads in type-2 frames.
+4. Declare protocol, tickRateHz, maxSessions, and achievements from
+   /describe. Use control messages for snapshots, achievement grants, elo,
+   and terminal results. Never trust a client payload for identity.
+5. Make POST /sessions restore fully from snapshot and make snapshots
+   frequent enough to bound crash rewind. Handle finished sessions as
+   terminal and idempotent.
+6. Build for a read-only, non-root, network-isolated container: vendor all
+   dependencies, write only to /tmp, and call the platform only through
+   STARHERMIT_API_BASE with STARHERMIT_SERVER_TOKEN.
+7. Add protocol tests covering frame byte layout, bad invoke keys,
+   snapshot/restore equivalence, undeclared achievements, duplicate
+   results, malformed payloads, and graceful session teardown.
 ```
 
 ## 5. Friend invites

@@ -1,6 +1,6 @@
 # Games API
 
-The games subsystem is the core of StarHermit: server-authoritative multiplayer games whose rules live in a single JavaScript file executed server-side in a sandboxed engine. This page covers the games REST API (`api/v1/games/{slug}`) and the gameplay WebSocket (`ws/v1/games`). For authoring the game script itself, see [Game Scripts](game-scripts.md). For the full worked example, see the [Chess Walkthrough](../tutorials/chess-walkthrough.md) and the reference implementation at [HypeDriven/starhermit-chess](https://github.com/HypeDriven/starhermit-chess).
+The games subsystem is the core of StarHermit: server-authoritative multiplayer games whose rules run either in a sandboxed JavaScript file or a developer-supplied container. Both runtimes share this player-facing REST API (`api/v1/games/{slug}`) and gameplay WebSocket (`ws/v1/games`). For server authoring, see [Game Scripts](game-scripts.md) or [Container-hosted Game Servers](container-games.md). For a complete script-runtime example, see the [Chess Walkthrough](../tutorials/chess-walkthrough.md) and [HypeDriven/starhermit-chess](https://github.com/HypeDriven/starhermit-chess).
 
 **Base URL:** `https://api.starhermit.com`.
 
@@ -30,6 +30,7 @@ All endpoints require authentication (`[Authorize]`) and work with both full use
 | GET | `/api/v1/games/{slug}/replays/mine` | Bearer | Caller's finished sessions |
 | GET | `/api/v1/games/{slug}/replays/{sessionId}` | Bearer | Full replay state (participants only) |
 | WS | `/ws/v1/games?sessionId={guid}` | Bearer | Gameplay WebSocket |
+| GET | `/api/v1/games/{slug}/server/sessions/{sessionId}` | Game-server token | Container backend session reconciliation; not available to player tokens |
 
 Errors are returned as `{"error":"..."}` with standard status codes.
 
@@ -58,7 +59,7 @@ Returns the game definition plus the caller's stats for that game. `404` if no s
 ```
 
 - `leaderboardId` is optional.
-- `me.elo` defaults to `1200`; `wins`/`losses`/`draws` are read from the script-owned per-player document.
+- `me.elo` defaults to `1200`; `wins`/`losses`/`draws` are read from the server-runtime-owned per-player document.
 
 ## Launch tokens
 
@@ -77,9 +78,9 @@ Mints a game-scoped JWT (default lifetime 60 minutes) carrying `game_scope={slug
 
 ### `GET /api/v1/games/{slug}/achievements`
 
-Every achievement the game's script declares, with the caller's unlock state. Secret achievements
-stay hidden until the caller unlocks them. Accepts a full user JWT or a game-scoped launch token.
-`404` when the slug has no scripted game.
+Every achievement the game's authoritative backend declares, with the caller's unlock state. Secret
+achievements stay hidden until the caller unlocks them. Accepts a full user JWT or a game-scoped
+launch token. `404` when the slug has no authoritative game definition.
 
 ```json
 [
@@ -97,11 +98,11 @@ stay hidden until the caller unlocks them. Accepts a full user JWT or a game-sco
 ]
 ```
 
-Game achievements are **server-authoritative**: only the game's script grants them (by returning
-`achievements: {userId: [keys]}` from a lifecycle hook), and the client-claimed
-`POST /api/v1/me/achievements/unlock` endpoint refuses them. Live unlocks arrive on the gameplay
-socket as `{"type":"achievement"}` frames. Full contract in
-[Achievements](achievements.md) and [Game Scripts](game-scripts.md#achievements).
+Game achievements are **server-authoritative**: only the game's script or container grants them,
+and the client-claimed `POST /api/v1/me/achievements/unlock` endpoint refuses them. Live unlocks
+arrive on the gameplay socket as `{"type":"achievement"}` frames. Full contracts are in
+[Achievements](achievements.md), [Game Scripts](game-scripts.md#achievements), and
+[Container Game Servers](container-games.md#control-channel).
 
 ## Per-player control bindings
 
@@ -390,13 +391,13 @@ The full final state JSON as archived by the platform. Participants only.
 
 ### Client → server
 
-The `cmd` envelope is the platform contract; the contents of `data` are defined by each game's script. For example, the chess reference implementation sends a move like this:
+The `cmd` envelope is the platform contract; the contents of `data` are defined by each game's authoritative backend. For example, the chess reference implementation sends a move like this:
 
 ```json
 { "type": "cmd", "data": { "type": "move", "from": "e2", "to": "e4" } }
 ```
 
-Durable commands run through the game script's `onPlayerMessage`. A payload whose data is explicitly marked `{ "type": "input", "realtime": true, ... }` is treated as high-rate realtime state instead: the platform keeps one latest frame per authenticated sender and supplies the batch as `ctx.inputs` on the next `onTick`. The script still validates and authoritatively applies those inputs; clients are never allowed to relay state directly. See [Game Scripts — Context object](game-scripts.md#context-object).
+For a script runtime, durable commands run through `onPlayerMessage`; explicitly marked `{ "type": "input", "realtime": true, ... }` data uses latest-wins batching into the next `onTick`. For a container runtime, the platform forwards authenticated commands over its binary stream and the container owns its simulation loop. In both cases the platform supplies the trusted sender identity and clients can never relay state directly. See [Game Scripts — Context object](game-scripts.md#context-object) and [Container Game Servers — Gameplay stream](container-games.md#gameplay-stream).
 
 ### Server → client
 
@@ -405,19 +406,31 @@ Durable commands run through the game script's `onPlayerMessage`. A payload whos
 { "type": "error", "error": "Illegal move" }
 { "type": "presence", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "online": true }
 { "type": "achievement", "data": { "key": "first-win", "name": "First Win", "description": "Win a match.", "icon": null, "points": 10, "unlockedAt": "2026-07-25T09:14:02Z" } }
+{ "type": "resumed", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "lostMs": 750 }
+{ "type": "abandoned", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "reason": "server_failure" }
 ```
 
-- `game` — a script-authorized message addressed to you.
+- `game` — a server-authorized message addressed to you.
 - `error` — an error from the platform or from your last command.
 - `presence` — broadcast to the other participants when someone joins or leaves.
 - `achievement` — an achievement the game's script just granted **you**, sent to the earning player
   only. A separate frame type on purpose: this is platform truth, not script-relayed game data.
-  Emitted from both the command path and the tick sweep. See
+  Emitted from both runtimes' durable update paths. See
   [Achievements](achievements.md#server-authoritative-game-achievements).
+- `resumed` — container games only: the server process restarted and restored this session from a
+  snapshot. Discard local prediction; `lostMs` reports the rewind and the game should send a normal
+  full-state `game` frame next.
+- `abandoned` — container games only: recovery was unsafe or failed, so the platform ended the
+  session without a winner or elo update. Known reasons are `server_failure` and `restore_failed`.
+  See [failure and recovery](container-games.md#failure-and-recovery).
 
-### Tick service
+### Runtime timing
 
-The platform runs the script's `onTick` sweeps at the rate requested through `game.tickRateHz`, clamped to the supported range. A rate of `0` disables ticks. See [Game Scripts — Tick rate](game-scripts.md#tick-rate).
+For JavaScript games, the platform runs `onTick` sweeps at the clamped rate requested through
+`game.tickRateHz`; `0` disables ticks. A container drives its own simulation loop and declares its
+requested rate through `/describe`; the platform uses that rate for scheduling and snapshot policy,
+not to step the game. See [Game Scripts — Tick rate](game-scripts.md#tick-rate) and
+[Container Game Servers](container-games.md#protocol-v1).
 
 ## Lifecycle of a game
 
@@ -428,9 +441,9 @@ The platform runs the script's `onTick` sweeps at the rate requested through `ga
    - **Invite flow:** pick a friend from `GET /api/v1/me/friends` (see [Friends](friends.md)), `POST .../invites` with `{ "toUserId": "..." }`; the invitee calls `POST .../invites/{inviteId}/accept`, which creates the session. (If your game seats players in a [realtime room](realtime.md) first, invite them to the room instead — same notification, but accepting puts them at the table you are already in.)
    - **AI practice:** `POST .../sessions/ai`.
 4. **Load the session** — `GET .../sessions/{sessionId}`.
-5. **Connect the WebSocket** — `ws/v1/games?sessionId={guid}` with the launch token, then send whatever initial-sync command the game's script defines — the chess reference implementation, for example, sends `{"type":"cmd","data":{"type":"sync"}}`.
-6. **Play** — exchange `cmd`/`game` frames as defined by the game's script, and surface any `achievement` frames the script grants along the way.
-7. **Result** — the script ends the game; the platform archives the replay and publishes elo updates to the leaderboard.
+5. **Connect the WebSocket** — `ws/v1/games?sessionId={guid}` with the launch token, then send whatever initial-sync command the game's backend defines — the chess reference implementation, for example, sends `{"type":"cmd","data":{"type":"sync"}}`.
+6. **Play** — exchange `cmd`/`game` frames as defined by the backend, surface `achievement` frames, and handle the container-only `resumed` frame.
+7. **Result** — the authoritative backend ends the game; the platform archives the replay and publishes elo updates to the leaderboard.
 8. **Replay** — `GET .../replays/{sessionId}` for the full final state.
 
 ### Example: chess command shapes

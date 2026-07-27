@@ -12,10 +12,10 @@
 - **Publishers** — publisher accounts that own catalog entries; see [Publisher](api/publisher.md).
 - **Software catalog** — software titles with builds and downloadable assets; see [Catalog](api/catalog.md).
 - **Entitlements** — per-user grants of catalog software (part of [Profile](api/profile.md)).
-- **Achievements & leaderboards** — server-authoritative achievements for any game with a server script, plus client-claimed achievements for catalog titles; see [Achievements](api/achievements.md) and [Leaderboards](api/leaderboards.md).
+- **Achievements & leaderboards** — server-authoritative achievements for games with a script or container backend, plus client-claimed achievements for catalog titles; see [Achievements](api/achievements.md) and [Leaderboards](api/leaderboards.md).
 - **Peer relay** — see [Relay](api/relay.md).
 - **Realtime rooms** — lobbies, matchmaking, AI players and backfill, and realtime transport for fast-paced games; can also bridge into a room-bound scripted session for server-authoritative play; see [Realtime Rooms](api/realtime.md).
-- **Games & game scripts** — server-authoritative, scripted games hosted by the platform; see [Games](api/games.md) and [Game Scripts](api/game-scripts.md).
+- **Authoritative games** — platform-hosted games whose rules run as a sandboxed JavaScript [Game Script](api/game-scripts.md) or a [Container Game Server](api/container-games.md); clients use the shared [Games API](api/games.md).
 
 ## Base URLs and ports
 
@@ -35,7 +35,7 @@ All REST routes are versioned: `api/v1/...`. WebSocket routes live under `ws/v1/
 
 ## Two ways to integrate your game
 
-1. **Scripted platform game.** You publish a game from a GitHub repo: a `starhermit.txt` manifest plus a `server.js` game script. The platform serves the game at `<slug>.starhermit.com` with `/api` and `/ws` proxied same-origin to the StarHermit backend, and runs your script server-side so game logic is server-authoritative. This path is demonstrated end-to-end by the chess reference implementation at <https://github.com/HypeDriven/starhermit-chess>. See [GitHub Games](api/github-games.md), [Game Scripts](api/game-scripts.md), and the [Integration Walkthrough](tutorials/chess-walkthrough.md).
+1. **Platform-hosted game.** You publish a game from a GitHub repo with a `starhermit.txt` manifest. It may be browser-only, use a sandboxed `server.js`, or point to a digest-pinned container image for server logic. The platform serves the game at `<slug>.starhermit.com` with `/api` and `/ws` proxied same-origin. The script path is demonstrated end-to-end by the chess reference implementation at <https://github.com/HypeDriven/starhermit-chess>. See [GitHub Games](api/github-games.md), [Game Scripts](api/game-scripts.md), [Container Game Servers](api/container-games.md), and the [Integration Walkthrough](tutorials/chess-walkthrough.md).
 2. **External game client.** Your own client calls the REST and WebSocket API directly, using JWT auth and, where appropriate, game launch tokens. The API reference pages below document the surface.
 
 ## API reference
@@ -43,6 +43,7 @@ All REST routes are versioned: `api/v1/...`. WebSocket routes live under `ws/v1/
 - [Authentication](api/auth.md)
 - [Games](api/games.md)
 - [Game Scripts](api/game-scripts.md)
+- [Container Game Servers](api/container-games.md)
 - [Profile](api/profile.md)
 - [Friends](api/friends.md)
 - [Chat](api/chat.md)

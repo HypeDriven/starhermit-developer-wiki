@@ -1,6 +1,6 @@
 # Game Scripts
 
-Every StarHermit game is defined by a **single JavaScript file** executed server-side in a sandboxed [Jint](https://github.com/sebastienros/jint) engine. The script is the sole authority on the game's rules: it validates every player command, mutates state, decides what each client may see, computes Elo, and ends games. Clients have zero authority. This page documents the script contract every game implements; for the REST/WebSocket surface that clients use, see [Games API](games.md). The worked example throughout is chess — the reference implementation at [HypeDriven/starhermit-chess](https://github.com/HypeDriven/starhermit-chess).
+A StarHermit authoritative game can be defined by a **single JavaScript file** executed server-side in a sandboxed [Jint](https://github.com/sebastienros/jint) engine. The script is the sole authority on that game's rules: it validates every player command, mutates state, decides what each client may see, computes Elo, and ends games. Clients have zero authority. This page documents the JavaScript runtime; games that need another language may instead implement the [Container Game Server](container-games.md) protocol. Both use the same player-facing [Games API](games.md). The worked example throughout is chess — the reference implementation at [HypeDriven/starhermit-chess](https://github.com/HypeDriven/starhermit-chess).
 
 ## Execution model
 
@@ -309,7 +309,7 @@ Declare the script in your game repository's `starhermit.txt` manifest:
 server=server.js
 ```
 
-Publishing flows through the GitHub integration — see [GitHub Games](github-games.md). The platform executes the script within the documented budgets.
+Publishing flows through the GitHub integration — see [GitHub Games](github-games.md). The platform executes the script within the documented budgets. Do not combine `server=` with `container.image=`; use the [container runtime](container-games.md) instead when shipping an image.
 
 ## Best practices
 

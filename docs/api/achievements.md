@@ -4,7 +4,7 @@ An achievement belongs to exactly **one owner**, and the owner decides who is al
 
 | Owner | Declared by | Unlocked by | Use it for |
 |---|---|---|---|
-| **A scripted game** | `game.achievements` in the game's server script | **The server script only** — server-authoritative | Any game with a `server=` script: scripted platform games, room-bound realtime games, AI/single-player sessions |
+| **An authoritative game** | `game.achievements` in a script, or `achievements` from a container's `/describe` | **The game's server runtime only** — server-authoritative | Games with a `server=` script or `container.image=` backend |
 | **A catalog title** (`SoftwareTitle`) | A publisher, via the [publisher API](publisher.md#achievements) | The player's client, via `POST /api/v1/me/achievements/unlock` (entitlement required) | Distributed titles whose client is the only thing that knows the player earned something |
 
 The two are mutually exclusive and the platform enforces the split:
@@ -16,7 +16,7 @@ Base URL: `https://api.starhermit.com`. All routes are under `/api/v1/...`.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/api/v1/games/{slug}/achievements` | Bearer | A scripted game's achievements + the caller's unlock state |
+| GET | `/api/v1/games/{slug}/achievements` | Bearer | An authoritative game's achievements + the caller's unlock state |
 | GET | `/api/v1/software/{titleId}/achievements` | Anonymous | A catalog title's achievement definitions |
 | GET | `/api/v1/me/achievements?titleId=` | JWT | The caller's unlocks (all owners, or one title) |
 | POST | `/api/v1/me/achievements/unlock` | JWT | Client-claimed unlock — **catalog titles only** |
@@ -25,8 +25,9 @@ Errors are `{"error": "..."}` with standard status codes, except `POST /me/achie
 
 ## Server-authoritative game achievements
 
-This is the mechanism **any** game should use when it has a server script. The script is the only
-writer, so an unlock cannot be forged by a modified client, a replayed request, or a hostile peer.
+This is the mechanism **any** game should use when it has a script or container backend. The
+server runtime is the only writer, so an unlock cannot be forged by a modified client, a replayed
+request, or a hostile peer.
 
 ### 1. Declare them in your script
 
@@ -87,11 +88,17 @@ type (platform truth, not a script-relayed `game` message):
 Unlocks granted from `createSession` are persisted before anyone has a socket, so they arrive with
 no frame — read them from the list endpoint on load.
 
+### Container backends
+
+A container declares the same achievement fields in `GET /describe`, then sends an
+`achievements` message on its control WebSocket. The platform applies the same key, participant,
+idempotency, and delivery rules. See [Container Game Servers](container-games.md#control-channel).
+
 ### `GET /api/v1/games/{slug}/achievements`
 
 Every achievement the game declares, with the caller's unlock state. `404` if the slug has no
-scripted game (a game without a `server=` script has no achievements — see
-[Which games can use this](#which-games-can-use-this)). Secret achievements are hidden until the
+authoritative game definition (a game without a script or container backend has no game-owned
+achievements — see [Which games can use this](#which-games-can-use-this)). Secret achievements are hidden until the
 caller unlocks them. Ordered by creation, then key.
 
 ```json
@@ -114,9 +121,9 @@ Works with a full user JWT or a game-scoped launch token.
 
 ### Which games can use this
 
-The mechanism is available to **any game that declares a `server=` script** in its
-[`starhermit.txt`](github-games.md#the-manifest-starhermittxt) — the script is what makes the unlock
-server-authoritative. That covers more than turn-based scripted games:
+The mechanism is available to a game that declares either a `server=` script or a
+`container.image=` backend in [`starhermit.txt`](github-games.md#the-manifest-starhermittxt). The
+server runtime makes the unlock authoritative. Script-backed use cases include:
 
 - **Scripted platform games** — unlock from `onPlayerMessage` / `onTick` as the match plays out.
 - **Room-bound realtime games** — a [realtime room](realtime.md#room-bound-scripted-sessions) for a
@@ -130,9 +137,10 @@ server-authoritative. That covers more than turn-based scripted games:
   awards from `createSession` / `onTick` / durable `cmd` messages sent over `ws/v1/games` while the
   fast path keeps flowing over `ws/v1/realtime`.
 
-A game with **no** server script at all (a pure browser game, or one built only on the
-[peer relay](relay.md)) has no server-authoritative unlock path — add a `server=` script to get one.
-Client-claimed unlocking is available only to catalog-distributed titles, below.
+Container-backed sessions can also declare and grant achievements through their protocol. A game
+with **no authoritative backend** (a pure browser game, or one built only on the [peer relay](relay.md))
+has no server-authoritative unlock path. Client-claimed unlocking is available only to
+catalog-distributed titles, below.
 
 ### Limits and rules
 
@@ -144,10 +152,10 @@ Client-claimed unlocking is available only to catalog-distributed titles, below.
 | `points` | clamped to 0–10000; defaults to 0 |
 | `name` | defaults to the `key` when omitted |
 
-- A malformed entry in the declaration is **skipped**, and a script that fails to evaluate yields an
-  empty list — provisioning never fails because of the achievements block. Verify with
-  `GET /api/v1/games/{slug}/achievements` after re-provisioning.
-- Definitions upsert by `key`. A key your script stops declaring is deleted **only if nobody has
+- A malformed declaration entry is **skipped**. A script that fails to evaluate yields an empty
+  list; a container's declaration is read after it passes health checks. Verify with
+  `GET /api/v1/games/{slug}/achievements` after deployment.
+- Definitions upsert by `key`. A key your backend stops declaring is deleted **only if nobody has
   unlocked it** — earned history is never destroyed.
 - Unlocks for users who are not participants of the session, and for the AI seat, are ignored.
 
