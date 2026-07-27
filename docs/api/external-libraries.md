@@ -2,7 +2,7 @@
 
 Linking a user's Steam, Epic, or GOG library so their external games can be listed, launched, and tracked. All routes require a JWT.
 
-Base URL: `http://localhost:5000` (some local setups use port `5050`). All routes are under `/api/v1/...`.
+Base URL: `https://api.starhermit.com`. All routes are under `/api/v1/...`.
 
 ## Linking and unlinking
 

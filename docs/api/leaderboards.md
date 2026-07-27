@@ -2,7 +2,7 @@
 
 Leaderboard definitions and entries. Reads are anonymous; submitting a score requires a JWT.
 
-Base URL: `http://localhost:5000` (some local setups use port `5050`). All routes are under `/api/v1/...`.
+Base URL: `https://api.starhermit.com`. All routes are under `/api/v1/...`.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|

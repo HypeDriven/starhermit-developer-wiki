@@ -59,7 +59,7 @@ All REST endpoints require authentication and work with both a full user token a
 
 ## REST endpoints
 
-Base: `http://localhost:5000/api/v1/realtime` (some local setups use port `5050`) — so
+Base: `https://api.starhermit.com/api/v1/realtime` — so
 `POST /rooms` below is `POST /api/v1/realtime/rooms`.
 
 | Method | Path | Who | Description |
@@ -97,7 +97,7 @@ Base: `http://localhost:5000/api/v1/realtime` (some local setups use port `5050`
 
 Because one notification covers both invite systems, its payload carries `kind: "room"` plus `roomId` and the `acceptPath`/`declinePath` for **this** invite. Answer a room invite at the realtime endpoints below — a room invite id is not valid at `/games/{slug}/invites/...` and vice versa.
 
-`GET /rooms/invites` lists the caller's pending room invites across all games (launch tokens see only their own game's). Use it as the invite inbox a game client polls. It is room-invites-only; `GET /api/v1/me/game-invites` is the cross-*system* inbox and returns these too.
+`GET /rooms/invites` lists the caller's pending room invites across all games (launch tokens see only their own game's). Use it as the room-invite inbox a game client polls. The unified invite inbox at `GET /api/v1/me/game-invites` returns these too.
 
 `POST /rooms/invites/{inviteId}/accept` seats the caller and returns the room. **Party pinning**: invite-joins are seated on the host's team while space lasts, then overflow to other teams. `409` if the room is full, already started/closed, or the caller is in another active room.
 
@@ -111,7 +111,7 @@ Because one notification covers both invite systems, its payload carries `kind: 
 
 ### Start, seats, leave, result
 
-`POST /rooms/{id}/start` (host only): atomically fills every empty seat with an AI participant (`isAi: true`, `userId: null`, unique random nickname from a server-side pool), freezes the roster, sets `status: "Playing"`, and returns the frozen roster. If the game has a `server=` script, this also creates the room-bound scripted session (see [the bridge](#room-bound-scripted-sessions)) and the returned room/roster push carries `gameSessionId`. **Idempotent** — starting a `Playing` room just returns the roster again. The backfill worker invokes the same path at the deadline, so a room may already be `Playing` when the host calls this.
+`POST /rooms/{id}/start` (host only): fills every empty seat with an AI participant (`isAi: true`, `userId: null`, unique random nickname), freezes the roster, sets `status: "Playing"`, and returns the frozen roster. If the game has a `server=` script, this also creates the room-bound scripted session (see [the bridge](#room-bound-scripted-sessions)); the returned room and roster push carry `gameSessionId`. **Idempotent** — starting a `Playing` room returns the roster again. A room may start automatically when its backfill deadline passes.
 
 `POST /rooms/{id}/seats` (host only, `Lobby`/`Open` only) re-seats participants:
 
@@ -124,7 +124,7 @@ Because one notification covers both invite systems, its payload carries `kind: 
 `POST /rooms/{id}/leave` behaves per room status:
 
 - **Lobby/Open**: the seat is removed. If the **host** leaves, the host role transfers to the longest-serving remaining human participant; if no humans remain, the room is `Closed`.
-- **Playing (AI takeover)**: the match continues — the leaver's seat is **not** removed. Their participant row is converted into an AI seat in place: `isAi: true`, `userId: null`, a fresh unique server-generated nickname, with the same participant `id`, `team`, `slot`, and `joinedAt`. The leaver is immediately freed (the one-active-room rule no longer counts them, so they can create or join another room) while the roster push tells every client an AI now occupies that seat. If the leaver is the **host** and at least one other human remains, the host role transfers to the longest-joined remaining human and the room stays `Playing` (client-side host migration is the game's concern); if no humans remain, the room is `Closed`.
+- **Playing (AI takeover)**: the match continues — the leaver's seat becomes an AI seat: `isAi: true`, `userId: null`, with a fresh unique nickname and the same participant `id`, `team`, `slot`, and `joinedAt`. The leaver is immediately freed (the one-active-room rule no longer counts them, so they can create or join another room) while the roster push tells every client an AI now occupies that seat. If the leaver is the **host** and at least one other human remains, the host role transfers to the longest-joined remaining human and the room stays `Playing` (client-side host migration is the game's concern); if no humans remain, the room is `Closed`.
 
 Returns the room.
 
@@ -140,7 +140,7 @@ Returns the room.
 
 ## WebSocket: `ws/v1/realtime`
 
-Connect to `ws://localhost:5000/ws/v1/realtime?roomId=<guid>` with a JWT via the `Authorization` header or the `?access_token=` query parameter. **Participants only** (`403` otherwise); a launch token's `game_scope` must equal the room's `gameSlug`. The newest connection supersedes the user's previous one — the old socket is closed with `PolicyViolation` ("Superseded by a newer connection").
+Connect to `wss://api.starhermit.com/ws/v1/realtime?roomId=<guid>` with a JWT via the `Authorization` header or the `?access_token=` query parameter. **Participants only** (`403` otherwise); a launch token's `game_scope` must equal the room's `gameSlug`. The newest connection supersedes the user's previous one — the old socket is closed with `PolicyViolation` ("Superseded by a newer connection").
 
 ### Binary frames (gameplay)
 
@@ -180,14 +180,11 @@ The server pushes JSON text frames on its own:
 | `MessageTooBig` | Frame over the 8 KB (binary) / 4 KB (text) cap |
 | `PolicyViolation` | Rate-limit violation, disallowed/invalid control frame, connection superseded by a newer one |
 
-## Background sweeps
+## Automatic room lifecycle
 
-**Backfill worker.** A background job sweeps every few seconds for `Open` rooms whose `openedAt + backfillAfterSeconds` deadline has passed and performs the same atomic start/backfill as `POST /rooms/{id}/start`. Host force-start and the worker share one code path, and start is idempotent, so a deadline start racing a force-start is safe. AI nicknames are drawn from a server-side name pool with uniqueness enforced per room.
-
-**Stale-room sweep.** A second sweeper closes abandoned rooms, judging "connected" from the live WebSocket registry (not heartbeats):
-
-- A `Playing` room is closed when its host has had **no active WebSocket connection for more than 60 seconds** (a host who never connected is measured from `startedAt`). Guests still connected receive a final roster push showing the room closed.
-- A `Lobby`/`Open` room is closed when it has been **idle for more than 60 minutes** (from `createdAt`, or `openedAt` once open) with **no participants connected**.
+- An `Open` room starts automatically when its backfill deadline passes; empty seats become uniquely named AI participants.
+- A `Playing` room closes when its host has no active WebSocket connection for more than 60 seconds. Connected guests receive a final roster push showing the room closed.
+- A `Lobby` or `Open` room closes after more than 60 minutes without connected participants.
 
 A participant who merely loses their connection is not affected: reconnecting the socket (newest connection supersedes) and `GET /rooms/mine` both keep working while the room is alive.
 
@@ -200,10 +197,10 @@ A participant who merely loses their connection is not affected: reconnecting th
 
 ## Room-bound scripted sessions
 
-For a game that declares a `server=` script in its manifest, a realtime room can run its match **server-authoritatively** instead of on the host client. This is how a game gets rooms (lobby, invites, matchmaking, backfill) *and* the scripted-games substrate (server-side simulation, validated inputs, script-owned results) at the same time.
+For a game that declares a `server=` script in its manifest, a realtime room can run its match **server-authoritatively** instead of on the host client. This combines rooms (lobby, invites, matchmaking, backfill) with server-side simulation, validated inputs, and script-owned results.
 
-- **Session creation on room start.** When the room enters `Playing` (host force-start or the backfill worker), the platform creates an N-player [game session](games.md) — one `GameSessionPlayer` per *human* participant; AI seats are not session players, they exist only in the script-facing roster — and links the two rows both ways: `GameSession.RealtimeRoomId` and `RealtimeRoom.GameSessionId`. The room DTO and roster pushes expose `gameSessionId` so clients know which gameplay socket to open.
-- **Gameplay moves to `ws/v1/games`.** Clients connect to `ws/v1/games?sessionId=<gameSessionId>` and exchange `cmd`/`game` frames with the script, exactly like any scripted game; the realtime WS stays connected for roster/presence only. The session ticks at the game's effective rate — what its script asked for via `game.tickRateHz`, bounded by the platform maximum and any operator override (see [Game Scripts](game-scripts.md#tick-rate)).
+- **Session creation on room start.** When the room enters `Playing`, the platform creates an N-player [game session](games.md) for the human participants. AI seats exist only in the script-facing roster. The room response and roster pushes expose `gameSessionId` so clients know which gameplay socket to open.
+- **Gameplay moves to `ws/v1/games`.** Clients connect to `ws/v1/games?sessionId=<gameSessionId>` and exchange `cmd`/`game` frames with the script, exactly like any scripted game; the realtime WS stays connected for roster/presence only. The session ticks at the supported rate requested by its script via `game.tickRateHz` (see [Game Scripts](game-scripts.md#tick-rate)).
 - **Extended script ctx.** Every invocation for a room-bound session (`createSession`, `onPlayerMessage`, `onTick`) additionally receives `ctx.room` (room id, metadata, and the frozen roster — humans *and* AI seats, ordered by team then slot) and `ctx.presence` (`{ "<userId>": { online, left } }` for every user who is or was a human participant). Details in [Game Scripts — Room-bound sessions](game-scripts.md#room-bound-sessions).
 - **Server-authoritative achievements.** Every hook of a bound session can grant achievements by returning `achievements: {userId: [keys]}`, exactly as in any scripted game — including from `createSession`, which fires the moment the room starts. Unlocks are pushed to the earning player over `ws/v1/games` as `{"type":"achievement"}` frames. See [Achievements](achievements.md#server-authoritative-game-achievements).
 - **The script ends the match.** When the script returns `result`, the platform finishes the session, stores the result on the room, and closes the room (final roster push included). `POST /rooms/{id}/result` is not used for room-bound games.
@@ -216,13 +213,13 @@ For a game that declares a `server=` script in its manifest, a realtime room can
 2. **Invite**: the host lists friends (`GET /api/v1/me/friends`) and sends `POST /rooms/{id}/invites`. The platform notifies each invitee (`game_invite` push + `GET /api/v1/me/game-invites`), so they can accept from the dashboard without having your game open; invitees already in the game see the same invites by polling `GET /rooms/invites`. Accepting seats them on the host's team.
 3. **Open**: the host calls `POST /rooms/{id}/open`. Solo players call `POST /rooms/quick-join` and land in the oldest open room with a free seat (on `404` they create and open their own room).
 4. **Connect**: everyone opens `ws/v1/realtime?roomId=…` and watches `roster`/`presence` pushes as seats fill.
-5. **Start**: at the backfill deadline (worker) or when the host force-starts, empty seats become AI participants and the roster freezes. **Host-routed game**: guests send inputs as binary frames (they reach only the host); the host broadcasts snapshots. **Room-bound scripted game**: everyone connects `ws/v1/games?sessionId=<gameSessionId>` and plays against the script with `cmd`/`game` frames.
-6. **Leave mid-match**: a player who leaves during `Playing` is replaced where they sat by an AI participant (same seat, new server-generated nickname) and can immediately queue again; if the host leaves, the host role passes to the longest-joined remaining human. A host who simply drops their connection has 60 seconds to reconnect before the stale-room sweep closes the match.
+5. **Start**: at the backfill deadline or when the host force-starts, empty seats become AI participants and the roster freezes. **Host-routed game**: guests send inputs as binary frames (they reach only the host); the host broadcasts snapshots. **Room-bound scripted game**: everyone connects `ws/v1/games?sessionId=<gameSessionId>` and plays against the script with `cmd`/`game` frames.
+6. **Leave mid-match**: a player who leaves during `Playing` is replaced where they sat by an AI participant (same seat, new server-generated nickname) and can immediately queue again; if the host leaves, the host role passes to the longest-joined remaining human. A host who drops their connection has 60 seconds to reconnect before the match closes.
 7. **Finish**: host-routed — the host POSTs the result; the server clamps scores, stores the result, pushes it to all sockets, and closes the room. Room-bound — the script returns `result` and the platform stores it and closes the room.
 
 ## See also
 
-- [Relay](relay.md) — simpler opaque byte fan-out (no lobbies), disabled by default
+- [Relay](relay.md) — simpler opaque byte fan-out (no lobbies); availability may vary
 - [Games](games.md) — server-authoritative scripted games
 - [Authentication](auth.md) — launch tokens and game-scope fencing
 - [Friends](friends.md) — the friend list used by the invite picker

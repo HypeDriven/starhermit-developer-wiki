@@ -4,7 +4,7 @@ StarHermit chat covers direct messages, group rooms, and game-session conversati
 
 ## REST endpoints
 
-Base: `http://localhost:5000/api/v1/chat` (some local setups use port `5050`).
+Base: `https://api.starhermit.com/api/v1/chat`.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -173,7 +173,7 @@ periodically refetch `/unread`.
 
 ## WebSocket: `ws/v1/chat`
 
-Connect to `ws://localhost:5000/ws/v1/chat` with a JWT via the `Authorization` header or the `?access_token=` query parameter.
+Connect to `wss://api.starhermit.com/ws/v1/chat` with a JWT via the `Authorization` header or the `?access_token=` query parameter.
 
 This is a **pure server→client push channel**: client frames are ignored (only `Close` is honored). Each frame is an envelope:
 

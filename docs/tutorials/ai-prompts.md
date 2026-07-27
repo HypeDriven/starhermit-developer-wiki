@@ -7,7 +7,7 @@ How to use them:
 - Replace the `[bracketed]` placeholders with your own values.
 - Work one section at a time, in roughly the order listed.
 - **Give the AI the relevant wiki page as context.** Each section names the page; paste its contents into the conversation or point the tool at the file. The prompts reference exact endpoints, and the reference pages are the source of truth for field names.
-- Verify each feature against a running backend (`http://localhost:5000`) before moving on — see the tips at the end.
+- Verify each feature against the public API at `https://api.starhermit.com` before moving on — see the tips at the end.
 
 These prompts work for any game. For reference code, point the AI at the chess reference implementation — [HypeDriven/starhermit-chess](https://github.com/HypeDriven/starhermit-chess) — a complete worked example of every pattern on this page.
 
@@ -313,7 +313,7 @@ Wire server-authoritative achievements into [my game]:
    Unlocks granted in createSession arrive with no frame, so always do the
    GET on load too.
 5. After changing the declaration, re-add the game from its repo to
-   re-provision, then confirm with the GET that the definitions updated.
+   publish the update, then confirm with the GET that the definitions changed.
 ```
 
 ### 12b. Client-claimed achievements (catalog titles only)
@@ -382,15 +382,15 @@ step before continuing:
 Constraints: no build step beyond what this repo already has; no client
 rules authority; no score submission from clients; match my existing code
 style. After each numbered step, give me a curl command or small test page
-to verify it against http://localhost:5000.
+to verify it against https://api.starhermit.com.
 ```
 
 ## Practical tips
 
 - **Keep prompts scoped to one feature.** The mega-prompt works, but one-feature prompts with a verification step between them fail less and are easier to debug when they do.
 - **Always hand the AI the exact wiki page.** The prompts reference endpoint paths, but the reference pages carry the field names and error shapes. Paste the page or point the tool at the file — don't paraphrase it from memory.
-- **Ask for a verification artifact per feature.** A small throwaway test page or a curl script exercised against a running backend at `http://localhost:5000` (or `5050` in some local setups) catches integration mistakes immediately.
-- **Launch tokens expire after 60 minutes.** For local testing, copy the local-dev panel pattern from the reference implementation (`index.html` in the [chess example repo](https://github.com/HypeDriven/starhermit-chess)): a small auth panel that takes a user JWT + slug + optional API base and mints a launch token itself, caching it under its own storage keys (the chess example uses `localStorage['chess.apiBase']` and `sessionStorage['chess.gameToken']` — substitute your own slug). It saves you from re-minting tokens through the launcher on every test run.
+- **Ask for a verification artifact per feature.** A small throwaway test page or a curl script exercised against `https://api.starhermit.com` catches integration mistakes immediately.
+- **Launch tokens expire after 60 minutes.** Obtain launch tokens through the documented launch flow and refresh them before expiry.
 - **Refresh cadence matters.** If your test sessions run long, make sure the 45-minute refresh is actually wired before you blame the backend for 401s.
 
 For the narrative version of how these pieces fit together in a shipped game, see the [chess walkthrough](chess-walkthrough.md) — the reference example; for first deploy, the [getting started guide](../getting-started.md).

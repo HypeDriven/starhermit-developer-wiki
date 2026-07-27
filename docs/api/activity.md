@@ -2,7 +2,7 @@
 
 The activity API covers launch sessions, playtime, and the activity feed — for both catalog titles and external (non-catalog) games. All routes require a JWT unless noted.
 
-Base URL: `http://localhost:5000` (some local setups use port `5050`). All routes are under `/api/v1/...`.
+Base URL: `https://api.starhermit.com`. All routes are under `/api/v1/...`.
 
 ## Catalog launch sessions and playtime
 

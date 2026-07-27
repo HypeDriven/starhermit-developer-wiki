@@ -2,11 +2,11 @@
 
 The relay provides opaque byte fan-out for game netcode: a REST API (`api/v1/relay`) manages sessions, and a WebSocket (`ws/v1/relay`) forwards binary frames verbatim between participants. All REST endpoints require authentication. Errors are returned as `{"error":"..."}` with standard status codes.
 
-The relay is **disabled by default** — requests return `503` when the platform operator has not enabled it.
+Relay availability may vary; unavailable requests return `503`.
 
 ## REST endpoints
 
-Base: `http://localhost:5000/api/v1/relay` (some local setups use port `5050`).
+Base: `https://api.starhermit.com/api/v1/relay`.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -64,7 +64,7 @@ Returns a `RelaySession`. Limits: max 5 active sessions per title; `maxParticipa
 
 ## WebSocket: `ws/v1/relay`
 
-Connect to `ws://localhost:5000/ws/v1/relay?sessionId=<guid>&titleId=<guid>` with a JWT via the `Authorization` header or the `?access_token=` query parameter.
+Connect to `wss://api.starhermit.com/ws/v1/relay?sessionId=<guid>&titleId=<guid>` with a JWT via the `Authorization` header or the `?access_token=` query parameter.
 
 The socket is an **opaque byte fan-out** for game netcode. Any binary frame you send is forwarded verbatim to every other session participant as a binary frame. There is no JSON protocol.
 
@@ -79,7 +79,7 @@ Use the relay for fast-paced games that want server fan-out without running a ga
 
 Contrast this with the [scripted games subsystem](games.md), which is server-authoritative and suited to anything from turn-based play to realtime tick rates. If your game needs the server to enforce rules and state, use game scripts; if it needs low-overhead byte relay between peers, use the relay.
 
-Because the relay is off by default, check with your platform operator that the relay is enabled before shipping a feature on it.
+Confirm relay availability before shipping a feature that depends on it.
 
 ## See also
 

@@ -2,7 +2,7 @@
 
 The publisher surface: manage publisher organizations and members, create and upload software titles and builds, and manage achievements, entitlements, and leaderboard definitions for your titles.
 
-Base URL: `http://localhost:5000` (some local setups use port `5050`). All routes require a JWT plus the listed permission claims. Roles: `PublisherMember`, `PublisherOwner`. Permission claims are assigned via roles; minted tokens carry the permission claims.
+Base URL: `https://api.starhermit.com`. All routes require a JWT plus the listed permission claims. Roles: `PublisherMember`, `PublisherOwner`. Permission claims are assigned via roles; minted tokens carry the permission claims.
 
 ## Publishers and members
 

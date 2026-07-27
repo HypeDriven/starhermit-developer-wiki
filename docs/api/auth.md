@@ -154,7 +154,7 @@ Providers: `google`, `github`.
 
 ### `GET /api/v1/auth/oauth/{provider}/authorize?link=&client=`
 
-Returns a 302 redirect to the provider and sets an `oauth_state` cookie (HttpOnly, SameSite=Lax, 10 minutes). `link=true` links the identity to the currently logged-in user; `client` picks a named redirect from configuration.
+Returns a 302 redirect to the provider and sets an `oauth_state` cookie (HttpOnly, SameSite=Lax, 10 minutes). `link=true` links the identity to the currently logged-in user; `client` selects a supported client redirect.
 
 ### `GET /api/v1/auth/oauth/{provider}/callback?code=&state=`
 
@@ -203,28 +203,28 @@ Public-key login, from challenge to authenticated call:
 
 ```bash
 # 1. Request a challenge
-curl -s -X POST http://localhost:5000/api/v1/auth/public-key/challenge \
+curl -s -X POST https://api.starhermit.com/api/v1/auth/public-key/challenge \
   -H "Content-Type: application/json" \
   -d '{"keyType":"Ed25519","keyData":"MCowBQYDK2VwAyEA..."}'
 # → { "challengeId": "...", "payload": { ... }, "expiresIn": 300 }
 
 # 2. Sign the serialized payload JSON with your private key, then complete
-curl -s -X POST http://localhost:5000/api/v1/auth/public-key/complete \
+curl -s -X POST https://api.starhermit.com/api/v1/auth/public-key/complete \
   -H "Content-Type: application/json" \
   -d '{"challengeId":"...","signature":"base64-signature...","keyType":"Ed25519","keyData":"MCowBQYDK2VwAyEA..."}'
 # → { "userId": "...", "accessToken": "...", "refreshToken": "..." }
 
 # 3. Call the API with the access token
-curl -s http://localhost:5000/api/v1/me \
+curl -s https://api.starhermit.com/api/v1/me \
   -H "Authorization: Bearer eyJhbGciOi..."
 
 # 4. When the access token expires (after 15 min), rotate the refresh token
-curl -s -X POST http://localhost:5000/api/v1/auth/refresh \
+curl -s -X POST https://api.starhermit.com/api/v1/auth/refresh \
   -H "Content-Type: application/json" \
   -d '{"refreshToken":"dGhpcyBpcyBh..."}'
 
 # 5. On logout, revoke the refresh token
-curl -s -X POST http://localhost:5000/api/v1/auth/logout \
+curl -s -X POST https://api.starhermit.com/api/v1/auth/logout \
   -H "Content-Type: application/json" \
   -d '{"refreshToken":"dGhpcyBpcyBh..."}'
 ```

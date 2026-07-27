@@ -19,9 +19,9 @@
 
 ## Base URLs and ports
 
-- Hosted platform: [https://starhermit.com](https://starhermit.com). Games published on it are served at `https://<slug>.starhermit.com` with `/api` and `/ws` proxied same-origin, so platform-hosted games use relative paths and never need to configure a base URL.
-- Local development: REST base `http://localhost:5000` (the default local port is 5000; some local setups use 5050). The `localhost` URLs throughout this wiki refer to a locally running backend.
-- WebSockets use the same host and port, under `ws/v1/...`.
+- Public REST API: [https://api.starhermit.com](https://api.starhermit.com), under `api/v1/...`.
+- Public WebSockets: `wss://api.starhermit.com/ws/v1/...`.
+- Games published on the platform are served at `https://<slug>.starhermit.com` with `/api` and `/ws` available same-origin, so platform-hosted games should use relative paths.
 
 ## Versioning
 
@@ -59,20 +59,7 @@ All REST routes are versioned: `api/v1/...`. WebSocket routes live under `ws/v1/
 
 Tutorials: [Integration Walkthrough (chess reference example)](tutorials/chess-walkthrough.md), [AI Prompts](tutorials/ai-prompts.md).
 
-## Swagger UI
-
-In the Development environment, Swagger UI is available at `/swagger` with three docs: `api-v1`, `publisher-v1`, and `ws-v1`. Note that the grouping is nominal — each doc contains the full API surface.
-
-## Infrastructure endpoints
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/` | Anonymous | HTML landing page |
-| GET | `/health` | Anonymous | Health check |
-| GET | `/health/details` | Anonymous | Detailed health check |
-| GET | `/api/v1/time?clientTime=` | Anonymous | Server clock, for client time sync |
-
-### Server clock — `GET /api/v1/time`
+## Server clock — `GET /api/v1/time`
 
 Deadlines the platform hands you (a session summary's `deadline`, a script's `ctx.now`) are on the
 **server's** clock, so a client rendering a countdown against its own clock will drift. This

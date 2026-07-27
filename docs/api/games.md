@@ -2,7 +2,7 @@
 
 The games subsystem is the core of StarHermit: server-authoritative multiplayer games whose rules live in a single JavaScript file executed server-side in a sandboxed engine. This page covers the games REST API (`api/v1/games/{slug}`) and the gameplay WebSocket (`ws/v1/games`). For authoring the game script itself, see [Game Scripts](game-scripts.md). For the full worked example, see the [Chess Walkthrough](../tutorials/chess-walkthrough.md) and the reference implementation at [HypeDriven/starhermit-chess](https://github.com/HypeDriven/starhermit-chess).
 
-**Base URL:** `http://localhost:5000` (some local setups use port `5050`).
+**Base URL:** `https://api.starhermit.com`.
 
 All endpoints require authentication (`[Authorize]`) and work with both full user tokens and game-scoped launch tokens.
 
@@ -417,7 +417,7 @@ Durable commands run through the game script's `onPlayerMessage`. A payload whos
 
 ### Tick service
 
-The platform runs the script's `onTick` sweeps on a timer at the game's effective tick rate, resolved in this order: an operator's per-game `GameDefinition.TickRateHz` (which may exceed the global default, up to the **1–1000 Hz** platform ceiling), else the rate the game's own script requested via `game.tickRateHz` (clamped to **0**–the global maximum; 0 means the game is never ticked), else the global maximum itself (platform default **30 Hz**, system setting `games.max_tick_rate_hz`). See [Game Scripts — Tick rate](game-scripts.md#tick-rate).
+The platform runs the script's `onTick` sweeps at the rate requested through `game.tickRateHz`, clamped to the supported range. A rate of `0` disables ticks. See [Game Scripts — Tick rate](game-scripts.md#tick-rate).
 
 ## Lifecycle of a game
 

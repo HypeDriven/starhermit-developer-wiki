@@ -26,9 +26,9 @@ globalThis.game = {
 };
 ```
 
-Both declarations are read by evaluating your script **at provision time** (when the game is added
-or re-added from its repo), not on every invocation — so they must be static values on the `game`
-object, and a change to either needs a re-provision to take effect.
+Both declarations are read by evaluating your script **when the game is published or updated**,
+not on every invocation — so they must be static values on the `game` object. Publish an update
+to apply a change.
 
 - `createSession(ctx)` — called when a session is created (matchmaking, invite-accept, AI practice, or a realtime room starting — see [Room-bound sessions](#room-bound-sessions)).
 - `onPlayerMessage(ctx)` — called for durable client commands received over the gameplay WebSocket. Inputs explicitly marked `realtime:true` bypass this entry point.
@@ -78,17 +78,13 @@ globalThis.game = {
 };
 ```
 
-- The declaration is read **when your script is provisioned** (when you add or re-add the game from its repo), not on every tick. Change it and re-add the game to apply it.
-- It is **clamped to `0`–the platform maximum** (`games.max_tick_rate_hz`, **30 Hz** by default): ask for less than the maximum and you get it; ask for more and you run at the maximum. Ask for **0** and the game is never ticked at all — the right choice for a turn-based game that only reacts to player commands, since it costs the platform nothing. The value is floored to a whole Hz; anything that isn't a number (or a missing declaration) leaves the game on the default.
-- Because only the request is stored, lowering the platform maximum immediately slows every game that asked for more — no re-provisioning needed.
-- A platform operator can set `GameDefinition.TickRateHz` for your game from the admin dashboard. That override **wins over your declaration and may exceed the global maximum** (only the hard 1–1000 Hz platform ceiling applies) — it is how a game is granted a higher rate than the default allows.
-- The scheduler follows the fastest active game and ticks each session at its own rate; games resolving to 0 Hz are skipped entirely.
-- Each tick still uses a fresh engine and round-trips `sessionState`, but high-rate realtime `input` messages are held in an in-memory mailbox rather than invoking Jint or persisting state individually. A 30 Hz realtime match therefore normally invokes its script 30 times per second regardless of how many players are sending movement.
-- Match snapshots are sent through per-connection latest-wins queues: a slow recipient may skip an obsolete snapshot but cannot delay the simulation or other recipients. Discrete events remain ordered reliable sends.
+- The declaration is read **when your game is published or updated**, not on every tick. Publish an update after changing it.
+- The rate is clamped to the supported platform range (**30 Hz** by default). Ask for **0** to disable ticks for games that only react to player commands. Values are floored to a whole Hz; invalid or missing declarations use the default.
+- Realtime inputs are latest-wins between ticks, while discrete action edges remain ordered. A slow recipient may skip an obsolete snapshot but cannot delay the simulation or other recipients.
 
 ## Room-bound sessions
 
-A session can be **bound to a realtime room** (`GameSession.RealtimeRoomId`, mirrored by `RealtimeRoom.GameSessionId`): when a [realtime room](realtime.md) for a game with a `server=` script starts, the platform creates one N-player session for the room — one `GameSessionPlayer` per **human** participant (AI seats are not session players; they exist only in the script-facing roster). This is how server-authoritative realtime games (e.g. football) run: rooms provide the lobby/matchmaking, the script runs the match. See [Realtime Rooms — the bridge](realtime.md#room-bound-scripted-sessions) for the room-side lifecycle.
+A session can be **bound to a realtime room**: when a [realtime room](realtime.md) for a game with a `server=` script starts, the platform creates one N-player session for the room's **human** participants (AI seats exist only in the script-facing roster). This is how server-authoritative realtime games (e.g. football) run: rooms provide the lobby/matchmaking, the script runs the match. See [Realtime Rooms — the bridge](realtime.md#room-bound-scripted-sessions) for the room-side lifecycle.
 
 Every invocation (`createSession`, `onPlayerMessage`, `onTick`) of a room-bound session receives two extra ctx fields:
 
@@ -182,12 +178,12 @@ globalThis.game = {
 | `secret` | boolean | Hidden from a player until *they* unlock it. Defaults to `false`. |
 | `points` | number | Clamped to 0–10000. Defaults to `0`. |
 
-The array is read at provision time and mirrored into the platform's definition registry:
+The array is applied when the game is published or updated:
 
-- Definitions **upsert by `key`** — editing a name, icon, points, or secret flag and re-provisioning updates the existing definition, and everyone who already earned it keeps it.
+- Definitions are matched by `key` — editing a name, icon, points, or secret flag updates the existing definition, and everyone who already earned it keeps it.
 - A key you stop declaring is deleted **only while nobody has unlocked it**. Earned history is never destroyed, so a retired achievement stays visible to the players who hold it.
 - At most **100** achievements per game; extras beyond that are dropped.
-- The declaration is **best effort**: a malformed entry is skipped and a script that fails to evaluate yields an empty list rather than failing the provision. Always confirm with `GET /api/v1/games/{slug}/achievements` after re-provisioning.
+- The declaration is **best effort**: malformed entries are skipped. Always confirm published definitions with `GET /api/v1/games/{slug}/achievements` after updating the game.
 
 ### Unlock
 
@@ -227,7 +223,7 @@ live-update path. Full surface in [Achievements](achievements.md).
 
 ## Budgets
 
-Scripts run under operator-tunable budgets:
+Scripts run under these resource budgets:
 
 - ~250 ms CPU per invocation
 - 32 MB memory
@@ -313,7 +309,7 @@ Declare the script in your game repository's `starhermit.txt` manifest:
 server=server.js
 ```
 
-Publishing flows through the GitHub integration — see [GitHub Games](github-games.md). The platform executes the script; scripts and their budgets are managed by the platform operator.
+Publishing flows through the GitHub integration — see [GitHub Games](github-games.md). The platform executes the script within the documented budgets.
 
 ## Best practices
 

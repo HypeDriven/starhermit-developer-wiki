@@ -29,8 +29,8 @@ not the subject of the docs.
 
 ## API reference
 
-Conventions shared by all endpoints: REST under `api/v1/...` at `http://localhost:5000`
-(some local setups use port `5050`), WebSockets under `ws/v1/...`, JWT bearer auth
+Conventions shared by all endpoints: REST under `api/v1/...` at `https://api.starhermit.com`,
+WebSockets under `ws/v1/...`, JWT bearer auth
 (`?access_token=` allowed on `/ws/**`), camelCase JSON, errors as `{"error":"..."}`.
 
 | Area | Page | What's inside |
@@ -54,7 +54,4 @@ Conventions shared by all endpoints: REST under `api/v1/...` at `http://localhos
 
 ## Notes
 
-- The admin/moderation surface is **not** part of this API — it is a separate internal
-  service and is not covered by this wiki.
-- The peer relay is disabled by default; voice is enabled by default.
-- Realtime rooms are enabled by default (unlike the peer relay).
+- Availability of relay, voice, and realtime room features may vary.

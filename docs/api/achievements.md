@@ -4,7 +4,7 @@ An achievement belongs to exactly **one owner**, and the owner decides who is al
 
 | Owner | Declared by | Unlocked by | Use it for |
 |---|---|---|---|
-| **A scripted game** (`GameDefinition`) | `game.achievements` in the game's server script | **The server script only** — server-authoritative | Any game with a `server=` script: scripted platform games, room-bound realtime games, AI/single-player sessions |
+| **A scripted game** | `game.achievements` in the game's server script | **The server script only** — server-authoritative | Any game with a `server=` script: scripted platform games, room-bound realtime games, AI/single-player sessions |
 | **A catalog title** (`SoftwareTitle`) | A publisher, via the [publisher API](publisher.md#achievements) | The player's client, via `POST /api/v1/me/achievements/unlock` (entitlement required) | Distributed titles whose client is the only thing that knows the player earned something |
 
 The two are mutually exclusive and the platform enforces the split:
@@ -12,7 +12,7 @@ The two are mutually exclusive and the platform enforces the split:
 - `POST /api/v1/me/achievements/unlock` **refuses game-scoped achievements** — a client can never claim one.
 - The publisher CRUD endpoints refuse them too — a game's achievements are owned by its script, not by a publisher.
 
-Base URL: `http://localhost:5000` (some local setups use port `5050`). All routes are under `/api/v1/...`.
+Base URL: `https://api.starhermit.com`. All routes are under `/api/v1/...`.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -46,8 +46,7 @@ globalThis.game = {
 };
 ```
 
-The declaration is read **when the game is provisioned** (when you add or re-add it from its repo)
-and mirrored into game-scoped definition rows. Re-provision to publish a change.
+The declaration is read **when the game is published or updated** from its repository. Publish an update to apply a change.
 
 ### 2. Unlock them from any lifecycle hook
 

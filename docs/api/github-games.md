@@ -2,7 +2,7 @@
 
 Publish a game from a GitHub repository onto [StarHermit](https://starhermit.com), or register an already-hosted web game. For repository games, the platform reads `starhermit.txt`, clones the repo, and serves it at `<slug>.starhermit.com`. Because `/api` and `/ws` are proxied same-origin from that subdomain, a platform-hosted game needs **no CORS or API-base configuration**. A pinned commit controls which repository version is live. The [chess reference implementation](../tutorials/chess-walkthrough.md) is published this way and serves as the reference example of the model.
 
-Base URL: `http://localhost:5000` (some local setups use port `5050`). All routes are under `api/v1/...` and require a JWT unless noted.
+Base URL: `https://api.starhermit.com`. All routes are under `api/v1/...` and require a JWT unless noted.
 
 ## The manifest: `starhermit.txt`
 

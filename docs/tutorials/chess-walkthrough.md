@@ -12,7 +12,7 @@ A scripted platform game is a plain static site plus one rules file. The chess r
 
 | File | Role |
 | --- | --- |
-| `index.html` | The whole page: board, menu, chat, voice UI, plus a local-dev auth panel |
+| `index.html` | The whole page: board, menu, chat, and voice UI |
 | `app.js` | App bootstrap, main menu, matchmaking, invites, replays, profiles |
 | `net.js` | HTTP layer: scoped game paths, launch tokens, token refresh |
 | `game.js` | In-game controller: gameplay WebSocket, chat, voice |
@@ -65,8 +65,6 @@ In the reference implementation, the client reads the hash **once**, then strips
 That second claim matters: **a game client should never hard-code its slug**. The reference implementation builds every API URL as `/api/v1/games/<slug>` plus a suffix (`net.js`, `Net.gamePath`), so the same code works for any game, any slug, any deployment.
 
 **Refresh.** The scoped token is allowed to re-call `launch-token` for its own game, so clients typically refresh periodically — the reference implementation refreshes every 45 minutes (`net.js`, `Net.startRefresh`), comfortably inside the 60-minute lifetime.
-
-**Local dev fallback.** When there is no `#game_token` in the hash, the reference implementation's `index.html` shows an auth panel that takes a user JWT, a slug, and an optional API base, and calls `Net.launchToken(jwt, slug)` itself. Two storage keys drive this: `localStorage['chess.apiBase']` and `sessionStorage['chess.gameToken']` (these key names are chess-specific example values). This is how you test against a backend running at `http://localhost:5000` (or `5050` in some local setups) without the launcher.
 
 Auth reference: [auth.md](../api/auth.md), [games.md](../api/games.md).
 

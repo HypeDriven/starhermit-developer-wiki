@@ -2,7 +2,7 @@
 
 The software catalog covers browsing and claiming titles, listing builds, downloading, cloud saves, wishlist, and ratings. Reads are anonymous; writes require a JWT.
 
-Base URL: `http://localhost:5000` (some local setups use port `5050`). All routes are under `/api/v1/...`.
+Base URL: `https://api.starhermit.com`. All routes are under `/api/v1/...`.
 
 ## Browsing and claiming titles
 

@@ -1,12 +1,12 @@
 # Voice
 
-StarHermit voice provides per-conversation voice rooms over a REST API (`api/v1/voice`) plus a mixed binary/text WebSocket (`ws/v1/voice`) for audio and WebRTC signaling. All REST endpoints require authentication. Voice is enabled by default but may be turned off by the platform operator. Errors are returned as `{"error":"..."}` with standard status codes.
+StarHermit voice provides per-conversation voice rooms over a REST API (`api/v1/voice`) plus a mixed binary/text WebSocket (`ws/v1/voice`) for audio and WebRTC signaling. All REST endpoints require authentication. Voice availability may vary. Errors are returned as `{"error":"..."}` with standard status codes.
 
 Rooms anchor to a [chat conversation](chat.md); membership in the conversation gates everything, so chat friendship rules also govern voice (game-session conversations bypass friendship). Limits: 3 active rooms per conversation, max 10 participants per room, codec `"opus"`.
 
 ## REST endpoints
 
-Base: `http://localhost:5000/api/v1/voice` (some local setups use port `5050`).
+Base: `https://api.starhermit.com/api/v1/voice`.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -65,7 +65,7 @@ Returns a `VoiceRoomDto`.
 
 ## WebSocket: `ws/v1/voice`
 
-Connect to `ws://localhost:5000/ws/v1/voice?roomId=<guid>` with a JWT via the `Authorization` header or the `?access_token=` query parameter. A prior REST `join` is required.
+Connect to `wss://api.starhermit.com/ws/v1/voice?roomId=<guid>` with a JWT via the `Authorization` header or the `?access_token=` query parameter. A prior REST `join` is required.
 
 The protocol is mixed:
 
