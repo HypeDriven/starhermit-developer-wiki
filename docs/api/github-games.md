@@ -49,7 +49,7 @@ Players can override these defaults per game through the
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | POST | `/api/v1/me/github-games` | JWT | Register a game from a repo URL → `201 GitHubGameDto` |
-| POST | `/api/v1/me/github-games/{id}/claim` | JWT | Take ownership when your linked GitHub login owns the repo → `GitHubGameDto` |
+| POST | `/api/v1/me/github-games/{id}/claim` | JWT | Take ownership after proving repository control by GitHub link or manifest owner → `GitHubGameDto` |
 | GET | `/api/v1/me/github-games` | JWT | List your registered GitHub games → `GitHubGameDto[]` |
 | POST | `/api/v1/me/github-games/{id}/transfer` | JWT | Transfer a game to another user → `GitHubGameDto` |
 | DELETE | `/api/v1/me/github-games/{id}` | JWT | Remove a registered game → `204` |
@@ -100,7 +100,21 @@ Errors use the standard shape:
 
 `POST /api/v1/me/github-games/{id}/claim` → `GitHubGameDto`
 
-Take ownership of a game when your linked GitHub login owns the repository. GitHub identity metadata stores `{"login":"…"}`; link your GitHub account via the OAuth flow (see [auth.md](auth.md)). Check link status with `GET /api/v1/me/github` → `{ linked, login }`.
+Take over an existing listing when you control its repository. Prove ownership either by linking the
+personal GitHub login matching the repository owner, or by committing
+`owner=<your StarHermit user ID or username>` to the repository's `starhermit.txt`. The manifest
+method supports organization-owned repositories, which are not inferred from personal GitHub org
+membership.
+
+On success, the existing listing keeps its ID/history, becomes managed by the claimant, refreshes
+repository-controlled metadata and backend declarations, and queues hosting where available. The
+previous submitter loses owner-scoped management access. Claiming a listing you already manage
+re-synchronizes it rather than returning a conflict.
+
+GitHub identity metadata stores `{"login":"…"}`; link your GitHub account via the OAuth flow (see
+[auth.md](auth.md)). Check link status with `GET /api/v1/me/github` → `{ linked, login }`. See the
+[step-by-step claiming tutorial](../tutorials/claim-existing-game.md) for discovery, both proof
+methods, validation, takeover, and troubleshooting.
 
 ### Transfer ownership
 
@@ -226,3 +240,4 @@ For the full client-side contract — how the game reads the launch token and ta
 - [container-games.md](container-games.md) — container-hosted game servers
 - [auth.md](auth.md) — JWT and OAuth identity linking
 - [tutorials/chess-walkthrough.md](../tutorials/chess-walkthrough.md) — end-to-end reference implementation
+- [tutorials/claim-existing-game.md](../tutorials/claim-existing-game.md) — take over an existing listing you own

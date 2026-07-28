@@ -58,7 +58,7 @@ All REST routes are versioned: `api/v1/...`. WebSocket routes live under `ws/v1/
 - [GitHub Games](api/github-games.md)
 - [Publisher](api/publisher.md)
 
-Tutorials: [Integration Walkthrough (chess reference example)](tutorials/chess-walkthrough.md), [Dedicated Server + Embedded Player Onboarding](tutorials/dedicated-server-onboarding.md), and [AI Prompts](tutorials/ai-prompts.md).
+Tutorials: [Integration Walkthrough (chess reference example)](tutorials/chess-walkthrough.md), [Dedicated Server + Embedded Player Onboarding](tutorials/dedicated-server-onboarding.md), [Claim a Game Someone Else Added](tutorials/claim-existing-game.md), and [AI Prompts](tutorials/ai-prompts.md).
 
 ## Server clock — `GET /api/v1/time`
 

@@ -29,6 +29,8 @@ not the subject of the docs.
 - **[Tutorial: publish a dedicated server and onboard players in-game](docs/tutorials/dedicated-server-onboarding.md)** —
   push a container bundle, renew its server token, and use public-key registration to onboard
   Steam/Epic/GOG/native players without OAuth or a StarHermit dashboard visit.
+- **[Tutorial: claim a game someone else added](docs/tutorials/claim-existing-game.md)** —
+  prove repository control, take over the existing listing, and manage its hosting and deployments.
 
 ## API reference
 
