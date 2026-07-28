@@ -53,6 +53,7 @@ Players can override these defaults per game through the
 | GET | `/api/v1/me/github-games` | JWT | List your registered GitHub games → `GitHubGameDto[]` |
 | POST | `/api/v1/me/github-games/{id}/transfer` | JWT | Transfer a game to another user → `GitHubGameDto` |
 | DELETE | `/api/v1/me/github-games/{id}` | JWT | Remove a registered game → `204` |
+| POST | `/api/v1/me/github-games/{id}/bundle` | JWT | Publish a raw `.tar.gz` containing client files and/or a saved container image |
 | PUT | `/api/v1/me/github-games/{id}/hosting` | JWT | Enable/disable hosting ("Deploy to starhermit") → `GameHostingView` |
 | GET | `/api/v1/me/github-games/{id}/deployment` | JWT | Read deployment/hosting state → `GameHostingView` |
 | PUT | `/api/v1/me/github-games/{id}/deployment` | JWT | Pin a commit/branch; queues a redeploy → `GameHostingView` |
@@ -108,6 +109,48 @@ Take ownership of a game when your linked GitHub login owns the repository. GitH
 ```json
 { "toUserId": "<user id>" }
 ```
+
+### Push a game bundle
+
+`POST /api/v1/me/github-games/{id}/bundle` publishes built output without asking StarHermit to
+clone it again. The caller must own the registered game. Send the `.tar.gz` bytes directly—not
+multipart form data—with `Content-Type: application/gzip`:
+
+```text
+client/            optional static client files; must include the registered launch file
+server/image.tar   optional output from `docker save`
+starhermit.txt     optional manifest copy for bundle portability
+```
+
+At least `client/` or `server/image.tar` must be present. Client files are swapped atomically. A
+server image is loaded, digest-pinned by the platform, and queues the container deployment to
+restart on that image. An uploaded image takes precedence over the manifest's registry reference.
+
+```bash
+docker save my-game-server:release -o image.tar
+mkdir -p bundle/server
+mv image.tar bundle/server/image.tar
+tar -C bundle -czf game-bundle.tar.gz .
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game-bundle.tar.gz
+```
+
+```json
+{
+  "clientPublished": false,
+  "serverImageLoaded": true,
+  "imageDigest": "sha256:...",
+  "bytesReceived": 318767104
+}
+```
+
+The upload limit defaults to 2 GiB and may be changed per game. An oversized stream returns `413`
+with `{ "error", "limitBytes" }`; malformed or unusable archives return `422`. Archives may not
+escape their root or contain links. The endpoint updates an existing registered game; it does not
+create the game record or slug. See the [dedicated-server publishing tutorial](../tutorials/dedicated-server-onboarding.md).
 
 ### Enable hosting
 

@@ -26,6 +26,9 @@ not the subject of the docs.
 - **[Tutorial: use AI to wire StarHermit into your game](docs/tutorials/ai-prompts.md)** —
   copy-pasteable prompts for an AI coding assistant, one per feature plus an all-together
   mega-prompt.
+- **[Tutorial: publish a dedicated server and onboard players in-game](docs/tutorials/dedicated-server-onboarding.md)** —
+  push a container bundle, renew its server token, and use public-key registration to onboard
+  Steam/Epic/GOG/native players without OAuth or a StarHermit dashboard visit.
 
 ## API reference
 

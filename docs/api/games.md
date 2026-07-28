@@ -4,7 +4,9 @@ The games subsystem is the core of StarHermit: server-authoritative multiplayer 
 
 **Base URL:** `https://api.starhermit.com`.
 
-All endpoints require authentication (`[Authorize]`) and work with both full user tokens and game-scoped launch tokens.
+Player endpoints require authentication and work with both full user tokens and game-scoped launch
+tokens. The two `/server/...` endpoints are container-only: session reconciliation uses a narrow
+server bearer token, while token renewal uses the deployment refresh key.
 
 ## Endpoints
 
@@ -31,6 +33,7 @@ All endpoints require authentication (`[Authorize]`) and work with both full use
 | GET | `/api/v1/games/{slug}/replays/{sessionId}` | Bearer | Full replay state (participants only) |
 | WS | `/ws/v1/games?sessionId={guid}` | Bearer | Gameplay WebSocket |
 | GET | `/api/v1/games/{slug}/server/sessions/{sessionId}` | Game-server token | Container backend session reconciliation; not available to player tokens |
+| POST | `/api/v1/games/{slug}/server/token` | Refresh key | Renew a container's expiring server token |
 
 Errors are returned as `{"error":"..."}` with standard status codes.
 

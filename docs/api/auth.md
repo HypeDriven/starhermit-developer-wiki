@@ -230,3 +230,11 @@ curl -s -X POST https://api.starhermit.com/api/v1/auth/logout \
 ```
 
 OAuth login is browser-driven: open `/api/v1/auth/oauth/google/authorize` (or `github`), complete the provider consent, and the callback lands the user on the frontend with `#access_token=…&refresh_token=…` in the URL fragment.
+
+## Embedded onboarding for native/storefront games
+
+A Steam, Epic, GOG, or standalone client can generate a key on the player's device and present the
+public-key registration flow inside its own UI, avoiding OAuth and a visit to the StarHermit
+dashboard. Registration is not silent: the player must consent, provide an email, and follow the
+one-time verification link. A game server token cannot create or impersonate players. See the
+[dedicated-server and embedded-onboarding tutorial](../tutorials/dedicated-server-onboarding.md).

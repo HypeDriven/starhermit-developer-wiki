@@ -7,6 +7,12 @@ use game-scoped launch tokens, REST sessions, and `ws/v1/games` JSON frames.
 
 Container hosting may be limited to approved developers while the feature is rolling out.
 
+After initial game registration, developers can also push a built `.tar.gz` containing
+`server/image.tar` (`docker save` output) through
+`POST /api/v1/me/github-games/{id}/bundle`. The platform loads and digest-pins the image and queues
+a deployment restart. See [GitHub Games — Push a game bundle](github-games.md#push-a-game-bundle)
+and the [dedicated-server tutorial](../tutorials/dedicated-server-onboarding.md).
+
 ## Manifest
 
 Declare the image in the repository's `starhermit.txt`:
@@ -160,13 +166,35 @@ than relying only on periodic checkpoints.
 |---|---|
 | `STARHERMIT_PROTOCOL` | Protocol version (`1`) |
 | `STARHERMIT_GAME_SLUG` | This game's slug |
-| `STARHERMIT_INVOKE_KEY` | Secret expected in `X-Starhermit-Invoke-Key` |
+| `STARHERMIT_INVOKE_KEY` | Secret expected in `X-Starhermit-Invoke-Key`; authenticates the platform to your container |
+| `STARHERMIT_REFRESH_KEY` | Separate secret used only to renew the server token |
 | `STARHERMIT_API_BASE` | Platform API base URL reachable from the isolated network |
-| `STARHERMIT_SERVER_TOKEN` | Bearer token for the narrow server-to-server API |
+| `STARHERMIT_SERVER_TOKEN` | Expiring bearer token for the narrow server-to-server API |
+| `STARHERMIT_SERVER_TOKEN_EXPIRES_IN` | Lifetime of the injected server token, in seconds |
 | `PORT` | Port on which the container must listen |
 
 A server token has no player identity and cannot call player endpoints. It is fenced to
 `GET /api/v1/time` and this game's `/api/v1/games/{slug}/server/...` prefix.
+
+### Renew the server token
+
+The injected server token expires (24 hours by default). Refresh it well before
+`STARHERMIT_SERVER_TOKEN_EXPIRES_IN` elapses:
+
+```http
+POST /api/v1/games/{slug}/server/token
+X-Starhermit-Refresh-Key: <STARHERMIT_REFRESH_KEY>
+```
+
+```json
+{ "token": "eyJhbGciOi...", "expiresInSeconds": 86400 }
+```
+
+This endpoint is intentionally called without the expired bearer token. The dedicated refresh key
+is compared against the live deployment and works even after the old token expires. It is distinct
+from `STARHERMIT_INVOKE_KEY`: the invoke key authenticates platform calls to your process, while the
+refresh key authenticates your process to the platform. Both rotate whenever the container starts.
+Schedule renewal at roughly half the reported lifetime and replace the token atomically.
 
 ### Reconcile a session
 
