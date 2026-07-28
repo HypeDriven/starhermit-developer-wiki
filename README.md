@@ -51,9 +51,9 @@ WebSockets under `ws/v1/...`, JWT bearer auth
 | Achievements | [achievements.md](docs/api/achievements.md) | Server-authoritative game achievements (script or container), client-claimed catalog-title achievements, secret achievements |
 | Leaderboards | [leaderboards.md](docs/api/leaderboards.md) | Definitions, entries, friends-only views, server-runtime-owned elo boards |
 | External libraries | [external-libraries.md](docs/api/external-libraries.md) | Linking Steam/Epic/GOG libraries, external launch URIs |
-| Relay | [relay.md](docs/api/relay.md) | Opaque byte fan-out sessions for fast-paced game netcode (`ws/v1/relay`) |
+| Relay | [relay.md](docs/api/relay.md) | Match-bound opaque byte fan-out with roster authorization and tick-aware rate limits (`ws/v1/relay`) |
 | Realtime rooms | [realtime.md](docs/api/realtime.md) | Lobbies, friend invites, quick-join matchmaking, AI-seat backfill, host-authoritative frame routing (`ws/v1/realtime`) |
-| GitHub games | [github-games.md](docs/api/github-games.md) | Publishing from a GitHub repo or registering a hosted web game (`starhermit.txt`, hosting, deployments) |
+| GitHub games | [github-games.md](docs/api/github-games.md) | Publishing from GitHub, a hosted URL, or an uploaded client/container bundle (`starhermit.txt`, hosting, deployments) |
 | Publisher | [publisher.md](docs/api/publisher.md) | Publisher/member management, title & build publishing, achievement/leaderboard/entitlement management |
 
 ## Notes

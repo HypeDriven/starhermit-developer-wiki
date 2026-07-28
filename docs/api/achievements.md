@@ -194,7 +194,7 @@ entitlement to the title.
 
 Returns `204`. Returns `400` when the achievement does not exist, when the caller has no entitlement
 to the title (see [catalog.md](catalog.md)), or when the achievement is **game-scoped** — those are
-granted by the game's script only. Re-unlocking something already held returns `204`.
+granted by the game's authoritative script or container backend only. Re-unlocking something already held returns `204`.
 
 Publisher-side management — defining, updating, and deleting title achievements — lives in
 [publisher.md](publisher.md#achievements).

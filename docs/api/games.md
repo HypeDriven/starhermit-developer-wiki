@@ -205,7 +205,7 @@ Session detail. Participants only — `403` otherwise.
 
 ### `POST /api/v1/games/{slug}/sessions/ai`
 
-Creates a practice session against the platform AI seat: fixed user id `00000000-0000-4000-8000-00000000a1a1`, username **"The House"**. The game script itself plays the AI — there is no external bot service.
+Creates a practice session against the platform AI seat: fixed user id `00000000-0000-4000-8000-00000000a1a1`, username **"The House"**. The game's authoritative backend plays the AI — there is no external bot service.
 
 ```json
 { "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e" }
@@ -324,7 +324,7 @@ https://dashboard.starhermit.com/game-invite/<userId>/<gameSlug>
 ```
 
 - `<userId>` — the sharing player's user id. A game client already has it: it is the `sub` claim of its launch token (the chess reference implementation exposes it as `Net.userId`).
-- `<gameSlug>` — the game's slug (`game_scope` claim). Games without a server script use the GitHub game id (a GUID) instead; the dashboard accepts either.
+- `<gameSlug>` — the game's slug (`game_scope` claim). Games without an authoritative script or container backend use the GitHub game id (a GUID) instead; the dashboard accepts either.
 
 When the recipient opens the link, the **dashboard** (not the game) does the automated friend-invite part — no new backend endpoints are involved, it composes the existing APIs:
 
@@ -383,7 +383,7 @@ The full final state JSON as archived by the platform. Participants only.
 - Matchmaking ticket statuses: `queued` | `matched` | `cancelled`.
 - Invite statuses: `pending` | `accepted` | `declined` | `cancelled`.
 - **Sessions are created via matchmaking, invite-accept, the AI endpoint, or a realtime room start** (room-bound sessions — see [Realtime Rooms](realtime.md#room-bound-scripted-sessions)) — there is no "create lobby" endpoint.
-- Elo is computed by the game script (`eloUpdates`), denormalized onto `GamePlayerState.Elo`, and published to the game's leaderboard (score type `elo`). **Clients can never submit scores to a game leaderboard directly** (see [Leaderboards](leaderboards.md)).
+- Elo updates come from the authoritative script (`eloUpdates`) or container control channel, are denormalized onto `GamePlayerState.Elo`, and are published to the game's leaderboard (score type `elo`). **Clients can never submit scores to a game leaderboard directly** (see [Leaderboards](leaderboards.md)).
 
 ## Gameplay WebSocket
 
@@ -405,7 +405,7 @@ For a script runtime, durable commands run through `onPlayerMessage`; explicitly
 ### Server → client
 
 ```json
-{ "type": "game", "data": { "...": "script-authorized message addressed to you" } }
+{ "type": "game", "data": { "...": "server-authorized message addressed to you" } }
 { "type": "error", "error": "Illegal move" }
 { "type": "presence", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "online": true }
 { "type": "achievement", "data": { "key": "first-win", "name": "First Win", "description": "Win a match.", "icon": null, "points": 10, "unlockedAt": "2026-07-25T09:14:02Z" } }
@@ -451,7 +451,7 @@ not to step the game. See [Game Scripts — Tick rate](game-scripts.md#tick-rate
 
 ### Example: chess command shapes
 
-The following payload shapes are the example: how the chess [reference implementation](https://github.com/HypeDriven/starhermit-chess) fills in `data`. **They are defined by each game's script, not by the platform** — every game defines its own command set and broadcast payloads in its own script. The platform envelope is only `cmd` / `game` / `error` / `presence`; the contents of `data` are entirely script-owned.
+The following payload shapes are the example: how the chess [reference implementation](https://github.com/HypeDriven/starhermit-chess) fills in `data`. **They are defined by chess's script, not by the platform** — every game defines its own command set and broadcast payloads in its authoritative backend. The client command envelope is `cmd`; common server envelopes include `game`, `error`, `presence`, and `achievement`, with `resumed`/`abandoned` additionally used for container recovery. The contents of `data` are backend-owned.
 
 Client commands (sent as `{"type":"cmd","data":{...}}`):
 

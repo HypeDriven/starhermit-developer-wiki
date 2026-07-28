@@ -126,8 +126,9 @@ Route `api/v1/publisher`; all achievement-management routes require `Permission-
 
 These endpoints manage **catalog-title** achievements only. They also require the caller to be a
 member of the publisher that owns the title, and they **fail closed for achievements that belong to
-a scripted game** — those are declared by the game's own server script and are not publisher-managed
-(see [Achievements](achievements.md) and [Game Scripts](game-scripts.md#achievements)).
+an authoritative game** — those are declared by the game's script or container backend and are not
+publisher-managed (see [Achievements](achievements.md), [Game Scripts](game-scripts.md#achievements),
+and [Container Game Servers](container-games.md#control-channel)).
 
 | Method | Path | Auth | Description |
 |---|---|---|---|

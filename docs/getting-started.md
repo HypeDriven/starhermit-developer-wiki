@@ -13,7 +13,7 @@
 - **Software catalog** — software titles with builds and downloadable assets; see [Catalog](api/catalog.md).
 - **Entitlements** — per-user grants of catalog software (part of [Profile](api/profile.md)).
 - **Achievements & leaderboards** — server-authoritative achievements for games with a script or container backend, plus client-claimed achievements for catalog titles; see [Achievements](api/achievements.md) and [Leaderboards](api/leaderboards.md).
-- **Peer relay** — see [Relay](api/relay.md).
+- **Peer relay** — match-bound opaque byte fan-out with roster authorization and rate limits derived from the game's tick rate; see [Relay](api/relay.md).
 - **Realtime rooms** — lobbies, matchmaking, AI players and backfill, and realtime transport for fast-paced games; can also bridge into a room-bound scripted session for server-authoritative play; see [Realtime Rooms](api/realtime.md).
 - **Authoritative games** — platform-hosted games whose rules run as a sandboxed JavaScript [Game Script](api/game-scripts.md) or a [Container Game Server](api/container-games.md); clients use the shared [Games API](api/games.md).
 

@@ -7,7 +7,7 @@ A match runs one of two ways:
 - **Host-routed (default)** — the platform server is a smart transport, not a simulator: the room creator's client is the **host** and runs the authoritative game simulation; other clients (guests) send inputs to the host and receive the host's snapshots. The server enforces routing, roles, capacity, rate limits, and identity — clients cannot spoof each other, and only the server-assigned host can broadcast.
 - **Room-bound scripted session (server-authoritative)** — for games that ship a `server=` script: when the room starts, the platform creates a bound N-player [scripted session](game-scripts.md#room-bound-sessions) that runs the simulation server-side at the game's tick rate. Gameplay then flows over `ws/v1/games` and the realtime WS is used for lobby/roster only. See [the bridge](#room-bound-scripted-sessions) below.
 
-Contrast this with the [peer relay](relay.md) (dumb fan-out, no rooms/lobbies, disabled by default) and plain [scripted games](games.md) (server-authoritative, but no lobbies/matchmaking of their own). Realtime rooms are **enabled by default**.
+Contrast this with the [peer relay](relay.md) (opaque fan-out bound to an existing room/session roster, disabled by default) and plain [scripted games](games.md) (server-authoritative, but no lobbies/matchmaking of their own). Realtime rooms are **enabled by default**.
 
 All REST endpoints require authentication and work with both a full user token and a game-scoped launch token. Errors are returned as `{"error":"..."}` with standard status codes.
 
@@ -245,7 +245,7 @@ For a game that declares a `server=` script in its manifest, a realtime room can
 
 ## See also
 
-- [Relay](relay.md) — simpler opaque byte fan-out (no lobbies); availability may vary
+- [Relay](relay.md) — opaque byte fan-out bound to a game session or realtime-room roster; availability may vary
 - [Games](games.md) — server-authoritative scripted games
 - [Authentication](auth.md) — launch tokens and game-scope fencing
 - [Friends](friends.md) — the friend list used by the invite picker
