@@ -127,6 +127,10 @@ Maximum message size is 4 KiB by default.
 
 ### Tick-rate-aware rate limit
 
+> **Connection-drop rule:** if a client sends relay commands/frames faster than the allowed rate,
+> StarHermit closes that client's relay WebSocket with `PolicyViolation`. This is not a queue or a
+> best-effort frame drop—the client connection is terminated and must reconnect.
+
 The old flat limit of one message per 100 ms no longer applies to configured sessions. Each
 sender's minimum interval is derived from the bound match's effective game tick rate:
 
@@ -149,8 +153,10 @@ operator override, then the game's requested rate, then the global setting. If n
 resolved—or the game opted out of server ticks with `0`—the global/default rate is used rather than
 making relay traffic unlimited. Rates are bounded by the platform ceiling.
 
-Sending again sooner than the session interval closes that sender's socket with
-`PolicyViolation`. Senders are limited independently.
+A client must pace commands to this interval or slower. Sending two commands/frames closer together
+than the minimum interval is treated as flooding: StarHermit drops that client's connection by
+closing its relay WebSocket with `PolicyViolation`. Senders are limited independently, so one
+client's violation does not disconnect the other players.
 
 ## Recommended client flow
 
@@ -158,7 +164,8 @@ Sending again sooner than the session interval closes that sender's socket with
 2. Have one match member create a relay with that match ID.
 3. Share the returned relay ID only through the match's authenticated state or roster messages.
 4. Each other match member calls `POST /api/v1/relay/{relayId}/join`.
-5. Each member opens `ws/v1/relay` and paces frames to the game's effective tick rate.
+5. Each member opens `ws/v1/relay` and paces frames to the game's effective tick rate; sending
+   faster drops that client's WebSocket connection.
 6. The creator closes the relay when the match ends.
 
 Do not use relay IDs as authorization secrets. The platform authorizes against the bound roster;
