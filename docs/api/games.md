@@ -12,6 +12,18 @@ server bearer token, while token renewal uses the deployment refresh key.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
+
+## What `{slug}` is
+
+A game's slug is its **uid** — the same value as its `<uid>.starhermit.com` address, e.g.
+`83fd04b1-3cbe-4b09-a251-3733ad4b9d94`. It is derived from the game's immutable id and **nothing
+can set it**: not `starhermit.txt`, not the repo name, not an operator. A name a developer could
+choose would be something two games could contend for, and would need the platform to arbitrate who
+got it; a uid can neither collide nor be asked for.
+
+Do not hard-code it. Read it from the launch token's `game_scope` claim, or — for a
+platform-hosted browser game — from `location.hostname`, since the subdomain is the uid.
+
 | GET | `/api/v1/games/{slug}` | Bearer | Game info + caller's stats |
 | POST | `/api/v1/games/{slug}/launch-token` | Bearer | Mint a game-scoped launch token |
 | GET | `/api/v1/games/{slug}/achievements` | Bearer | The game's achievements + the caller's unlock state |

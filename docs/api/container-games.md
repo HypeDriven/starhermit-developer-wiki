@@ -19,7 +19,10 @@ Declare the image in the repository's `starhermit.txt`:
 
 ```ini
 name=Void Marshals
-slug=void-marshals
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its <uid>.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
 launch=index.html
 
 container.image=ghcr.io/octocat/vm-server@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08

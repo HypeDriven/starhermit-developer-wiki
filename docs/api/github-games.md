@@ -10,7 +10,10 @@ Place `starhermit.txt` at the repo root. Format: `key=value` lines, `#` starts a
 
 ```text
 name=Your Game
-slug=yourgame            # URL-safe id; endpoints live under /api/v1/games/<slug>/…
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its <uid>.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
 launch=index.html        # repo-relative HTML entry
 owner=<starhermit username or user id>
 # Choose at most one authoritative backend, or omit both for a browser-only game:

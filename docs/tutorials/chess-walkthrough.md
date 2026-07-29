@@ -34,7 +34,10 @@ Publishing any game starts with the `starhermit.txt` manifest at the repo root. 
 
 ```text
 name=StarHermit Chess
-slug=chess
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its <uid>.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
 launch=index.html
 owner=HypeDriven
 server=server.js

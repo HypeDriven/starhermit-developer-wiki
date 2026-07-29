@@ -150,7 +150,10 @@ At the repository root, create or update `starhermit.txt`:
 
 ```ini
 name=Orbit League
-slug=orbit-league
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its <uid>.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
 launch=index.html
 owner=3fa85f64-5717-4562-b3fc-2c963f66afa6
 ```
