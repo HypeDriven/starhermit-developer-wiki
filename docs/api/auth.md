@@ -24,6 +24,12 @@ Errors are returned as `{"error":"..."}` with standard status codes (400/401/403
 
 Begins public-key registration and sends a verification email. The pending registration record expires after 4 hours. If `userId` is set, the email must match that account. Throttled to 1 email per address and per IP per 24 hours — when throttled, the response is 429 with a `Retry-After` header.
 
+When `userId` is set and the pair does not check out, the response is `403` with a single message
+regardless of *why*: an unknown account and a wrong address answer identically. This endpoint takes
+no credentials — it has to, since it is how a new key gets attached — so distinguishing them would
+make it an oracle for which user ids exist and then for their addresses. A caller who owns the
+account already knows which of the two they got wrong.
+
 Request:
 
 ```json
@@ -139,6 +145,21 @@ Response:
   "refreshToken": "bmV3IHJlZnJlc2g..."
 }
 ```
+
+#### When refresh stops working
+
+A refresh token records the account state it was issued under, and refresh checks it. Two answers
+your client must handle rather than retry:
+
+| Status | Meaning | What the client should do |
+|---|---|---|
+| `401` | The session was revoked platform-side — a "sign out everywhere", or a compromise response. The whole token family is burned, including the token just presented. | Discard both tokens and start a fresh sign-in. |
+| `403` | The account is **suspended**. | Stop. Signing in again will not help; the same `403` comes back from every sign-in route until the suspension is lifted. |
+
+The `403` is deliberately distinct from `401`, because the two need opposite reactions: one means
+"authenticate again", the other means "authenticating again is pointless". A suspended account is
+refused by *every* credential-minting route — refresh, public-key completion, the OAuth callback,
+and game launch tokens — not only by refresh.
 
 ### `POST /api/v1/auth/logout`
 

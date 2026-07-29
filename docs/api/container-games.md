@@ -5,7 +5,12 @@ sandboxed JavaScript file. This lets the server use Rust, Go, C++, or any other 
 serve HTTP and WebSockets. The browser-facing [Games API](games.md) stays the same: clients still
 use game-scoped launch tokens, REST sessions, and `ws/v1/games` JSON frames.
 
-Container hosting may be limited to approved developers while the feature is rolling out.
+Container hosting is limited to an **operator allowlist of developers** while the feature is rolling
+out, and an unset allowlist admits nobody rather than everybody — an operator who enabled the
+feature but has not named anyone has not yet decided who may run code on the host. If provisioning a
+container game returns `403` on a server where the feature is enabled, ask the operator to add your
+user id. This applies equally to a registry image and an uploaded `server/image.tar`, so neither
+route is quietly more permissive than the other.
 
 After initial game registration, developers can also push a built `.tar.gz` containing
 `server/image.tar` (`docker save` output) through

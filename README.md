@@ -18,8 +18,8 @@ not the subject of the docs.
 ## Where to start
 
 - **[Getting started](docs/getting-started.md)** — base URLs, versioning, auth model, and the
-  the ways to integrate (a platform game published from GitHub, with an optional script or
-  container server, or an external client calling the REST/WS API directly).
+  the ways to integrate (a platform game published from GitHub or uploaded as a folder, with an
+  optional script or container server, or an external client calling the REST/WS API directly).
 - **[Tutorial: end-to-end integration walkthrough (using the chess reference example)](docs/tutorials/chess-walkthrough.md)** —
   the full lifecycle from launch token to replay viewer, with the exact calls a game client
   makes, illustrated by the chess reference implementation.
@@ -55,7 +55,7 @@ WebSockets under `ws/v1/...`, JWT bearer auth
 | External libraries | [external-libraries.md](docs/api/external-libraries.md) | Linking Steam/Epic/GOG libraries, external launch URIs |
 | Relay | [relay.md](docs/api/relay.md) | Match-bound opaque byte fan-out with roster authorization and tick-aware rate limits (`ws/v1/relay`) |
 | Realtime rooms | [realtime.md](docs/api/realtime.md) | Lobbies, friend invites, quick-join matchmaking, AI-seat backfill, host-authoritative frame routing (`ws/v1/realtime`) |
-| GitHub games | [github-games.md](docs/api/github-games.md) | Publishing from GitHub, a hosted URL, or an uploaded client/container bundle (`starhermit.txt`, hosting, deployments) |
+| GitHub games | [github-games.md](docs/api/github-games.md) | Publishing from GitHub, a hosted URL, **a local folder**, or an uploaded client/container bundle (`starhermit.txt`, hosting, deployments, **your audience figures**) |
 | Publisher | [publisher.md](docs/api/publisher.md) | Publisher/member management, title & build publishing, achievement/leaderboard/entitlement management |
 
 ## Notes

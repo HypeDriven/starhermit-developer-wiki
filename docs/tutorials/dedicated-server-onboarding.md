@@ -235,8 +235,11 @@ The platform:
 - queues the old container to be replaced by the uploaded image;
 - restores eligible active sessions from their persisted snapshots.
 
-You may upload only the client or only the server image. The default cap is 2 GiB and can be tuned
-per game. `413` includes `limitBytes`; an invalid archive or image returns `422`. Do not put symlinks,
+You may upload only the client or only the server image. A game's disk allowance is **4 GB** and can
+be tuned per game; because a push replaces a game's content rather than adding to it, that is both
+the largest push and the most disk the game can occupy. `413` includes `limitBytes`; an invalid
+archive or image returns `422`; and `507` means the server has no room right now — it is checked
+before your body is read, so a doomed upload is refused rather than half-landed. Do not put symlinks,
 hard links, path traversal, or files outside the documented layout in the archive.
 
 A successful upload does not mean the new process has passed health checks yet. Poll the existing

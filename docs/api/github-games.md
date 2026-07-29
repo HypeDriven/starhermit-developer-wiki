@@ -52,8 +52,10 @@ Players can override these defaults per game through the
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | POST | `/api/v1/me/github-games` | JWT | Register a game from a repo URL → `201 GitHubGameDto` |
+| POST | `/api/v1/me/github-games/upload` | JWT | **Add a game from a local folder** — no repository at all → `201 { game, bytesReceived }` |
 | POST | `/api/v1/me/github-games/{id}/claim` | JWT | Take ownership after proving repository control by GitHub link or manifest owner → `GitHubGameDto` |
 | GET | `/api/v1/me/github-games` | JWT | List your registered GitHub games → `GitHubGameDto[]` |
+| GET | `/api/v1/me/github-games/{id}/stats` | JWT (owner) | **Audience figures for a game you added** → `GameStatsDto` |
 | POST | `/api/v1/me/github-games/{id}/transfer` | JWT | Transfer a game to another user → `GitHubGameDto` |
 | DELETE | `/api/v1/me/github-games/{id}` | JWT | Remove a registered game → `204` |
 | POST | `/api/v1/me/github-games/{id}/bundle` | JWT | Publish a raw `.tar.gz` containing client files and/or a saved container image |
@@ -98,6 +100,92 @@ Errors use the standard shape:
 ```json
 { "error": "..." }
 ```
+
+### Add a game from a local folder
+
+`POST /api/v1/me/github-games/upload` → `201`
+
+The counterpart to registering a URL: **there is no repository**, and nothing is cloned. The folder
+travels as one `.tar.gz` on the request body and the platform hosts what it contains. Same archive
+format as [pushing a bundle](#push-a-game-bundle), so the same packaging works for both.
+
+```text
+client/           the game's files, published as-is
+starhermit.txt    optional; name= and launch= instead of the query parameters
+```
+
+Send the bytes directly — not multipart form data — with `Content-Type: application/gzip`:
+
+```bash
+tar -czf game.tar.gz client/ starhermit.txt
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/upload?displayName=My%20Game" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game.tar.gz
+```
+
+```json
+{
+  "game": { "id": "...", "displayName": "My Game", "launchPath": "index.html", "hosting": { "hostingEnabled": true } },
+  "bytesReceived": 4194304
+}
+```
+
+Metadata resolves in this order, so most folders need no query parameters at all:
+
+1. `?displayName=` / `?launchPath=` on the request.
+2. `name=` / `launch=` in a `starhermit.txt` at the archive root.
+3. `index.html` at the root of `client/` — used as the launch path when nothing else names one.
+
+Notes specific to this route:
+
+- **The game is live as soon as the call returns.** There is no separate hosting or deployment
+  step: `deployStatus` is `live` and `deployedCommitSha` is `null`, because there is no commit.
+- **The files cannot be regenerated**, so the platform never redeploys them from anywhere. A game
+  added this way carries `contentSource: upload`, which is what stops the deployment worker from
+  replacing an uploaded build with the contents of a repository. Push a new build with
+  [the bundle endpoint](#push-a-game-bundle) or upload the folder again.
+- **No repository means no claiming.** `ownerLogin` is empty, so no GitHub login can ever match it;
+  `repoUrl` carries a synthetic `upload:<id>` value rather than a URL.
+- **A `server/image.tar` is refused here** (`422`). A server image needs a provisioned game to
+  attach to, which does not exist until the game does — create the game first, then push the image
+  to `/{id}/bundle`.
+- A launch path naming a file the archive does not contain is refused (`422`) while the upload is
+  still in staging, rather than becoming a 404 for every player.
+
+Limits are the same as any other push: see [Upload limits](#upload-limits).
+
+### Audience figures for your game
+
+`GET /api/v1/me/github-games/{id}/stats` → `GameStatsDto`
+
+How many people play a game **you added**. Restricted to the game's owner — anyone else gets `404`,
+the same answer as a game that does not exist.
+
+```json
+{
+  "totalPlayers": 42,
+  "playingNow": 3,
+  "totalSessions": 130,
+  "totalPlaytimeMinutes": 8140,
+  "lastPlayedAt": "2026-07-29T08:45:24Z",
+  "livenessWindowHours": 4
+}
+```
+
+- **Aggregate only.** You learn the size of your audience, never who is in it.
+- `totalPlayers` counts **distinct people**, not sessions — someone who played six times is one
+  player.
+- `playingNow` counts distinct players whose session has not ended *and* began inside
+  `livenessWindowHours`. The window matters: a client that crashed or lost its network never sends
+  the session end, and without it those rows would read as people still playing indefinitely.
+- `totalPlaytimeMinutes` counts **completed sessions only**, matching the per-user playtime figures
+  in [activity.md](activity.md). A session in flight contributes nothing yet.
+- `lastPlayedAt` is `null` for a game nobody has played.
+
+Figures come from the same launch ledger every client writes (see [activity.md](activity.md)), so a
+game whose players never report launches will read as zero.
 
 ### Claim ownership
 
@@ -164,10 +252,30 @@ curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle"
 }
 ```
 
-The upload limit defaults to 2 GiB and may be changed per game. An oversized stream returns `413`
-with `{ "error", "limitBytes" }`; malformed or unusable archives return `422`. Archives may not
-escape their root or contain links. The endpoint updates an existing registered game; it does not
-create the game record or slug. See the [dedicated-server publishing tutorial](../tutorials/dedicated-server-onboarding.md).
+The endpoint updates an existing registered game; it does not create the game record or slug — for
+that, see [adding a game from a local folder](#add-a-game-from-a-local-folder). See the
+[dedicated-server publishing tutorial](../tutorials/dedicated-server-onboarding.md).
+
+### Upload limits
+
+Both upload routes share the same rules.
+
+| Limit | Value |
+|---|---|
+| Disk allowance per game | **4 GB** (operator-tunable per game) |
+| Enforcement | applied **while streaming**, so an oversized push is cut off mid-flight |
+
+Per-push and per-game are deliberately the same number: publishing **replaces** a game's content
+rather than adding to it, so the largest push is also the most disk a game can occupy.
+
+| Status | Meaning |
+|---|---|
+| `413` | Over the allowance. Body carries `{ "error", "limitBytes" }`. |
+| `422` | Malformed archive, or unusable contents (missing launch file, no `client/`, a `server/image.tar` on the create route). |
+| `507` | The server does not have room right now. Checked **before the body is read**, on both the staging and hosting volumes, so a doomed upload is refused rather than half-landed. |
+
+Archives may not escape their root or contain links, and only regular files and directories are
+extracted — symlinks, hardlinks and device nodes are rejected.
 
 ### Enable hosting
 
@@ -208,6 +316,7 @@ create the game record or slug. See the [dedicated-server publishing tutorial](.
 ```
 
 - `serverScriptPath` is present only for a JavaScript backend. `gameSlug` may be present for either a script or container backend. The current DTO does not expose a container image reference.
+- For a game added from a local folder, `repoUrl` is a synthetic `upload:<id>` marker and `ownerLogin`/`repoName` are empty — there is no repository to name, and an empty owner is what makes the listing unclaimable.
 - `SharedGitHubGameDto` extends `GitHubGameDto` with `submittedByUserId` and `submittedByUsername`.
 
 ```json
@@ -225,7 +334,25 @@ create the game record or slug. See the [dedicated-server publishing tutorial](.
 
 `hostedUrl`, `pinnedCommitSha`, `deployedCommitSha`, `deployError`, and `deployedAt` are optional.
 
+```json
+// GameStatsDto  (GET /api/v1/me/github-games/{id}/stats — owner only)
+{
+  "totalPlayers": 42,
+  "playingNow": 3,
+  "totalSessions": 130,
+  "totalPlaytimeMinutes": 8140,
+  "lastPlayedAt": "2026-07-29T08:45:24Z",
+  "livenessWindowHours": 4
+}
+```
+
 ## Publish your own game: walkthrough
+
+There are two routes in. If your game lives in a git repository, follow the numbered steps below.
+If it is just a folder on your machine, one call does all of it:
+[add a game from a local folder](#add-a-game-from-a-local-folder) registers the game, publishes the
+files, and leaves it live — no hosting toggle and no commit pin, because there is no repository to
+track.
 
 1. **Choose a source**: push a repo containing `starhermit.txt` at the root (optionally declaring either a `server.js` script or container image), or prepare the public URL of an already-hosted browser game.
 2. **Link your GitHub identity** via the OAuth flow (see [auth.md](auth.md)); verify with `GET /api/v1/me/github`.

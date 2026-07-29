@@ -35,7 +35,7 @@ All REST routes are versioned: `api/v1/...`. WebSocket routes live under `ws/v1/
 
 ## Two ways to integrate your game
 
-1. **Platform-hosted game.** You publish a game from a GitHub repo with a `starhermit.txt` manifest. It may be browser-only, use a sandboxed `server.js`, or point to a digest-pinned container image for server logic. The platform serves the game at `<slug>.starhermit.com` with `/api` and `/ws` proxied same-origin. The script path is demonstrated end-to-end by the chess reference implementation at <https://github.com/HypeDriven/starhermit-chess>. See [GitHub Games](api/github-games.md), [Game Scripts](api/game-scripts.md), [Container Game Servers](api/container-games.md), and the [Integration Walkthrough](tutorials/chess-walkthrough.md).
+1. **Platform-hosted game.** You publish a game from a GitHub repo with a `starhermit.txt` manifest — or, if it does not live in a repository, [upload the folder directly](api/github-games.md#add-a-game-from-a-local-folder) and skip git entirely. It may be browser-only, use a sandboxed `server.js`, or point to a digest-pinned container image for server logic. The platform serves the game at `<slug>.starhermit.com` with `/api` and `/ws` proxied same-origin. The script path is demonstrated end-to-end by the chess reference implementation at <https://github.com/HypeDriven/starhermit-chess>. See [GitHub Games](api/github-games.md), [Game Scripts](api/game-scripts.md), [Container Game Servers](api/container-games.md), and the [Integration Walkthrough](tutorials/chess-walkthrough.md).
 2. **External game client.** Your own client calls the REST and WebSocket API directly, using JWT auth and, where appropriate, game launch tokens. The API reference pages below document the surface.
 
 ## API reference

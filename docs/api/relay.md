@@ -16,7 +16,7 @@ Base: `https://api.starhermit.com/api/v1/relay`.
 |---|---|---|---|
 | GET | `/?titleId=` | JWT | List active relay sessions for this title whose bound match includes the caller |
 | POST | `/` | JWT | Create a relay bound to one match |
-| GET | `/{sessionId}` | JWT | Get a relay session |
+| GET | `/{sessionId}` | JWT | Get a relay session — visible only to members of its bound match (`404` otherwise) |
 | POST | `/{sessionId}/join` | JWT | Join the relay; caller must be in its bound match |
 | POST | `/{sessionId}/close` | JWT | Close a relay (creator only) |
 

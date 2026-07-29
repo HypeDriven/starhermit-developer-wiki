@@ -6,7 +6,7 @@ A StarHermit authoritative game can be defined by a **single JavaScript file** e
 
 - One JS file per game, executed in a **fresh sandboxed Jint engine per invocation**. Nothing persists in memory between calls — all state lives in the documents you return.
 - No `Date` access, no own RNG. Clock and randomness come from the host: `ctx.now` (ms epoch) and `ctx.random` (float in `[0, 1)`).
-- The platform invokes the script when a player sends a durable command, when a session is created, and on periodic `onTick` sweeps (see [Games API — Tick service](games.md#tick-service)). Realtime `{type:"input", realtime:true}` frames are the exception: they are buffered latest-wins and delivered as a batch to the next tick.
+- The platform invokes the script when a player sends a durable command, when a session is created, and on periodic `onTick` sweeps (see [Games API — Runtime timing](games.md#runtime-timing)). Realtime `{type:"input", realtime:true}` frames are the exception: they are buffered latest-wins and delivered as a batch to the next tick.
 
 ## Entry points
 

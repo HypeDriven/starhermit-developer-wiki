@@ -12,9 +12,21 @@ Route prefix: `api/v1/publisher`.
 |---|---|---|---|
 | POST | `/api/v1/publisher` | JWT (`Permission-publisher.content.manage`) | Create a publisher; creator becomes a member with role `"Owner"` → `201` |
 | GET | `/api/v1/publisher` | JWT (`Permission-publisher.content.manage`) | List publishers → `Publisher[]` |
-| POST | `/api/v1/publisher/{publisherId}/members` | JWT (`Permission-publisher.members.manage`) | Add a member → `204` |
-| DELETE | `/api/v1/publisher/{publisherId}/members/{memberUserId}` | JWT (`Permission-publisher.members.manage`) | Remove a member → `204` (owner cannot be removed) |
-| GET | `/api/v1/publisher/{publisherId}/members/{memberUserId}` | JWT (`Permission-publisher.members.manage`) | Get a member → `PublisherMember` |
+| POST | `/api/v1/publisher/{publisherId}/members` | JWT (`Permission-publisher.members.manage`) + **role `Owner`** | Add a member → `204` |
+| DELETE | `/api/v1/publisher/{publisherId}/members/{memberUserId}` | JWT (`Permission-publisher.members.manage`) + **role `Owner`** | Remove a member → `204` (owner cannot be removed) |
+| GET | `/api/v1/publisher/{publisherId}/members/{memberUserId}` | JWT (`Permission-publisher.members.manage`) + **membership of that publisher** | Get a member → `PublisherMember` |
+
+### Who may change membership
+
+The permission claim says you may manage publisher members somewhere; it does not say *which*
+publisher. Both checks therefore apply:
+
+- **Adding and removing members is `Owner`-only.** Membership carries content-manage authority over
+  every one of the publisher's titles, so a plain member who could add members could grant that
+  authority to anyone. A non-owner gets `401`.
+- **Reading a membership requires belonging to that publisher.** A caller outside it gets the same
+  `404` as a user who is not a member, so the endpoint reveals nothing about publishers you are not
+  part of.
 
 ### Create a publisher
 
