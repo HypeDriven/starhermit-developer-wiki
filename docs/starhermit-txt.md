@@ -99,7 +99,7 @@ launch=index.html
 |---|---|---|
 | `name` | — | The display name players see. Required unless you pass a display name in the upload form. |
 | `launch` | `launch_path`, `html` | Path to the entry `.html`, relative to the manifest. Defaults to `index.html` when a file by that name sits at the root. |
-| `owner` | `username`, `user` | The owning StarHermit **user ID (UUID)**. Use the immutable user ID from `GET /api/v1/me`, not a username. Lets you [claim a listing someone else added](tutorials/claim-existing-game.md). |
+| `owner` | `username`, `user` | **Repository flow only.** The owning StarHermit **user ID (UUID)** from `GET /api/v1/me`, not a username. Lets you [claim a listing someone else added](tutorials/claim-existing-game.md) by proving you control the repository. Ignored on an upload — see [Who owns an uploaded game](#who-owns-an-uploaded-game). |
 
 ### Keys for a game with server logic
 
@@ -165,7 +165,7 @@ container.health=/healthz
 container.env.LOG_LEVEL=info
 ```
 
-### Claiming a listing you own
+### Claiming a listing you own — repository games only
 
 Set `owner` to the immutable StarHermit user ID returned as `id` by `GET /api/v1/me`—not the
 profile username or nickname:
@@ -175,6 +175,19 @@ name=My Game
 launch=index.html
 owner=3fa85f64-5717-4562-b3fc-2c963f66afa6
 ```
+
+## Who owns an uploaded game
+
+**The account that uploads it.** Always, and there is nothing to configure.
+
+An upload has no repository behind it, so there is nothing for anyone to prove control of: the
+platform records the uploading account as the submitter and leaves the GitHub owner field empty, so
+no claim can ever match the row. An `owner=` line in an uploaded build is ignored, and the clients do
+not offer a field for it — putting a game in another person's name would assign them responsibility
+for content they did not publish, which is not something an upload form should be able to do.
+
+Handing a game you already own to someone else is a separate, deliberate action from its Manage menu
+after the fact, not a decision made while adding it.
 
 ## Publishing from a GitHub repository instead
 
