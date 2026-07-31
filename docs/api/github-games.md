@@ -90,7 +90,7 @@ Despite its historical name, `repoUrl` accepts three launch sources:
 - `displayName` and `launchPath` are optional fallbacks. They are useful for a third-party repo
   without trusted manifest metadata; a direct hosted URL is itself the launch location.
 - For verified repository owners the platform validates `starhermit.txt`.
-- An optional `server=` script or `container.image=` backend provisions an authoritative game (`gameSlug`); see [game-scripts.md](game-scripts.md) and [container-games.md](container-games.md). Container hosting may be restricted to approved developers.
+- An optional `server=` script or `container.image=` backend provisions an authoritative game (`gameSlug`); see [game-scripts.md](game-scripts.md) and [container-games.md](container-games.md). Container hosting is open to any signed-in user on starhermit.com; a self-hosted deployment can restrict it to an operator allowlist.
 - Limits: 100 games per user. Registering a duplicate returns `409`.
 
 Registration/deployment statuses include: `InvalidUrl`, `LimitReached`, `Duplicate`, `MissingManualMetadata`, `MissingStarhermitTxt`, `InvalidLaunchPath`, `InvalidServerScriptPath`, `InvalidContainerImage`, `ServerProvisionConflict`, `RemovedByOwner`.

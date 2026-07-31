@@ -135,7 +135,7 @@ host (JavaScript, no Node APIs, no imports, no network, no clock):
 ### 4b. Alternative: authoring a container game server
 
 Use this instead of section 4 when the authoritative server needs Rust, Go, C++, or another
-runtime. Container hosting may be limited to approved developers.
+runtime. Container hosting is open to any signed-in user on starhermit.com.
 
 Context page: [container-games.md](../api/container-games.md) — this protocol is mandatory.
 
