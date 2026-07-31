@@ -180,10 +180,17 @@ The upload is one gzip-compressed tar archive with this layout:
 ```text
 client/            optional static web client, including the registered launch file
 server/image.tar   optional `docker save` output
-starhermit.txt     optional manifest copy
+starhermit.txt     the manifest
 ```
 
 At least `client/` or `server/image.tar` must be present.
+
+If you publish through the StarHermit web dashboard or Windows client rather than curl, you do not
+build this archive by hand. Pick either a **server distribution folder** (holding `starhermit.txt`
+and `image.tar`) or **the `image.tar` on its own**, and the client packs the layout above. The
+[`starhermit.txt`](../starhermit-txt.md) values — display name and the `container.*` knobs — are
+fields in the dialog, prefilled from the folder's manifest when there is one, so a bare `image.tar`
+publishes just as well.
 
 ```bash
 rm -rf bundle game-bundle.tar.gz
@@ -196,7 +203,7 @@ cp -R dist/. bundle/client/
 docker build -t orbit-server:release -f Dockerfile.server .
 docker save orbit-server:release -o bundle/server/image.tar
 
-# Optional, useful for keeping the artifact self-describing.
+# Keeps the artifact self-describing, and is what the dashboard/desktop clients require.
 cp starhermit.txt bundle/starhermit.txt
 
 tar -C bundle -czf game-bundle.tar.gz .

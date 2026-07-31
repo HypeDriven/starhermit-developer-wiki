@@ -111,8 +111,15 @@ format as [pushing a bundle](#push-a-game-bundle), so the same packaging works f
 
 ```text
 client/           the game's files, published as-is
-starhermit.txt    optional; name= and launch= instead of the query parameters
+starhermit.txt    name= and launch= instead of the query parameters
 ```
+
+The manifest is optional to *this endpoint* — the query parameters can supply the same values — and
+the StarHermit clients always send one, built from their manifest fields. Shipping the file inside
+your build is still worth doing: it makes the build self-describing and prefills those fields, so it
+can be re-uploaded without remembering which values it needed. See
+[The `starhermit.txt` manifest](../starhermit-txt.md) for the format, and note that **everything
+adjacent to the manifest is uploaded** — upload a distributable build, not a source tree.
 
 Send the bytes directly — not multipart form data — with `Content-Type: application/gzip`:
 
@@ -230,11 +237,28 @@ starhermit.txt     optional manifest copy for bundle portability
 At least `client/` or `server/image.tar` must be present. Client files are swapped atomically. A
 server image is loaded, digest-pinned by the platform, and queues the container deployment to
 restart on that image. An uploaded image takes precedence over the manifest's registry reference.
+Anything else in the archive is ignored.
+
+The StarHermit clients build this bundle for you, from a folder **or a single `.tar`**:
+
+- **Client files** — the game's distribution folder, or a `.tar` of it. A folder is packed under
+  `client/`; a `.tar`'s entries are re-homed there (an archive already under `client/` is left
+  alone). ustar only — GNU long-name and PAX archives are refused, because re-homing them means
+  rewriting the metadata blocks that name the following entry.
+- **Dedicated server** — the server's distribution folder, or the `docker save` `.tar` on its own.
+  From a folder only the manifest and `image.tar` are uploaded: the image already contains your
+  server's own files, so packing the rest would send gigabytes for the platform to discard.
+
+In both cases the [`starhermit.txt`](../starhermit-txt.md) is editable in the dialog. Whatever the
+picked build carries prefills the fields, and whatever they hold is written at the bundle root — so
+a build with no manifest is publishable, and one that ships as a `.tar` can still have its manifest
+updated.
 
 ```bash
 docker save my-game-server:release -o image.tar
 mkdir -p bundle/server
 mv image.tar bundle/server/image.tar
+cp starhermit.txt bundle/
 tar -C bundle -czf game-bundle.tar.gz .
 
 curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle" \

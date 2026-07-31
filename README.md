@@ -17,6 +17,9 @@ not the subject of the docs.
 
 ## Where to start
 
+- **[The `starhermit.txt` manifest](docs/starhermit-txt.md)** — the one file every published game
+  needs, where it has to sit in the folder you upload, and why that folder should be your
+  distributable build: everything next to the manifest is uploaded and served to players.
 - **[Getting started](docs/getting-started.md)** — base URLs, versioning, auth model, and the
   the ways to integrate (a platform game published from GitHub or uploaded as a folder, with an
   optional script or container server, or an external client calling the REST/WS API directly).
