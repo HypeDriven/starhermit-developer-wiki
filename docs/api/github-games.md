@@ -15,7 +15,7 @@ name=Your Game
 # it, so two games can never contend for a name. Your client reads its own slug
 # from the launch token's game_scope claim.)
 launch=index.html        # repo-relative HTML entry
-owner=<starhermit username or user id>
+owner=<starhermit user id>  # UUID from GET /api/v1/me; do not use username/nickname
 # Choose at most one authoritative backend, or omit both for a browser-only game:
 server=server.js         # sandboxed JavaScript; see game-scripts.md
 # container.image=ghcr.io/owner/game@sha256:<64 lowercase hex>; see container-games.md
@@ -200,7 +200,8 @@ game whose players never report launches will read as zero.
 
 Take over an existing listing when you control its repository. Prove ownership either by linking the
 personal GitHub login matching the repository owner, or by committing
-`owner=<your StarHermit user ID or username>` to the repository's `starhermit.txt`. The manifest
+`owner=<your StarHermit user ID>` to the repository's `starhermit.txt`. `owner` should be the
+immutable UUID returned as `id` by `GET /api/v1/me`, **not** a username or nickname. The manifest
 method supports organization-owned repositories, which are not inferred from personal GitHub org
 membership.
 

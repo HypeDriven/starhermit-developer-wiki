@@ -99,7 +99,7 @@ launch=index.html
 |---|---|---|
 | `name` | — | The display name players see. Required unless you pass a display name in the upload form. |
 | `launch` | `launch_path`, `html` | Path to the entry `.html`, relative to the manifest. Defaults to `index.html` when a file by that name sits at the root. |
-| `owner` | `username`, `user` | The StarHermit username that owns this game. Lets you [claim a listing someone else added](tutorials/claim-existing-game.md). |
+| `owner` | `username`, `user` | The owning StarHermit **user ID (UUID)**. Use the immutable user ID from `GET /api/v1/me`, not a username. Lets you [claim a listing someone else added](tutorials/claim-existing-game.md). |
 
 ### Keys for a game with server logic
 
@@ -167,10 +167,13 @@ container.env.LOG_LEVEL=info
 
 ### Claiming a listing you own
 
+Set `owner` to the immutable StarHermit user ID returned as `id` by `GET /api/v1/me`—not the
+profile username or nickname:
+
 ```text
 name=My Game
 launch=index.html
-owner=my-starhermit-username
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6
 ```
 
 ## Publishing from a GitHub repository instead

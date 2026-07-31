@@ -140,7 +140,7 @@ name=Orbit League
 # it, so two games can never contend for a name. Your client reads its own slug
 # from the launch token's game_scope claim.)
 launch=index.html
-owner=your-starhermit-name
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6  # your user ID from GET /api/v1/me, not username
 
 container.image=ghcr.io/your-github-login/orbit-server@sha256:<64-lowercase-hex>
 container.port=8080
@@ -148,6 +148,9 @@ container.health=/health
 container.memory_mb=1024
 container.cpu=1.0
 ```
+
+Set `owner` to the immutable `id` returned by `GET /api/v1/me`. Do not use the account username or
+nickname; those are display values and may change.
 
 Register it:
 

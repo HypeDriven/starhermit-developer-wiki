@@ -39,9 +39,12 @@ name=StarHermit Chess
 # it, so two games can never contend for a name. Your client reads its own slug
 # from the launch token's game_scope claim.)
 launch=index.html
-owner=HypeDriven
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6  # StarHermit user ID, not username/nickname
 server=server.js
 ```
+
+Use the immutable `id` from `GET /api/v1/me` for `owner`; usernames and nicknames are display
+values and should not be used as manifest ownership identifiers.
 
 The platform clones the repo, serves the static files at `<slug>.starhermit.com` — for the example slug `chess`, that is [chess.starhermit.com](https://chess.starhermit.com), where the reference game is playable live — and proxies `/api` and `/ws` to the backend **same-origin**. That one decision removes an entire category of work: no CORS, no API-base configuration, no environment detection — game clients just use relative paths.
 

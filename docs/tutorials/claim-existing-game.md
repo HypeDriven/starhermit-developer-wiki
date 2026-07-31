@@ -8,7 +8,7 @@ Claiming is protected by repository control. Knowing the game ID or repository U
 You must prove control in one of two ways:
 
 1. Link the personal GitHub account that owns the repository; or
-2. Commit your StarHermit user ID/username as `owner=` in the repository's `starhermit.txt`.
+2. Commit your immutable StarHermit user ID as `owner=` in the repository's `starhermit.txt`.
 
 The second method is especially useful for organization-owned repositories, because the current
 GitHub-login check matches personal repository owners and does not infer organization membership.
@@ -134,7 +134,7 @@ organization-owned repository, use Option B.
 ### Option B: add `owner=` to `starhermit.txt`
 
 This proves control because only someone able to publish repository content can add the value.
-Using your immutable StarHermit user ID is safer than a renameable username.
+Set `owner` to your immutable StarHermit user ID (UUID), **not** your username or nickname.
 
 Get your ID:
 
@@ -158,8 +158,8 @@ launch=index.html
 owner=3fa85f64-5717-4562-b3fc-2c963f66afa6
 ```
 
-Replace the example owner with `STARHERMIT_USER_ID`. You may use your current StarHermit username
-instead, but the user ID remains valid if the username changes.
+Replace the example owner with `STARHERMIT_USER_ID`. Do not put your username or nickname here;
+those can change, while the user ID is the stable ownership identifier.
 
 For an authoritative game, retain exactly one backend declaration:
 
@@ -275,8 +275,8 @@ use these owner-scoped management endpoints for it.
 
 ### `403`: link the repository owner or add `owner=`
 
-The linked GitHub login does not match `ownerLogin`, or the manifest owner does not match your
-StarHermit user ID/username.
+The linked GitHub login does not match `ownerLogin`, or the manifest `owner` does not exactly match
+your StarHermit user ID.
 
 - Check `GET /api/v1/me/github`.
 - Check the exact `ownerLogin` returned by the public listing.
@@ -309,7 +309,7 @@ management, not user identities.
 
 - Never accept a claim link or listing ID as proof of repository ownership.
 - Do not put GitHub access tokens, container credentials, or other secrets in `starhermit.txt`.
-- Prefer the immutable StarHermit user ID in `owner=`.
+- Always use the immutable StarHermit user ID in `owner=`; do not use a username or nickname.
 - Review the existing listing and repository URL before claiming; display names are not unique.
 - If you later transfer the game, the recipient becomes the manager but verified-owner status is
   reset. They must run the claim flow themselves if they control the repository.
