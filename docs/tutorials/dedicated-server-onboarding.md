@@ -227,6 +227,18 @@ curl -sS -X POST "$API/api/v1/me/github-games/$GAME_ID/bundle" \
   --data-binary @game-bundle.tar.gz
 ```
 
+> **A bundle over about 100 MB will not get through this route.** The CDN in front of the API
+> refuses a large request body with a `413` of its own — one the platform never sees, so it carries
+> no `limitBytes` and appears in no log you can read. A `docker save` of a real server image reaches
+> that size easily. If you see a `413` with no `limitBytes`, that is this and not your game's
+> allowance, which is gigabytes.
+>
+> Send the identical archive over
+> [`ws/v1/game-upload`](../api/github-games.md#upload-over-a-websocket) instead — frames after a
+> WebSocket upgrade are not a request body, so the cap does not apply. Same archive layout, same
+> allowance, same JSON answers; the one addition is that you must send `{"type":"complete"}` when
+> the last byte is out, because nothing is published until you do.
+
 Example response:
 
 ```json

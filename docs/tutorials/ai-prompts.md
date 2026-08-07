@@ -299,6 +299,31 @@ everywhere a user id is rendered:
    chat messages, replay headers, presence indicators.
 ```
 
+## 10b. Per-player game settings
+
+Context page: [games.md](../api/games.md#per-player-game-settings).
+
+```text
+Read docs/api/games.md (pasted below). Make my options screen persist
+per-player, so a player's settings follow them to any machine:
+
+1. On boot, GET /api/v1/games/{slug}/settings with the launch token. Merge
+   the returned `settings` object over my built-in defaults — a key that
+   isn't there means "never changed", not "off".
+2. When the player changes one option, PATCH /api/v1/games/{slug}/settings
+   with just that key. Do NOT re-PUT the whole map: PUT deletes every key
+   the body omits, and two screens saving concurrently would erase each
+   other's work. Debounce continuous controls like sliders.
+3. "Reset to defaults" for one option = PATCH with that key set to null,
+   which removes it. For all of them, DELETE the collection.
+4. Namespace keys by area — audio.master, graphics.detail — and keep
+   values small JSON. Read limits.maxTotalBytes from the GET response
+   rather than hard-coding it; it is an operator setting.
+5. Handle 413 by telling the player their settings are full instead of
+   silently dropping the write, and never store save-game progress here —
+   that is what cloud saves are for.
+```
+
 ## 11. Cloud saves (non-scripted / external games)
 
 Context page: [games.md](../api/games.md). Skip this section if your game is fully server-scripted — session state already lives on the platform.
@@ -415,6 +440,9 @@ step before continuing:
    locally through the shared rules.
 10. Profiles: nickname/avatar resolution with caching and the
     "Player <id8>" fallback, applied everywhere.
+11. Options screen: per-player settings via GET …/settings on boot merged
+    over my defaults, PATCH per changed key (never PUT the whole map),
+    null to reset one key, DELETE for all.
 
 Constraints: no build step beyond what this repo already has; no client
 rules authority; no score submission from clients; match my existing code

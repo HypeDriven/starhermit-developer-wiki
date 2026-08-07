@@ -105,6 +105,12 @@ launch=index.html
 
 Pick **one** server style. Declaring both `server=` and `container.image=` is refused.
 
+These work in an **uploaded folder** as well as a repository. A `server=` script travels inside the
+folder you upload and its source is read straight out of the archive, so a game with authoritative
+rules needs no repository at all. If the declaration cannot be honoured — the script is missing,
+points outside the folder, or asks for a container you are not approved to run — the whole upload is
+refused rather than a half-configured game being created.
+
 | Key | Meaning |
 |---|---|
 | `server` (alias `server_script`) | Path to a JavaScript file that runs as the authoritative server in StarHermit's sandbox. See [Game Scripts](api/game-scripts.md). |

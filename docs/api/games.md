@@ -30,6 +30,13 @@ platform-hosted browser game — from `location.hostname`, since the subdomain i
 | GET | `/api/v1/games/{slug}/controls` | Bearer | Get the caller's effective control bindings |
 | PUT | `/api/v1/games/{slug}/controls` | Bearer | Replace the caller's control overrides |
 | DELETE | `/api/v1/games/{slug}/controls` | Bearer | Reset the caller's controls to manifest defaults |
+| GET | `/api/v1/games/{slug}/settings` | Bearer | The caller's stored settings for this game, plus the size limits |
+| PUT | `/api/v1/games/{slug}/settings` | Bearer | Replace the caller's whole settings map |
+| PATCH | `/api/v1/games/{slug}/settings` | Bearer | Merge into the stored map; `null` removes a key |
+| DELETE | `/api/v1/games/{slug}/settings` | Bearer | Clear every setting the caller stored for this game |
+| GET | `/api/v1/games/{slug}/settings/{key}` | Bearer | One setting, or `404` |
+| PUT | `/api/v1/games/{slug}/settings/{key}` | Bearer | Store one setting |
+| DELETE | `/api/v1/games/{slug}/settings/{key}` | Bearer | Remove one setting |
 | GET | `/api/v1/games/{slug}/sessions/mine` | Bearer | Caller's active sessions |
 | GET | `/api/v1/games/{slug}/sessions/{sessionId}` | Bearer | Session detail (participants only) |
 | POST | `/api/v1/games/{slug}/sessions/ai` | Bearer | Create a practice session vs the platform AI |
@@ -172,6 +179,107 @@ effective map. Invalid actions, codes, or conflicts return `400`.
 
 Deletes all of the caller's overrides and restores the manifest defaults. Returns `204`.
 Launch-token writes are intentional, so a hosted game may provide its own rebinding screen.
+
+## Per-player game settings
+
+Where your game keeps **its own options** for a player — master volume, graphics detail, subtitle
+size, preferred camera, last chosen loadout — so they follow that player to any machine they sign in
+from. A key/value store scoped to one player and one game.
+
+**Nothing declares a schema.** The platform stores your keys and your values and never reads them,
+so you add an option by writing it: no manifest entry, no redeploy, no platform release. That also
+means the platform cannot validate them for you — a typo in a key name is a new setting, not an
+error.
+
+Like the controls API, a game-scoped launch token is accepted (its `game_scope` must match `{slug}`),
+so an in-game options screen works with nothing but the token the game already holds. Unlike
+controls, no manifest declaration is needed: every game has settings storage from the moment it
+exists, including a browser-only game with no server logic at all.
+
+Pick the right store — [cloud saves](catalog.md) hold progress (one opaque archive per title, 10 MB),
+and a script or container backend's own player state is server-authoritative and not writable from a
+client. Settings are the small, client-owned preferences in between.
+
+### `GET /api/v1/games/{slug}/settings`
+
+Everything the caller has stored for this game. `settings` is empty for a player who has never saved
+anything — that is a `200`, not a `404`. Keys come back sorted.
+
+```json
+{
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "settings": {
+    "audio.master": 0.8,
+    "graphics.detail": "ultra",
+    "graphics.options": { "shadows": true, "msaa": 4 }
+  },
+  "count": 3,
+  "bytes": 118,
+  "updatedAt": "2026-08-07T15:04:11Z",
+  "limits": { "maxKeys": 200, "maxKeyLength": 128, "maxTotalBytes": 2097152 }
+}
+```
+
+`bytes` is what this player's settings currently cost against `limits.maxTotalBytes`. Read the
+limits rather than hard-coding them: the allowance is an operator setting, and a game can be granted
+its own.
+
+### `PUT /api/v1/games/{slug}/settings`
+
+Replaces the whole map. **Keys the body omits are deleted** — send everything, or use `PATCH`.
+
+```json
+{ "settings": { "audio.master": 0.8, "graphics.detail": "ultra" } }
+```
+
+An empty `settings` object clears the game's settings for the caller. Returns the same shape as
+`GET`.
+
+### `PATCH /api/v1/games/{slug}/settings`
+
+Merges into what is stored, leaving keys it does not mention alone. A `null` value **removes** its
+key ([JSON Merge Patch](https://www.rfc-editor.org/rfc/rfc7396), same semantics). This is what an
+options screen should use — it can save the one slider that moved without first reading and
+rewriting everything else.
+
+```json
+{ "settings": { "audio.music": 0.25, "graphics.options": null } }
+```
+
+### `GET` / `PUT` / `DELETE /api/v1/games/{slug}/settings/{key}`
+
+One setting at a time. `GET` returns `{ "key", "value", "updatedAt" }`, or `404` if the caller has
+never stored it. `PUT` takes `{ "value": <any JSON> }` and stores the value **verbatim** — including
+an explicit `null`, which here is a value like any other, not a delete. `DELETE` returns `204`, and
+removing something that is not there is a no-op rather than an error.
+
+```bash
+curl -X PUT "https://api.starhermit.com/api/v1/games/$SLUG/settings/audio.master" \
+  -H "Authorization: Bearer $LAUNCH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"value": 0.35}'
+```
+
+### Rules
+
+| Rule | Value |
+|---|---|
+| Setting names | 1–128 chars of `A-Z a-z 0-9 . _ - :` — namespace freely (`audio.master`, `graphics:shadows`) |
+| Values | Any JSON: number, string, boolean, array, object, `null` |
+| Settings per player, per game | 200 |
+| Bytes per player, per game | **2 MB by default** — an operator may raise or lower it, and may grant one game a different allowance |
+
+A single setting may use the entire byte allowance; there is no separate smaller per-value cap.
+
+| Status | Meaning |
+|---|---|
+| `400` | Bad setting name, or a body that is not `{"settings": {...}}` / `{"value": ...}` |
+| `404` | No game answers to that slug, or (single-key `GET`) nothing is stored under that key |
+| `413` | Over the allowance — either too many settings, or too many bytes. The message states the limit |
+
+A batch that contains one bad key writes none of the good ones. Settings are per player and per
+game: nothing leaks between two players, or between two of the same player's games. They survive a
+game being disabled or delisted, because they are the player's data rather than the game's.
 
 ## Sessions
 

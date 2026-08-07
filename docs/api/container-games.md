@@ -18,6 +18,19 @@ After initial game registration, developers can also push a built `.tar.gz` cont
 a deployment restart. See [GitHub Games — Push a game bundle](github-games.md#push-a-game-bundle)
 and the [dedicated-server tutorial](../tutorials/dedicated-server-onboarding.md).
 
+Three things about that push are worth knowing before you build a release pipeline around it:
+
+- **A `docker save` will exceed the CDN's ~100 MB request-body cap**, which answers with a `413`
+  the platform never sees — no `limitBytes`, nothing in any log you can read. Push the archive over
+  [`ws/v1/game-upload`](github-games.md#upload-over-a-websocket) instead; same archive, same
+  allowance, same answers.
+- **The image you upload is itself the declaration.** A game with no backend yet — one added from an
+  uploaded folder that declared none — gets its container definition provisioned from the digest
+  just loaded. You do not need a `container.image=` in a manifest first.
+- **A re-push applies the knobs its manifest declares and keeps the ones it omits.** Changing
+  `container.port` and re-uploading now moves the deployment to that port; leaving the manifest out
+  of the bundle changes nothing but the image.
+
 ## Manifest
 
 Declare the image in the repository's `starhermit.txt`:

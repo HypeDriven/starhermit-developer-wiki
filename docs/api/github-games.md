@@ -59,6 +59,7 @@ Players can override these defaults per game through the
 | POST | `/api/v1/me/github-games/{id}/transfer` | JWT | Transfer a game to another user → `GitHubGameDto` |
 | DELETE | `/api/v1/me/github-games/{id}` | JWT | Remove a registered game → `204` |
 | POST | `/api/v1/me/github-games/{id}/bundle` | JWT | Publish a raw `.tar.gz` containing client files and/or a saved container image |
+| WS | `/ws/v1/game-upload` | JWT (`?access_token=`) | **The same two uploads over a WebSocket** — the transport to use for anything over ~100 MB |
 | PUT | `/api/v1/me/github-games/{id}/hosting` | JWT | Enable/disable hosting ("Deploy to starhermit") → `GameHostingView` |
 | GET | `/api/v1/me/github-games/{id}/deployment` | JWT | Read deployment/hosting state → `GameHostingView` |
 | PUT | `/api/v1/me/github-games/{id}/deployment` | JWT | Pin a commit/branch; queues a redeploy → `GameHostingView` |
@@ -163,6 +164,24 @@ Notes specific to this route:
 
 Limits are the same as any other push: see [Upload limits](#upload-limits).
 
+#### An uploaded folder can bring its own server backend
+
+If the archive's [`starhermit.txt`](../starhermit-txt.md) declares server logic, the upload
+provisions it and the created game comes back with a `gameSlug` — the same thing the repository flow
+does, without a repository. Pick one style; declaring both is refused.
+
+| Declaration | What happens |
+|---|---|
+| `server=path/to/server.js` | A script backend. The file travels **inside the folder you upload**, so its source is read straight out of the archive — there is nothing to fetch. See [game-scripts.md](game-scripts.md). |
+| `container.image=name@sha256:…` | A container backend, digest-pinned as always. See [container-games.md](container-games.md). The image itself is pushed afterwards to `/{id}/bundle`. |
+
+Refusals here fail the whole create — no half-made game row survives one:
+
+- `server=` naming a file the archive does not contain.
+- `server=` pointing outside the client files (`../`).
+- Declaring both `server=` and `container.image=`.
+- Asking for a container where containers are disabled, or from an owner not approved for them.
+
 ### Audience figures for your game
 
 `GET /api/v1/me/github-games/{id}/stats` → `GameStatsDto`
@@ -240,6 +259,18 @@ server image is loaded, digest-pinned by the platform, and queues the container 
 restart on that image. An uploaded image takes precedence over the manifest's registry reference.
 Anything else in the archive is ignored.
 
+**Uploading an image is itself the declaration.** If the game has no server backend yet — an
+uploaded folder that declared none — pushing `server/image.tar` provisions one from the digest just
+loaded and gives the game its `gameSlug`. You do not have to name a digest-pinned image in a
+manifest first, which was circular: the definition had to exist before it could receive an image,
+and the image was the only thing that could describe it.
+
+**A re-push applies the container knobs its manifest declares, and only those.** Include
+`starhermit.txt` in the bundle with a changed `container.port`, `container.health`,
+`container.memory` or `container.cpu` and the deployment picks it up on restart; leave a knob out and
+it keeps whatever you set last time. Omit the manifest entirely and nothing about the deployment
+changes except the image.
+
 The StarHermit clients build this bundle for you, from a folder **or a single `.tar`**:
 
 - **Client files** — the game's distribution folder, or a `.tar` of it. A folder is packed under
@@ -277,13 +308,60 @@ curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle"
 }
 ```
 
-The endpoint updates an existing registered game; it does not create the game record or slug — for
-that, see [adding a game from a local folder](#add-a-game-from-a-local-folder). See the
-[dedicated-server publishing tutorial](../tutorials/dedicated-server-onboarding.md).
+The endpoint updates an existing registered game; it never creates the game record — for that, see
+[adding a game from a local folder](#add-a-game-from-a-local-folder). It *can* now mint the game's
+`gameSlug`, but only as a side effect of loading a server image into a game that had no backend. See
+the [dedicated-server publishing tutorial](../tutorials/dedicated-server-onboarding.md).
+
+### Upload over a WebSocket
+
+`GET /ws/v1/game-upload` (upgrade) — **use this for anything over about 100 MB.**
+
+The CDN in front of the API refuses an HTTP request body over roughly **100 MB** with a `413` of its
+own. That refusal never reaches the platform, so it carries no `limitBytes` and appears in no log you
+can read — a `413` with no `limitBytes` field is the CDN, not your game's allowance, which is two
+orders of magnitude larger. Any realistic `docker save` will hit it.
+
+Frames sent after the WebSocket upgrade are not a request body, so the ceiling does not apply.
+**Only the transport differs.** The binary frames concatenate into exactly the bytes the HTTP routes
+read, go through the same pipeline, and every refusal, allowance and success body is the one the HTTP
+route would have produced — so a client can share one code path across both.
+
+```text
+wss://api.starhermit.com/ws/v1/game-upload?gameId=$GAME_ID&access_token=$TOKEN
+wss://api.starhermit.com/ws/v1/game-upload?displayName=My%20Game&launchPath=index.html&access_token=$TOKEN
+```
+
+Pass `gameId` to push to a game you own (the `/{id}/bundle` route); omit it and pass
+`displayName`/`launchPath` to create one from a folder (the `/upload` route). The token goes in the
+query string because a browser cannot set an `Authorization` header on a WebSocket handshake; it is
+checked once, at the handshake, so an upload that outlives its access token still finishes.
+
+| Direction | Frame | Meaning |
+|---|---|---|
+| server → | `{"type":"ready","mode":"bundle","limitBytes":N,"heartbeatSeconds":15}` | Allowance settled and free space checked. Start sending. `mode` is `bundle` or `create`. |
+| → server | *binary* | Archive bytes, chunked however you like — the server never reassembles messages, so 256 KB–1 MB is a fine default. Concatenated, your frames must be exactly the `.tar.gz`. |
+| server → | `{"type":"ack","bytesReceived":N}` | Receipt progress, roughly every 8 MB. Drive your progress bar from this. |
+| → server | `{"type":"complete"}` | The archive has been sent in full. |
+| → server | `{"type":"abort"}` | Give up. Answered with `status: 499`; nothing is published. |
+| server → | `{"type":"progress","phase":"publishing","bytesReceived":N}` | Heartbeat every 15s while the upload lands. Ignore them, but expect them. |
+| server → | `{"type":"result","status":200,...}` | Success. The rest of the object is the HTTP response body verbatim (`status` is `201` for a create). |
+| server → | `{"type":"error","status":413,"error":"...","limitBytes":N}` | Refusal. `status` and the body are what the HTTP route would have answered. |
+
+**Nothing is published until `{"type":"complete"}` arrives.** This is the one behaviour with no HTTP
+equivalent, and it is deliberate: the end-of-archive marker lives *inside* a tar's bytes, so the
+platform finishes reading a complete-looking archive without the connection ever ending. A socket
+that simply dropped after the last byte would otherwise publish exactly like one that finished —
+silently replacing a live game with an abandoned push. Closing the socket without the frame uploads
+nothing.
+
+The silent window between your last byte and the `result` is real and can be long — a server image
+is re-streamed to the daemon and loaded, then client files are copied into the hosting volume. That
+is what the `progress` heartbeats are for; do not treat quiet as failure.
 
 ### Upload limits
 
-Both upload routes share the same rules.
+All upload routes — both HTTP endpoints and the WebSocket — share the same rules.
 
 | Limit | Value |
 |---|---|
@@ -295,8 +373,8 @@ rather than adding to it, so the largest push is also the most disk a game can o
 
 | Status | Meaning |
 |---|---|
-| `413` | Over the allowance. Body carries `{ "error", "limitBytes" }`. |
-| `422` | Malformed archive, or unusable contents (missing launch file, no `client/`, a `server/image.tar` on the create route). |
+| `413` | Over the allowance. Body carries `{ "error", "limitBytes" }`. A `413` **without** `limitBytes` is the CDN's ~100 MB body cap, not this — [use the upload socket](#upload-over-a-websocket). |
+| `422` | Malformed archive, or unusable contents (missing launch file, no `client/`, a `server/image.tar` on the create route). Also a **truncated** archive — the ordinary result of a dropped connection mid-upload. |
 | `507` | The server does not have room right now. Checked **before the body is read**, on both the staging and hosting volumes, so a doomed upload is refused rather than half-landed. |
 
 Archives may not escape their root or contain links, and only regular files and directories are

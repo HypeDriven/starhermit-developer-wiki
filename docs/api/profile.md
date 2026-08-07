@@ -10,6 +10,7 @@ Errors are returned as `{"error":"..."}` with standard status codes (400/401/403
 |--------|------|------|-------------|
 | GET | `/api/v1/me` | JWT (`Permission-user.profile.read`) | Get your own profile |
 | PATCH | `/api/v1/me` | JWT (`Permission-user.profile.update`) | Update username, email, metadata, or nickname |
+| POST | `/api/v1/me/terms/accept` | JWT (`Permission-user.profile.update`) | Record acceptance of a specific terms revision |
 | PUT | `/api/v1/me/avatar` | JWT (`Permission-user.profile.update`) | Upload your avatar |
 | GET | `/api/v1/me/avatar` | JWT (`Permission-user.profile.read`) | Get your avatar |
 | GET | `/api/v1/users/{id}/avatar` | JWT | Get any user's avatar |
@@ -38,6 +39,8 @@ Errors are returned as `{"error":"..."}` with standard status codes (400/401/403
   "metadata": "{}",
   "createdAt": "2026-07-01T12:00:00Z",
   "updatedAt": "2026-07-20T09:30:00Z",
+  "termsAcceptedHash": "9f86d081884c7d65...",
+  "termsAcceptedAt": "2026-07-30T11:02:44Z",
   "privacy": {
     "onlineStatus": 1,
     "currentlyPlaying": 1,
@@ -63,6 +66,21 @@ All fields optional. Constraints: `username` 1–32 characters and unique; `nick
   "nickname": "New Nick"
 }
 ```
+
+### `POST /api/v1/me/terms/accept`
+
+Records that this account accepted your terms of service. The body is the **hash of the terms text
+that was shown** (≤64 characters), not a boolean — so acceptance is tied to a specific revision, and
+publishing new terms is a matter of comparing hashes rather than resetting a flag on every account.
+
+```json
+{ "hash": "9f86d081884c7d65..." }
+```
+
+Returns `{ "termsAcceptedHash", "termsAcceptedAt" }`; both also appear on `GET /api/v1/me`, where
+they are `null` for an account that has never accepted. A missing or over-long hash is `400`.
+Requires `Permission-user.profile.update`, so a game-scoped launch token cannot accept terms on a
+player's behalf.
 
 ### Avatars
 
