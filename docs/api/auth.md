@@ -16,6 +16,7 @@ Errors are returned as `{"error":"..."}` with standard status codes (400/401/403
 | POST | `/api/v1/auth/logout` | Anonymous | Revoke a refresh token |
 | GET | `/api/v1/auth/oauth/{provider}/authorize` | Anonymous | Redirect to the OAuth provider |
 | GET | `/api/v1/auth/oauth/{provider}/callback` | Anonymous | OAuth callback; redirects to the frontend with tokens |
+| GET | `/api/v1/auth/oauth/link/confirm` | Emailed one-time token | Confirm an identity link held for account-owner approval |
 | POST | `/api/v1/games/{slug}/launch-token` | JWT | Mint a game-scoped launch token (see below) |
 
 ## Public-key registration
@@ -36,7 +37,7 @@ Request:
 {
   "email": "dev@example.com",
   "keyType": "Ed25519",
-  "keyData": "MCowBQYDK2VwAyEA...",
+  "keyData": "<base64-raw-32-byte-public-key>",
   "userId": null
 }
 ```
@@ -78,7 +79,7 @@ Request:
 ```json
 {
   "keyType": "Ed25519",
-  "keyData": "MCowBQYDK2VwAyEA..."
+  "keyData": "<base64-raw-32-byte-public-key>"
 }
 ```
 
@@ -89,7 +90,7 @@ Response:
   "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
   "payload": {
     "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
-    "fingerprint": "SHA256:abc123...",
+    "fingerprint": "4d9f3c...",
     "issuer": "starhermit",
     "audience": "starhermit",
     "expiry": "2026-07-22T07:24:44Z",
@@ -111,7 +112,7 @@ Request:
   "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
   "signature": "base64-signature...",
   "keyType": "Ed25519",
-  "keyData": "MCowBQYDK2VwAyEA..."
+  "keyData": "<base64-raw-32-byte-public-key>"
 }
 ```
 
@@ -175,7 +176,9 @@ Providers: `google`, `github`.
 
 ### `GET /api/v1/auth/oauth/{provider}/authorize?link=&client=`
 
-Returns a 302 redirect to the provider and sets an `oauth_state` cookie (HttpOnly, SameSite=Lax, 10 minutes). `link=true` links the identity to the currently logged-in user; `client` selects a supported client redirect.
+Returns a 302 redirect to the provider and sets an `oauth_state` cookie (HttpOnly, SameSite=Lax, 10
+minutes). `link=true` starts linking the identity to the currently logged-in user; linking requires
+recent authentication (within 5 minutes). `client` selects a supported client redirect.
 
 ### `GET /api/v1/auth/oauth/{provider}/callback?code=&state=`
 
@@ -185,7 +188,36 @@ Returns a 302 redirect to the frontend URL with the tokens in the fragment:
 #access_token=…&refresh_token=…&token_type=Bearer&expires_in=900
 ```
 
-Finds-or-creates the user (username `oauth-{provider}-{guid}`, role `User`), or links the identity to the current user (linking requires recent authentication, within 5 minutes). GitHub identity metadata stores `{"login":"…"}` — this is used for repository-ownership checks in [GitHub Games](github-games.md).
+A normal sign-in finds or creates the user (username `oauth-{provider}-{guid}`, role `User`) and the
+new session records `auth_method=oauth`. This matters because only an OAuth-authenticated session
+may perform high-impact credential changes:
+
+- add or revoke account public keys;
+- change the account email;
+- remove an OAuth-managed identity.
+
+Game-scoped tokens can never perform these operations. A refresh token retains the original
+session's authentication method, so refreshing an OAuth session does not remove this capability and
+refreshing a public-key session does not add it.
+
+When `link=true`, the callback does not automatically promote the session merely because it visited
+an OAuth provider. A link started from an OAuth session is attached immediately. A link started from
+a public-key, email-verification, or legacy session is held until the account owner opens the
+confirmation sent to the account's verified email; the redirect fragment reports
+`link=pending_email_confirmation`. The one-time email leads to
+`GET /api/v1/auth/oauth/link/confirm?token=…`. This prevents a stolen public key from linking the
+attacker's provider account and turning that into a permanent OAuth sign-in.
+
+GitHub identity metadata stores `{"login":"…"}` — this is used for repository-ownership checks in
+[GitHub Games](github-games.md).
+
+### OAuth-enrolled public keys for automation
+
+An OAuth session can call `POST /api/v1/me/public-keys` to attach a labelled machine key immediately.
+Later, CI signs the normal public-key challenge and uses its short-lived access token to upload an
+owned game's bundle; the private key never leaves the CI secret store. See
+[the CI/CD build-upload tutorial](../tutorials/ci-cd-build-upload.md) for setup, a signing helper, and
+a GitHub Actions workflow.
 
 ## Tokens
 
@@ -226,13 +258,13 @@ Public-key login, from challenge to authenticated call:
 # 1. Request a challenge
 curl -s -X POST https://api.starhermit.com/api/v1/auth/public-key/challenge \
   -H "Content-Type: application/json" \
-  -d '{"keyType":"Ed25519","keyData":"MCowBQYDK2VwAyEA..."}'
+  -d '{"keyType":"Ed25519","keyData":"<base64-raw-32-byte-public-key>"}'
 # → { "challengeId": "...", "payload": { ... }, "expiresIn": 300 }
 
 # 2. Sign the serialized payload JSON with your private key, then complete
 curl -s -X POST https://api.starhermit.com/api/v1/auth/public-key/complete \
   -H "Content-Type: application/json" \
-  -d '{"challengeId":"...","signature":"base64-signature...","keyType":"Ed25519","keyData":"MCowBQYDK2VwAyEA..."}'
+  -d '{"challengeId":"...","signature":"base64-signature...","keyType":"Ed25519","keyData":"<base64-raw-32-byte-public-key>"}'
 # → { "userId": "...", "accessToken": "...", "refreshToken": "..." }
 
 # 3. Call the API with the access token

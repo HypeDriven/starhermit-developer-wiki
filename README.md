@@ -32,6 +32,9 @@ not the subject of the docs.
 - **[Tutorial: publish a dedicated server and onboard players in-game](docs/tutorials/dedicated-server-onboarding.md)** —
   push a container bundle, renew its server token, and use public-key registration to onboard
   Steam/Epic/GOG/native players without OAuth or a StarHermit dashboard visit.
+- **[Tutorial: upload builds from CI/CD](docs/tutorials/ci-cd-build-upload.md)** — enroll a dedicated
+  deployment public key from an OAuth session, authenticate non-interactively, and publish client or
+  container builds from GitHub Actions (including large uploads over WebSockets).
 - **[Tutorial: claim a game someone else added](docs/tutorials/claim-existing-game.md)** —
   prove repository control, take over the existing listing, and manage its hosting and deployments.
 
@@ -47,7 +50,7 @@ WebSockets under `ws/v1/...`, JWT bearer auth
 | Games | [games.md](docs/api/games.md) | Sessions, elo matchmaking, friend invites, per-player controls, **per-player game settings**, AI practice, replays, `ws/v1/games` protocol |
 | Game scripts | [game-scripts.md](docs/api/game-scripts.md) | Authoring the server-side JS rules file (Jint sandbox contract, budgets, tick rate, elo, achievements, replays) |
 | Container game servers | [container-games.md](docs/api/container-games.md) | Shipping authoritative game logic as a digest-pinned container (protocol, streams, snapshots, isolation, recovery) |
-| Profile | [profile.md](docs/api/profile.md) | `me`, avatars, privacy settings, terms acceptance, public keys, linked identities, entitlements, presence heartbeat |
+| Profile | [profile.md](docs/api/profile.md) | `me`, avatars, privacy settings, terms acceptance, OAuth-controlled public-key credentials, linked identities, entitlements, presence heartbeat |
 | Friends | [friends.md](docs/api/friends.md) | Friend requests, friend list with online/current-game presence |
 | Chat | [chat.md](docs/api/chat.md) | Conversations, messages, unread state, invites, `ws/v1/chat` push events, in-game chat pattern |
 | Voice | [voice.md](docs/api/voice.md) | Voice rooms, `ws/v1/voice` audio relay + WebRTC signaling |

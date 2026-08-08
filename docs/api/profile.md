@@ -16,8 +16,9 @@ Errors are returned as `{"error":"..."}` with standard status codes (400/401/403
 | GET | `/api/v1/users/{id}/avatar` | JWT | Get any user's avatar |
 | GET | `/api/v1/users/{id}/profile` | JWT | Get any user's public profile |
 | GET | `/api/v1/me/public-keys` | JWT (`Permission-user.profile.read`) | List your public keys |
-| POST | `/api/v1/me/public-keys` | JWT (`Permission-user.profile.update`) | Add a public key |
-| DELETE | `/api/v1/me/public-keys/{keyId}` | JWT (`Permission-user.profile.update`) | Soft-revoke a public key |
+| POST | `/api/v1/me/public-keys` | **OAuth-authenticated** JWT (`Permission-user.profile.update`) | Add a public key immediately |
+| DELETE | `/api/v1/me/public-keys/{keyId}` | **OAuth-authenticated** JWT (`Permission-user.profile.update`) | Revoke one key and its sessions |
+| DELETE | `/api/v1/me/public-keys/all` | **OAuth-authenticated** JWT (`Permission-user.profile.update`) | Revoke every active key and its sessions |
 | GET | `/api/v1/me/identities` | JWT (`Permission-user.profile.read`) | List your linked identities |
 | POST | `/api/v1/me/identities` | JWT (`Permission-user.profile.update`) | Link an identity (non-OAuth providers only) |
 | DELETE | `/api/v1/me/identities/{identityId}` | JWT (`Permission-user.profile.update`) | Unlink an identity |
@@ -56,7 +57,11 @@ Errors are returned as `{"error":"..."}` with standard status codes (400/401/403
 
 ### `PATCH /api/v1/me`
 
-All fields optional. Constraints: `username` 1–32 characters and unique; `nickname` ≤64 characters, non-unique; `metadata` ≤4096 characters. Returns 204 on success, 409 on conflict (e.g. username taken).
+All fields optional. Constraints: `username` 1–32 characters and unique; `nickname` ≤64 characters,
+non-unique; `metadata` ≤4096 characters. Changing `email` additionally requires an
+OAuth-authenticated session because the account email can approve credential links; a public-key or
+email-verification session gets `403` for that field but may still update the others. Returns 204 on
+success, 409 on conflict (for example, a username is already taken).
 
 ```json
 {
@@ -107,16 +112,31 @@ Returns 204. `GET /api/v1/me/avatar` returns your avatar as `image/png` bytes.
 
 ## Public keys
 
+A registered key is an API credential: its holder can complete the
+[public-key challenge flow](auth.md#public-key-login) and receive an ordinary access/refresh-token
+pair. This makes a separately labelled key suitable for a desktop client or deployment pipeline.
+
+**Only a session created directly by Google or GitHub OAuth may change the key list.** A public-key,
+email-verification, game-launch, or game-server session gets `403`, even if it otherwise carries the
+profile-update permission. This prevents one stolen key from enrolling replacements or revoking the
+owner's keys. Listing remains available to any full account session.
+
 ### `GET /api/v1/me/public-keys`
+
+The list includes revoked rows as an audit trail:
 
 ```json
 [
   {
     "id": "9b2f5c74-1d2e-4a6b-8c0d-1e2f3a4b5c6d",
     "keyType": "Ed25519",
-    "keyData": "MCowBQYDK2VwAyEA...",
+    "keyData": "<base64-raw-32-byte-public-key>",
+    "label": "orbit-league-production",
+    "fingerprint": "4d9f3c...",
     "createdAt": "2026-07-01T12:00:00Z",
+    "lastUsedAt": "2026-07-30T09:00:00Z",
     "isRevoked": false,
+    "revokedAt": null,
     "metadata": null
   }
 ]
@@ -124,18 +144,45 @@ Returns 204. `GET /api/v1/me/avatar` returns your avatar as `image/png` bytes.
 
 ### `POST /api/v1/me/public-keys`
 
+Requires an OAuth-authenticated session and attaches the key immediately; unlike anonymous
+registration, no email round trip is needed.
+
 ```json
 {
   "keyType": "Ed25519",
-  "keyData": "MCowBQYDK2VwAyEA..."
+  "keyData": "<base64-raw-32-byte-public-key>",
+  "label": "orbit-league-production"
 }
 ```
 
-Returns the created key.
+`label` is optional (128 characters maximum). Accepted key types are `Ed25519`, `ECDSA-P256`, and
+`RSA-PSS`; material must be standard Base64: a raw 32-byte public key for Ed25519, an encoded P-256
+curve point for ECDSA, or a public SPKI for RSA. RSA keys must be 2048–8192 bits. The platform
+canonicalizes valid material and limits an account to 20 active keys by default. `fingerprint` is
+the lowercase SHA-256 hex digest of the canonical `keyType:keyData` string.
+
+Returns `201` with the created key. Invalid material returns `400`; an already-active key or a full
+key list returns `409` (the latter includes `limit`). Active key material is unique platform-wide.
 
 ### `DELETE /api/v1/me/public-keys/{keyId}`
 
-Soft-revokes the key. Returns 204.
+Requires an OAuth-authenticated session. Revocation is idempotent and ends refresh sessions minted
+by the key; access tokens naming it are refused on their next request. Returns:
+
+```json
+{ "revoked": [{ "id": "...", "isRevoked": true }], "sessionsEnded": 1 }
+```
+
+An unknown key on this account returns `404`.
+
+### `DELETE /api/v1/me/public-keys/all`
+
+The compromise-response operation: revoke every active key and end all sessions they authenticated.
+It has an explicit `/all` path so an accidentally empty key ID cannot become a bulk revocation.
+Returns the same `{ revoked, sessionsEnded }` shape.
+
+For a complete machine-deployment example, see
+[Upload builds from CI/CD with an OAuth-enrolled public key](../tutorials/ci-cd-build-upload.md).
 
 ## Linked identities
 
@@ -167,7 +214,8 @@ Providers `github` and `google` (and any configured OAuth provider) are **reject
 
 ### `DELETE /api/v1/me/identities/{identityId}`
 
-Returns 204.
+Removing an OAuth-managed identity requires an OAuth-authenticated session, so a stolen public key
+cannot remove the owner's route back into the account. Returns 204.
 
 ## Privacy settings
 

@@ -63,7 +63,7 @@ folder you upload should be your distributable build rather than your source tre
 - [GitHub Games](api/github-games.md)
 - [Publisher](api/publisher.md)
 
-Tutorials: [Integration Walkthrough (chess reference example)](tutorials/chess-walkthrough.md), [Dedicated Server + Embedded Player Onboarding](tutorials/dedicated-server-onboarding.md), [Claim a Game Someone Else Added](tutorials/claim-existing-game.md), and [AI Prompts](tutorials/ai-prompts.md).
+Tutorials: [Integration Walkthrough (chess reference example)](tutorials/chess-walkthrough.md), [Dedicated Server + Embedded Player Onboarding](tutorials/dedicated-server-onboarding.md), [CI/CD Build Upload with an OAuth-enrolled Public Key](tutorials/ci-cd-build-upload.md), [Claim a Game Someone Else Added](tutorials/claim-existing-game.md), and [AI Prompts](tutorials/ai-prompts.md).
 
 ## Server clock — `GET /api/v1/time`
 

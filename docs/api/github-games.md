@@ -313,6 +313,22 @@ The endpoint updates an existing registered game; it never creates the game reco
 `gameSlug`, but only as a side effect of loading a server image into a game that had no backend. See
 the [dedicated-server publishing tutorial](../tutorials/dedicated-server-onboarding.md).
 
+### Upload from CI/CD
+
+Do not keep an interactive OAuth token in a repository secret. Sign in through OAuth once and use
+that session to add a separately labelled deployment key with `POST /api/v1/me/public-keys`. The CI
+job can then sign `/auth/public-key/challenge`, exchange it at `/auth/public-key/complete`, and use
+the returned 15-minute access token on this bundle endpoint.
+
+The deployment key acts as its owning account, so that account must own the target game. It cannot
+add another key or revoke itself: changing the key list remains OAuth-only. Use one key per
+environment so one workflow can be disabled without stopping the others. Archives over roughly
+100 MB must use the WebSocket transport below.
+
+See [Upload builds from CI/CD with an OAuth-enrolled public key](../tutorials/ci-cd-build-upload.md)
+for key generation, GitHub secret setup, a complete challenge-signing/uploader script, static and
+container bundle layouts, and a GitHub Actions workflow.
+
 ### Upload over a WebSocket
 
 `GET /ws/v1/game-upload` (upgrade) — **use this for anything over about 100 MB.**
