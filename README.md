@@ -38,6 +38,15 @@ not the subject of the docs.
 - **[Tutorial: claim a game someone else added](docs/tutorials/claim-existing-game.md)** —
   prove repository control, take over the existing listing, and manage its hosting and deployments.
 
+## Client SDKs
+
+If you are building on an engine with a maintained SDK, start there rather than with raw HTTP — the
+same API, with the token refresh, retry, reconnection and redaction rules already implemented.
+
+| Platform | Page | Package |
+|---|---|---|
+| Unity | [Unity SDK](docs/sdk/unity.md) | [`com.starhermit.sdk`](https://github.com/HypeDriven/starhermit-unity-sdk) — typed clients for the REST API v1 and all six WebSocket protocols |
+
 ## API reference
 
 Conventions shared by all endpoints: REST under `api/v1/...` at `https://api.starhermit.com`,
@@ -63,6 +72,9 @@ WebSockets under `ws/v1/...`, JWT bearer auth
 | Realtime rooms | [realtime.md](docs/api/realtime.md) | Lobbies, friend invites, quick-join matchmaking, AI-seat backfill, host-authoritative frame routing (`ws/v1/realtime`) |
 | GitHub games | [github-games.md](docs/api/github-games.md) | Publishing from GitHub, a hosted URL, **a local folder**, or an uploaded client/container bundle — over HTTP or **the `ws/v1/game-upload` socket for large builds** (`starhermit.txt`, hosting, deployments, **your audience figures**) |
 | Publisher | [publisher.md](docs/api/publisher.md) | Publisher/member management, title & build publishing, achievement/leaderboard/entitlement management |
+
+Every area above is reachable from the [Unity SDK](docs/sdk/unity.md) as a typed service; that page
+maps each row to its SDK client.
 
 ## Notes
 

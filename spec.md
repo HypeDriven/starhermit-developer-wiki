@@ -26,6 +26,10 @@ patterns, not the subject of the docs.
 - `docs/api/*.md` — one page per area: `auth`, `games`, `game-scripts`, `container-games`, `profile`,
   `friends`, `chat`, `voice`, `catalog`, `activity`, `achievements`, `leaderboards`,
   `external-libraries`, `relay`, `realtime`, `github-games`, `publisher`.
+- `docs/sdk/*.md` — one page per maintained client SDK: `unity` (the `com.starhermit.sdk` Unity package —
+  install, client construction, credentials, a map from each API page to its typed service, sockets,
+  errors and retries, credential storage, and forward compatibility). These pages describe how to reach
+  the documented API from an engine; they do not restate the API itself.
 - `docs/tutorials/*.md` — `chess-walkthrough` (the full lifecycle from launch token to replay viewer),
   `ai-prompts` (copy-pasteable prompts for an AI coding assistant, one per feature plus a mega-prompt),
   `dedicated-server-onboarding` (push a container bundle, renew its server token, onboard
