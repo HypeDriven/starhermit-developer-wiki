@@ -99,6 +99,7 @@ launch=index.html
 |---|---|---|
 | `name` | — | The display name players see. Required unless you pass a display name in the upload form. |
 | `launch` | `launch_path`, `html` | Path to the entry `.html`, relative to the manifest. Defaults to `index.html` when a file by that name sits at the root. |
+| `cover` | `cover_art`, `coverart` | Artwork on the game's library tile. A path relative to the launch file (`cover.png`, `art/box.jpg`) or an absolute `https://` URL. Optional — without one the tile shows the favicon. A bad value is dropped rather than refusing the game. |
 | `owner` | `username`, `user` | **Repository flow only.** The owning StarHermit **user ID (UUID)** from `GET /api/v1/me`, not a username. Lets you [claim a listing someone else added](tutorials/claim-existing-game.md) by proving you control the repository. Ignored on an upload — see [Who owns an uploaded game](#who-owns-an-uploaded-game). |
 
 ### Keys for a game with server logic
@@ -143,6 +144,41 @@ lookup is case-insensitive, but `starhermit.text`, `starhermit.cfg` and `manifes
 name=Asteroid Garden
 launch=index.html
 ```
+
+### Game with cover art
+
+```text
+name=Asteroid Garden
+launch=index.html
+cover=art/cover.png
+```
+
+A relative path is resolved against the launch file (no `..`, no leading `/`, no query string) and
+must end in `.png`, `.jpg`/`.jpeg`, `.gif`, `.webp` or `.svg`. An absolute URL must be `https://` —
+`http://` is dropped — and the bytes are sniffed, so the URL itself needs no image extension.
+
+The line is re-read on every deploy, so changing it changes the cover and removing it removes the
+cover. An image set from **Manage → Cover art** in the web dashboard (or by a StarHermit operator)
+overrides it: that choice lives outside the build, so a redeploy never undoes it. Removing the
+upload falls back to this line again.
+
+#### Library tiles
+
+Cover art is poster art: both libraries **scale it to fill the tile and centre-crop** whatever does
+not fit. The tiles are not the same shape.
+
+| Surface | Tile | Crop |
+|---|---|---|
+| Windows client | 96×128 portrait (3:4) | Fills the portrait; wider art loses the sides |
+| Web dashboard | Square | Fills the square; taller art loses the top and bottom |
+
+Keep the subject in the **centre**. A 3:4 portrait whose middle square is the composition, or a
+square whose middle 3:4 strip is, survives both crops. Letterboxing is never applied — empty
+margins you add around the art are cropped away with everything else.
+
+SVG covers show on the web library. The Windows client has no SVG decoder, so that tile falls back
+to the favicon while the web tile still shows the cover. Prefer PNG, JPEG or WEBP when you want
+the same tile on both.
 
 ### Static site whose entry point is not at the root
 
@@ -225,4 +261,5 @@ for its directory prefix, so shorten very long folder chains.
 | "A launch path is required" | No `launch=` line and no `index.html` at the folder root. |
 | "The upload's files do not contain the launch file" | `launch=` names a file that is not in the folder. Check the spelling and that it is relative to the manifest, not absolute. |
 | Your game published but is missing files | Those files were not adjacent to the manifest. The upload starts at the folder holding `starhermit.txt`; nothing above it is included. |
+| The library tile shows the favicon, not your cover | `cover=` is missing, is not a usable image path/`https://` URL, or the file is not beside the launch file. Bad values are dropped silently — the game still publishes. SVG appears on the web library only; the Windows tile falls back to the favicon. An image from **Manage → Cover art** overrides the manifest until you remove it there. |
 | `container.image` refused | It is not digest-pinned. Use `name@sha256:<64 hex>`, not a tag. |

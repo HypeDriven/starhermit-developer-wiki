@@ -95,6 +95,7 @@ A minimal declaration is:
   "protocol": 1,
   "tickRateHz": 20,
   "maxSessions": 48,
+  "replays": true,
   "achievements": [
     {
       "key": "first-win",
@@ -105,6 +106,11 @@ A minimal declaration is:
   ]
 }
 ```
+
+`replays` asks the platform to keep each finished session's last state, which is what
+`GET /api/v1/games/{slug}/replays/{sessionId}` serves. Declare it only if your game wants replays;
+without it nothing is kept once a match ends. See
+[Container Game Servers — `GET /describe`](../api/container-games.md#get-describe).
 
 Gameplay stream frames use:
 

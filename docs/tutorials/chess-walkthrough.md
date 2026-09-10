@@ -30,7 +30,7 @@ One file, one source of truth, **zero rules authority on the client**. A game cl
 
 ## 2. Publishing your game
 
-Publishing any game starts with the `starhermit.txt` manifest at the repo root. It declares the game's `name`, `slug`, `launch` entry point, `owner`, and `server` script. The reference implementation's manifest, for example:
+Publishing any game starts with the `starhermit.txt` manifest at the repo root. It declares the game's `name`, `launch` entry point, `owner`, and `server` script. Optional `cover=` is the artwork on the library tile — see [The `starhermit.txt` manifest](../starhermit-txt.md#game-with-cover-art). The reference implementation's manifest, for example:
 
 ```text
 name=StarHermit Chess
@@ -358,7 +358,7 @@ The client side is therefore trivial: read the entries (§4) and render them, as
 
 ## 10. Replays
 
-The platform records a replay for every finished game; clients just fetch and render it. In the reference implementation this is `App.loadReplays` / `App.openReplay` in `app.js`:
+A game that declares `replays: true` in its script has every finished session kept by the platform; clients just fetch and render it. Check `replaysEnabled` on `GET /api/v1/games/chess` before offering the screen — an operator can answer for a game either way, and the endpoints below return `404` when replays are off. In the reference implementation the fetching is `App.loadReplays` / `App.openReplay` in `app.js`:
 
 ```http
 GET /api/v1/games/chess/replays/mine?limit=10
@@ -423,7 +423,7 @@ The chess example, a turn-based board game, needs none of them. If your game is 
 
 ## 14. Integration checklist
 
-- [ ] Add a `starhermit.txt` manifest (`name`, `slug`, `launch`, `owner`, `server`).
+- [ ] Add a `starhermit.txt` manifest (`name`, `launch`, `owner`, `server`; optional `cover=` for the library tile).
 - [ ] Read `#game_token` from the URL hash once, then strip it with `history.replaceState`.
 - [ ] Decode the JWT for `sub` (user id) and `game_scope` (slug) — never hard-code your slug.
 - [ ] Build all API paths as same-origin relative URLs: `/api/v1/games/<slug>` + suffix.
@@ -432,5 +432,6 @@ The chess example, a turn-based board game, needs none of them. If your game is 
 - [ ] Design your script's commands and broadcasts **as the client contract** — the client renders broadcasts and sends commands, nothing more.
 - [ ] Return a summary object `{ turnPlayerId, deadline, status, moveCount }` so the sessions list can show whose turn it is.
 - [ ] End games by returning a `result` — that one return value is what powers both replays and elo.
+- [ ] Declare `replays: true` in your script if you want finished sessions kept, and branch the replay UI on `replaysEnabled`.
 
 Get these right and your game has auth, matchmaking, sessions, ratings, and replays with zero backend code of your own. The [getting started guide](../getting-started.md) walks the first deploy end to end.

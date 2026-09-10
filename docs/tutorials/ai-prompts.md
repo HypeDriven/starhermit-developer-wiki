@@ -111,9 +111,11 @@ host (JavaScript, no Node APIs, no imports, no network, no clock):
 1. Expose globalThis.game with createSession, onPlayerMessage, and onTick,
    matching the signatures in game-scripts.md.
 2. Set globalThis.game.tickRateHz deliberately: 0 for a turn-based game
-   that needs no periodic work, or the lowest whole-Hz rate that meets this
-   game's realtime/timer needs. Explain the choice. The platform may clamp
-   it to its configured maximum.
+   that needs no periodic work, or the lowest rate that meets this game's
+   realtime/timer needs (fractional rates are allowed — 0.5 is a tick every
+   two seconds). Explain the choice. A game that declares nothing is ticked
+   at 0.25 Hz, and the platform may clamp a request to its configured
+   maximum.
 3. Determinism: use ONLY ctx.now() for time and ctx.random() for
    randomness. Never use Date, Math.random, or any ambient API.
 4. Every handler returns an object shaped per the contract:
@@ -125,8 +127,10 @@ host (JavaScript, no Node APIs, no imports, no network, no clock):
    client contract and document them in a comment at the top of the file.
 6. Maintain a summary object { turnPlayerId, deadline, status, moveCount }
    so the platform's sessions list can show whose turn it is.
-7. When the game ends, return a result object (so the platform records a
-   replay) and eloUpdates for the rated players.
+7. When the game ends, return a result object and eloUpdates for the rated
+   players. If I want finished sessions kept as replays, also declare
+   globalThis.game.replays = true and make the final sessionState
+   reconstructable — replays are off unless a game asks for them.
 8. Also expose the pure rules functions as globalThis.[myGame]Rules so the
    browser client can reuse this same file for rendering and replays —
    one file, one source of truth, zero rules authority on the client.
@@ -153,9 +157,14 @@ StarHermit game protocol v1 server for [one-paragraph game description] in
 3. Keep every live session keyed by session id. Validate the type-1 binary
    frame's platform-stamped user id as the command sender and emit only
    valid JSON payloads in type-2 frames.
-4. Declare protocol, tickRateHz, maxSessions, and achievements from
-   /describe. Use control messages for snapshots, achievement grants, elo,
-   and terminal results. Never trust a client payload for identity.
+4. Declare protocol, tickRateHz, maxSessions, achievements and replays
+   from /describe (tickRateHz should be the rate my own loop runs at — the
+   platform does not step a container, it uses the rate to avoid asking for
+   snapshots faster than my game produces state; replays: true only if I want
+   finished sessions kept, they are off unless a game asks). Use control
+   messages for snapshots,
+   achievement grants, elo, and terminal results. Never trust a client
+   payload for identity.
 5. Make POST /sessions restore fully from snapshot and make snapshots
    frequent enough to bound crash rewind. Handle finished sessions as
    terminal and idempotent.
@@ -263,7 +272,11 @@ Context page: [games.md](../api/games.md).
 ```text
 Read docs/api/games.md (pasted below). Build a replay viewer:
 
-1. List my recent games with GET /api/v1/games/<slug>/replays/mine?limit=10.
+1. Read replaysEnabled from GET /api/v1/games/<slug> and hide the whole
+   replay screen when it is false — replays are off unless a game asks
+   for them, and the endpoints below answer 404 for a game without them.
+   Then list my recent games with
+   GET /api/v1/games/<slug>/replays/mine?limit=10.
 2. Opening one calls GET /api/v1/games/<slug>/replays/{sessionId}, which
    returns { sessionId, players, finishedAt, result, state } — the
    shapes of result and state are defined by my game's script.
@@ -428,16 +441,19 @@ step before continuing:
    the cmd/sync pattern, 1s→30s exponential-backoff reconnect with re-sync,
    game/error/presence routing.
 6. Server script: globalThis.game per game-scripts.md implementing
-   [my game's rules], an intentional tickRateHz (0 for no periodic ticks),
-   ctx.now/ctx.random only, summary object, result + eloUpdates on game end,
-   shared rules exposed client-side.
+   [my game's rules], an intentional tickRateHz (0 for no periodic ticks;
+   declaring none means a slow 0.25 Hz platform default),
+   replays: true if I want finished sessions kept, ctx.now/ctx.random only,
+   summary object, result + eloUpdates on game end, shared rules exposed
+   client-side.
 7. Chat: session conversation via chatConversationId, REST GET/POST
    messages with 5 s polling (ws/v1/chat is blocked for scoped tokens).
 8. Voice: opt-in toggle, rooms REST + /ws/v1/voice, WebRTC perfect
    negotiation over rtc messages, mute/speaking, roster events, disabled
    for AI games.
-9. Replays: GET …/replays/mine and GET …/replays/{sessionId}, stepped
-   locally through the shared rules.
+9. Replays: gated on replaysEnabled from GET /api/v1/games/<slug>, then
+   GET …/replays/mine and GET …/replays/{sessionId}, stepped locally
+   through the shared rules.
 10. Profiles: nickname/avatar resolution with caching and the
     "Player <id8>" fallback, applied everywhere.
 11. Options screen: per-player settings via GET …/settings on boot merged

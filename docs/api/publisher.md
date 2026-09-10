@@ -79,10 +79,27 @@ The creator becomes a member with role `"Owner"`.
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | POST | `/api/v1/publisher/software` | JWT (`Permission-publisher.content.manage`) | Create/update a software title (body = full `SoftwareTitle`; membership in the title's actual publisher enforced) |
-| POST | `/api/v1/publisher/software/upload` | JWT (`Permission-publisher.content.manage`) | Get upload URLs for a title → `UploadUrlInfo[]` |
-| POST | `/api/v1/publisher/software/build/finalize` | JWT (`Permission-publisher.content.manage`) | Finalize a build from uploaded assets → `204` |
+| POST | `/api/v1/publisher/software/upload` | JWT (`Permission-publisher.content.manage` **+** `Permission-publisher.binary.publish`) | Get upload URLs for a title → `UploadUrlInfo[]` |
+| POST | `/api/v1/publisher/software/build/finalize` | JWT (`Permission-publisher.content.manage` **+** `Permission-publisher.binary.publish`) | Finalize a build from uploaded assets → `204` |
 | GET | `/api/v1/publisher/analytics/downloads?publisherId=` | JWT (`Permission-publisher.content.manage`) | Download counts per title |
 | GET | `/api/v1/publisher/analytics/launches?publisherId=` | JWT (`Permission-publisher.content.manage`) | Launch counts per title |
+
+### Publishing a build needs the binary-publish grant
+
+The two build endpoints require **`publisher.binary.publish`** on top of
+`publisher.content.manage` and membership of the title's publisher. Without it both answer `403`,
+while every other endpoint on this page keeps working — you can create and edit titles, define
+achievements and leaderboards, and grant entitlements; you just cannot ship an executable.
+
+The reason is what a build is. A build's assets are downloaded by the desktop client and run on the
+player's machine with the player's privileges, outside any sandbox Starhermit controls — unlike a
+browser game, which runs in the browser's. So the right to publish one is granted per account by a
+Starhermit administrator (the `BinaryPublisher` role), not acquired by creating a publisher. No
+other role carries it. **Ask an administrator for the grant before building an upload flow against
+these endpoints**; it is also removed when a publisher account is suspended.
+
+Browser games need none of this: `/api/v1/me/github-games` submissions, folder uploads and bundle
+pushes stay self-serve for any signed-in account.
 
 ### Get upload URLs
 
@@ -221,6 +238,9 @@ Route `api/v1/publisher/leaderboards`; all routes require `Permission-publisher.
 
 ## Publish a build: flow
 
+0. **Hold the binary-publish grant**: steps 3 and 5 require `publisher.binary.publish`, which a
+   Starhermit administrator grants per account. See
+   [Publishing a build needs the binary-publish grant](#publishing-a-build-needs-the-binary-publish-grant).
 1. **Create a publisher**: `POST /api/v1/publisher` with `{ name, description }`.
 2. **Create the title**: `POST /api/v1/publisher/software` with the full `SoftwareTitle` body.
 3. **Get upload URLs**: `POST /api/v1/publisher/software/upload` with `{ titleId }`.

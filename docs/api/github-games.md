@@ -15,6 +15,7 @@ name=Your Game
 # it, so two games can never contend for a name. Your client reads its own slug
 # from the launch token's game_scope claim.)
 launch=index.html        # repo-relative HTML entry
+cover=art/cover.png      # optional cover art for the library tile; or an https:// URL
 owner=<starhermit user id>  # UUID from GET /api/v1/me; do not use username/nickname
 # Choose at most one authoritative backend, or omit both for a browser-only game:
 server=server.js         # sandboxed JavaScript; see game-scripts.md
@@ -25,6 +26,7 @@ control.shoot=Space | Shoot
 ```
 
 - `slug` determines the subdomain (`<slug>.starhermit.com`) and the game API namespace (`/api/v1/games/<slug>/…`).
+- `cover` (aliases `cover_art`, `coverart`) is the artwork shown on the game's library tile: a path relative to the launch file, or an absolute `https://` URL. Optional — without one the tile shows your site's favicon. Re-read on every deploy, so changing the line changes the cover. See [Cover art](#cover-art) for the tile crops.
 - `server` declares a sandboxed JavaScript backend; see [game-scripts.md](game-scripts.md).
 - `container.image` declares a container backend; see [container-games.md](container-games.md). It must be digest-pinned, hosted in the verified GitHub owner's namespace on an allowlisted registry, and may be accompanied by `container.port`, `container.health`, `container.memory_mb`, `container.cpu`, and non-secret `container.env.*` values.
 - Both backend keys are optional for a pure browser game, but they are mutually exclusive with each other.
@@ -65,6 +67,9 @@ Players can override these defaults per game through the
 | PUT | `/api/v1/me/github-games/{id}/deployment` | JWT | Pin a commit/branch; queues a redeploy → `GameHostingView` |
 | GET | `/api/v1/github-games` | JWT | Public browse of shared GitHub games → `SharedGitHubGameDto[]` |
 | GET | `/api/v1/github-games/{id}/icon` | Anonymous | Game icon image bytes (favicon or owner avatar); `ResponseCache` 86400 |
+| GET | `/api/v1/github-games/{id}/cover` | Anonymous | **Cover art image bytes**, or `404` when the game has none; `ResponseCache` 3600 |
+| PUT | `/api/v1/me/github-games/{id}/cover` | JWT (owner) | Upload cover art, overriding the manifest's `cover=` → `204` |
+| DELETE | `/api/v1/me/github-games/{id}/cover` | JWT (owner) | Drop the uploaded cover, falling back to the manifest → `204` |
 | GET | `/api/v1/me/github` | JWT | GitHub identity link status → `{ linked, login }` |
 
 ### Register a game
@@ -181,6 +186,46 @@ Refusals here fail the whole create — no half-made game row survives one:
 - `server=` pointing outside the client files (`../`).
 - Declaring both `server=` and `container.image=`.
 - Asking for a container where containers are disabled, or from an owner not approved for them.
+
+### Cover art
+
+The image shown on your game's tile in the library. Set it either way — whichever you use, the
+anonymous `GET /api/v1/github-games/{id}/cover` is what serves it:
+
+- **In your build** — a `cover=` line in `starhermit.txt`, naming an image relative to the launch
+  file or an absolute `https://` URL. Re-read on every deploy, so your repository stays the source of truth.
+- **Uploaded** — `PUT /api/v1/me/github-games/{id}/cover` with the image base64-encoded. This is
+  what the web dashboard's *Manage → Cover art* does, and what a StarHermit operator can do for you.
+
+```http
+PUT /api/v1/me/github-games/{id}/cover
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "imageBase64": "iVBORw0KGgoAAAANSUhEUg..." }
+```
+
+An upload **overrides** the manifest, deliberately: a deploy that re-reads `starhermit.txt` must
+never undo art someone chose by hand. `DELETE /api/v1/me/github-games/{id}/cover` is the way back —
+it drops the upload and the manifest's `cover=` applies again.
+
+PNG, JPEG, GIF, WEBP, BMP or SVG, up to **4 MB**. The type is sniffed from the bytes, so a
+`Content-Type` you assert is neither needed nor believed, and bytes that are not a decodable image
+are refused with `400`. A relative `cover=` path must end in `.png`, `.jpg`/`.jpeg`, `.gif`,
+`.webp` or `.svg` (no `..`, no leading `/`); an unusable value is dropped rather than failing the
+game.
+
+Cover art is poster art: both libraries **scale it to fill the tile and centre-crop** whatever does
+not fit. The tiles are not the same shape.
+
+| Surface | Tile | Crop |
+|---|---|---|
+| Windows client | 96×128 portrait (3:4) | Fills the portrait; wider art loses the sides |
+| Web dashboard | Square | Fills the square; taller art loses the top and bottom |
+
+Keep the subject in the centre so both crops look right. SVG covers show on the web library; the
+Windows client cannot decode SVG, so that tile shows the favicon instead. A game with no cover at
+all falls back to its favicon (`GET /api/v1/github-games/{id}/icon`).
 
 ### Audience figures for your game
 
@@ -430,12 +475,15 @@ extracted — symlinks, hardlinks and device nodes are rejected.
   "isVerifiedOwner": true,
   "metadataSource": "...",
   "createdAt": "...",
+  "coverArtSource": "manifest",
+  "coverArtUpdatedAt": "...",
   "hosting": { "hostingEnabled": true }
 }
 ```
 
 - `serverScriptPath` is present only for a JavaScript backend. `gameSlug` may be present for either a script or container backend. The current DTO does not expose a container image reference.
 - For a game added from a local folder, `repoUrl` is a synthetic `upload:<id>` marker and `ownerLogin`/`repoName` are empty — there is no repository to name, and an empty owner is what makes the listing unclaimable.
+- `coverArtSource` is `"upload"`, `"manifest"` or `null`, and `coverArtUpdatedAt` is when that cover last changed — use it to cache-bust the `/cover` URL. Anything non-null means the game has cover art to fetch; `null` means fall back to `/icon`. The two sources are not equal: an upload always wins, and it is the only one `DELETE /cover` can remove.
 - `SharedGitHubGameDto` extends `GitHubGameDto` with `submittedByUserId` and `submittedByUsername`.
 
 ```json

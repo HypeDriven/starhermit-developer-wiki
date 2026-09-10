@@ -10,13 +10,16 @@ A StarHermit authoritative game can be defined by a **single JavaScript file** e
 
 ## Entry points
 
-Expose the handlers on `globalThis.game`. Two optional **static** declarations sit alongside them:
-`tickRateHz` asks the platform how often to invoke `onTick` (see [Tick rate](#tick-rate)), and
-`achievements` registers the game's achievements (see [Achievements](#achievements)):
+Expose the handlers on `globalThis.game`. Three optional **static** declarations sit alongside them:
+`tickRateHz` asks the platform how often to invoke `onTick` — declare it if your game depends on the
+tick, since a game that says nothing is ticked once every four seconds (see [Tick rate](#tick-rate)),
+`achievements` registers the game's achievements (see [Achievements](#achievements)), and `replays`
+asks the platform to keep your finished sessions (see [Replays](#replays)):
 
 ```js
 globalThis.game = {
   tickRateHz: 0, // turn-based: opt out of periodic ticks
+  replays: true, // keep finished sessions as replays
   achievements: [
     { key: "first-win", name: "First Win", description: "Win a match.", points: 10 }
   ],
@@ -26,7 +29,7 @@ globalThis.game = {
 };
 ```
 
-Both declarations are read by evaluating your script **when the game is published or updated**,
+The declarations are read by evaluating your script **when the game is published or updated**,
 not on every invocation — so they must be static values on the `game` object. Publish an update
 to apply a change.
 
@@ -79,8 +82,48 @@ globalThis.game = {
 ```
 
 - The declaration is read **when your game is published or updated**, not on every tick. Publish an update after changing it.
-- The rate is clamped to the supported platform range (**30 Hz** by default). Ask for **0** to disable ticks for games that only react to player commands. Values are floored to a whole Hz; invalid or missing declarations use the default.
+- **A game that declares no rate is ticked at 0.25 Hz** — once every four seconds. That is plenty to
+  adjudicate a move clock or a timeout and costs the platform almost nothing, but it is far too slow
+  for anything your gameplay depends on. If `onTick` drives your game, declare the rate you need.
+- Requests are clamped to the platform maximum (**30 Hz** by default), so a game can ask for less
+  than the platform allows but never for more. Ask for **0** to disable ticks entirely for a game
+  that only reacts to player commands.
+- Rates may be **fractional**: `0.5` is a tick every two seconds. The smallest non-zero rate is
+  `0.01` Hz — a smaller positive number is raised to it rather than read as an opt-out, because a
+  small fraction is a slow game. Ticking is off only for `0` or a negative rate. A missing or
+  unusable declaration (a string, `null`, `NaN`) takes the 0.25 Hz default.
+- An operator can override the rate for a particular game, in either direction.
 - Realtime inputs are latest-wins between ticks, while discrete action edges remain ordered. A slow recipient may skip an obsolete snapshot but cannot delay the simulation or other recipients.
+
+## Replays
+
+When a session finishes, the platform can keep its final `sessionState` as the **replay** — the
+document served by `GET /api/v1/games/{slug}/replays/{sessionId}` (see
+[Games API — Replays](games.md#replays)). A replay is storage held for as long as the match's record
+is, so **your game gets one only if it asks**:
+
+```js
+globalThis.game = {
+  replays: true,           // keep finished sessions as replays
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+```
+
+- The declaration must be a literal `true` or `false` — anything else is read as no declaration, and
+  a game that declares nothing has no replays.
+- It is read **when your game is published or updated**. Publish an update after changing it.
+- A platform operator may answer for a particular game either way, so the declaration is a request
+  rather than a guarantee. `GET /api/v1/games/{slug}` reports the answer as `replaysEnabled` —
+  branch your replay UI on that, not on what your script asked for.
+- Nothing else changes with replays off: your session state is still stored and still handed back to
+  every invocation as `ctx.sessionState`, and it is still the crash restore point. What a game
+  without replays does not get is a copy that outlives the session, so its replay endpoints answer
+  `404`.
+- Design the final `sessionState` to be worth replaying — a move log, or whatever your client needs
+  to reconstruct the match. The chess reference implementation keeps `state.game.moves` and steps it
+  through the same rules module the platform executes.
 
 ## Room-bound sessions
 
@@ -143,7 +186,7 @@ Key rules:
 - Only messages listed in `broadcast` are delivered to clients, each addressed to explicit player ids or `"all"`. Nothing else leaks.
 - `eloUpdates` is the only way ratings change. The host denormalizes them onto `GamePlayerState.Elo` and publishes them to the game's leaderboard; clients can never submit scores directly (see [Leaderboards](leaderboards.md)).
 - `achievements` is the only way achievements are granted. Keys are resolved against the game's own declaration and persisted by the platform — see [Achievements](#achievements).
-- End games via `result`. The host then finishes the session and **archives the final `sessionState` as the replay** (served by `GET .../replays/{sessionId}` — see [Games API](games.md#replays)).
+- End games via `result`. The host then finishes the session, and for a game with [replays](#replays) **archives the final `sessionState`** as the replay (served by `GET .../replays/{sessionId}` — see [Games API](games.md#replays)).
 
 ## Achievements
 
@@ -318,6 +361,6 @@ Publishing flows through the GitHub integration — see [GitHub Games](github-ga
 - **Use `ctx.now` / `ctx.random` only.** No `Date`, no `Math.random` — the host owns the clock and the dice.
 - **Design `broadcast` messages as the only client contract.** Clients must be able to render the entire game from what the script sends; anything not broadcast does not exist for them.
 - **One file, two surfaces.** The same file can double as client-side rules via a separate export: the chess reference implementation, for example, exposes `globalThis.chessRules` for the browser (move preview, validation hints) and `globalThis.game` for the host. One source of truth, zero authority on the client.
-- **Always end games via `result`** so the platform archives the replay and publishes Elo updates.
+- **Always end games via `result`** so the platform publishes Elo updates and archives the replay when your game has [replays](#replays).
 
 See the [Chess Walkthrough](../tutorials/chess-walkthrough.md) for a line-by-line tour, and [AI Prompts](../tutorials/ai-prompts.md) for help generating your own script.

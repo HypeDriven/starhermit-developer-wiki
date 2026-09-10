@@ -48,7 +48,7 @@ platform-hosted browser game — from `location.hostname`, since the subdomain i
 | POST | `/api/v1/games/{slug}/invites/{inviteId}/accept` | Bearer | Accept an invite (creates the session) |
 | POST | `/api/v1/games/{slug}/invites/{inviteId}/decline` | Bearer | Decline an invite |
 | GET | `/api/v1/me/game-invites` | Bearer | All pending invites — every game, both invite systems (max 50) |
-| GET | `/api/v1/games/{slug}/replays/mine` | Bearer | Caller's finished sessions |
+| GET | `/api/v1/games/{slug}/replays/mine` | Bearer | Caller's finished sessions (games with replays) |
 | GET | `/api/v1/games/{slug}/replays/{sessionId}` | Bearer | Full replay state (participants only) |
 | WS | `/ws/v1/games?sessionId={guid}` | Bearer | Gameplay WebSocket |
 | GET | `/api/v1/games/{slug}/server/sessions/{sessionId}` | Game-server token | Container backend session reconciliation; not available to player tokens |
@@ -69,6 +69,7 @@ Returns the game definition plus the caller's stats for that game. `404` if no s
   "enabled": true,
   "leaderboardId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "maxConcurrentSessionsPerPlayer": 20,
+  "replaysEnabled": true,
   "me": {
     "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
     "elo": 1200,
@@ -82,6 +83,7 @@ Returns the game definition plus the caller's stats for that game. `404` if no s
 
 - `leaderboardId` is optional.
 - `me.elo` defaults to `1200`; `wins`/`losses`/`draws` are read from the server-runtime-owned per-player document.
+- `replaysEnabled` says whether this game's finished sessions are kept — read it rather than assuming, and hide your replay UI when it is `false`. See [Replays](#replays).
 
 ## Launch tokens
 
@@ -462,6 +464,20 @@ What this means for your game client:
 
 ## Replays
 
+A replay is a finished session's final state document, kept by the platform and served back to the
+players who were in it. **Replays are an opt-in feature of a game, off unless the game asks for
+them**, because a replay is storage the platform holds for as long as the match's record exists.
+
+Ask for them in your server code — `replays: true` on the `game` object for a
+[script](game-scripts.md#replays), `"replays": true` from `/describe` for a
+[container server](container-games.md#get-describe) — and publish an update to apply it. A platform
+operator can also answer for a particular game either way, so treat the `replaysEnabled` field of
+`GET /api/v1/games/{slug}` as the answer rather than assuming your declaration is the last word.
+
+Both endpoints below return `404` for a game whose replays are off, and nothing is kept from that
+game's finished sessions — so a client that offers a replay screen should read `replaysEnabled`
+first.
+
 ### `GET /api/v1/games/{slug}/replays/mine?limit=`
 
 The caller's finished sessions. `limit` defaults to `10` and is clamped to 1–50.
@@ -550,15 +566,16 @@ For a script runtime, durable commands run through `onPlayerMessage`; explicitly
 ### Runtime timing
 
 For JavaScript games, the platform runs `onTick` sweeps at the clamped rate requested through
-`game.tickRateHz`; `0` disables ticks. A container drives its own simulation loop and declares its
-requested rate through `/describe`; the platform uses that rate for scheduling and snapshot policy,
-not to step the game. See [Game Scripts — Tick rate](game-scripts.md#tick-rate) and
+`game.tickRateHz`; `0` disables ticks, and a game that requests nothing is ticked at **0.25 Hz** —
+declare a rate if your gameplay depends on the tick. A container drives its own simulation loop and
+declares its requested rate through `/describe`; the platform uses that rate for scheduling and
+snapshot policy, not to step the game. See [Game Scripts — Tick rate](game-scripts.md#tick-rate) and
 [Container Game Servers](container-games.md#protocol-v1).
 
 ## Lifecycle of a game
 
 1. **Mint a launch token** — `POST /api/v1/games/{slug}/launch-token`. Clients should refresh it before expiry (the chess reference client refreshes every 45 minutes).
-2. **Fetch game state** — `GET /api/v1/games/{slug}` for info + your stats; `GET .../sessions/mine` for games in progress; `GET .../invites` and `GET /api/v1/me/game-invites` for pending invites; `GET .../replays/mine` for history; `GET .../achievements` for the achievement screen.
+2. **Fetch game state** — `GET /api/v1/games/{slug}` for info + your stats; `GET .../sessions/mine` for games in progress; `GET .../invites` and `GET /api/v1/me/game-invites` for pending invites; `GET .../replays/mine` for history when `replaysEnabled`; `GET .../achievements` for the achievement screen.
 3. **Find an opponent**, one of three ways:
    - **Matchmaking:** `POST .../matchmaking`, then poll `GET .../matchmaking` every 3 s until `status` is `matched` (the response carries `sessionId`). `DELETE .../matchmaking` to cancel.
    - **Invite flow:** pick a friend from `GET /api/v1/me/friends` (see [Friends](friends.md)), `POST .../invites` with `{ "toUserId": "..." }`; the invitee calls `POST .../invites/{inviteId}/accept`, which creates the session. (If your game seats players in a [realtime room](realtime.md) first, invite them to the room instead — same notification, but accepting puts them at the table you are already in.)
@@ -566,7 +583,7 @@ not to step the game. See [Game Scripts — Tick rate](game-scripts.md#tick-rate
 4. **Load the session** — `GET .../sessions/{sessionId}`.
 5. **Connect the WebSocket** — `ws/v1/games?sessionId={guid}` with the launch token, then send whatever initial-sync command the game's backend defines — the chess reference implementation, for example, sends `{"type":"cmd","data":{"type":"sync"}}`.
 6. **Play** — exchange `cmd`/`game` frames as defined by the backend, surface `achievement` frames, and handle the container-only `resumed` frame.
-7. **Result** — the authoritative backend ends the game; the platform archives the replay and publishes elo updates to the leaderboard.
+7. **Result** — the authoritative backend ends the game; the platform publishes elo updates to the leaderboard and, for a game with [replays](#replays), archives the final state.
 8. **Replay** — `GET .../replays/{sessionId}` for the full final state.
 
 ### Example: chess command shapes

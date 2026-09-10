@@ -91,15 +91,29 @@ not assume the process will survive for the life of a match.
   "protocol": 1,
   "tickRateHz": 20,
   "maxSessions": 48,
+  "replays": true,
   "achievements": [
     { "key": "first-blood", "name": "First Blood", "description": "Score first.", "points": 10 }
   ]
 }
 ```
 
-`protocol` must be `1`. `tickRateHz` and `maxSessions` are requests and may be clamped. Achievement
-entries use the same fields and limits as [script-declared achievements](game-scripts.md#declare);
-only declared keys can later be granted.
+`protocol` must be `1`. `tickRateHz` and `maxSessions` are requests and may be clamped. The platform
+never steps a container's loop, so `tickRateHz` tells it how fast your game *moves* rather than how
+fast to run it: it is what stops the platform asking for snapshots faster than your game produces
+new state. Declare the rate your loop actually runs at. Fractional rates are accepted (`0.5` is one
+tick every two seconds), and a rate that slow does stretch the interval between snapshot requests —
+which is how much play a crash costs. A container that declares nothing leaves the checkpoint
+cadence to snapshot cost alone. Achievement entries use the same fields and limits as
+[script-declared achievements](game-scripts.md#declare); only declared keys can later be granted.
+
+`replays` asks the platform to keep each finished session's last state as a **replay**, served by
+`GET /api/v1/games/{slug}/replays/{sessionId}` (see [Games API — Replays](games.md#replays)). It must
+be a literal `true` or `false`; a game that declares nothing has no replays, and its replay endpoints
+answer `404`. Like the tick rate it is a request — an operator may answer for a particular game
+either way — so branch your client on `replaysEnabled` from `GET /api/v1/games/{slug}` rather than on
+what you declared. Snapshots are unaffected either way: a live session needs a restore point whether
+or not its last one is kept.
 
 ### `POST /sessions`
 
@@ -140,7 +154,9 @@ Return the standard envelope with a complete `sessionState` restore point:
 
 The platform checkpoints active sessions periodically. A snapshot response may also include
 `playerStates`, `eloUpdates`, `achievements`, or `result`; they pass through the same validation and
-persistence rules as a script result.
+persistence rules as a script result. For a game with [replays](#get-describe), the last state a
+finished session reached is what the platform keeps as its replay — so make that state
+reconstructable, not just resumable.
 
 ## Gameplay stream
 

@@ -131,14 +131,15 @@ Maximum message size is 4 KiB by default.
 > StarHermit closes that client's relay WebSocket with `PolicyViolation`. This is not a queue or a
 > best-effort frame drop—the client connection is terminated and must reconnect.
 
-The old flat limit of one message per 100 ms no longer applies to configured sessions. Each
-sender's minimum interval is derived from the bound match's effective game tick rate:
+Each sender's minimum interval is derived from the rate the bound match is paced at:
 
 ```text
-minimum interval ms = (1000 / effectiveTickRateHz) × 0.90
+minimum interval ms = (1000 / max(pacingRateHz, 1)) × 0.90
 ```
 
-The 10% headroom allows ordinary timer and network jitter. Examples:
+The 10% headroom allows ordinary timer and network jitter. The rate is never taken below **1 Hz**,
+so the limit never asks for more than ~900 ms of silence between two frames however slowly a game
+ticks. Examples:
 
 | Effective rate | Minimum sender interval |
 |---:|---:|
@@ -149,9 +150,12 @@ The 10% headroom allows ordinary timer and network jitter. Examples:
 
 For a game session, the rate comes from its game definition. For a realtime room, the room's
 `gameSlug` is resolved to a game definition. The normal effective-rate precedence applies:
-operator override, then the game's requested rate, then the global setting. If no definition can be
-resolved—or the game opted out of server ticks with `0`—the global/default rate is used rather than
-making relay traffic unlimited. Rates are bounded by the platform ceiling.
+operator override, then the game's requested rate. What the relay limit does **not** follow is a
+rate that says nothing about how often players talk to each other: if no definition can be
+resolved, if the game opted out of server ticks with `0`, or if it requested no rate at all and so
+takes the platform's slow default, the limit is sized from the global rate instead. A game is never
+throttled to one message every few seconds because nobody wrote a number in its server code. Rates
+are bounded by the platform ceiling.
 
 A client must pace commands to this interval or slower. Sending two commands/frames closer together
 than the minimum interval is treated as flooding: StarHermit drops that client's connection by
