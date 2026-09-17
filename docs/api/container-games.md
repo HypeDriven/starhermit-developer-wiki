@@ -5,12 +5,10 @@ sandboxed JavaScript file. This lets the server use Rust, Go, C++, or any other 
 serve HTTP and WebSockets. The browser-facing [Games API](games.md) stays the same: clients still
 use game-scoped launch tokens, REST sessions, and `ws/v1/games` JSON frames.
 
-Container hosting is limited to an **operator allowlist of developers** while the feature is rolling
-out, and an unset allowlist admits nobody rather than everybody — an operator who enabled the
-feature but has not named anyone has not yet decided who may run code on the host. If provisioning a
-container game returns `403` on a server where the feature is enabled, ask the operator to add your
-user id. This applies equally to a registry image and an uploaded `server/image.tar`, so neither
-route is quietly more permissive than the other.
+Container hosting is open to any signed-in user on starhermit.com. A self-hosted deployment can
+restrict it to an operator allowlist; an unset allowlist there admits nobody rather than everybody.
+This applies equally to a registry image and an uploaded `server/image.tar`, so neither route is
+quietly more permissive than the other.
 
 After initial game registration, developers can also push a built `.tar.gz` containing
 `server/image.tar` (`docker save` output) through
@@ -30,6 +28,9 @@ Three things about that push are worth knowing before you build a release pipeli
 - **A re-push applies the knobs its manifest declares and keeps the ones it omits.** Changing
   `container.port` and re-uploading now moves the deployment to that port; leaving the manifest out
   of the bundle changes nothing but the image.
+- **`?mode=merge` patches client files only.** A `server/image.tar` in a merge is loaded exactly as
+  on a replace — an image cannot be half-updated. See
+  [partial updates](github-games.md#partial-updates-modemerge).
 
 ## Manifest
 

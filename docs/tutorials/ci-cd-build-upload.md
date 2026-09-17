@@ -148,10 +148,11 @@ def authenticate(api, public_key, private_key):
     return complete.json()["accessToken"]
 
 
-def upload_http(api, game_id, token, archive):
+def upload_http(api, game_id, token, archive, mode):
     with archive.open("rb") as stream:
         response = requests.post(
             f"{api}/api/v1/me/github-games/{game_id}/bundle",
+            params={"mode": mode} if mode != "replace" else None,
             headers={"Authorization": f"Bearer {token}",
                      "Content-Type": "application/gzip"},
             data=stream, timeout=1800)
@@ -159,12 +160,14 @@ def upload_http(api, game_id, token, archive):
     print(json.dumps(response.json()))
 
 
-async def upload_websocket(api, game_id, token, archive):
+async def upload_websocket(api, game_id, token, archive, mode):
     import websockets
     parsed = urlparse(api)
+    query = f"gameId={quote(game_id)}&access_token={quote(token)}"
+    if mode != "replace":
+        query += f"&mode={quote(mode)}"
     uri = urlunparse(("wss" if parsed.scheme == "https" else "ws", parsed.netloc,
-                      "/ws/v1/game-upload", "",
-                      f"gameId={quote(game_id)}&access_token={quote(token)}", ""))
+                      "/ws/v1/game-upload", "", query, ""))
     async with websockets.connect(uri, max_size=None, ping_interval=20) as ws:
         ready = json.loads(await ws.recv())
         if ready.get("type") != "ready":
@@ -186,14 +189,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("archive", type=Path)
     parser.add_argument("--api", default="https://api.starhermit.com")
+    parser.add_argument("--mode", choices=("replace", "merge"), default="replace",
+                        help="replace the live client files (default) or patch them")
     args = parser.parse_args()
     game_id = os.environ["STARHERMIT_GAME_ID"]
     token = authenticate(args.api.rstrip("/"), os.environ["STARHERMIT_PUBLIC_KEY"],
                          os.environ["STARHERMIT_PRIVATE_KEY"])
     if args.archive.stat().st_size < 90 * 1024 * 1024:
-        upload_http(args.api.rstrip("/"), game_id, token, args.archive)
+        upload_http(args.api.rstrip("/"), game_id, token, args.archive, args.mode)
     else:
-        asyncio.run(upload_websocket(args.api.rstrip("/"), game_id, token, args.archive))
+        asyncio.run(upload_websocket(args.api.rstrip("/"), game_id, token, args.archive, args.mode))
 
 
 if __name__ == "__main__":

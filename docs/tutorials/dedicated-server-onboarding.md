@@ -263,7 +263,10 @@ The platform:
 - queues the old container to be replaced by the uploaded image;
 - restores eligible active sessions from their persisted snapshots.
 
-You may upload only the client or only the server image. A game's disk allowance is **4 GB** and can
+You may upload only the client or only the server image. Client-only patches use
+`?mode=merge` on the same endpoint (see
+[partial updates](../api/github-games.md#partial-updates-modemerge)); an image in a merge is still
+loaded whole. A game's disk allowance is **2 GB** on starhermit.com (operator-tunable) and can
 be tuned per game; because a push replaces a game's content rather than adding to it, that is both
 the largest push and the most disk the game can occupy. `413` includes `limitBytes`; an invalid
 archive or image returns `422`; and `507` means the server has no room right now — it is checked

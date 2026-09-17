@@ -24,7 +24,7 @@ contents **are** the published game, copied as-is. Every file and every subfolde
 
 So pick your **distributable build output**, not your source tree. Uploading a working directory
 means shipping your source, your notes, your unminified assets and your half-finished experiments to
-every player, and burning your game's 4 GB allowance on files nobody loads.
+every player, and burning your game's disk allowance on files nobody loads.
 
 A handful of names are always skipped, because they are never part of a published game:
 `.git`, `node_modules`, `.DS_Store`, `Thumbs.db`. Everything else is fair game — including
@@ -245,8 +245,10 @@ endpoints the clients call.
 
 ## Limits
 
-One game may occupy **4 GB**, and that is also the ceiling on a single upload — publishing replaces a
-game's content rather than adding to it, so the largest push is also the most a game can hold. Deeply
+One game may occupy **2 GB** on starhermit.com (operator-tunable; code default 4 GB), and that is
+also the ceiling on a single replace upload. A [`?mode=merge`](api/github-games.md#partial-updates-modemerge)
+patch is bounded by the resulting tree, so a small upload that would make the live game exceed the
+allowance is refused. Deeply
 nested paths are refused: the archive format caps a path at 100 characters for the file name plus 155
 for its directory prefix, so shorten very long folder chains.
 
@@ -255,7 +257,7 @@ for its directory prefix, so shorten very long folder chains.
 | What you see | Why |
 |---|---|
 | The client says your build has no manifest | No `starhermit.txt` at the root of what you picked (a copy deeper inside does not count). This is a prompt, not a refusal — fill in the dialog's fields and one is written for you. |
-| Your `.tar` is refused as "extended headers" | It uses GNU long-name or PAX blocks. Re-create it with `tar --format=ustar`, or upload the folder. |
+| Your `.tar` is refused as "extended headers" | The *client* packer that re-homes a single `.tar` into `client/` still refuses GNU long-name and PAX blocks (rewriting those metadata blocks is how the next entry is named). `git archive` and `tar -czf .` are accepted by the platform itself. Re-create with `tar --format=ustar`, or upload the folder. |
 | You edited a field but the old value is live | The manifest inside your build is unchanged; only the bundle got the new one. Update the file in your build so the next upload starts from the right values. |
 | "A display name is required" | No `name=` line, and no display name typed into the form. |
 | "A launch path is required" | No `launch=` line and no `index.html` at the folder root. |

@@ -25,7 +25,7 @@ control.up=KeyW+ArrowUp | Move forward
 control.shoot=Space | Shoot
 ```
 
-- `slug` determines the subdomain (`<slug>.starhermit.com`) and the game API namespace (`/api/v1/games/<slug>/…`).
+- There is no `slug` key: the platform assigns a uid and uses it as both the subdomain (`<uid>.starhermit.com`) and the game API namespace (`/api/v1/games/<uid>/…`).
 - `cover` (aliases `cover_art`, `coverart`) is the artwork shown on the game's library tile: a path relative to the launch file, or an absolute `https://` URL. Optional — without one the tile shows your site's favicon. Re-read on every deploy, so changing the line changes the cover. See [Cover art](#cover-art) for the tile crops.
 - `server` declares a sandboxed JavaScript backend; see [game-scripts.md](game-scripts.md).
 - `container.image` declares a container backend; see [container-games.md](container-games.md). It must be digest-pinned, hosted in the verified GitHub owner's namespace on an allowlisted registry, and may be accompanied by `container.port`, `container.health`, `container.memory_mb`, `container.cpu`, and non-secret `container.env.*` values.
@@ -60,7 +60,7 @@ Players can override these defaults per game through the
 | GET | `/api/v1/me/github-games/{id}/stats` | JWT (owner) | **Audience figures for a game you added** → `GameStatsDto` |
 | POST | `/api/v1/me/github-games/{id}/transfer` | JWT | Transfer a game to another user → `GitHubGameDto` |
 | DELETE | `/api/v1/me/github-games/{id}` | JWT | Remove a registered game → `204` |
-| POST | `/api/v1/me/github-games/{id}/bundle` | JWT | Publish a raw `.tar.gz` containing client files and/or a saved container image |
+| POST | `/api/v1/me/github-games/{id}/bundle` | JWT | Publish a raw `.tar.gz` containing client files and/or a saved container image. `?mode=merge` patches live client files instead of replacing them |
 | WS | `/ws/v1/game-upload` | JWT (`?access_token=`) | **The same two uploads over a WebSocket** — the transport to use for anything over ~100 MB |
 | PUT | `/api/v1/me/github-games/{id}/hosting` | JWT | Enable/disable hosting ("Deploy to starhermit") → `GameHostingView` |
 | GET | `/api/v1/me/github-games/{id}/deployment` | JWT | Read deployment/hosting state → `GameHostingView` |
@@ -297,9 +297,10 @@ multipart form data—with `Content-Type: application/gzip`:
 client/            optional static client files; must include the registered launch file
 server/image.tar   optional output from `docker save`
 starhermit.txt     optional manifest copy for bundle portability
+remove.txt         merge only: client-relative paths to delete, one per line
 ```
 
-At least `client/` or `server/image.tar` must be present. Client files are swapped atomically. A
+At least `client/` or `server/image.tar` must be present (a merge may also be only `remove.txt`). Client files are swapped atomically. A
 server image is loaded, digest-pinned by the platform, and queues the container deployment to
 restart on that image. An uploaded image takes precedence over the manifest's registry reference.
 Anything else in the archive is ignored.
@@ -349,9 +350,48 @@ curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle"
   "clientPublished": false,
   "serverImageLoaded": true,
   "imageDigest": "sha256:...",
-  "bytesReceived": 318767104
+  "bytesReceived": 318767104,
+  "mode": "replace",
+  "filesRemoved": 0
 }
 ```
+
+#### Partial updates: `?mode=merge`
+
+A push is a **replace** unless you ask otherwise: the archive is the whole game, and anything not in
+it is gone. `?mode=merge` (HTTP and the upload socket alike) makes it a **patch** of the live client
+files — the answer to re-uploading gigabytes of unchanged assets for a one-file fix.
+
+```bash
+printf '%s\n' '# one client-relative path per line; a directory removes everything under it' \
+    'assets/old-music.ogg' 'levels/cut/' > remove.txt
+tar czf patch.tar.gz client/index.html client/js/app.js remove.txt
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle?mode=merge" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @patch.tar.gz
+```
+
+With `mode=merge`:
+
+- files under `client/` are added or overwritten
+- paths in a root `remove.txt` (`#` comments; a directory removes its whole subtree) are deleted
+- every other live file stays exactly as it is
+
+The merged tree is staged as a copy and swapped in atomically — players see the old game or the
+whole new one, never a mix. The result is bounded by the **game's** allowance, not the upload's, so
+a game cannot grow past its limit one small patch at a time. A merge is only about client files; a
+`server/image.tar` is loaded exactly as on a replace. A patch carrying no `starhermit.txt` leaves
+cover art as it was.
+
+A merge is refused (`409`/`422`, nothing changes) when the game has nothing published yet, when it
+would remove the launch file, or when `remove.txt` points outside the game. A `remove.txt` in a
+plain replace is also refused (`422`), because there it could only mean something you did not
+intend. `mode` must be `replace` (default) or `merge`; anything else is `400`.
+
+The same parameter works on the socket: `ws/v1/game-upload?gameId=…&mode=merge`. The `ready` frame
+echoes it as `"apply":"merge"`.
 
 The endpoint updates an existing registered game; it never creates the game record — for that, see
 [adding a game from a local folder](#add-a-game-from-a-local-folder). It *can* now mint the game's
@@ -390,6 +430,7 @@ route would have produced — so a client can share one code path across both.
 
 ```text
 wss://api.starhermit.com/ws/v1/game-upload?gameId=$GAME_ID&access_token=$TOKEN
+wss://api.starhermit.com/ws/v1/game-upload?gameId=$GAME_ID&mode=merge&access_token=$TOKEN
 wss://api.starhermit.com/ws/v1/game-upload?displayName=My%20Game&launchPath=index.html&access_token=$TOKEN
 ```
 
@@ -400,7 +441,7 @@ checked once, at the handshake, so an upload that outlives its access token stil
 
 | Direction | Frame | Meaning |
 |---|---|---|
-| server → | `{"type":"ready","mode":"bundle","limitBytes":N,"heartbeatSeconds":15}` | Allowance settled and free space checked. Start sending. `mode` is `bundle` or `create`. |
+| server → | `{"type":"ready","mode":"bundle","apply":"replace","limitBytes":N,"heartbeatSeconds":15}` | Allowance settled and free space checked. Start sending. `mode` is `bundle` or `create`. `apply` is `merge` when you asked for a partial update. |
 | → server | *binary* | Archive bytes, chunked however you like — the server never reassembles messages, so 256 KB–1 MB is a fine default. Concatenated, your frames must be exactly the `.tar.gz`. |
 | server → | `{"type":"ack","bytesReceived":N}` | Receipt progress, roughly every 8 MB. Drive your progress bar from this. |
 | → server | `{"type":"complete"}` | The archive has been sent in full. |
@@ -426,20 +467,24 @@ All upload routes — both HTTP endpoints and the WebSocket — share the same r
 
 | Limit | Value |
 |---|---|
-| Disk allowance per game | **4 GB** (operator-tunable per game) |
+| Disk allowance per game | **2 GB** on starhermit.com (operator-tunable per game; code default 4 GB) |
 | Enforcement | applied **while streaming**, so an oversized push is cut off mid-flight |
 
-Per-push and per-game are deliberately the same number: publishing **replaces** a game's content
-rather than adding to it, so the largest push is also the most disk a game can occupy.
+Per-push and per-game are the same number on a replace. A merge is bounded by the **resulting**
+game size, so a small patch that would make the live tree exceed the allowance is refused.
 
 | Status | Meaning |
 |---|---|
+| `400` | `mode` is neither `replace` nor `merge`. |
+| `409` | A merge against a game that has no published files yet. |
 | `413` | Over the allowance. Body carries `{ "error", "limitBytes" }`. A `413` **without** `limitBytes` is the CDN's ~100 MB body cap, not this — [use the upload socket](#upload-over-a-websocket). |
-| `422` | Malformed archive, or unusable contents (missing launch file, no `client/`, a `server/image.tar` on the create route). Also a **truncated** archive — the ordinary result of a dropped connection mid-upload. |
+| `422` | Malformed archive, or unusable contents (missing launch file, no `client/`, a `server/image.tar` on the create route, a merge that would delete the launch file, `remove.txt` on a replace). Also a **truncated** archive — the ordinary result of a dropped connection mid-upload. |
 | `507` | The server does not have room right now. Checked **before the body is read**, on both the staging and hosting volumes, so a doomed upload is refused rather than half-landed. |
 
 Archives may not escape their root or contain links, and only regular files and directories are
-extracted — symlinks, hardlinks and device nodes are rejected.
+extracted — symlinks, hard links and device nodes are rejected. `git archive` PAX global headers,
+`./`-prefixed names from `tar -czf game.tgz .`, and file names that merely contain `..`
+(`sprite..png`) are accepted. A `..` path segment is still refused.
 
 ### Enable hosting
 
