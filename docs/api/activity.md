@@ -116,6 +116,12 @@ The game feed returns `GameFeedItemDto[]` for one game key (a catalog guid or `"
 ]
 ```
 
-Activity `type` values: `"download"`, `"launch"`, `"external_launch"`. Privacy settings can hide launch/download activity — see [profile.md](profile.md).
+Activity `type` values: `"download"`, `"launch"`, `"external_launch"`.
+
+`/activity/friends` is gated per activity type on the **owner's** privacy setting: launches follow
+`recentLaunchActivity`, downloads follow `recentDownloads`. Each is included when the level is
+`FriendsOnly` or `Public`. An account that has never chosen gets the defaults (launches shared with
+friends, downloads private). An unreadable privacy document is treated as fully private. See
+[profile.md](profile.md).
 
 Errors are `{"error": "..."}` with standard status codes.

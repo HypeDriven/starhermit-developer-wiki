@@ -441,17 +441,18 @@ Content-Type: application/json
 
 ```json
 {
-  "provider": "steam",
-  "providerUserId": "76561198000000000",
+  "provider": "epic",
+  "providerUserId": "epic-account-id",
   "metadata": "{\"displayName\":\"RookPilot\"}"
 }
 ```
 
-Use `steam`, `epic`, `gog`, or your own non-OAuth provider name as appropriate. Obtain the external
-ID from that platform's authenticated SDK/session, not from editable player input. This endpoint
-associates an identity with the StarHermit account; it is not itself proof of Steam/Epic/GOG
-ownership and must not replace the platform's own ticket verification for purchases or bans.
-GitHub and Google identities cannot be self-linked here because they require OAuth.
+Use a **non-reserved** provider name (`epic`, `gog`, or your own storefront id). Do **not** use
+`steam`, `google`, `github`, or any other name the platform treats as an OAuth provider — those
+are rejected even if that provider is not configured. Obtain the external ID from that platform's
+authenticated SDK/session, not from editable player input. This endpoint associates an identity
+with the StarHermit account; it is not itself proof of storefront ownership and must not replace
+the platform's own ticket verification for purchases or bans.
 
 The separate external-library API is optional and currently uses demo synchronization while provider
 integrations are finalized; it is not required for dedicated-server play.

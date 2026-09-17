@@ -4,7 +4,7 @@
 
 ## What StarHermit provides
 
-- **Users & authentication** — public-key registration (no passwords) and OAuth sign-in; see [Authentication](api/auth.md).
+- **Users & authentication** — public-key registration (no passwords) and OAuth sign-in through whichever providers this deployment has credentials for; see [Authentication](api/auth.md).
 - **Profiles & presence** — user profiles, avatars, privacy settings, entitlements, and presence heartbeats; see [Profile](api/profile.md).
 - **Friends** — friend requests and friendship state; see [Friends](api/friends.md).
 - **Text chat** — conversations and messages; see [Chat](api/chat.md).
@@ -30,7 +30,7 @@ All REST routes are versioned: `api/v1/...`. WebSocket routes live under `ws/v1/
 ## Authentication model (overview)
 
 - Access tokens are JWTs with a 15-minute lifetime; refresh tokens rotate and last 7 days. See [Authentication](api/auth.md) for the token format and the refresh/logout endpoints.
-- Send the access token as a `Authorization: Bearer <token>` header on every authenticated request. For `/ws/**` paths only, the token is also accepted as an `?access_token=` query parameter, because browsers cannot set headers on WebSocket handshakes.
+- Send the access token as a `Authorization: Bearer <token>` header on every authenticated request. For `/ws/**` paths only, the credential is also accepted as `?ticket=` (a one-time connection ticket from `POST /api/v1/realtime/connection-tickets`) or as `?access_token=` (still supported). Browsers cannot set headers on WebSocket handshakes.
 - Games additionally use **game-scoped launch tokens** — short-lived JWTs minted per game that fence the caller into that game's API surface. See [Authentication](api/auth.md#game-launch-tokens) and [Games](api/games.md).
 
 ## Two ways to integrate your game

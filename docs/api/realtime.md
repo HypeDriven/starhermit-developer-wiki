@@ -42,6 +42,10 @@ All REST endpoints require authentication and work with both a full user token a
       "leftAt": null
     }
   ],
+  "name": "Friday night",
+  "joinCode": "K7MP2X",
+  "isVisible": false,
+  "revision": 1,
   "createdAt": "2026-07-22T07:00:00Z",
   "openedAt": null,
   "startedAt": null,
@@ -56,6 +60,9 @@ All REST endpoints require authentication and work with both a full user token a
 - `(team, slot)` is a participant's seat coordinate; humans are seated in join order.
 - `gameSessionId` is the bound scripted session, set when the room starts for a game with a `server=` script (see [the bridge](#room-bound-scripted-sessions)); `null` otherwise. It is also included in roster pushes.
 - `result` is the outcome, set when the room closes — host-submitted for host-routed games, script-returned for room-bound sessions.
+- `joinCode` is six characters (read-alike pairs removed). It is the invitation for `join-by-code`. Listings never include it.
+- `isVisible` lists the room in `GET /rooms`. Being open (quick-joinable) and being listed are independent.
+- `revision` bumps only when the host edits configuration (`PATCH`), never when a seat fills. Pass it as `expectedRevision` on `PATCH` for compare-and-swap (`409` on conflict).
 
 **Invite**: `{ "id", "roomId", "gameSlug", "fromUserId", "fromUsername", "toUserId", "status", "createdAt", "notified" }` with `status` one of `pending` | `accepted` | `declined` | `expired` (invites expire when the room closes or starts before they are answered). `notified` appears on the response to `POST /rooms/{id}/invites` and reports whether the invitee's notification reached a live connection; it is `null` when listing.
 
@@ -67,7 +74,12 @@ Base: `https://api.starhermit.com/api/v1/realtime` — so
 | Method | Path | Who | Description |
 |---|---|---|---|
 | POST | `/rooms` | anyone | Create a lobby, optionally with AI players; caller becomes host |
+| GET | `/rooms?gameSlug=` | anyone | Browse open, listed rooms that still have a seat (no code, no roster; max 50) |
+| POST | `/rooms/join-by-code` | anyone | Take a seat with the room's join code (works on unlisted / still-Lobby rooms) |
+| PATCH | `/rooms/{id}` | host | Rename, list/unlist, replace metadata (`expectedRevision` CAS) |
+| POST | `/rooms/{id}/matchmake` | host, lobby | Queue the whole roster as one party/team |
 | GET | `/rooms/{id}` | participants + invitees | Room + roster |
+| POST | `/api/v1/realtime/connection-tickets` | anyone | One-time `?ticket=` for the realtime (and other) sockets |
 | POST | `/rooms/{id}/invites` | participants | Invite a friend; notifies them (`409` on duplicate) |
 | GET | `/rooms/invites` | anyone | Caller's pending room invites (cross-game) |
 | POST | `/rooms/invites/{inviteId}/accept` | invitee | Join the room (seat assigned) |
@@ -83,7 +95,7 @@ Base: `https://api.starhermit.com/api/v1/realtime` — so
 ### Create a room — `POST /rooms`
 
 ```json
-{ "gameSlug": "my-game", "teamCount": 2, "seatsPerTeam": 5, "backfillAfterSeconds": 30, "aiPlayers": 0, "metadata": { "map": "arena" } }
+{ "gameSlug": "my-game", "teamCount": 2, "seatsPerTeam": 5, "backfillAfterSeconds": 30, "aiPlayers": 0, "name": "Friday night", "isVisible": false, "metadata": { "map": "arena" } }
 ```
 
 - `gameSlug` is required for full user tokens. With a game-scoped launch token the slug is taken from the token's `game_scope` (a mismatching body value is rejected with `403`).
@@ -132,6 +144,14 @@ Because one notification covers both invite systems, its payload carries `kind: 
 
 An `Open` room does not wait out its countdown once **every seat is taken** — by humans or by AI players configured at creation. It starts there and then, so the response to `open` (or to the join that filled the last seat) can already be a `Playing` room with `startedAt` set. A room created with AI in every seat but the host's therefore starts the moment it is opened.
 
+`GET /rooms?gameSlug=` browses that game's open, listed rooms that still have a seat, oldest-open first, capped at 50. Each row has name, host name, player/capacity counts and metadata — **no join code and no roster**.
+
+`POST /rooms/join-by-code` with `{ "joinCode": "K7MP2X" }` takes a seat. Codes are whitespace- and case-insensitive. Unlike quick-join this works on an unlisted room still in `Lobby`. The code is released when the room closes.
+
+`PATCH /rooms/{id}` (host): `{ "name", "isVisible", "metadata", "expectedRevision" }`. Omitted fields are left alone; send `name: ""` to clear the name.
+
+`POST /rooms/{id}/matchmake` (host, lobby only) enters the whole roster as one team against another team of the same size. Repeatable `?queues=` names a subset of the game's match shapes, same as `POST /games/{slug}/matchmaking`.
+
 `POST /rooms/quick-join` with `{ "gameSlug": "my-game", "seats": 1 }` places the caller in the **oldest open room with a free seat** for that game slug — AI seats count as taken, so a room whose remaining seats are all AI is skipped. `404` when no room qualifies — the client should then create its own room and open it. Only single-seat quick-join is supported (`seats` must be `1`).
 
 ### Start, seats, leave, result
@@ -165,7 +185,7 @@ Returns the room.
 
 ## WebSocket: `ws/v1/realtime`
 
-Connect to `wss://api.starhermit.com/ws/v1/realtime?roomId=<guid>` with a JWT via the `Authorization` header or the `?access_token=` query parameter. **Participants only** (`403` otherwise); a launch token's `game_scope` must equal the room's `gameSlug`. The newest connection supersedes the user's previous one — the old socket is closed with `PolicyViolation` ("Superseded by a newer connection").
+Connect to `wss://api.starhermit.com/ws/v1/realtime?roomId=<guid>` with a JWT via the `Authorization` header, `?ticket=` from `POST /api/v1/realtime/connection-tickets`, or `?access_token=`. Prefer the ticket: it is one-use and seconds-lived. **Participants only** (`403` otherwise); a launch token's `game_scope` must equal the room's `gameSlug`. The newest connection supersedes the user's previous one — the old socket is closed with `PolicyViolation` ("Superseded by a newer connection").
 
 ### Binary frames (gameplay)
 

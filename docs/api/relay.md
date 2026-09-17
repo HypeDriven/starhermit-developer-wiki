@@ -117,7 +117,7 @@ Connect to:
 wss://api.starhermit.com/ws/v1/relay?sessionId=<relay-id>&titleId=<title-id>
 ```
 
-Authenticate with an `Authorization: Bearer <token>` header or `?access_token=` query parameter.
+Authenticate with an `Authorization: Bearer <token>` header, `?ticket=`, or `?access_token=` query parameter.
 The handshake returns `403` unless the user joined the relay and is still authorized by its bound
 match.
 

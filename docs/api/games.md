@@ -40,9 +40,15 @@ platform-hosted browser game — from `location.hostname`, since the subdomain i
 | GET | `/api/v1/games/{slug}/sessions/mine` | Bearer | Caller's active sessions |
 | GET | `/api/v1/games/{slug}/sessions/{sessionId}` | Bearer | Session detail (participants only) |
 | POST | `/api/v1/games/{slug}/sessions/ai` | Bearer | Create a practice session vs the platform AI |
-| POST | `/api/v1/games/{slug}/matchmaking` | Bearer | Enqueue for nearest-elo matchmaking |
-| GET | `/api/v1/games/{slug}/matchmaking` | Bearer | Latest non-cancelled matchmaking ticket |
+| GET | `/api/v1/games/{slug}/queues` | Bearer | Match shapes this game accepts |
+| POST | `/api/v1/games/{slug}/matchmaking` | Bearer | Enqueue for nearest-elo matchmaking (`?queues=` subset) |
+| GET | `/api/v1/games/{slug}/matchmaking` | Bearer | Latest ticket while it is still joinable |
 | DELETE | `/api/v1/games/{slug}/matchmaking` | Bearer | Cancel queued tickets |
+| GET | `/api/v1/games/{slug}/diagnostics` | JWT (owner) | Live sessions, script metering, queue, webhook health |
+| GET | `/api/v1/games/{slug}/webhooks` | JWT (owner) | List webhook endpoints |
+| POST | `/api/v1/games/{slug}/webhooks` | JWT (owner) | Create a webhook; secret returned once |
+| DELETE | `/api/v1/games/{slug}/webhooks/{id}` | JWT (owner) | Delete a webhook |
+| POST | `/api/v1/games/{slug}/webhooks/{id}/resume` | JWT (owner) | Clear the breaker after fixing the endpoint |
 | POST | `/api/v1/games/{slug}/invites` | Bearer | Invite a friend to a game |
 | GET | `/api/v1/games/{slug}/invites` | Bearer | Incoming pending + all outgoing invites |
 | POST | `/api/v1/games/{slug}/invites/{inviteId}/accept` | Bearer | Accept an invite (creates the session) |
@@ -70,6 +76,7 @@ Returns the game definition plus the caller's stats for that game. `404` if no s
   "leaderboardId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "maxConcurrentSessionsPerPlayer": 20,
   "replaysEnabled": true,
+  "buildId": "s12",
   "me": {
     "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
     "elo": 1200,
@@ -84,12 +91,13 @@ Returns the game definition plus the caller's stats for that game. `404` if no s
 - `leaderboardId` is optional.
 - `me.elo` defaults to `1200`; `wins`/`losses`/`draws` are read from the server-runtime-owned per-player document.
 - `replaysEnabled` says whether this game's finished sessions are kept — read it rather than assuming, and hide your replay UI when it is `false`. See [Replays](#replays).
+- `buildId` names the server logic currently serving the game (`s` + script version, or `c` + image digest prefix). Send it back as `ws/v1/games?build=…` so a stale client is refused with `409 {"error":"build_mismatch"}` before it acts on moved fields. Omitting `build` connects as before.
 
 ## Launch tokens
 
 ### `POST /api/v1/games/{slug}/launch-token`
 
-Mints a game-scoped JWT (default lifetime 60 minutes) carrying `game_scope={slug}` and no permission claims. A scoped token may re-mint a token for its own game — this is the client refresh pattern. Clients should refresh before the token expires; the chess reference client, for example, refreshes every 45 minutes.
+Mints a game-scoped JWT (default lifetime 60 minutes) carrying `game_scope={slug}` and no permission claims. A scoped token may re-mint a token for its own game — this is the client refresh pattern — but renewal is bounded by `launch_chain` (default 12 hours from the original user session). Past that ceiling renewal is `403`. Clients should refresh before the token expires; the chess reference client, for example, refreshes every 45 minutes.
 
 ```json
 {
@@ -335,21 +343,46 @@ Creates a practice session against the platform AI seat: fixed user id `00000000
 
 ## Matchmaking
 
+A game declares the shapes of match it accepts (`game.queues` in a script, or `/describe` for a
+container). A game that declares none has one implicit 1v1. A client that names no queue gets the
+game's first.
+
+### `GET /api/v1/games/{slug}/queues`
+
+```json
+[
+  { "key": "duos", "teams": 2, "teamSize": 2, "players": 4 }
+]
+```
+
 ### `POST /api/v1/games/{slug}/matchmaking`
 
-Enqueues the caller for nearest-elo pairing. Returns `409` if the caller is already queued or at their concurrent-session cap. Status is `queued`, or `matched` (with `sessionId`) if a pairing was found immediately.
+Enqueues the caller for nearest-elo pairing. Repeatable `?queues=` query keys name a **subset** of
+those shapes (e.g. 1v1 and 2v2, not 3v3). Matching only fills a ticket against a shape it allowed.
+An unknown key is `404`; a list empty after validation is `400`. Returns `409` if the caller is
+already queued or at their concurrent-session cap.
+
+The search starts in a narrow elo band and widens while the ticket waits (default 100, +10/s).
+Statuses: `queued`, `matched`, `cancelled`, `expired` (waited past the cap, default 300 s, without
+finding anyone — offer a practice game rather than spin). A party is a [realtime room](realtime.md):
+`POST /api/v1/realtime/rooms/{id}/matchmake` (host, lobby) enters the whole roster as one team.
 
 ```json
 {
   "ticketId": "b3b7c8d2-5c1e-4f3a-9e2d-1a2b3c4d5e6f",
-  "status": "matched",
-  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e"
+  "status": "queued",
+  "sessionId": null,
+  "waitedSeconds": 12,
+  "searchEloBand": 220,
+  "maxWaitSeconds": 300
 }
 ```
 
 ### `GET /api/v1/games/{slug}/matchmaking`
 
-Returns the caller's latest non-cancelled ticket (same `GameMatchmakingDto` shape), or `404`.
+Returns the caller's latest ticket, or `404`. A `matched` ticket is reported **only while its
+session is still `active`**. After the match ends this is `404` so the lobby offers a new match
+instead of pointing at a dead session id.
 
 ### `DELETE /api/v1/games/{slug}/matchmaking`
 
@@ -450,7 +483,7 @@ https://dashboard.starhermit.com/game-invite/<userId>/<gameSlug>
 
 When the recipient opens the link, the **dashboard** (not the game) does the automated friend-invite part — no new backend endpoints are involved, it composes the existing APIs:
 
-1. Signs them in (Google OAuth), or reuses their existing session. The link intent survives the sign-in round trip.
+1. Signs them in (OAuth via a live provider), or reuses their existing session. The link intent survives the sign-in round trip.
 2. Shows a consent dialog naming the sharer and the game, then **friends the sharer**: it accepts the sharer's pending friend request if one exists, otherwise it sends one (`POST /api/v1/me/friend-requests`).
 3. Prompts them to pick a nickname if their account has none (games display profile nicknames — see [Profile](profile.md)).
 4. Launches the game (the platform-hosted `https://<game-id>.starhermit.com` copy, with a launch token in the `#game_token=` fragment as usual).
@@ -499,7 +532,10 @@ The caller's finished sessions. `limit` defaults to `10` and is clamped to 1–5
 
 ### `GET /api/v1/games/{slug}/replays/{sessionId}`
 
-The full final state JSON as archived by the platform. Participants only.
+The full final state JSON as archived by the platform. Participants only. `recordedWith` is what
+produced the document (script version, runtime, tick rate), stamped at finish — so a later redeploy
+does not make old replays look like the current code wrote them. Matches finished before this
+existed report `null`.
 
 ```json
 {
@@ -507,7 +543,8 @@ The full final state JSON as archived by the platform. Participants only.
   "players": [ { "userId": "...", "username": "alice" }, { "userId": "...", "username": "bob" } ],
   "finishedAt": "2026-07-20T15:42:37Z",
   "result": { "kind": "white-win", "reason": "checkmate" },
-  "state": { "...": "game-specific final session state" }
+  "state": { "...": "game-specific final session state" },
+  "recordedWith": { "scriptVersion": 12, "runtime": "script", "tickRateHz": 0.25 }
 }
 ```
 
@@ -516,14 +553,14 @@ The full final state JSON as archived by the platform. Participants only.
 - Session `status` is `"active"` or `"finished"`.
 - Each session gets a per-session chat conversation (type `"game"`) so opponents can chat and voice-call **without being friends** (see [Chat](chat.md) and [Voice](voice.md)).
 - Concurrent-session cap per player defaults to `20`.
-- Matchmaking ticket statuses: `queued` | `matched` | `cancelled`.
+- Matchmaking ticket statuses: `queued` | `matched` | `cancelled` | `expired`.
 - Invite statuses: `pending` | `accepted` | `declined` | `cancelled`.
 - **Sessions are created via matchmaking, invite-accept, the AI endpoint, or a realtime room start** (room-bound sessions — see [Realtime Rooms](realtime.md#room-bound-scripted-sessions)) — there is no "create lobby" endpoint.
 - Elo updates come from the authoritative script (`eloUpdates`) or container control channel, are denormalized onto `GamePlayerState.Elo`, and are published to the game's leaderboard (score type `elo`). **Clients can never submit scores to a game leaderboard directly** (see [Leaderboards](leaderboards.md)).
 
 ## Gameplay WebSocket
 
-`ws/v1/games?sessionId={guid}` (version-neutral route). Authenticate with the `Authorization` header or the `?access_token=` query parameter. Participants only (`403`); when connecting with a launch token, its `game_scope` must match the session's game.
+`ws/v1/games?sessionId={guid}` (version-neutral route). Authenticate with the `Authorization` header, `?ticket=`, or `?access_token=`. Participants only (`403`); when connecting with a launch token, its `game_scope` must match the session's game. A finished session is `410 {"error":"session_not_active"}`. Optional `?build=` is the `buildId` from `GET /games/{slug}` — mismatch is `409 {"error":"build_mismatch"}`.
 
 - Text frames only, max 16 KB per frame.
 - A newer connection supersedes the old one: the previous connection is closed with `PolicyViolation`.
@@ -556,12 +593,39 @@ For a script runtime, durable commands run through `onPlayerMessage`; explicitly
   only. A separate frame type on purpose: this is platform truth, not script-relayed game data.
   Emitted from both runtimes' durable update paths. See
   [Achievements](achievements.md#server-authoritative-game-achievements).
-- `resumed` — container games only: the server process restarted and restored this session from a
-  snapshot. Discard local prediction; `lostMs` reports the rewind and the game should send a normal
-  full-state `game` frame next.
-- `abandoned` — container games only: recovery was unsafe or failed, so the platform ended the
-  session without a winner or elo update. Known reasons are `server_failure` and `restore_failed`.
-  See [failure and recovery](container-games.md#failure-and-recovery).
+- `resumed` — the session changed hands (container restore, or another Api process took the
+  ownership lease). Discard local prediction; `lostMs` is the gap since the last durable write.
+  The first attach after a handoff is announced once per player.
+- `abandoned` — the platform ended the session without a winner or elo update. Reasons:
+  `players_left`, `idle_no_players`, `superseded` (the player asked for a new game of this title),
+  `server_failure`, `restore_failed`, `operator_ended` (the game's owner ended it). Stored as
+  `{ "kind": "abandoned", "reason": "…" }`.
+
+## Owner diagnostics and webhooks
+
+Owner-only. A game-scoped launch token cannot reach these.
+
+### `GET /api/v1/games/{slug}/diagnostics`
+
+A snapshot of live sessions (active, finished, live connections), script metering against CPU /
+memory / statement budgets, the matchmaking queue (longest wait and how far it has widened),
+webhook endpoint health, and this process's unflushed write buffer.
+
+### Webhooks
+
+`GET/POST/DELETE /api/v1/games/{slug}/webhooks` and `POST .../{id}/resume`. Up to 5 endpoints per
+game. Events: `session.created`, `session.finished` (omit `events` to subscribe to both). The
+signing secret is returned **once**, on create.
+
+The platform POSTs JSON with:
+
+- `X-Starhermit-Signature: t=<unix>,v1=<hmac-sha256>` over `"<t>.<body>"`
+- `X-Starhermit-Event-Id` — the event (idempotency key; repeats across retries)
+- `X-Starhermit-Delivery` — this attempt
+
+URL must be https and must not resolve to a private / loopback / CGNAT range (checked at
+registration and again before each send). Redirects are not followed. Failed endpoints back off
+and are disabled after consecutive failures; `resume` clears the breaker.
 
 ### Runtime timing
 

@@ -13,13 +13,16 @@ A StarHermit authoritative game can be defined by a **single JavaScript file** e
 Expose the handlers on `globalThis.game`. Three optional **static** declarations sit alongside them:
 `tickRateHz` asks the platform how often to invoke `onTick` — declare it if your game depends on the
 tick, since a game that says nothing is ticked once every four seconds (see [Tick rate](#tick-rate)),
-`achievements` registers the game's achievements (see [Achievements](#achievements)), and `replays`
-asks the platform to keep your finished sessions (see [Replays](#replays)):
+`achievements` registers the game's achievements (see [Achievements](#achievements)), `replays`
+asks the platform to keep your finished sessions (see [Replays](#replays)), and `queues` declares
+the shapes of match matchmaking accepts (see [Games — Matchmaking](games.md#matchmaking)). A game
+that declares no queues has one implicit 1v1:
 
 ```js
 globalThis.game = {
   tickRateHz: 0, // turn-based: opt out of periodic ticks
   replays: true, // keep finished sessions as replays
+  queues: [{ key: "duos", teams: 2, teamSize: 2 }],
   achievements: [
     { key: "first-win", name: "First Win", description: "Win a match.", points: 10 }
   ],

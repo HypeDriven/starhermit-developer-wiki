@@ -173,7 +173,7 @@ periodically refetch `/unread`.
 
 ## WebSocket: `ws/v1/chat`
 
-Connect to `wss://api.starhermit.com/ws/v1/chat` with a JWT via the `Authorization` header or the `?access_token=` query parameter.
+Connect to `wss://api.starhermit.com/ws/v1/chat` with a JWT via the `Authorization` header, `?ticket=`, or `?access_token=`.
 
 This is a **pure server→client push channel**: client frames are ignored (only `Close` is honored). Each frame is an envelope:
 

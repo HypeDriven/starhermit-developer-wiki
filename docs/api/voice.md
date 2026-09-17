@@ -15,7 +15,8 @@ Base: `https://api.starhermit.com/api/v1/voice`.
 | GET | `/rooms/{roomId}` | JWT | Get a room |
 | POST | `/rooms/{roomId}/join` | JWT | Join a room (required before the WS) |
 | POST | `/rooms/{roomId}/leave` | JWT | Leave a room |
-| POST | `/rooms/{roomId}/mute` | JWT | Set your mute state |
+| POST | `/rooms/{roomId}/mute` | JWT | Set your own mute state |
+| POST | `/rooms/{roomId}/participants/{userId}/server-mute` | JWT (creator) | Host mute the participant cannot lift |
 | POST | `/rooms/{roomId}/close` | JWT | Close a room (creator only) |
 
 ### Create a room
@@ -46,6 +47,7 @@ Returns a `VoiceRoomDto`.
       "userId": "<guid>",
       "username": "alice",
       "isMuted": false,
+      "isServerMuted": false,
       "isConnected": true,
       "joinedAt": "2026-07-22T07:01:00Z"
     }
@@ -55,17 +57,21 @@ Returns a `VoiceRoomDto`.
 
 ### Join, leave, mute, close
 
-`POST /rooms/{roomId}/join` → `VoiceRoomDto`. This REST join is **required** before opening the WebSocket; connecting without it returns `403`.
+`POST /rooms/{roomId}/join` → `VoiceRoomDto`. This REST join is **required** before opening the WebSocket; connecting without it returns `403`. Rejoining clears the participant's **own** mute (`isMuted`); a host's `isServerMuted` survives leave and reconnect.
 
 `POST /rooms/{roomId}/leave` → `204`.
 
-`POST /rooms/{roomId}/mute` with `{ "muted": true }` → `204`.
+`POST /rooms/{roomId}/mute` with `{ "muted": true }` → `204`. This is the participant's own mute and cannot clear a host mute.
+
+`POST /rooms/{roomId}/participants/{userId}/server-mute` with `{ "muted": true }` → `204` (creator only). Audio is dropped if either mute is set.
 
 `POST /rooms/{roomId}/close` → `204` (creator only).
 
+State your mute on connect rather than inheriting whatever the row remembers.
+
 ## WebSocket: `ws/v1/voice`
 
-Connect to `wss://api.starhermit.com/ws/v1/voice?roomId=<guid>` with a JWT via the `Authorization` header or the `?access_token=` query parameter. A prior REST `join` is required.
+Connect to `wss://api.starhermit.com/ws/v1/voice?roomId=<guid>` with a JWT via the `Authorization` header, `?ticket=`, or `?access_token=`. A prior REST `join` is required.
 
 The protocol is mixed:
 

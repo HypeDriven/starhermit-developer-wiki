@@ -1,6 +1,6 @@
 # Authentication
 
-StarHermit has **no password authentication**. There are two sign-in flows: public-key authentication (Ed25519, ECDSA-P256, or RSA-PSS, with email-verified registration) and OAuth (Google OIDC and GitHub). All auth routes live under `api/v1/auth` and are anonymous. This page also covers token lifecycles and the game-scoped launch tokens used by games.
+StarHermit has **no password authentication**. There are two sign-in flows: public-key authentication (Ed25519, ECDSA-P256, or RSA-PSS, with email-verified registration) and OAuth. All auth routes live under `api/v1/auth` and are anonymous except where noted. This page also covers token lifecycles, game-scoped launch tokens, and WebSocket connection tickets.
 
 Errors are returned as `{"error":"..."}` with standard status codes (400/401/403/404/409/422/429).
 
@@ -14,10 +14,14 @@ Errors are returned as `{"error":"..."}` with standard status codes (400/401/403
 | POST | `/api/v1/auth/public-key/complete` | Anonymous | Submit a signed challenge to log in |
 | POST | `/api/v1/auth/refresh` | Anonymous | Rotate a refresh token for a new token pair |
 | POST | `/api/v1/auth/logout` | Anonymous | Revoke a refresh token |
+| POST | `/api/v1/auth/public-key/revoke-request` | Anonymous | Email a link that revokes every active key on the matching account |
+| GET | `/api/v1/auth/public-key/revoke/confirm` | Emailed one-time token | Confirm that revocation; issues no session |
+| GET | `/api/v1/auth/oauth/providers` | Anonymous | Live OAuth providers this deployment can actually sign people in with |
 | GET | `/api/v1/auth/oauth/{provider}/authorize` | Anonymous | Redirect to the OAuth provider |
 | GET | `/api/v1/auth/oauth/{provider}/callback` | Anonymous | OAuth callback; redirects to the frontend with tokens |
 | GET | `/api/v1/auth/oauth/link/confirm` | Emailed one-time token | Confirm an identity link held for account-owner approval |
 | POST | `/api/v1/games/{slug}/launch-token` | JWT | Mint a game-scoped launch token (see below) |
+| POST | `/api/v1/realtime/connection-tickets` | JWT | One-time ticket for opening a `/ws/**` socket |
 
 ## Public-key registration
 
@@ -172,7 +176,30 @@ Revokes the given refresh token. Returns 200.
 
 ## OAuth
 
-Providers: `google`, `github`.
+The platform ships seven providers: `google`, `github`, `discord`, `twitch`, `gitlab`, `linkedin`,
+`bitbucket`. **Only providers this deployment has credentials for are live.** A client must not
+hard-code the list.
+
+### `GET /api/v1/auth/oauth/providers`
+
+Anonymous. Returns the live providers in the order they should be offered:
+
+```json
+{
+  "providers": [
+    {
+      "provider": "google",
+      "displayName": "Google",
+      "authorizeUrl": "/api/v1/auth/oauth/google/authorize",
+      "linksExistingAccountsByEmail": true
+    }
+  ]
+}
+```
+
+`linksExistingAccountsByEmail` is whether a sign-in at that provider can find an account the person
+already has (the operator's trust setting for that provider). Asking to authorize a name that is not
+live is `404`, not a redirect into the provider's own error page.
 
 ### `GET /api/v1/auth/oauth/{provider}/authorize?link=&client=`
 
@@ -188,8 +215,16 @@ Returns a 302 redirect to the frontend URL with the tokens in the fragment:
 #access_token=…&refresh_token=…&token_type=Bearer&expires_in=900
 ```
 
+If the provider refuses the token exchange, the callback answers `409` naming the provider's error
+**code** (the description stays in the server log).
+
 A normal sign-in finds or creates the user (username `oauth-{provider}-{guid}`, role `User`) and the
-new session records `auth_method=oauth`. This matters because only an OAuth-authenticated session
+new session records `auth_method=oauth`. A sign-in whose `(provider, providerUserId)` is unknown is
+**adopted onto an existing account** only when the provider's assertion is trusted, exactly one
+account already holds that verified email, and that account has no identity from this provider yet.
+Anything else provisions a separate account. Adoption emails the account naming the provider.
+
+This matters because only an OAuth-authenticated session
 may perform high-impact credential changes:
 
 - add or revoke account public keys;
@@ -235,7 +270,9 @@ a GitHub Actions workflow.
 }
 ```
 
-The token carries a `game_scope` claim and defaults to a 60-minute lifetime. Full details are in [Games](games.md).
+The token carries a `game_scope` claim and defaults to a 60-minute lifetime. Renewal copies a
+`launch_chain` start time forward; past 12 hours (default) renewal is `403` and the holder must go
+back to a full account session. Full details are in [Games](games.md).
 
 ### Game-scope fencing
 
@@ -282,7 +319,25 @@ curl -s -X POST https://api.starhermit.com/api/v1/auth/logout \
   -d '{"refreshToken":"dGhpcyBpcyBh..."}'
 ```
 
-OAuth login is browser-driven: open `/api/v1/auth/oauth/google/authorize` (or `github`), complete the provider consent, and the callback lands the user on the frontend with `#access_token=…&refresh_token=…` in the URL fragment.
+OAuth login is browser-driven: read `GET /api/v1/auth/oauth/providers`, open a live provider's
+`authorizeUrl`, complete consent, and the callback lands the user on the frontend with
+`#access_token=…&refresh_token=…` in the URL fragment.
+
+## Emailed key revocation
+
+For an owner who cannot reach `DELETE /me/public-keys` (no OAuth session, or locked out by a stolen
+key). `POST /api/v1/auth/public-key/revoke-request` with `{ "email": "…" }` holds a request and
+emails a link. `GET /api/v1/auth/public-key/revoke/confirm?token=…` revokes **every** active key on
+that account and ends the sessions they authenticated. Both are unauthenticated, answer `202` with
+the same body whatever they find, and **issue no session**.
+
+## WebSocket connection tickets
+
+`POST /api/v1/realtime/connection-tickets` exchanges the caller's bearer token for a one-time ticket
+valid about 30 seconds. Pass it as `?ticket=` on any `/ws/v1/*` handshake. It carries the caller's
+claims verbatim (including `game_scope` and `pk`), is refused on REST, and is spent on first use.
+Any authenticated caller may ask, including a game-scoped launch token. `?access_token=` still works
+until clients have moved.
 
 ## Embedded onboarding for native/storefront games
 

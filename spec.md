@@ -20,9 +20,9 @@ patterns, not the subject of the docs.
 - `docs/starhermit-txt.md` — the manifest every published game needs, where it must sit in the uploaded
   folder, and why that folder should be the distributable build (everything beside the manifest is
   uploaded and served).
-- `docs/getting-started.md` — base URLs, versioning, the auth model, and the ways to integrate: a
-  platform game published from GitHub or uploaded as a folder, with an optional script or container
-  server, or an external client calling the REST/WS API directly.
+- `docs/getting-started.md` — base URLs, versioning, the auth model (including WebSocket connection
+  tickets), and the ways to integrate: a platform game published from GitHub or uploaded as a folder,
+  with an optional script or container server, or an external client calling the REST/WS API directly.
 - `docs/api/*.md` — one page per area: `auth`, `games`, `game-scripts`, `container-games`, `profile`,
   `friends`, `chat`, `voice`, `catalog`, `activity`, `achievements`, `leaderboards`,
   `external-libraries`, `relay`, `realtime`, `github-games`, `publisher`.

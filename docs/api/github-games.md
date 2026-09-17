@@ -56,8 +56,11 @@ Players can override these defaults per game through the
 | POST | `/api/v1/me/github-games` | JWT | Register a game from a repo URL → `201 GitHubGameDto` |
 | POST | `/api/v1/me/github-games/upload` | JWT | **Add a game from a local folder** — no repository at all → `201 { game, bytesReceived }` |
 | POST | `/api/v1/me/github-games/{id}/claim` | JWT | Take ownership after proving repository control by GitHub link or manifest owner → `GitHubGameDto` |
+| PUT | `/api/v1/me/github-games/{id}/url` | JWT | Point an existing game at a different URL; uid and playtime survive |
 | GET | `/api/v1/me/github-games` | JWT | List your registered GitHub games → `GitHubGameDto[]` |
 | GET | `/api/v1/me/github-games/{id}/stats` | JWT (owner) | **Audience figures for a game you added** → `GameStatsDto` |
+| GET | `/api/v1/me/github-games/{id}/sessions` | JWT (owner) | Live sessions of this game's server |
+| DELETE | `/api/v1/me/github-games/{id}/sessions/{sessionId}` | JWT (owner) | End one live session (`abandoned` / `operator_ended`) |
 | POST | `/api/v1/me/github-games/{id}/transfer` | JWT | Transfer a game to another user → `GitHubGameDto` |
 | DELETE | `/api/v1/me/github-games/{id}` | JWT | Remove a registered game → `204` |
 | POST | `/api/v1/me/github-games/{id}/bundle` | JWT | Publish a raw `.tar.gz` containing client files and/or a saved container image. `?mode=merge` patches live client files instead of replacing them |
@@ -97,7 +100,8 @@ Despite its historical name, `repoUrl` accepts three launch sources:
   without trusted manifest metadata; a direct hosted URL is itself the launch location.
 - For verified repository owners the platform validates `starhermit.txt`.
 - An optional `server=` script or `container.image=` backend provisions an authoritative game (`gameSlug`); see [game-scripts.md](game-scripts.md) and [container-games.md](container-games.md). Container hosting is open to any signed-in user on starhermit.com; a self-hosted deployment can restrict it to an operator allowlist.
-- Limits: 100 games per user. Registering a duplicate returns `409`.
+- **A declared server backend needs a proven owner.** Submitting a repo that declares `server=` or `container.image=` without GitHub-login or `owner=` proof is `403` (naming both proofs), not a browser-only listing that pretends to have a backend.
+- Limits: 100 games per user (operator-overridable per account). Registering a duplicate returns `409`.
 
 Registration/deployment statuses include: `InvalidUrl`, `LimitReached`, `Duplicate`, `MissingManualMetadata`, `MissingStarhermitTxt`, `InvalidLaunchPath`, `InvalidServerScriptPath`, `InvalidContainerImage`, `ServerProvisionConflict`, `RemovedByOwner`.
 
@@ -225,7 +229,9 @@ not fit. The tiles are not the same shape.
 
 Keep the subject in the centre so both crops look right. SVG covers show on the web library; the
 Windows client cannot decode SVG, so that tile shows the favicon instead. A game with no cover at
-all falls back to its favicon (`GET /api/v1/github-games/{id}/icon`).
+all falls back to its favicon (`GET /api/v1/github-games/{id}/icon`). The icon is resolved from the
+URL you submitted and, when the platform hosts the game, from the copy it serves at
+`<uid>.starhermit.com` — so an uploaded bundle with a favicon in its files still gets an icon.
 
 ### Audience figures for your game
 
@@ -503,6 +509,29 @@ extracted — symlinks, hard links and device nodes are rejected. `git archive` 
 ```
 
 `commit` is optional. Pinning a sha/branch queues a redeploy; poll `GET /api/v1/me/github-games/{id}/deployment` for status.
+
+This is refused for a game that names no repository (an uploaded bundle): pinning a commit is what
+moves a game onto its repository, and a bundle-created game has none. Redeploying an uploaded game
+verifies the files still on the volume rather than fetching github.com.
+
+### Move a game to a new URL
+
+`PUT /api/v1/me/github-games/{id}/url`
+
+```json
+{ "repoUrl": "https://github.com/you/new-repo", "displayName": "optional for a hosted URL" }
+```
+
+The row survives — uid, `<uid>.starhermit.com`, playtime, ratings — and is redeployed from the
+destination. A github destination must be one the caller can prove they control (`403` otherwise),
+and its `starhermit.txt` must not name a *different* `owner=` (`403`). A scripted or container
+backend is disabled unless the destination declares one.
+
+### Live sessions (owner)
+
+`GET /api/v1/me/github-games/{id}/sessions` lists active sessions of the game's server.
+`DELETE .../sessions/{sessionId}` ends one through the platform abandonment path (no winner, no
+elo, reason `operator_ended`). That returns the capacity seat a stuck session was holding.
 
 ## DTOs
 

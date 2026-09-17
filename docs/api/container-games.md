@@ -284,10 +284,20 @@ restarted too often. The platform finishes it without a winner or elo change and
 ```
 
 `reason` is `server_failure` when recovery is unsafe or the replacement never starts, and
-`restore_failed` when recreating the session fails. A repeatedly crashing deployment is disabled.
+`restore_failed` when recreating the session fails. Publishing a new image restores live sessions
+into the replacement (or abandons those too stale). A repeatedly crashing deployment is disabled
+(`failed`) and is **not** woken by player demand.
+
+A deployment with no live sessions is stopped after 15 minutes of idle (operator-configurable).
+The next session request against a `stopped` deployment wakes it (`pending` → health gate →
+`running`); losing that race is `503` saying the game is starting. Only `stopped` is woken this
+way — never `failed`.
 
 Design `POST /sessions` restoration and snapshot cadence as part of the game protocol, not as an
 optional optimization.
+
+The game's owner can list and end stranded sessions:
+`GET`/`DELETE /api/v1/me/github-games/{id}/sessions[/{sessionId}]`.
 
 ## See also
 

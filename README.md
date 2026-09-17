@@ -55,21 +55,21 @@ WebSockets under `ws/v1/...`, JWT bearer auth
 
 | Area | Page | What's inside |
 |---|---|---|
-| Auth | [auth.md](docs/api/auth.md) | Public-key registration/login, Google & GitHub OAuth, refresh rotation, launch tokens & game-scope fencing |
-| Games | [games.md](docs/api/games.md) | Sessions, elo matchmaking, friend invites, per-player controls, **per-player game settings**, AI practice, replays, `ws/v1/games` protocol |
+| Auth | [auth.md](docs/api/auth.md) | Public-key registration/login, live OAuth providers (`GET /auth/oauth/providers`), refresh rotation, launch tokens & game-scope fencing, WebSocket connection tickets |
+| Games | [games.md](docs/api/games.md) | Sessions, declared match queues, elo matchmaking, friend invites, per-player controls and settings, AI practice, opt-in replays, owner diagnostics/webhooks, `ws/v1/games` protocol |
 | Game scripts | [game-scripts.md](docs/api/game-scripts.md) | Authoring the server-side JS rules file (Jint sandbox contract, budgets, tick rate, elo, achievements, replays) |
 | Container game servers | [container-games.md](docs/api/container-games.md) | Shipping authoritative game logic as a digest-pinned container (protocol, streams, snapshots, isolation, recovery) |
 | Profile | [profile.md](docs/api/profile.md) | `me`, avatars, privacy settings, terms acceptance, OAuth-controlled public-key credentials, linked identities, entitlements, presence heartbeat |
 | Friends | [friends.md](docs/api/friends.md) | Friend requests, friend list with online/current-game presence |
 | Chat | [chat.md](docs/api/chat.md) | Conversations, messages, unread state, invites, `ws/v1/chat` push events, in-game chat pattern |
-| Voice | [voice.md](docs/api/voice.md) | Voice rooms, `ws/v1/voice` audio relay + WebRTC signaling |
+| Voice | [voice.md](docs/api/voice.md) | Voice rooms, participant mute vs host server-mute, `ws/v1/voice` audio relay + WebRTC signaling |
 | Catalog | [catalog.md](docs/api/catalog.md) | Software titles, builds, downloads, cloud saves, wishlist, ratings & reviews |
 | Activity | [activity.md](docs/api/activity.md) | Launch sessions, playtime, friends' activity feeds |
 | Achievements | [achievements.md](docs/api/achievements.md) | Server-authoritative game achievements (script or container), client-claimed catalog-title achievements, secret achievements |
 | Leaderboards | [leaderboards.md](docs/api/leaderboards.md) | Definitions, entries, friends-only views, server-runtime-owned elo boards |
 | External libraries | [external-libraries.md](docs/api/external-libraries.md) | Linking Steam/Epic/GOG libraries, external launch URIs |
 | Relay | [relay.md](docs/api/relay.md) | Match-bound opaque byte fan-out with roster authorization and tick-aware rate limits (`ws/v1/relay`) |
-| Realtime rooms | [realtime.md](docs/api/realtime.md) | Lobbies, friend invites, quick-join matchmaking, AI-seat backfill, host-authoritative frame routing (`ws/v1/realtime`) |
+| Realtime rooms | [realtime.md](docs/api/realtime.md) | Lobbies, browse/join-by-code, friend invites, party matchmaking, AI-seat backfill, host-authoritative frame routing (`ws/v1/realtime`) |
 | GitHub games | [github-games.md](docs/api/github-games.md) | Publishing from GitHub, a hosted URL, **a local folder**, or an uploaded client/container bundle — over HTTP or **the `ws/v1/game-upload` socket for large builds** (`starhermit.txt`, hosting, deployments, **your audience figures**) |
 | Publisher | [publisher.md](docs/api/publisher.md) | Publisher/member management, title & build publishing, achievement/leaderboard/entitlement management |
 
