@@ -127,7 +127,7 @@ def authenticate(api, public_key, private_key):
 
     # Public JSON is camelCase; the server verifies its ChallengePayload serialization, whose
     # property names and order are the PascalCase sequence below.
-    signed_payload = json.dumps({
+    payload = {
         "ChallengeId": p["challengeId"],
         "Fingerprint": p["fingerprint"],
         "Issuer": p["issuer"],
@@ -135,7 +135,16 @@ def authenticate(api, public_key, private_key):
         "Expiry": p["expiry"],
         "Nonce": p["nonce"],
         "ClientTimestamp": p["clientTimestamp"],
-    }, separators=(",", ":")).encode()
+    }
+    # System.Text.Json escapes '+' in string fields (the Base64 nonce) as \u002B.
+    # DateTimeOffset fields keep literal '+' in their offsets: do not replace globally.
+    fields = []
+    for name, value in payload.items():
+        encoded = json.dumps(value)
+        if name == "Nonce":
+            encoded = encoded.replace("+", r"\u002B")
+        fields.append(json.dumps(name) + ":" + encoded)
+    signed_payload = ("{" + ",".join(fields) + "}").encode("utf-8")
 
     seed = base64.b64decode(private_key, validate=True)
     signature = Ed25519PrivateKey.from_private_bytes(seed).sign(signed_payload)

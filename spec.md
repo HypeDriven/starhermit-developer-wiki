@@ -36,7 +36,8 @@ patterns, not the subject of the docs.
   `ai-prompts` (copy-pasteable prompts for an AI coding assistant, one per feature plus a mega-prompt),
   `dedicated-server-onboarding` (push a container bundle, renew its server token, onboard
   Steam/Epic/GOG/native players via public-key registration without OAuth), `ci-cd-build-upload`
-  (enrol a labelled machine key from an OAuth session, authenticate a pipeline by signed challenge,
+  (enrol a labelled machine key from an OAuth session, authenticate a pipeline by signed challenge
+  with the server’s exact JSON escaping (including Base64 nonce plus signs),
   and upload client or container builds over HTTP/WebSocket), and `claim-existing-game` (prove
   repository control and take over an existing listing).
 
