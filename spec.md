@@ -26,6 +26,8 @@ patterns, not the subject of the docs.
 - `docs/api/*.md` — one page per area: `auth`, `games`, `game-scripts`, `container-games`, `profile`,
   `friends`, `chat`, `voice`, `catalog`, `activity`, `achievements`, `leaderboards`,
   `external-libraries`, `relay`, `realtime`, `github-games`, `publisher`.
+  The authentication page includes direct-browser game sign-in: a provider chooser, return URL
+  validation, game-scoped token handling and a copyable Sign in button example.
 - `docs/sdk/*.md` — one page per maintained client SDK: `unity` (the `com.starhermit.sdk` Unity package —
   install, client construction, credentials, a map from each API page to its typed service, sockets,
   errors and retries, credential storage, and forward compatibility). These pages describe how to reach

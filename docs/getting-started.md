@@ -33,6 +33,8 @@ All REST routes are versioned: `api/v1/...`. WebSocket routes live under `ws/v1/
 - Send the access token as a `Authorization: Bearer <token>` header on every authenticated request. For `/ws/**` paths only, the credential is also accepted as `?ticket=` (a one-time connection ticket from `POST /api/v1/realtime/connection-tickets`) or as `?access_token=` (still supported). Browsers cannot set headers on WebSocket handshakes.
 - Games additionally use **game-scoped launch tokens** — short-lived JWTs minted per game that fence the caller into that game's API surface. See [Authentication](api/auth.md#game-launch-tokens) and [Games](api/games.md).
 
+A hosted game opened directly in the browser can offer a [Sign in button](api/auth.md#sign-in-from-a-directly-opened-browser-game). Starhermit handles sign-in or account creation and returns a game-scoped token straight to the game.
+
 ## Two ways to integrate your game
 
 1. **Platform-hosted game.** You publish a game from a GitHub repo with a `starhermit.txt` manifest — or, if it does not live in a repository, [upload the folder directly](api/github-games.md#add-a-game-from-a-local-folder) and skip git entirely. It may be browser-only, use a sandboxed `server.js`, or point to a digest-pinned container image for server logic. The platform serves the game at `<slug>.starhermit.com` with `/api` and `/ws` proxied same-origin. The script path is demonstrated end-to-end by the chess reference implementation at <https://github.com/HypeDriven/starhermit-chess>. See [GitHub Games](api/github-games.md), [Game Scripts](api/game-scripts.md), [Container Game Servers](api/container-games.md), and the [Integration Walkthrough](tutorials/chess-walkthrough.md).

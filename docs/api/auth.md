@@ -16,6 +16,7 @@ Errors are returned as `{"error":"..."}` with standard status codes (400/401/403
 | POST | `/api/v1/auth/logout` | Anonymous | Revoke a refresh token |
 | POST | `/api/v1/auth/public-key/revoke-request` | Anonymous | Email a link that revokes every active key on the matching account |
 | GET | `/api/v1/auth/public-key/revoke/confirm` | Emailed one-time token | Confirm that revocation; issues no session |
+| GET | `/api/v1/auth/games/{gameId}/sign-in` | Anonymous | Sign in or create an account, then return directly to a hosted game |
 | GET | `/api/v1/auth/oauth/providers` | Anonymous | Live OAuth providers this deployment can actually sign people in with |
 | GET | `/api/v1/auth/oauth/{provider}/authorize` | Anonymous | Redirect to the OAuth provider |
 | GET | `/api/v1/auth/oauth/{provider}/callback` | Anonymous | OAuth callback; redirects to the frontend with tokens |
@@ -205,11 +206,14 @@ live is `404`, not a redirect into the provider's own error page.
 
 Returns a 302 redirect to the provider and sets an `oauth_state` cookie (HttpOnly, SameSite=Lax, 10
 minutes). `link=true` starts linking the identity to the currently logged-in user; linking requires
-recent authentication (within 5 minutes). `client` selects a supported client redirect.
+recent authentication (within 5 minutes). `client` selects a supported client redirect. For a
+directly opened game, use `gameId` and optional `returnUrl` instead; see
+[Sign in from a directly opened browser game](#sign-in-from-a-directly-opened-browser-game).
 
 ### `GET /api/v1/auth/oauth/{provider}/callback?code=&state=`
 
-Returns a 302 redirect to the frontend URL with the tokens in the fragment:
+For ordinary account sign-in, returns a 302 redirect to the frontend URL with the tokens in the
+fragment (game sign-in instead returns a scoped token directly to the game, as described below):
 
 ```
 #access_token=…&refresh_token=…&token_type=Bearer&expires_in=900
@@ -258,6 +262,88 @@ a GitHub Actions workflow.
 
 - **Access token** — JWT, 15-minute lifetime (`expires_in=900`). Claims include `sub` (the user id) plus `permission` and role claims. Revocation takes effect immediately.
 - **Refresh token** — An opaque rotating token with a 7-day lifetime. Each refresh issues a new refresh token and revokes the old one; reusing a revoked token revokes the entire token family.
+
+## Sign in from a directly opened browser game
+
+A hosted game opened outside the dashboard can show a **Sign in** button linking to:
+
+```text
+https://api.starhermit.com/api/v1/auth/games/{gameId}/sign-in
+```
+
+`gameId` is the game's immutable UUID (the subdomain in `{gameId}.starhermit.com`). Starhermit
+shows its enabled sign-in providers. Continuing signs in an existing player or creates a new
+account using the normal OAuth account-matching rules, then redirects **straight back to the
+game**, without visiting the dashboard.
+
+The optional `returnUrl` preserves a specific game page, query string or hash route. It must be
+an absolute HTTPS URL on exactly that game's hosted origin; other games, external hosts,
+credentials in the URL and alternate ports are rejected with `400`. Omit it to return to the
+published launch file. Unknown, removed, unhosted or never-published games return `404`. Both
+repository deployments and uploaded games are supported; arbitrary external/local URLs are not.
+
+Navigate the browser to the **public API origin** above, rather than fetching the page or starting
+through the game's `/api` proxy. The OAuth state cookie and provider callback must use the same
+API host. Use this flow when the game has no valid launcher-provided or previously obtained token.
+
+### Button and return-token example
+
+```html
+<button id="starhermit-sign-in">Sign in</button>
+<script type="module">
+const api = 'https://api.starhermit.com';
+const gameId = 'YOUR_GAME_UID';
+const signIn = document.querySelector('#starhermit-sign-in');
+let gameToken = null; // Or your existing launcher-provided game token.
+
+// Read this before your game router or third-party scripts consume the fragment.
+const auth = new URLSearchParams(location.hash.slice(1));
+if (auth.has('access_token')) {
+  gameToken = auth.get('access_token');
+  const originalHash = auth.get('game_fragment');
+  history.replaceState(null, '', location.pathname + location.search +
+    (originalHash ? '#' + originalHash : ''));
+}
+signIn.hidden = Boolean(gameToken);
+signIn.addEventListener('click', () => {
+  const url = new URL(`/api/v1/auth/games/${gameId}/sign-in`, api);
+  url.searchParams.set('returnUrl', location.href);
+  location.assign(url.href);
+});
+
+// Pass gameToken to your game's API client as Authorization: Bearer <gameToken>.
+// This example keeps it in memory; a reload can require sign-in again.
+</script>
+```
+
+The return fragment is:
+
+```text
+#access_token=…&token_type=Bearer&expires_in=3600
+```
+
+`access_token` is a **game-scoped launch token**, not an account-wide access token. No refresh token
+is issued. `expires_in` uses the deployment's configured launch-token lifetime (default 3600
+seconds). An original return URL fragment is encoded in the optional `game_fragment` field;
+restore it after capturing the token and removing authentication data from browser history.
+Do not log or forward the token.
+
+Renew before expiry using `POST /api/v1/games/{gameId}/launch-token` with the current token as
+Bearer authorization, then replace it with the returned `token`. The usual renewal-chain ceiling
+applies (default 12 hours). If the token expires or renewal is refused, clear it and show Sign in
+again. See [Game launch tokens](#game-launch-tokens).
+
+### Choosing a provider yourself
+
+Games may instead read `GET /api/v1/auth/oauth/providers` and navigate to an offered `authorizeUrl`
+on the public API origin, adding `gameId` and optionally `returnUrl`. The authorization step
+validates and stores the target in the existing ten-minute OAuth state; callback query parameters
+cannot change it. The initiating browser's cookie is still required, and the game is checked again
+before issuing a token. Suspended accounts cannot receive a token.
+
+Do not combine game sign-in with `client` or `link` (`400`). A `returnUrl` without `gameId` is also
+`400`. Normal dashboard and desktop sign-in continue using their configured frontend destinations
+and ordinary account token pairs.
 
 ## Game launch tokens
 
