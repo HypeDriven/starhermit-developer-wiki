@@ -378,6 +378,12 @@ finding anyone — offer a practice game rather than spin). A party is a [realti
 }
 ```
 
+Games may opt into [deadline starts in `starhermit.txt`](../starhermit-txt.md#starting-matchmaking-before-every-human-seat-is-filled):
+`matchmaking.max_wait_seconds` starts an underfilled match after the wait, and
+`matchmaking.ai_players` limits how many vacant seats become AI. Other seats stay empty. Full human
+matches start early. `maxWaitSeconds` reports that game's setting; these tickets stay `queued`
+until the worker starts them, rather than expiring at the global wait limit.
+
 ### `GET /api/v1/games/{slug}/matchmaking`
 
 Returns the caller's latest ticket, or `404`. A `matched` ticket is reported **only while its

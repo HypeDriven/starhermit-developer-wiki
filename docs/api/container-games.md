@@ -135,7 +135,9 @@ The request is the same context shape a JavaScript game receives:
 }
 ```
 
-Field semantics match the [script context](game-scripts.md#context-object). Respond with the
+Field semantics match the [script context](game-scripts.md#context-object), including
+[matchmaking seats, AI flags and empty seats](game-scripts.md#matchmaking-seat-layout) for games
+that configure a start deadline in `starhermit.txt`. Respond with the
 standard result envelope, for example:
 
 ```json

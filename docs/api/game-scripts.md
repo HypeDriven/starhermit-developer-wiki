@@ -128,6 +128,33 @@ globalThis.game = {
   to reconstruct the match. The chess reference implementation keeps `state.game.moves` and steps it
   through the same rules module the platform executes.
 
+## Matchmaking seat layout
+
+New matchmade sessions receive `ctx.matchmaking` on **every** invocation (create, command and tick).
+It preserves the queue shape and seats even if the game is redeployed later:
+
+```js
+ctx.matchmaking = {
+  queue: "ffa", teams: 4, teamSize: 1,
+  seats: [
+    { id: "human-uuid", name: "Alice", team: 0, slot: 0, ai: false },
+    { id: "synthetic-ai-uuid", name: "AI 2-1", team: 1, slot: 0, ai: true },
+    { id: null, name: null, team: 2, slot: 0, ai: false },
+    { id: null, name: null, team: 3, slot: 0, ai: false }
+  ]
+};
+```
+
+`ctx.players` contains occupied seats only, with `team` and `ai:true` for AI. Team/slot indexes are
+zero-based. AI IDs are stable within this session and are not StarHermit account IDs. Only humans
+have session/chat membership and can receive account player-state, rating or achievement writes.
+Keep AI state in `sessionState`. Copy whichever roster fields clients need into your game's state
+or broadcasts. Older sessions and non-matchmaking sessions can omit `ctx.matchmaking`.
+
+Declare a start deadline and the maximum AI count in
+[`starhermit.txt`](../starhermit-txt.md#starting-matchmaking-before-every-human-seat-is-filled).
+With AI count `0`, vacant seats remain empty. The same context is delivered to container servers.
+
 ## Room-bound sessions
 
 A session can be **bound to a realtime room**: when a [realtime room](realtime.md) for a game with a `server=` script starts, the platform creates one N-player session for the room's **human** participants (AI seats exist only in the script-facing roster). This is how server-authoritative realtime games (e.g. football) run: rooms provide the lobby/matchmaking, the script runs the match. See [Realtime Rooms — the bridge](realtime.md#room-bound-scripted-sessions) for the room-side lifecycle.

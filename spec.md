@@ -19,7 +19,7 @@ patterns, not the subject of the docs.
 - `README.md` — the landing page: what StarHermit is, where to start, and the API-reference index table.
 - `docs/starhermit-txt.md` — the manifest every published game needs, where it must sit in the uploaded
   folder, and why that folder should be the distributable build (everything beside the manifest is
-  uploaded and served).
+  uploaded and served). It also documents matchmaking start deadlines, AI-seat limits and empty-seat behavior.
 - `docs/getting-started.md` — base URLs, versioning, the auth model (including WebSocket connection
   tickets), and the ways to integrate: a platform game published from GitHub or uploaded as a folder,
   with an optional script or container server, or an external client calling the REST/WS API directly.

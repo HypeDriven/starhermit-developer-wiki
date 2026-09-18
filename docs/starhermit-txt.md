@@ -122,6 +122,45 @@ refused rather than a half-configured game being created.
 | `container.health` | Path the platform probes for readiness. |
 | `container.env.<NAME>` | An environment variable passed to your container. |
 
+### Starting matchmaking before every human seat is filled
+
+These settings apply to an authoritative game using StarHermit matchmaking, with either a
+JavaScript or container server:
+
+```ini
+matchmaking.max_wait_seconds=30
+matchmaking.ai_players=2
+```
+
+| Key | Meaning |
+|---|---|
+| `matchmaking.max_wait_seconds` | Integer **0–86400**. Start an underfilled match when the oldest selected ticket has waited this many seconds. `0` starts immediately. Omit to keep the default full-human-match-or-expire behavior. |
+| `matchmaking.ai_players` | Integer **0–31**, default **0**. At the deadline, fill up to this many vacant seats with AI; leave any further vacant seats empty. Requires `matchmaking.max_wait_seconds`. |
+
+The queue's capacity still comes from `game.queues` (or the container's `queues` declaration);
+without a declaration it is 1v1. For example, in an eight-seat queue with three humans waiting,
+the settings above start with three humans, two AI players and three empty seats. A full human
+match can start before the deadline and gets no AI. Setting AI to `0` allows a human-only match
+with empty seats, including a single human if the game supports that.
+
+The platform checks on enqueue and on the matchmaking worker's sweep (default every **5 seconds**),
+so a start may follow the deadline by up to a sweep interval under normal load. Elo compatibility
+and each ticket's allowed queue subset still apply. Parties stay together on one team; at the
+deadline a smaller party or solo player may occupy a larger team, with the remaining seats
+available for AI or left empty. Tickets are not combined into one team.
+
+**Your game server must accept underfilled matches and implement AI behavior.** StarHermit marks
+the AI players; it does not generate their moves. A rejected session cancels the selected tickets.
+The frozen seat layout is provided as `ctx.matchmaking`, and occupied seats appear in `ctx.players`;
+see [the server context](api/game-scripts.md#matchmaking-seat-layout). Empty seats are not automatically
+filled by late joins.
+
+Repository redeploys and uploads apply these settings. A supplied manifest without the keys resets
+them; a patch with no manifest preserves them. Invalid values are refused (upload `422`, or a failed
+repository deployment). These settings do not affect explicit practice games or realtime-room
+quick-join/backfill.
+
+
 ## How to create one
 
 1. Open a plain-text editor — Notepad, TextEdit, VS Code, anything. Not Word.
