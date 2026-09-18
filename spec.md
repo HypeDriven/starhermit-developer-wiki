@@ -19,7 +19,8 @@ patterns, not the subject of the docs.
 - `README.md` — the landing page: what StarHermit is, where to start, and the API-reference index table.
 - `docs/starhermit-txt.md` — the manifest every published game needs, where it must sit in the uploaded
   folder, and why that folder should be the distributable build (everything beside the manifest is
-  uploaded and served). It also documents matchmaking start deadlines, AI-seat limits and empty-seat behavior.
+  uploaded and served). It also documents matchmaking start deadlines, AI-seat limits and empty-seat behavior,
+  folder cache lifetimes, exact additional CORS origins, and how upload modes replace or preserve hosting policies.
 - `docs/getting-started.md` — base URLs, versioning, the auth model (including WebSocket connection
   tickets), and the ways to integrate: a platform game published from GitHub or uploaded as a folder,
   with an optional script or container server, or an external client calling the REST/WS API directly.
@@ -28,9 +29,17 @@ patterns, not the subject of the docs.
   `external-libraries`, `relay`, `realtime`, `github-games`, `publisher`.
   The authentication page includes direct-browser game sign-in: a provider chooser, return URL
   validation, game-scoped token handling and a copyable Sign in button example.
+  The profile page documents current-terms discovery, explicit acceptance, account status fields,
+  REST/WebSocket enforcement and recovery examples. Getting started, authentication and the
+  onboarding/CI tutorials explain how acceptance affects their flows. Realtime rooms covers
+  human-party matchmaking with deadline starts; matchmaking and container pages state the
+  current container queue limitation, and catalog/publisher pages identify the mock storage and
+  processing pipeline. The walkthrough and AI prompts support direct sign-in, bounded token renewal
+  and the current script context contract.
 - `docs/sdk/*.md` — one page per maintained client SDK: `unity` (the `com.starhermit.sdk` Unity package —
   install, client construction, credentials, a map from each API page to its typed service, sockets,
-  errors and retries, credential storage, and forward compatibility). These pages describe how to reach
+  errors and retries, credential storage, and forward compatibility, including a current-terms
+  example using raw JSON with the existing acceptance method). These pages describe how to reach
   the documented API from an engine; they do not restate the API itself.
 - `docs/tutorials/*.md` — `chess-walkthrough` (the full lifecycle from launch token to replay viewer),
   `ai-prompts` (copy-pasteable prompts for an AI coding assistant, one per feature plus a mega-prompt),

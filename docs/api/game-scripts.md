@@ -10,7 +10,7 @@ A StarHermit authoritative game can be defined by a **single JavaScript file** e
 
 ## Entry points
 
-Expose the handlers on `globalThis.game`. Three optional **static** declarations sit alongside them:
+Expose the handlers on `globalThis.game`. Four optional **static** declarations sit alongside them:
 `tickRateHz` asks the platform how often to invoke `onTick` — declare it if your game depends on the
 tick, since a game that says nothing is ticked once every four seconds (see [Tick rate](#tick-rate)),
 `achievements` registers the game's achievements (see [Achievements](#achievements)), `replays`

@@ -383,6 +383,13 @@ flow look invisible. The refresh token and private key are player credentials. I
 email client forces an external browser, explain that the player must return to the game afterward;
 the current API has no registration-status polling or custom callback parameter.
 
+Before proceeding to multiplayer, use the player's account token to check `GET /api/v1/me`.
+If `termsAcceptanceRequired` is true, display the current text from `GET /api/v1/terms` and, after
+explicit acceptance, post its hash to `POST /api/v1/me/terms/accept`. Public-key account sessions
+can do this inside the native client; player launch tokens cannot. Repeat the check on later
+launches because revisions change. See [the acceptance example and error handling](../api/profile.md#terms-acceptance).
+Your container's deployment token is exempt; that exemption does not extend to its players.
+
 ### 4. Log in on later launches
 
 Request a five-minute challenge:

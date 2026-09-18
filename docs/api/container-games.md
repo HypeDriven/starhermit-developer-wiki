@@ -16,9 +16,9 @@ After initial game registration, developers can also push a built `.tar.gz` cont
 a deployment restart. See [GitHub Games — Push a game bundle](github-games.md#push-a-game-bundle)
 and the [dedicated-server tutorial](../tutorials/dedicated-server-onboarding.md).
 
-Three things about that push are worth knowing before you build a release pipeline around it:
+These details about that push are worth knowing before you build a release pipeline around it:
 
-- **A `docker save` will exceed the CDN's ~100 MB request-body cap**, which answers with a `413`
+- **A large `docker save` can exceed the CDN's ~100 MB request-body cap**, which answers with a `413`
   the platform never sees — no `limitBytes`, nothing in any log you can read. Push the archive over
   [`ws/v1/game-upload`](github-games.md#upload-over-a-websocket) instead; same archive, same
   allowance, same answers.
@@ -115,6 +115,11 @@ answer `404`. Like the tick rate it is a request — an operator may answer for 
 either way — so branch your client on `replaysEnabled` from `GET /api/v1/games/{slug}` rather than on
 what you declared. Snapshots are unaffected either way: a live session needs a restore point whether
 or not its last one is kept.
+
+The current `/describe` reader does not import a `queues` property. Container games therefore use
+the implicit `default` 1v1 matchmaking queue; adding shapes here does not enable larger matches.
+Check `GET /api/v1/games/{slug}/queues` for the effective shape. Manifest deadline starts and AI-seat
+limits still apply within that shape; see [matchmaking](games.md#matchmaking).
 
 ### `POST /sessions`
 

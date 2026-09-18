@@ -4,6 +4,11 @@ Publish a game from a GitHub repository onto [StarHermit](https://starhermit.com
 
 Base URL: `https://api.starhermit.com`. All routes are under `api/v1/...` and require a JWT unless noted.
 
+Hosted client files can declare [folder cache lifetimes](../starhermit-txt.md#browser-asset-caching)
+and [additional CORS origins](../starhermit-txt.md#allowing-another-website-to-access-your-hosted-game)
+in `starhermit.txt`. Those policies publish with the client files; a manifest-free merge retains
+existing settings, while a supplied manifest replaces them.
+
 ## The manifest: `starhermit.txt`
 
 Place `starhermit.txt` at the repo root. Format: `key=value` lines, `#` starts a comment.

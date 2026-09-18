@@ -35,6 +35,12 @@ All REST routes are versioned: `api/v1/...`. WebSocket routes live under `ws/v1/
 
 A hosted game opened directly in the browser can offer a [Sign in button](api/auth.md#sign-in-from-a-directly-opened-browser-game). Starhermit handles sign-in or account creation and returns a game-scoped token straight to the game.
 
+Before calling protected endpoints or opening sockets, an account must [accept the current terms](api/profile.md#terms-acceptance).
+Use `GET /api/v1/me` to check `termsAcceptanceRequired`, display the document from
+`GET /api/v1/terms`, and submit its hash only after the user accepts. A `403` with
+`error: "terms_acceptance_required"` requires acceptance through an account session; a player launch
+token can read the document but cannot accept it.
+
 ## Two ways to integrate your game
 
 1. **Platform-hosted game.** You publish a game from a GitHub repo with a `starhermit.txt` manifest — or, if it does not live in a repository, [upload the folder directly](api/github-games.md#add-a-game-from-a-local-folder) and skip git entirely. It may be browser-only, use a sandboxed `server.js`, or point to a digest-pinned container image for server logic. The platform serves the game at `<slug>.starhermit.com` with `/api` and `/ws` proxied same-origin. The script path is demonstrated end-to-end by the chess reference implementation at <https://github.com/HypeDriven/starhermit-chess>. See [GitHub Games](api/github-games.md), [Game Scripts](api/game-scripts.md), [Container Game Servers](api/container-games.md), and the [Integration Walkthrough](tutorials/chess-walkthrough.md).

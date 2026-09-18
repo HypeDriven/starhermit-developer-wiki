@@ -24,6 +24,19 @@ Errors are returned as `{"error":"..."}` with standard status codes (400/401/403
 | POST | `/api/v1/games/{slug}/launch-token` | JWT | Mint a game-scoped launch token (see below) |
 | POST | `/api/v1/realtime/connection-tickets` | JWT | One-time ticket for opening a `/ws/**` socket |
 
+## After sign-in: current terms
+
+Successful sign-in does not imply permission to use protected APIs. Account holders must
+[accept the current StarHermit terms](profile.md#terms-acceptance) before protected REST calls or
+WebSocket upgrades succeed. Account clients can check `GET /api/v1/me`, fetch `GET /api/v1/terms`,
+and record explicit acceptance with `POST /api/v1/me/terms/accept`. Both OAuth and public-key
+account sessions support this flow. Refreshing credentials does not resolve pending acceptance.
+
+A directly opened browser game can receive a scoped token before the account has accepted.
+If a game call returns `403` with `error: "terms_acceptance_required"`, direct the player to their
+StarHermit account UI to accept and then retry. The game token cannot accept terms, even though
+it can read `GET /api/v1/terms`. Do not treat this response as an expired-token sign-in loop.
+
 ## Public-key registration
 
 ### `POST /api/v1/auth/public-key/register`

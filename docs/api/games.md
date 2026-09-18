@@ -343,9 +343,15 @@ Creates a practice session against the platform AI seat: fixed user id `00000000
 
 ## Matchmaking
 
-A game declares the shapes of match it accepts (`game.queues` in a script, or `/describe` for a
-container). A game that declares none has one implicit 1v1. A client that names no queue gets the
-game's first.
+A script declares the match shapes it accepts through `game.queues`. A game with no accepted
+declarations has one implicit `default` queue (two teams of one). The current container
+`/describe` reader does **not** import `queues`, so container games use that implicit 1v1 shape.
+A client that names no queue gets the game's first.
+
+Up to eight script queues are retained. Keys are trimmed, lowercased, nonempty and at most 32
+characters; duplicate keys keep the first. `teams` is clamped to 2–8 and `teamSize` to 1–16;
+shapes exceeding 32 total players are discarded. Invalid declarations can fall back to implicit
+1v1, so verify the effective shapes with `GET /queues` after publishing.
 
 ### `GET /api/v1/games/{slug}/queues`
 
@@ -359,8 +365,17 @@ game's first.
 
 Enqueues the caller for nearest-elo pairing. Repeatable `?queues=` query keys name a **subset** of
 those shapes (e.g. 1v1 and 2v2, not 3v3). Matching only fills a ticket against a shape it allowed.
-An unknown key is `404`; a list empty after validation is `400`. Returns `409` if the caller is
-already queued or at their concurrent-session cap.
+For example:
+
+```http
+POST /api/v1/games/{slug}/matchmaking?queues=solo&queues=duos
+Authorization: Bearer <token>
+```
+
+Use keys returned by `GET /queues`. `?queue=solo` selects a single shape; if both `queue` and
+`queues` are supplied, their keys are combined and deduplicated case-insensitively. An unknown key
+is `404`; a list empty after validation is `400`. Returns `409` if the caller is already queued
+or at their concurrent-session cap.
 
 The search starts in a narrow elo band and widens while the ticket waits (default 100, +10/s).
 Statuses: `queued`, `matched`, `cancelled`, `expired` (waited past the cap, default 300 s, without

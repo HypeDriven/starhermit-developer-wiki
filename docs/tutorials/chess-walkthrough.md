@@ -52,7 +52,7 @@ Full flow: [github-games.md](../api/github-games.md) and [publisher.md](../api/p
 
 ## 3. Launch and authentication
 
-A player never logs in inside a game client. For any game, the platform launcher handles it:
+The chess reference flow receives credentials from the platform launcher:
 
 1. The launcher calls `POST /api/v1/games/chess/launch-token` (shown with the example slug `chess`; your game substitutes its own) with the user's full platform JWT.
 2. It gets back a short-lived, **game-scoped** token:
@@ -71,6 +71,12 @@ In the reference implementation, the client reads the hash **once**, then strips
 That second claim matters: **a game client should never hard-code its slug**. The reference implementation builds every API URL as `/api/v1/games/<slug>` plus a suffix (`net.js`, `Net.gamePath`), so the same code works for any game, any slug, any deployment.
 
 **Refresh.** The scoped token is allowed to re-call `launch-token` for its own game, so clients typically refresh periodically — the reference implementation refreshes every 45 minutes (`net.js`, `Net.startRefresh`), comfortably inside the 60-minute lifetime.
+
+A game opened directly can instead offer [browser sign-in](../api/auth.md#sign-in-from-a-directly-opened-browser-game),
+which returns `#access_token` rather than the launcher's `#game_token`. Handle both entry paths if
+you support both. Renew using the returned lifetime and respect the default 12-hour renewal-chain
+ceiling. A `403 terms_acceptance_required` requires the player to [accept through their account](../api/profile.md#terms-acceptance);
+a game token cannot do this and signing in again does not resolve it.
 
 Auth reference: [auth.md](../api/auth.md), [games.md](../api/games.md).
 
@@ -150,7 +156,7 @@ References: [games.md](../api/games.md), [leaderboards.md](../api/leaderboards.m
 
 ## 5. Getting players into a session — three ways
 
-There is no "create lobby" endpoint for any game. Sessions are created **only** by matchmaking, invite-accept, or the AI endpoint.
+This walkthrough uses matchmaking, invite-accept, and AI practice to create sessions. Games that need a lobby can use [realtime rooms](../api/realtime.md), whose start flow can also create a bound authoritative session.
 
 ### a. Matchmaking
 

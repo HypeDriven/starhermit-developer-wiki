@@ -1,16 +1,15 @@
 # Unity SDK
 
 The **Starhermit Unity SDK** ([HypeDriven/starhermit-unity-sdk](https://github.com/HypeDriven/starhermit-unity-sdk))
-is a Unity Package Manager package that wraps everything in this wiki behind typed, asynchronous C#
-methods, so a Unity game does not hand-roll HTTP requests, JSON parsing, token refresh or WebSocket
-reconnection.
+is a Unity Package Manager package with typed, asynchronous C# clients for the platform. It handles
+HTTP requests, JSON parsing, token refresh and WebSocket reconnection.
 
 | | |
 |---|---|
 | Package | `com.starhermit.sdk`, version 0.1.0 |
 | Namespace | `Starhermit` |
 | API baseline | REST v1 and WebSocket v1 |
-| REST operations mapped to typed methods | 182 of 192 (4 are not-for-clients, reachable through `Raw`; 0 unmapped) |
+| Newer REST features | Use `client.Raw` and model `RawJson` when this SDK version has no typed member |
 | WebSocket protocols | all 6, one connection class each |
 | Licence | MIT |
 
@@ -149,6 +148,27 @@ Access-token refresh is coordinated: a `401` buys at most one refresh and one re
 callers await the same refresh rather than starting several — with a rotating refresh token, a second
 exchange would revoke the family and sign the player out. A definitive rejection raises `SessionExpired`
 once; a transport failure leaves the session intact.
+
+### Accepting the current terms
+
+Check acceptance before starting heartbeats, game requests or sockets. Version 0.1.0 has
+`AcceptTermsAsync`, but newer profile fields and terms discovery use its raw JSON support:
+
+```csharp
+var profile = await client.Me.GetProfileAsync(ct);
+var needsAcceptance = profile.RawJson["termsAcceptanceRequired"].AsBooleanOrDefault();
+var terms = await client.Raw.SendForJsonAsync(new StarhermitRequest("GET", "terms"), ct);
+var textToDisplay = terms["text"].AsStringOrNull();
+var displayedHash = terms["hash"].AsStringOrNull();
+// Display textToDisplay. Retain displayedHash for this displayed revision.
+// Only in the user's Accept handler, using an account session:
+// await client.Me.AcceptTermsAsync(displayedHash, ct);
+```
+
+Do not use a sample revision label such as `terms-2026-08`: only the current hash from the API is
+accepted. On `409`, fetch and display the new text for another acceptance. On
+`403 terms_acceptance_required`, resolve acceptance before retrying; player launch tokens cannot
+accept. See [Profile](../api/profile.md#terms-acceptance) for the complete flow.
 
 ## Where each wiki page lives in the SDK
 

@@ -3,7 +3,7 @@
 This tutorial gives a deployment pipeline its own StarHermit credential without storing your Google
 or GitHub OAuth tokens in CI. The one-time setup is interactive:
 
-1. Sign in through OAuth.
+1. Sign in through OAuth and accept the current StarHermit terms.
 2. Add a dedicated public key to your StarHermit account.
 3. Put only that key's private half in the CI secret store.
 
@@ -31,6 +31,11 @@ one private key among every workflow.
 - A distributable client build and/or a Docker-compatible `docker save` image. See
   [GitHub Games](../api/github-games.md#push-a-game-bundle) for the archive layout.
 - Python 3 for the setup commands and example workflow; `curl` and `jq` for the enrollment example.
+
+A pipeline can sign in successfully and still receive `403 terms_acceptance_required` when it
+uploads or opens an upload socket. Have the account owner review and [accept the current terms](../api/profile.md#terms-acceptance)
+interactively, then rerun the job. This can recur when terms change; do not automatically accept
+terms from CI.
 
 ## One-time setup
 
@@ -284,7 +289,7 @@ smoke test before promoting the release.
 
 ## Rotation and incident response
 
-1. Sign in through OAuth.
+1. Sign in through OAuth and accept the current StarHermit terms.
 2. Add a newly generated, distinctly labelled key.
 3. Replace the CI secret and variable, then run a deployment.
 4. Revoke the old key with `DELETE /api/v1/me/public-keys/{keyId}`.

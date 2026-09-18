@@ -18,8 +18,9 @@ Context page: [github-games.md](../api/github-games.md), [auth.md](../api/auth.m
 ```text
 Read docs/api/github-games.md and docs/api/auth.md (pasted below), then:
 
-1. Create a starhermit.txt manifest at the repo root with keys name, slug,
-   launch, and owner. Use slug "[my-game]" and launch "index.html". Add
+1. Create a starhermit.txt manifest at the build root with name and
+   launch=index.html. There is no slug key: the platform assigns the UID.
+   For a repository claim, owner is my StarHermit user UUID. Add
    either server=server.js for section 4 or container.image=... for section
    4b; never declare both.
 2. Create a net module (match this repo's language/module style) that:
@@ -32,12 +33,19 @@ Read docs/api/github-games.md and docs/api/auth.md (pasted below), then:
      /api/v1/games/<slug> + suffix. Never hard-code the slug; always use
      the game_scope claim.
    - Attaches `Authorization: Bearer <token>` to every request.
-   - Refreshes the token every 45 minutes by calling
-     POST /api/v1/games/<slug>/launch-token with the current token, and
-     swaps in the returned { token } (it expires after expiresInSeconds
-     = 3600 seconds).
-   - Builds WebSocket URLs as ws(s)://<host>/<path>?access_token=<token>,
-     choosing wss when the page is served over https.
+   - Also supports direct browser sign-in as documented in auth.md: navigate
+     to the public API's /api/v1/auth/games/<gameId>/sign-in when no token
+     exists, parse #access_token on return, restore game_fragment and scrub
+     credentials. Configure the game UID for this initial sign-in link.
+   - Renews before the returned expiresInSeconds elapses via
+     POST /api/v1/games/<slug>/launch-token. Respect the renewal-chain limit
+     (default 12 hours); require sign-in when renewal is no longer allowed.
+   - Handles 403 terms_acceptance_required by directing the player to their
+     account UI to accept the current terms, then retrying after confirmation.
+     A launch token cannot accept terms; refreshing cannot fix this error.
+   - Opens sockets with a fresh one-use ?ticket= obtained from
+     POST /api/v1/realtime/connection-tickets, choosing wss over HTTPS.
+     ?access_token= remains supported; never log either credential.
 
 The game will be served at <slug>.starhermit.com with /api and /ws proxied
 same-origin, so there is no CORS handling and no API-base configuration.
@@ -56,7 +64,8 @@ Read docs/api/games.md (pasted below). Implement a "Find match" button in
    to the session screen for that sessionId.
 3. If it is { ticketId, status: "queued" }, show a "searching…" state and
    poll GET /api/v1/games/<slug>/matchmaking every 3 seconds until it
-   reports matched, then navigate.
+   reports matched, then navigate. Stop on cancelled/expired; treat 404
+   as no joinable ticket. Read /queues to offer allowed queue subsets.
 4. A cancel button sends DELETE /api/v1/games/<slug>/matchmaking and
    returns to the idle state. Also cancel on page unload.
 5. After 30 seconds still unmatched, reveal a "Play against the AI" button
@@ -64,8 +73,8 @@ Read docs/api/games.md (pasted below). Implement a "Find match" button in
    matchmaking ticket, and navigates to the returned sessionId.
 
 Handle 4xx responses by returning to the idle state with an error message.
-There is no lobby-creation endpoint — sessions only come from matchmaking,
-invite-accept, or sessions/ai — so do not invent one.
+This flow uses Games API matchmaking, invite-accept, or sessions/ai.
+For a lobby or party flow, use the separate realtime rooms API.
 ```
 
 ## 3. Gameplay socket
@@ -78,7 +87,8 @@ Implement a GameController module for [my game screen]:
 
 1. On entering a session, GET /api/v1/games/<slug>/sessions/{sessionId}
    and keep the response (it includes chatConversationId for later).
-2. Connect to ws(s)://<host>/ws/v1/games?sessionId=<id>&access_token=<token>.
+2. Connect to ws(s)://<host>/ws/v1/games?sessionId=<id>&ticket=<fresh-ticket>.
+   If using build compatibility checks, pass the client buildId as &build=.
 3. Every frame is a JSON envelope. Outgoing: {"type":"cmd","data":<command>}.
    Incoming: {"type":"game","data":…}, {"type":"error","error":…}, and
    {"type":"presence","userId","online"}.
@@ -87,9 +97,13 @@ Implement a GameController module for [my game screen]:
    state broadcast. Never assume local state survives a reconnect.
 5. On close, reconnect with exponential backoff starting at 1 second,
    doubling up to a 30-second ceiling, and re-send the sync on each open.
+   Stop on authorization/policy rejection or finished sessions; resolve terms
+   acceptance through REST and reload on build_mismatch. Acquire a new ticket
+   for each connection attempt.
 6. Route incoming frames: "game" frames go to a state handler that updates
    the UI, "error" frames to a toast/log, "presence" frames to an
-   online/offline indicator for the opponent.
+   online/offline indicator for the opponent. On resumed, discard prediction
+   and resync; on abandoned, stop play and show the reason.
 7. Do not put any user id in outgoing commands — the platform passes the
    authenticated sender to the server script; payloads are never trusted
    for identity.
@@ -116,8 +130,8 @@ host (JavaScript, no Node APIs, no imports, no network, no clock):
    two seconds). Explain the choice. A game that declares nothing is ticked
    at 0.25 Hz, and the platform may clamp a request to its configured
    maximum.
-3. Determinism: use ONLY ctx.now() for time and ctx.random() for
-   randomness. Never use Date, Math.random, or any ambient API.
+3. Use ONLY ctx.now for time and ctx.random for randomness. These are
+   numeric context values, not functions. Never use Date, Math.random, or any ambient API.
 4. Every handler returns an object shaped per the contract:
    { ok, error, sessionState, playerStates, broadcast, eloUpdates, result }.
    Validate every command against the current state and the sender; reject
@@ -415,31 +429,37 @@ When you want the assistant to wire the whole flow in one session, use this — 
 
 ```text
 You are working in my game repository. I am integrating it with the
-StarHermit platform. I have pasted four reference pages below:
-docs/api/games.md, docs/api/game-scripts.md, docs/api/chat.md, and
-docs/api/voice.md. They are the source of truth for every endpoint path
+StarHermit platform. I have pasted these reference pages below:
+docs/api/games.md, docs/api/game-scripts.md, docs/api/chat.md,
+docs/api/voice.md, docs/api/auth.md, and docs/starhermit-txt.md. They are the source of truth for every endpoint path
 and field name — do not invent API surface beyond them.
 
 Build the complete loop, in this order, stopping for me to verify each
 step before continuing:
 
-1. Bootstrap: starhermit.txt manifest (name/slug/launch/owner/server) and
+1. Bootstrap: starhermit.txt manifest (name/launch/server; optional owner UUID
+   for repository claims, no slug key) and
    a net module — read #game_token once and strip it with
    history.replaceState, decode sub + game_scope, same-origin relative
-   /api/v1/games/<slug> paths, Authorization headers, 45-minute launch
-   token refresh via POST …/launch-token, WS URLs with ?access_token=.
+   /api/v1/games/<slug> paths, Authorization headers, renewal before expiry
+   via POST …/launch-token within the renewal-chain limit, one-use WS tickets.
+   Support direct-browser sign-in and #access_token as auth.md describes.
+   Handle terms_acceptance_required through the player's account UI.
 2. Lobby: GET /api/v1/games/<slug> (leaderboardId + me stats),
    GET …/sessions/mine (render myTurn/deadline), friends leaderboard via
    GET /api/v1/leaderboards/{id}/entries?friendsOnly=true, recent replays
    via GET …/replays/mine?limit=10, pending invites via GET …/invites.
 3. Matchmaking: POST …/matchmaking, poll GET every 3 s, DELETE to cancel,
-   30-second fallback to POST …/sessions/ai.
+   handle cancelled/expired and 404, optional queue subsets and the game
+   manifest deadline/AI policy; offer practice through POST …/sessions/ai.
 4. Friend invites: GET /api/v1/me/friends, POST …/invites { toUserId },
    accept/decline, and &session_id= deep-link handling from the launch
    hash.
-5. Gameplay: ws(s)://<host>/ws/v1/games?sessionId=…&access_token=… with
+5. Gameplay: ws(s)://<host>/ws/v1/games?sessionId=…&ticket=… with
    the cmd/sync pattern, 1s→30s exponential-backoff reconnect with re-sync,
-   game/error/presence routing.
+   fresh tickets per attempt, game/error/presence/resumed/abandoned routing.
+   Stop on policy/auth rejection, recover terms via REST, and reload on
+   build_mismatch when opting into the build check.
 6. Server script: globalThis.game per game-scripts.md implementing
    [my game's rules], an intentional tickRateHz (0 for no periodic ticks;
    declaring none means a slow 0.25 Hz platform default),
@@ -471,7 +491,6 @@ to verify it against https://api.starhermit.com.
 - **Keep prompts scoped to one feature.** The mega-prompt works, but one-feature prompts with a verification step between them fail less and are easier to debug when they do.
 - **Always hand the AI the exact wiki page.** The prompts reference endpoint paths, but the reference pages carry the field names and error shapes. Paste the page or point the tool at the file — don't paraphrase it from memory.
 - **Ask for a verification artifact per feature.** A small throwaway test page or a curl script exercised against `https://api.starhermit.com` catches integration mistakes immediately.
-- **Launch tokens expire after 60 minutes.** Obtain launch tokens through the documented launch flow and refresh them before expiry.
-- **Refresh cadence matters.** If your test sessions run long, make sure the 45-minute refresh is actually wired before you blame the backend for 401s.
+- **Use the returned token lifetime.** The default is 60 minutes, but renew using `expiresInSeconds` and respect the renewal-chain ceiling. Pending terms acceptance needs an account action, not another refresh.
 
 For the narrative version of how these pieces fit together in a shipped game, see the [chess walkthrough](chess-walkthrough.md) — the reference example; for first deploy, the [getting started guide](../getting-started.md).

@@ -84,7 +84,7 @@ a server build is self-describing and can be re-uploaded on its own.
 ## Format
 
 Lines of `key=value`. Blank lines are ignored, `#` starts a comment, and whitespace around keys and
-values is trimmed. Keys are case-insensitive; unknown keys are ignored, so a typo fails quietly —
+values is trimmed. Key names are case-insensitive, except that folder paths in `cache.<folder>` are case-sensitive; unknown keys are ignored, so a typo fails quietly —
 check your spelling against the tables below.
 
 ```text
@@ -102,6 +102,69 @@ launch=index.html
 | `cover` | `cover_art`, `coverart` | Artwork on the game's library tile. A path relative to the launch file (`cover.png`, `art/box.jpg`) or an absolute `https://` URL. Optional — without one the tile shows the favicon. A bad value is dropped rather than refusing the game. |
 | `owner` | `username`, `user` | **Repository flow only.** The owning StarHermit **user ID (UUID)** from `GET /api/v1/me`, not a username. Lets you [claim a listing someone else added](tutorials/claim-existing-game.md) by proving you control the repository. Ignored on an upload — see [Who owns an uploaded game](#who-owns-an-uploaded-game). |
 
+### Browser asset caching
+
+Use `cache.<folder>=<seconds>` to set `Cache-Control: public, max-age=<seconds>` on hosted static
+files. Durations are integers **0–31536000** (one year):
+
+```ini
+cache..=0
+cache.audio=31536000
+cache.audio/live=0
+cache.assets/textures=604800
+```
+
+Here `cache..` sets the whole-site default to zero (revalidate on reuse), `audio/` caches for a year,
+`audio/live/` revalidates, and `assets/textures/` caches for a week. Use content-hashed filenames for
+long-lived assets: redeploying does not invalidate copies already cached in players' browsers.
+
+Paths are case-sensitive, relative to the hosted root (repository root or the bundle's `client/`
+directory), and match whole folders including descendants. `audio` does not match `audiobooks`.
+A trailing slash is optional; the most-specific folder wins, and the last duplicate wins. Use `.`
+only for the root default; absolute paths, empty segments, `.`/`..` segments, backslashes, `%`, `?`,
+`#`, `:` and control characters are refused. Without a matching rule there is no explicit static
+`Cache-Control` header. API calls, WebSockets and externally streamed missing-asset fallbacks are
+unaffected.
+
+### Allowing another website to access your hosted game
+
+For a browser client on another origin, declare up to **five** exact HTTP/HTTPS origins:
+
+```ini
+cors.origins=https://example.com,https://play.example.org,http://localhost:5173
+```
+
+For example, after publishing this manifest, a development page on `http://localhost:5173` can fetch
+an asset from your hosted game:
+
+```js
+const response = await fetch('https://YOUR_GAME_UID.starhermit.com/assets/levels.json');
+if (!response.ok) throw new Error(`Asset request failed: ${response.status}`);
+const levels = await response.json();
+```
+
+Each origin is a scheme, exact hostname and optional port. Wildcards, bare domains, credentials,
+paths (even a trailing `/`), queries and fragments are refused. Scheme and port must match;
+subdomains are not implicitly included. Repeated `cors.origins` lines combine, with at most five
+entries across the manifest (duplicates also count). Omit the key to allow no additional origins;
+an empty value is invalid.
+
+This applies to static assets, missing-asset fallbacks and `/api/` requests on **your game's host**.
+Allowed origins receive credentialed CORS headers; OPTIONS preflights permit GET, HEAD, POST, PUT,
+PATCH, DELETE and OPTIONS with the requested headers. API authentication and authorization still
+apply. This does not configure CORS on `api.starhermit.com`, change WebSocket origin rules, or widen
+the return URLs permitted by browser game sign-in. A game running on its own hosted origin needs no
+extra CORS declaration.
+
+### Publishing cache and CORS settings
+
+Both policies publish with the client files. Repository deployments read the pinned commit.
+In bundles, root `starhermit.txt` takes precedence over `client/starhermit.txt`.
+A merge upload without a manifest retains existing policies; a supplied manifest replaces them
+(omitting a setting clears it). A full replacement without a manifest clears both policies.
+Invalid settings reject publication before replacing live files (`422` for uploads; a failed
+repository deployment). See [bundle updates](api/github-games.md#partial-updates-modemerge).
+
 ### Keys for a game with server logic
 
 Pick **one** server style. Declaring both `server=` and `container.image=` is refused.
@@ -117,7 +180,7 @@ refused rather than a half-configured game being created.
 | `server` (alias `server_script`) | Path to a JavaScript file that runs as the authoritative server in StarHermit's sandbox. See [Game Scripts](api/game-scripts.md). |
 | `container.image` | A **digest-pinned** image (`name@sha256:<64 hex>`) to run as the server. Tags are refused. See [Container Game Servers](api/container-games.md). |
 | `container.port` | Port your container listens on. |
-| `container.memory` | Memory limit for the container. |
+| `container.memory_mb` | Requested memory in MiB, clamped to operator limits. |
 | `container.cpu` | CPU limit for the container. |
 | `container.health` | Path the platform probes for readiness. |
 | `container.env.<NAME>` | An environment variable passed to your container. |
@@ -137,8 +200,9 @@ matchmaking.ai_players=2
 | `matchmaking.max_wait_seconds` | Integer **0–86400**. Start an underfilled match when the oldest selected ticket has waited this many seconds. `0` starts immediately. Omit to keep the default full-human-match-or-expire behavior. |
 | `matchmaking.ai_players` | Integer **0–31**, default **0**. At the deadline, fill up to this many vacant seats with AI; leave any further vacant seats empty. Requires `matchmaking.max_wait_seconds`. |
 
-The queue's capacity still comes from `game.queues` (or the container's `queues` declaration);
-without a declaration it is 1v1. For example, in an eight-seat queue with three humans waiting,
+The queue's capacity comes from a script's `game.queues`; without a declaration it is 1v1.
+The current container `/describe` reader does not import `queues`, so container matchmaking uses
+the implicit 1v1 shape. For example, in a script-declared eight-seat queue with three humans waiting,
 the settings above start with three humans, two AI players and three empty seats. A full human
 match can start before the deadline and gets no AI. Setting AI to `0` allows a human-only match
 with empty seats, including a single human if the game supports that.
@@ -241,7 +305,7 @@ name=Voxel Skirmish
 launch=index.html
 container.image=ghcr.io/octocat/voxel-server@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
 container.port=8080
-container.memory=512m
+container.memory_mb=512
 container.health=/healthz
 container.env.LOG_LEVEL=info
 ```

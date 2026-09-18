@@ -19,9 +19,9 @@ not the subject of the docs.
 
 - **[The `starhermit.txt` manifest](docs/starhermit-txt.md)** — the one file every published game
   needs, where it has to sit in the folder you upload, and why that folder should be your
-  distributable build: everything next to the manifest is uploaded and served to players.
+  distributable build: everything next to the manifest is uploaded and served to players. Also covers asset cache lifetimes and additional CORS origins.
 - **[Getting started](docs/getting-started.md)** — base URLs, versioning, auth model, and the
-  the ways to integrate (a platform game published from GitHub or uploaded as a folder, with an
+  ways to integrate (a platform game published from GitHub or uploaded as a folder, with an
   optional script or container server, or an external client calling the REST/WS API directly).
 - **[Tutorial: end-to-end integration walkthrough (using the chess reference example)](docs/tutorials/chess-walkthrough.md)** —
   the full lifecycle from launch token to replay viewer, with the exact calls a game client
@@ -59,7 +59,7 @@ WebSockets under `ws/v1/...`, JWT bearer auth
 | Games | [games.md](docs/api/games.md) | Sessions, declared match queues, elo matchmaking, friend invites, per-player controls and settings, AI practice, opt-in replays, owner diagnostics/webhooks, `ws/v1/games` protocol |
 | Game scripts | [game-scripts.md](docs/api/game-scripts.md) | Authoring the server-side JS rules file (Jint sandbox contract, budgets, tick rate, elo, achievements, replays) |
 | Container game servers | [container-games.md](docs/api/container-games.md) | Shipping authoritative game logic as a digest-pinned container (protocol, streams, snapshots, isolation, recovery) |
-| Profile | [profile.md](docs/api/profile.md) | `me`, avatars, privacy settings, terms acceptance, OAuth-controlled public-key credentials, linked identities, entitlements, presence heartbeat |
+| Profile | [profile.md](docs/api/profile.md) | `me`, avatars, privacy settings, current terms acceptance and recovery, OAuth-controlled public-key credentials, linked identities, entitlements, presence heartbeat |
 | Friends | [friends.md](docs/api/friends.md) | Friend requests, friend list with online/current-game presence |
 | Chat | [chat.md](docs/api/chat.md) | Conversations, messages, unread state, invites, `ws/v1/chat` push events, in-game chat pattern |
 | Voice | [voice.md](docs/api/voice.md) | Voice rooms, participant mute vs host server-mute, `ws/v1/voice` audio relay + WebRTC signaling |
@@ -73,8 +73,8 @@ WebSockets under `ws/v1/...`, JWT bearer auth
 | GitHub games | [github-games.md](docs/api/github-games.md) | Publishing from GitHub, a hosted URL, **a local folder**, or an uploaded client/container bundle — over HTTP or **the `ws/v1/game-upload` socket for large builds** (`starhermit.txt`, hosting, deployments, **your audience figures**) |
 | Publisher | [publisher.md](docs/api/publisher.md) | Publisher/member management, title & build publishing, achievement/leaderboard/entitlement management |
 
-Every area above is reachable from the [Unity SDK](docs/sdk/unity.md) as a typed service; that page
-maps each row to its SDK client.
+The [Unity SDK](docs/sdk/unity.md) maps these areas to its clients; newer endpoints and fields can
+be accessed through its raw request and JSON support.
 
 ## Notes
 

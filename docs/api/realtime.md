@@ -7,7 +7,7 @@ A match runs one of two ways:
 - **Host-routed (default)** — the platform server is a smart transport, not a simulator: the room creator's client is the **host** and runs the authoritative game simulation; other clients (guests) send inputs to the host and receive the host's snapshots. The server enforces routing, roles, capacity, rate limits, and identity — clients cannot spoof each other, and only the server-assigned host can broadcast.
 - **Room-bound scripted session (server-authoritative)** — for games that ship a `server=` script: when the room starts, the platform creates a bound N-player [scripted session](game-scripts.md#room-bound-sessions) that runs the simulation server-side at the game's tick rate. Gameplay then flows over `ws/v1/games` and the realtime WS is used for lobby/roster only. See [the bridge](#room-bound-scripted-sessions) below.
 
-Contrast this with the [peer relay](relay.md) (opaque fan-out bound to an existing room/session roster, disabled by default) and plain [scripted games](games.md) (server-authoritative, but no lobbies/matchmaking of their own). Realtime rooms are **enabled by default**.
+Contrast this with the [peer relay](relay.md) (opaque fan-out bound to an existing room/session roster, disabled by default) and plain [scripted games](games.md) (server-authoritative, with session matchmaking and invites but no room lobby). Realtime rooms are **enabled by default**.
 
 All REST endpoints require authentication and work with both a full user token and a game-scoped launch token. Errors are returned as `{"error":"..."}` with standard status codes.
 
@@ -150,7 +150,24 @@ An `Open` room does not wait out its countdown once **every seat is taken** — 
 
 `PATCH /rooms/{id}` (host): `{ "name", "isVisible", "metadata", "expectedRevision" }`. Omitted fields are left alone; send `name: ""` to clear the name.
 
-`POST /rooms/{id}/matchmake` (host, lobby only) enters the whole roster as one team against another team of the same size. Repeatable `?queues=` names a subset of the game's match shapes, same as `POST /games/{slug}/matchmaking`.
+`POST /rooms/{id}/matchmake` (host, `Lobby` only) queues the room's **human** roster as one
+party/team; pre-seated AI participants are not party members. With the default policy, party size
+must equal the selected queue's `teamSize`. With a [manifest start deadline](../starhermit-txt.md#starting-matchmaking-before-every-human-seat-is-filled),
+a smaller party can occupy a larger team at the deadline; remaining seats become AI up to the
+game's configured cap, then stay empty. Parties stay together and tickets are not combined into one team.
+
+Use `?queue=duos` for one shape or repeat `?queues=` to allow a subset, as in the Games API:
+
+```http
+POST /api/v1/realtime/rooms/{id}/matchmake?queues=duos&queues=trios
+Authorization: Bearer <token>
+```
+
+Returns the [matchmaking ticket](games.md#post-apiv1gamesslugmatchmaking), including `status` and
+`sessionId` when matched. The host polls `GET /api/v1/games/{slug}/matchmaking` and cancels with
+`DELETE` on that path. An already-queued room or a party that fits none of the allowed shapes
+returns `409`. This authoritative matchmaking flow is separate from opening a room for quick-join
+and its room-level backfill countdown.
 
 `POST /rooms/quick-join` with `{ "gameSlug": "my-game", "seats": 1 }` places the caller in the **oldest open room with a free seat** for that game slug — AI seats count as taken, so a room whose remaining seats are all AI is skipped. `404` when no room qualifies — the client should then create its own room and open it. Only single-seat quick-join is supported (`seats` must be `1`).
 

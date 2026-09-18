@@ -1,6 +1,6 @@
 # Profile
 
-The profile API covers the authenticated user's own account (`/api/v1/me/...`), public lookups of other users, public keys, linked identities, privacy settings, entitlements, and the presence heartbeat. All routes require authorization.
+The profile API covers the authenticated user's own account (`/api/v1/me/...`), public lookups of other users, public keys, linked identities, privacy settings, entitlements, and the presence heartbeat. Account routes require authorization; the current terms document is public.
 
 Errors are returned as `{"error":"..."}` with standard status codes (400/401/403/404/409/422/429).
 
@@ -10,7 +10,8 @@ Errors are returned as `{"error":"..."}` with standard status codes (400/401/403
 |--------|------|------|-------------|
 | GET | `/api/v1/me` | JWT (`Permission-user.profile.read`) | Get your own profile |
 | PATCH | `/api/v1/me` | JWT (`Permission-user.profile.update`) | Update username, email, metadata, or nickname |
-| POST | `/api/v1/me/terms/accept` | JWT (`Permission-user.profile.update`) | Record acceptance of a specific terms revision |
+| GET | `/api/v1/terms` | Anonymous | Read the current StarHermit terms and their hash |
+| POST | `/api/v1/me/terms/accept` | JWT (`Permission-user.profile.update`) | Accept the current StarHermit terms |
 | PUT | `/api/v1/me/avatar` | JWT (`Permission-user.profile.update`) | Upload your avatar |
 | GET | `/api/v1/me/avatar` | JWT (`Permission-user.profile.read`) | Get your avatar |
 | GET | `/api/v1/users/{id}/avatar` | JWT | Get any user's avatar |
@@ -42,6 +43,8 @@ Errors are returned as `{"error":"..."}` with standard status codes (400/401/403
   "updatedAt": "2026-07-20T09:30:00Z",
   "termsAcceptedHash": "9f86d081884c7d65...",
   "termsAcceptedAt": "2026-07-30T11:02:44Z",
+  "currentTermsHash": "9f86d081884c7d65...",
+  "termsAcceptanceRequired": false,
   "privacy": {
     "onlineStatus": 1,
     "currentlyPlaying": 1,
@@ -73,20 +76,97 @@ success, 409 on conflict (username or nickname already taken).
 }
 ```
 
-### `POST /api/v1/me/terms/accept`
+### Terms acceptance
 
-Records that this account accepted your terms of service. The body is the **hash of the terms text
-that was shown** (≤64 characters), not a boolean — so acceptance is tied to a specific revision, and
-publishing new terms is a matter of comparing hashes rather than resetting a flag on every account.
+Before using protected REST endpoints or opening WebSockets, the account must accept the **current
+StarHermit terms**. This applies to account tokens and player launch tokens, including accounts that
+accepted an older revision. It does not apply to anonymous resources/sign-in or a container server's
+own deployment token. `GET /api/v1/me` and the acceptance endpoint remain available with their usual
+account permissions while acceptance is pending.
+
+`GET /api/v1/me` includes `currentTermsHash` and `termsAcceptanceRequired`. The stored
+`termsAcceptedHash` and `termsAcceptedAt` are null before first acceptance. The hash shown in the
+profile example above is abbreviated; always use the full hash returned by the API.
+
+#### `GET /api/v1/terms`
+
+Anonymous; also readable with a player launch token. Returns `200` with `Cache-Control: no-store`:
 
 ```json
-{ "hash": "9f86d081884c7d65..." }
+{ "hash": "<current-64-character-lowercase-sha256>", "text": "<complete terms text>" }
 ```
 
-Returns `{ "termsAcceptedHash", "termsAcceptedAt" }`; both also appear on `GET /api/v1/me`, where
-they are `null` for an account that has never accepted. A missing or over-long hash is `400`.
-Requires `Permission-user.profile.update`, so a game-scoped launch token cannot accept terms on a
-player's behalf.
+Render `text` as plain text. `hash` is SHA-256 of the exact UTF-8 document bytes; use the returned
+value rather than hashing reformatted display text.
+
+#### `POST /api/v1/me/terms/accept`
+
+After the user reads and explicitly accepts the displayed revision, send its hash:
+
+```http
+POST /api/v1/me/terms/accept
+Authorization: Bearer <account-access-token>
+Content-Type: application/json
+
+{ "hash": "<hash-returned-with-the-displayed-text>" }
+```
+
+Returns `200` with `{ "termsAcceptedHash", "termsAcceptedAt" }`. Requires
+`Permission-user.profile.update`; OAuth and public-key account sessions can accept, but a
+**game-scoped launch token cannot**. Acceptance is stored on the account and takes effect on the
+next request with the same still-valid token; refreshing the token is unnecessary.
+
+A missing/blank hash or one longer than 64 characters returns `400`. A hash that does not exactly
+match the current revision returns `409`:
+
+```json
+{
+  "error": "terms_version_mismatch",
+  "termsHash": "<current-hash>",
+  "termsUrl": "/api/v1/terms"
+}
+```
+
+Fetch and display the new document and ask for acceptance again; do not silently accept a replacement
+revision. Other protected requests with pending acceptance return `403`:
+
+```json
+{
+  "error": "terms_acceptance_required",
+  "message": "Accept the latest terms of service before using the API.",
+  "termsHash": "<current-hash>",
+  "termsUrl": "/api/v1/terms",
+  "acceptUrl": "/api/v1/me/terms/accept"
+}
+```
+
+A hosted game should direct the player to their StarHermit account UI to accept, then retry after
+confirmation. It should not repeatedly sign the player in or refresh tokens to fix this error.
+WebSocket upgrades are refused with HTTP `403` before opening; browsers may hide the response body,
+so handle acceptance through REST before connecting.
+
+Example for an account client (call `acceptDisplayedTerms` only from the user's Accept action):
+
+```js
+const api = 'https://api.starhermit.com';
+async function loadTerms() {
+  const response = await fetch(`${api}/api/v1/terms`);
+  if (!response.ok) throw new Error(`Terms fetch failed: ${response.status}`);
+  return response.json(); // Display text, retain this document's hash.
+}
+async function acceptDisplayedTerms(accountToken, displayedTerms) {
+  const response = await fetch(`${api}/api/v1/me/terms/accept`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accountToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hash: displayedTerms.hash })
+  });
+  if (response.status === 409) {
+    throw new Error('Terms changed. Reload and display them for a new acceptance.');
+  }
+  if (!response.ok) throw new Error(`Acceptance failed: ${response.status}`);
+  return response.json();
+}
+```
 
 ### Avatars
 

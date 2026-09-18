@@ -92,7 +92,10 @@ Requires an entitlement (403 otherwise). Returns:
 }
 ```
 
-The URL targets the latest build's first downloadable asset, and is signed and time-limited. The call records a download activity.
+The URL targets the latest build's first downloadable asset. The call records a download activity.
+The current backend uses a mock file-storage adapter that appends `token=mock-download-token`;
+it does not issue a real expiring signature. A deployment needs a real storage integration for
+production catalog downloads; see [the publisher pipeline limitation](publisher.md#finalize-a-build).
 
 ## Cloud saves
 
