@@ -100,7 +100,75 @@ launch=index.html
 | `name` | — | The display name players see. Required unless you pass a display name in the upload form. |
 | `launch` | `launch_path`, `html` | Path to the entry `.html`, relative to the manifest. Defaults to `index.html` when a file by that name sits at the root. |
 | `cover` | `cover_art`, `coverart` | Artwork on the game's library tile. A path relative to the launch file (`cover.png`, `art/box.jpg`) or an absolute `https://` URL. Optional — without one the tile shows the favicon. A bad value is dropped rather than refusing the game. |
+| `description` | — | The store-page text players read about your game. One line; write `\n` for a line break. Or use `description.file` to keep it in a file. See [Description and release notes](#description-and-release-notes). |
+| `release_notes` | `releasenotes` | What changed in this build. Same rules as `description`; `release_notes.file` points at a file instead. |
 | `owner` | `username`, `user` | **Repository flow only.** The owning StarHermit **user ID (UUID)** from `GET /api/v1/me`, not a username. Lets you [claim a listing someone else added](tutorials/claim-existing-game.md) by proving you control the repository. Ignored on an upload — see [Who owns an uploaded game](#who-owns-an-uploaded-game). |
+
+### Description and release notes
+
+Two optional pieces of text shown alongside your game: a **description** (what the game is) and
+**release notes** (what changed in the build you are publishing). Each can be written in the
+manifest itself or kept in its own file.
+
+**Inline**, for short text. The manifest is one line per key, so write `\n` wherever you want a
+line break (and `\\` for a literal backslash):
+
+```text
+name=Asteroid Garden
+launch=index.html
+description=Tend a garden on a drifting asteroid.\nPlant, water, and dodge the meteor showers.
+release_notes=- New: night cycle\n- Fixed: seeds vanishing after a reload
+```
+
+**From a file**, for anything longer — this is the form to use for real release notes:
+
+```text
+name=Asteroid Garden
+launch=index.html
+description.file=DESCRIPTION.md
+release_notes.file=CHANGELOG.md
+```
+
+```text
+my-game-dist/
+  starhermit.txt
+  DESCRIPTION.md
+  CHANGELOG.md
+  index.html
+```
+
+| Key | Aliases | Meaning |
+|---|---|---|
+| `description` | — | Description text, inline. |
+| `description.file` | — | Path to a `.md`, `.markdown` or `.txt` file holding the description. |
+| `release_notes` | `releasenotes` | Release notes text, inline. |
+| `release_notes.file` | `releasenotes.file` | Path to a `.md`, `.markdown` or `.txt` file holding the release notes. |
+
+The rules:
+
+- **File paths are relative to `starhermit.txt`** (the repository root for a repository game), not
+  to the launch file. No `..`, no leading `/`, and only `.md`, `.markdown` or `.txt`; any other path
+  is ignored rather than refusing the game. The file has to be *inside* what you publish, so it is
+  served to players like every other file next to the manifest. Do not put anything in it you
+  would not show them.
+- **A file wins over the inline line.** Declare both and the inline text is only a fallback, used
+  when the file cannot be found.
+- **The text is re-read every time the manifest is**: every upload or push that carries a
+  manifest, and every repository deploy (from the commit being deployed). Delete both lines and the
+  text is cleared. A file that is declared but missing, with no inline fallback, leaves the text the
+  game already had.
+- **Why a file and not multi-line text in the manifest?** Every other key is read line by line. If a
+  paragraph of release notes could sit inside the manifest, a note that happened to say
+  `owner=someone` would be read as an `owner=` line.
+- **Size**: a description is cut at 4,000 characters and release notes at 20,000. Longer text is
+  shortened, not refused. Line endings are normalized and leading and trailing blank lines trimmed.
+- **Formatting**: the text is stored exactly as written. Markdown is a sensible choice, but whether
+  it is rendered or shown as plain text is up to the client displaying it.
+- **Release notes replace, not accumulate.** Each publish carries the notes for *that* build. Keep
+  your full history in your own changelog and publish the part players need.
+
+Clients read the description from the game listing and release notes from
+[`GET /api/v1/github-games/{id}/release-notes`](api/github-games.md#description-and-release-notes).
 
 ### Browser asset caching
 
@@ -283,6 +351,15 @@ SVG covers show on the web library. The Windows client has no SVG decoder, so th
 to the favicon while the web tile still shows the cover. Prefer PNG, JPEG or WEBP when you want
 the same tile on both.
 
+### Game with a description and release notes
+
+```text
+name=Asteroid Garden
+launch=index.html
+description=Tend a garden on a drifting asteroid.
+release_notes.file=CHANGELOG.md
+```
+
 ### Static site whose entry point is not at the root
 
 ```text
@@ -367,4 +444,6 @@ for its directory prefix, so shorten very long folder chains.
 | "The upload's files do not contain the launch file" | `launch=` names a file that is not in the folder. Check the spelling and that it is relative to the manifest, not absolute. |
 | Your game published but is missing files | Those files were not adjacent to the manifest. The upload starts at the folder holding `starhermit.txt`; nothing above it is included. |
 | The library tile shows the favicon, not your cover | `cover=` is missing, is not a usable image path/`https://` URL, or the file is not beside the launch file. Bad values are dropped silently — the game still publishes. SVG appears on the web library only; the Windows tile falls back to the favicon. An image from **Manage → Cover art** overrides the manifest until you remove it there. |
+| Your description or release notes did not appear | The key is misspelled (unknown keys are ignored), the `*.file` path is not a `.md`/`.markdown`/`.txt` file relative to `starhermit.txt`, or the file was not in what you published. A missing file keeps the previous text. |
+| Your release notes show `\n` literally | Only the inline form turns `\n` into a line break. Text read from a `*.file` is used exactly as written. |
 | `container.image` refused | It is not digest-pinned. Use `name@sha256:<64 hex>`, not a tag. |

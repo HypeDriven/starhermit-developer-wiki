@@ -21,6 +21,8 @@ name=Your Game
 # from the launch token's game_scope claim.)
 launch=index.html        # repo-relative HTML entry
 cover=art/cover.png      # optional cover art for the library tile; or an https:// URL
+description=One-line pitch\nSecond line   # optional; or description.file=DESCRIPTION.md
+release_notes.file=CHANGELOG.md          # optional; or release_notes=inline text
 owner=<starhermit user id>  # UUID from GET /api/v1/me; do not use username/nickname
 # Choose at most one authoritative backend, or omit both for a browser-only game:
 server=server.js         # sandboxed JavaScript; see game-scripts.md
@@ -32,6 +34,7 @@ control.shoot=Space | Shoot
 
 - There is no `slug` key: the platform assigns a uid and uses it as both the subdomain (`<uid>.starhermit.com`) and the game API namespace (`/api/v1/games/<uid>/…`).
 - `cover` (aliases `cover_art`, `coverart`) is the artwork shown on the game's library tile: a path relative to the launch file, or an absolute `https://` URL. Optional — without one the tile shows your site's favicon. Re-read on every deploy, so changing the line changes the cover. See [Cover art](#cover-art) for the tile crops.
+- `description` / `release_notes` (or `description.file` / `release_notes.file`, which name a `.md`/`.markdown`/`.txt` file relative to the manifest) are optional text for your game. They are re-read on every deploy like `cover`. See [Description and release notes](#description-and-release-notes).
 - `server` declares a sandboxed JavaScript backend; see [game-scripts.md](game-scripts.md).
 - `container.image` declares a container backend; see [container-games.md](container-games.md). It must be digest-pinned, hosted in the verified GitHub owner's namespace on an allowlisted registry, and may be accompanied by `container.port`, `container.health`, `container.memory_mb`, `container.cpu`, and non-secret `container.env.*` values.
 - Both backend keys are optional for a pure browser game, but they are mutually exclusive with each other.
@@ -74,6 +77,7 @@ Players can override these defaults per game through the
 | GET | `/api/v1/me/github-games/{id}/deployment` | JWT | Read deployment/hosting state → `GameHostingView` |
 | PUT | `/api/v1/me/github-games/{id}/deployment` | JWT | Pin a commit/branch; queues a redeploy → `GameHostingView` |
 | GET | `/api/v1/github-games` | JWT | Public browse of shared GitHub games → `SharedGitHubGameDto[]` |
+| GET | `/api/v1/github-games/{id}/release-notes` | JWT | The game's release notes from its manifest → `GitHubGameReleaseNotesDto`, or `404` for an unknown or removed game |
 | GET | `/api/v1/github-games/{id}/icon` | Anonymous | Game icon image bytes (favicon or owner avatar); `ResponseCache` 86400 |
 | GET | `/api/v1/github-games/{id}/cover` | Anonymous | **Cover art image bytes**, or `404` when the game has none; `ResponseCache` 3600 |
 | PUT | `/api/v1/me/github-games/{id}/cover` | JWT (owner) | Upload cover art, overriding the manifest's `cover=` → `204` |
@@ -556,14 +560,45 @@ elo, reason `operator_ended`). That returns the capacity seat a stuck session wa
   "createdAt": "...",
   "coverArtSource": "manifest",
   "coverArtUpdatedAt": "...",
-  "hosting": { "hostingEnabled": true }
+  "hosting": { "hostingEnabled": true },
+  "description": "Tend a garden on a drifting asteroid.",
+  "releaseNotesUpdatedAt": "..."
 }
 ```
 
 - `serverScriptPath` is present only for a JavaScript backend. `gameSlug` may be present for either a script or container backend. The current DTO does not expose a container image reference.
 - For a game added from a local folder, `repoUrl` is a synthetic `upload:<id>` marker and `ownerLogin`/`repoName` are empty — there is no repository to name, and an empty owner is what makes the listing unclaimable.
 - `coverArtSource` is `"upload"`, `"manifest"` or `null`, and `coverArtUpdatedAt` is when that cover last changed — use it to cache-bust the `/cover` URL. Anything non-null means the game has cover art to fetch; `null` means fall back to `/icon`. The two sources are not equal: an upload always wins, and it is the only one `DELETE /cover` can remove.
+- `description` is the manifest's description, or `null`. `releaseNotesUpdatedAt` is when the release notes last *changed text* (`null` when the game has none). Redeploying identical notes does not move it, so it is safe to drive a "What's new" badge: remember the value a player last saw and compare. The notes themselves are not in the listing; see [Description and release notes](#description-and-release-notes).
 - `SharedGitHubGameDto` extends `GitHubGameDto` with `submittedByUserId` and `submittedByUsername`.
+
+### Description and release notes
+
+Both come from the game's `starhermit.txt`; see
+[the manifest reference](../starhermit-txt.md#description-and-release-notes) for how to write them.
+The description is in the game listings above. Release notes can run to 20,000 characters, so they
+are kept out of the browse list, which returns every game at once, and fetched per game:
+
+```http
+GET /api/v1/github-games/{id}/release-notes
+Authorization: Bearer <token>
+```
+
+```json
+// GitHubGameReleaseNotesDto
+{
+  "id": "...",
+  "releaseNotes": "- New: night cycle\n- Fixed: seeds vanishing after a reload",
+  "updatedAt": "2026-09-27T10:15:00+00:00",
+  "commitSha": "4f2a…"
+}
+```
+
+- `releaseNotes` and `updatedAt` are `null` when the game declares no notes.
+- `commitSha` is the deployed commit for a repository game, and `null` for an uploaded build.
+- Only ask when `releaseNotesUpdatedAt` in the listing is newer than what you last showed.
+- The text is returned exactly as the developer wrote it (typically Markdown). Rendering it is
+  the client's choice, and it should be treated as untrusted input like any user text.
 
 ```json
 // GameHostingView
