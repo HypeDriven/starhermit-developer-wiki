@@ -49,7 +49,7 @@ patterns, not the subject of the docs.
   with the server’s exact JSON escaping (including Base64 nonce plus signs),
   and upload client or container builds over HTTP/WebSocket), `kart-racer` (a multiplayer racing game
   on realtime rooms: host-routed binary netcode with host migration, plus a server-authoritative
-  script variant with matchmaking), and `claim-existing-game` (prove repository control and take over
+  script variant with matchmaking and client-side prediction), and `claim-existing-game` (prove repository control and take over
   an existing listing).
 
 Conventions the pages share and state: REST under `api/v1/...` at `https://api.starhermit.com`,

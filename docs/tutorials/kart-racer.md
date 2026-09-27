@@ -271,7 +271,7 @@ globalThis.game = {
   createSession(ctx) {
     const karts = racers(ctx).map((r, i) => ({
       id: r.id, name: r.name, ai: r.ai, x: -8 * (i % 2), z: -6 * i, heading: 0, speed: 0,
-      cp: 1, lap: 0, boost: 0, boosts: 1, input: {}, finishedAt: null
+      cp: 1, lap: 0, boost: 0, boosts: 1, input: {}, ack: 0, finishedAt: null
     }));
     return { ok: true, sessionState: { t: ctx.now, goAt: ctx.now + 4000, karts, order: [] } };
   },
@@ -291,12 +291,17 @@ globalThis.game = {
     s.t = ctx.now;
     for (const i of ctx.inputs || []) {        // latest realtime input per player since last tick
       const k = s.karts.find((k) => k.id === i.from);
-      if (k) k.input = i.data;
+      if (k) { k.input = i.data; k.ack = Math.max(k.ack, Math.floor(+i.data.seq) || 0); }
     }
     if (ctx.now >= s.goAt) {
-      for (const k of s.karts) if (!k.finishedAt) step(k, k.ai ? aiInput(k) : k.input, dt, s, ctx);
+      for (const k of s.karts) {
+        if (k.finishedAt) continue;
+        move(k, k.ai ? aiInput(k) : k.input, dt);   // pure motion — shared with the client
+        progress(k, s, ctx);                        // checkpoints, laps, finish — server only
+      }
     }
-    const snap = s.karts.map((k) => [k.id, r1(k.x), r1(k.z), r2(k.heading), r1(k.speed), k.lap, k.cp]);
+    const snap = s.karts.map((k) =>
+      [k.id, r2(k.x), r2(k.z), r3(k.heading), r2(k.speed), r2(k.boost), k.lap, k.cp, k.ack]);
     const out = { ok: true, sessionState: s,
       broadcast: [{ to: "all", data: { type: "snap", t: s.t, goAt: s.goAt, karts: snap } }] };
     if (raceOver(s, ctx)) Object.assign(out, finish(s, ctx));
@@ -310,8 +315,10 @@ The helpers are ordinary game code. The parts the platform cares about:
 - **`racers(ctx)`** reads the grid from whichever start the session had: `ctx.room.roster` for a
   room (AI seats have `userId: null`, so give them ids like `ai-0-5`), `ctx.matchmaking.seats` for a
   matchmade race (skip seats with `id: null`), else `ctx.players`.
-- **`step(k, input, dt)`** must **clamp every input value** — `steer` to −1…1, `throttle` to 0…1 —
-  because `ctx.inputs[].data` is whatever the client sent. Only `from` is trusted.
+- **`move(k, input, dt)`** must **clamp every input value** — `steer` to −1…1, `throttle` to 0…1 —
+  because `ctx.inputs[].data` is whatever the client sent. Only `from` is trusted. Keep it pure —
+  no `ctx`, no session state — so the client can run it too (see
+  [client-side prediction](#client-side-prediction)).
 - **Randomness and time** come from `ctx.random` and `ctx.now`; there is no `Date` or `Math.random`.
 - **`finish(s, ctx)`** returns `result` (which ends the session and, for a room, closes it),
   `achievements` for the winner if human, and `eloUpdates` for human racers — for example pairwise
@@ -340,11 +347,139 @@ platform preserves only the one-shot fields `pass`, `tackle` and `shoot` when a 
 replaces an older one — any other button in a realtime input can be overwritten before the tick
 sees it.
 
-Render other karts ~100 ms behind the latest `snap`, interpolating. For your own kart, run the same
-`step` function locally and correct toward the server's position; exposing the physics from
-`server.js` as a second global (the way chess exposes `globalThis.chessRules`) keeps the client and
-server stepping identical code. `achievement` frames arrive on the same socket; read
-`GET /api/v1/games/{slug}/achievements` on load for anything granted before it opened.
+`achievement` frames arrive on the same socket; read `GET /api/v1/games/{slug}/achievements` on
+load for anything granted before it opened.
+
+### Client-side prediction
+
+Rendering only what the server sends makes the kart feel like it is steered through mud. A steering
+change has to reach the server, wait for the next tick (up to 33 ms at 30 Hz), and come back in a
+`snap` — at 80 ms ping that is over 100 ms before the kart turns. Prediction hides that: the client
+moves **its own kart** immediately and treats each `snap` as a correction, not as the picture.
+
+#### Share the motion code
+
+Split the simulation the way the script above does: a pure `move(k, input, dt)` for handling, and
+server-only `progress` for checkpoints, laps and finishing. Expose the motion code from `server.js`
+as a second global — the pattern chess uses for `globalThis.chessRules` — and load the same file in
+the browser:
+
+```js
+// server.js — shared by the platform's sandbox and the browser
+function move(k, input, dt) { /* clamp input, integrate speed, heading, x, z, boost */ }
+globalThis.kartPhysics = { move, TRACK };
+globalThis.game = { /* ... as above ... */ };
+```
+
+```html
+<script src="server.js"></script>  <!-- defines kartPhysics; the client never calls game.* -->
+```
+
+The client predicts **motion only**. Laps, positions, items and the finish order stay the server's
+call. Don't expect bit-identical results: the sandbox and the browser may disagree in the last bits of
+`Math.sin`/`Math.cos`, and positions in `snap` are rounded. Reconciliation absorbs that drift.
+
+#### Step at the server's rhythm
+
+The server does not run one step per input. Each tick it applies the **latest** input it holds for
+that kart, keeps using it until a newer one arrives, and integrates over the real time since the
+previous tick. So mirror that shape rather than stepping at display frame rate:
+
+```js
+const pending = [];                              // inputs the server hasn't acknowledged yet
+let seq = 0, predicted, previous;               // { x, z, heading, speed, boost }, seeded from the first snap
+let error = { x: 0, z: 0, heading: 0 };          // visual offset, decays in render()
+
+setInterval(() => {                              // 30 Hz, the script's tickRateHz
+  if (!predicted || serverNow() < goAt) return;  // the server ignores movement before goAt
+  const input = { steer: readSteer(), throttle: readThrottle(), brake: held("brake"), drift: held("drift") };
+  const entry = { seq: ++seq, input, dt: 1 / 30 };
+  send({ type: "cmd", data: { type: "input", realtime: true, seq: entry.seq, ...input } });
+  pending.push(entry);
+  previous = { ...predicted };
+  kartPhysics.move(predicted, input, entry.dt);  // the kart responds now, not a round trip later
+}, 1000 / 30);
+```
+
+Sending faster than the tick rate is wasted — only the latest input per tick is used — and the
+platform drops realtime inputs above its per-connection cap.
+
+#### Reconcile on every `snap`
+
+The script echoes `ack`, the highest `seq` it has applied for each kart. On each `snap`, rewind your
+kart to the server's state and replay what the server hasn't seen yet:
+
+```js
+function onSnap(snap) {
+  const [, x, z, heading, speed, boost, lap, cp, ack] = snap.karts.find((k) => k[0] === myId);
+  while (pending.length && pending[0].seq <= ack) pending.shift();   // applied or superseded
+
+  const corrected = { x, z, heading, speed, boost };
+  for (const p of pending) kartPhysics.move(corrected, p.input, p.dt);
+
+  if (!predicted) { predicted = corrected; previous = { ...corrected }; return; } // first snap
+  error.x += predicted.x - corrected.x;          // what the player would see jump
+  error.z += predicted.z - corrected.z;
+  error.heading += predicted.heading - corrected.heading;
+  if (Math.hypot(error.x, error.z) > 3) error = { x: 0, z: 0, heading: 0 }; // wall hit, bump: snap
+  predicted = corrected;
+  hud.lap = lap; hud.checkpoint = cp;            // progress is never predicted
+}
+```
+
+Discarding everything up to `ack` is right even though latest-wins skips some inputs: a skipped
+input was superseded before the server ticked, so it never affected the server's kart either.
+
+#### Smooth corrections, render at frame rate
+
+Small corrections should be invisible. Draw the kart at the predicted position plus a decaying
+error offset, and interpolate between the last two 30 Hz prediction steps so a 60 or 144 Hz display
+moves smoothly:
+
+```js
+function render(frameDt) {
+  const decay = Math.exp(-frameDt / 0.1);        // ~100 ms to absorb a correction
+  error.x *= decay; error.z *= decay; error.heading *= decay;
+  const a = sinceLastStep() * 30;                // 0…1 between prediction steps
+  drawKart(lerp(previous.x, predicted.x, a) + error.x,
+           lerp(previous.z, predicted.z, a) + error.z,
+           lerpAngle(previous.heading, predicted.heading, a) + error.heading);
+}
+```
+
+Tune the snap threshold rather than the decay: a correction bigger than a kart length is a real
+event (a bump you didn't predict) and reads better as a quick snap than as a slow slide.
+
+#### Know what not to predict
+
+- **Other karts.** They are drawn ~100 ms in the past (buffer `snap`s and interpolate between the
+  two that bracket `serverNow() - 100`), so a collision predicted against them is a collision with
+  where they *were*. Predict walls and the track — they don't move — and let the server resolve
+  kart-to-kart bumps. The correction arrives within a round trip. If the buffer runs dry, extrapolate
+  from speed and heading for up to ~100 ms, then hold.
+- **Items.** `use-item` is a durable command, so it runs in `onPlayerMessage` as soon as it arrives —
+  no tick wait. Play the flame and the sound on the key press; let the speed arrive through
+  reconciliation, since `boost` is in the `snap`. If the server refuses (no charges left), the next
+  `snap` rolls it back.
+- **Race state.** Lap count, position and finish come from `snap` and your script's broadcasts only.
+
+#### Estimate the server clock
+
+`snap.t` and `goAt` are server time (`ctx.now`). Keep an offset from the smallest observed gap, which
+filters out slow deliveries:
+
+```js
+let offset = Infinity;
+function noteSnap(snap) { offset = Math.min(offset, performance.now() - snap.t); }
+const serverNow = () => performance.now() - offset;
+```
+
+Start the countdown from `goAt`, and gate prediction on it as the loop above does. A kart that moves
+before `goAt` locally gets rubber-banded back to the grid by the first `snap` after the start.
+
+To tune all of this, add artificial latency in development (delay `send` and `onSnap` by 100–200 ms)
+and log the size of each correction — steady large corrections mean `move` has drifted from the
+server's copy, or an input field is being clamped differently on each side.
 
 ## Checklist
 
@@ -357,6 +492,8 @@ server stepping identical code. `achievement` frames arrive on the same socket; 
 - [ ] Ready → countdown → race events as control frames; result with the order in `metadata`.
 - [ ] Host drives AI seats and leavers' karts; the new host resumes from the last snapshot.
 - [ ] Variant B: `tickRateHz: 30`, clamped inputs, items as durable commands, `result` + `eloUpdates`.
+- [ ] Variant B: own kart predicted with the shared `move`, reconciled on `ack`, corrections smoothed;
+      no movement before `goAt`; other karts interpolated ~100 ms behind.
 
 ## See also
 
