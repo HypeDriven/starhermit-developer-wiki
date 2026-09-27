@@ -295,7 +295,7 @@ game being disabled or delisted, because they are the player's data rather than 
 
 ### `GET /api/v1/games/{slug}/sessions/mine`
 
-The caller's active sessions for this game. `myTurn` and `deadline` are parsed from the script state's `summary` object (see [Game Scripts](game-scripts.md#the-platform-readable-window)).
+The caller's active sessions for this game. `myTurn` and `deadline` are parsed from the script state's `summary` object (see [Game Scripts](game-scripts.md#the-platform-readable-window)). `pausedAt` is set while a [persistent](../tutorials/persistent-sessions.md) session is paused with nobody in it, and `null` otherwise.
 
 ```json
 [
@@ -309,7 +309,8 @@ The caller's active sessions for this game. `myTurn` and `deadline` are parsed f
     "createdAt": "2026-07-20T14:03:11Z",
     "finishedAt": null,
     "myTurn": true,
-    "deadline": "2026-07-21T14:03:11Z"
+    "deadline": "2026-07-21T14:03:11Z",
+    "pausedAt": null
   }
 ]
 ```
@@ -574,6 +575,7 @@ existed report `null`.
 - Session `status` is `"active"` or `"finished"`.
 - Each session gets a per-session chat conversation (type `"game"`) so opponents can chat and voice-call **without being friends** (see [Chat](chat.md) and [Voice](voice.md)).
 - Concurrent-session cap per player defaults to `20`.
+- A game that declares `persistent` keeps empty sessions **paused** instead of ending them; connecting to one resumes it. Paused sessions count toward the cap. See the [persistent sessions tutorial](../tutorials/persistent-sessions.md).
 - Matchmaking ticket statuses: `queued` | `matched` | `cancelled` | `expired`.
 - Invite statuses: `pending` | `accepted` | `declined` | `cancelled`.
 - **Sessions are created via matchmaking, invite-accept, the AI endpoint, or a realtime room start** (room-bound sessions — see [Realtime Rooms](realtime.md#room-bound-scripted-sessions)) — there is no "create lobby" endpoint.
@@ -585,6 +587,7 @@ existed report `null`.
 
 - Text frames only, max 16 KB per frame.
 - A newer connection supersedes the old one: the previous connection is closed with `PolicyViolation`.
+- Connecting to a paused [persistent](../tutorials/persistent-sessions.md) session resumes it before your first command. If it cannot be resumed (typically a container still starting), you get an `error` frame and the socket closes with code `1001`; the session stays paused — reconnect with backoff.
 
 ### Client → server
 
@@ -620,7 +623,8 @@ For a script runtime, durable commands run through `onPlayerMessage`; explicitly
 - `abandoned` — the platform ended the session without a winner or elo update. Reasons:
   `players_left`, `idle_no_players`, `superseded` (the player asked for a new game of this title),
   `server_failure`, `restore_failed`, `operator_ended` (the game's owner ended it). Stored as
-  `{ "kind": "abandoned", "reason": "…" }`.
+  `{ "kind": "abandoned", "reason": "…" }`. A [persistent](../tutorials/persistent-sessions.md) game's sessions are never
+  ended as `players_left`, `idle_no_players` or `superseded` — they pause instead.
 
 ## Owner diagnostics and webhooks
 

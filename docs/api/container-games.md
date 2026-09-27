@@ -93,6 +93,7 @@ not assume the process will survive for the life of a match.
   "tickRateHz": 20,
   "maxSessions": 48,
   "replays": true,
+  "persistent": false,
   "achievements": [
     { "key": "first-blood", "name": "First Blood", "description": "Score first.", "points": 10 }
   ]
@@ -115,6 +116,13 @@ answer `404`. Like the tick rate it is a request — an operator may answer for 
 either way — so branch your client on `replaysEnabled` from `GET /api/v1/games/{slug}` rather than on
 what you declared. Snapshots are unaffected either way: a live session needs a restore point whether
 or not its last one is kept.
+
+`persistent` (literal `true`/`false`) asks for sessions that **pause instead of ending** when every
+player has left. A pause parks the session: the platform takes a final snapshot, stores it, and
+calls `DELETE /sessions/{id}`; the next player to join brings it back through `POST /sessions` with
+that `snapshot`, exactly like a crash restore but without spending the restart budget or sending
+`resumed`. Restored persistent sessions also carry `pausedMs`, the total time spent paused. See the
+[persistent sessions tutorial](../tutorials/persistent-sessions.md).
 
 The current `/describe` reader does not import a `queues` property. Container games therefore use
 the implicit `default` 1v1 matchmaking queue; adding shapes here does not enable larger matches.
@@ -151,6 +159,8 @@ standard result envelope, for example:
 
 On recovery the request also contains `snapshot`, holding the last state persisted by the platform,
 and `restoredFrom`, a Unix-millisecond timestamp. Reconstruct a playable session from the snapshot.
+Persistent games are restored the same way when a player rejoins a paused session, with `pausedMs`
+in the body.
 
 ### `GET /sessions/{sessionId}/snapshot`
 
@@ -296,6 +306,7 @@ into the replacement (or abandons those too stale). A repeatedly crashing deploy
 (`failed`) and is **not** woken by player demand.
 
 A deployment with no live sessions is stopped after 15 minutes of idle (operator-configurable).
+Paused [persistent](#get-describe) sessions are parked out of the container and do not keep it up.
 The next session request against a `stopped` deployment wakes it (`pending` → health gate →
 `running`); losing that race is `503` saying the game is starting. Only `stopped` is woken this
 way — never `failed`.

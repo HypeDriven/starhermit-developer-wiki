@@ -39,6 +39,9 @@ not the subject of the docs.
   racer on realtime rooms: lobbies, quick-join, CPU drivers, host-routed binary netcode within the
   socket's rate limits, host migration, and a server-authoritative 30 Hz script variant for ranked play,
   with client-side prediction and reconciliation.
+- **[Tutorial: persistent sessions — games that pause when everyone leaves](docs/tutorials/persistent-sessions.md)** —
+  opt a script or container game into sessions that pause instead of ending, keep game clocks still
+  with `ctx.pausedMs`, and rejoin paused worlds from the client.
 - **[Tutorial: claim a game someone else added](docs/tutorials/claim-existing-game.md)** —
   prove repository control, take over the existing listing, and manage its hosting and deployments.
 
@@ -61,7 +64,7 @@ WebSockets under `ws/v1/...`, JWT bearer auth
 |---|---|---|
 | Auth | [auth.md](docs/api/auth.md) | Public-key registration/login, live OAuth providers (`GET /auth/oauth/providers`), refresh rotation, launch tokens & game-scope fencing, WebSocket connection tickets |
 | Games | [games.md](docs/api/games.md) | Sessions, declared match queues, elo matchmaking, friend invites, per-player controls and settings, AI practice, opt-in replays, owner diagnostics/webhooks, `ws/v1/games` protocol |
-| Game scripts | [game-scripts.md](docs/api/game-scripts.md) | Authoring the server-side JS rules file (Jint sandbox contract, budgets, tick rate, elo, achievements, replays) |
+| Game scripts | [game-scripts.md](docs/api/game-scripts.md) | Authoring the server-side JS rules file (Jint sandbox contract, budgets, tick rate, elo, achievements, replays, persistent sessions) |
 | Container game servers | [container-games.md](docs/api/container-games.md) | Shipping authoritative game logic as a digest-pinned container (protocol, streams, snapshots, isolation, recovery) |
 | Profile | [profile.md](docs/api/profile.md) | `me`, avatars, privacy settings, current terms acceptance and recovery, OAuth-controlled public-key credentials, linked identities, entitlements, presence heartbeat |
 | Friends | [friends.md](docs/api/friends.md) | Friend requests, friend list with online/current-game presence |

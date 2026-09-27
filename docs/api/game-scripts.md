@@ -10,11 +10,13 @@ A StarHermit authoritative game can be defined by a **single JavaScript file** e
 
 ## Entry points
 
-Expose the handlers on `globalThis.game`. Four optional **static** declarations sit alongside them:
+Expose the handlers on `globalThis.game`. Five optional **static** declarations sit alongside them:
 `tickRateHz` asks the platform how often to invoke `onTick` — declare it if your game depends on the
 tick, since a game that says nothing is ticked once every four seconds (see [Tick rate](#tick-rate)),
 `achievements` registers the game's achievements (see [Achievements](#achievements)), `replays`
-asks the platform to keep your finished sessions (see [Replays](#replays)), and `queues` declares
+asks the platform to keep your finished sessions (see [Replays](#replays)), `persistent` pauses
+sessions instead of ending them when everyone leaves (see [Persistent sessions](#persistent-sessions)),
+and `queues` declares
 the shapes of match matchmaking accepts (see [Games — Matchmaking](games.md#matchmaking)). A game
 that declares no queues has one implicit 1v1:
 
@@ -47,6 +49,7 @@ ctx = {
   now: 1721473200000,              // ms epoch, from the host clock
   random: 0.7231,                  // float in [0, 1), from the host RNG
   sessionId: "0f8fad5b-...",       // current session id
+  pausedMs: 0,                     // persistent games only: total ms this session has spent paused
   players: [                       // session participants
     { id: "7c9e6679-...", name: "alice" },
     { id: "00000000-0000-4000-8000-00000000a1a1", name: "The House", ai: true }
@@ -127,6 +130,30 @@ globalThis.game = {
 - Design the final `sessionState` to be worth replaying — a move log, or whatever your client needs
   to reconstruct the match. The chess reference implementation keeps `state.game.moves` and steps it
   through the same rules module the platform executes.
+
+## Persistent sessions
+
+A game that declares `persistent: true` keeps its sessions when every player leaves. About 15
+seconds after the last disconnect the session is **paused** — no `onTick` calls — and the first
+player to reconnect resumes it. It is never ended as `players_left`, `idle_no_players` or
+`superseded`; it ends only when your script returns a `result` (or the owner ends it).
+
+```js
+globalThis.game = {
+  persistent: true,        // pause empty sessions instead of ending them
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+```
+
+- Must be a literal `true` or `false`. It is read **when your game is published or updated**.
+- `ctx.now` stays the wall clock. Persistent sessions also get `ctx.pausedMs`, the total time spent
+  paused, so `ctx.now - ctx.pausedMs` is a clock that stands still while nobody is there.
+- Paused sessions count against the per-player session cap, so give players a command that ends a
+  world with a `result`.
+
+See the [persistent sessions tutorial](../tutorials/persistent-sessions.md) for a worked example and the client flow.
 
 ## Matchmaking seat layout
 
