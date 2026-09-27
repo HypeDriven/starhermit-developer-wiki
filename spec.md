@@ -47,8 +47,10 @@ patterns, not the subject of the docs.
   Steam/Epic/GOG/native players via public-key registration without OAuth), `ci-cd-build-upload`
   (enrol a labelled machine key from an OAuth session, authenticate a pipeline by signed challenge
   with the server’s exact JSON escaping (including Base64 nonce plus signs),
-  and upload client or container builds over HTTP/WebSocket), and `claim-existing-game` (prove
-  repository control and take over an existing listing).
+  and upload client or container builds over HTTP/WebSocket), `kart-racer` (a multiplayer racing game
+  on realtime rooms: host-routed binary netcode with host migration, plus a server-authoritative
+  script variant with matchmaking), and `claim-existing-game` (prove repository control and take over
+  an existing listing).
 
 Conventions the pages share and state: REST under `api/v1/...` at `https://api.starhermit.com`,
 WebSockets under `ws/v1/...`, JWT bearer auth with `?access_token=` allowed on `/ws/**`, camelCase JSON,

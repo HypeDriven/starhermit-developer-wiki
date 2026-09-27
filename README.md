@@ -35,6 +35,9 @@ not the subject of the docs.
 - **[Tutorial: upload builds from CI/CD](docs/tutorials/ci-cd-build-upload.md)** — enroll a dedicated
   deployment public key from an OAuth session, authenticate non-interactively, and publish client or
   container builds from GitHub Actions (including large uploads over WebSockets).
+- **[Tutorial: build a multiplayer kart racer](docs/tutorials/kart-racer.md)** — an eight-kart
+  racer on realtime rooms: lobbies, quick-join, CPU drivers, host-routed binary netcode within the
+  socket's rate limits, host migration, and a server-authoritative 30 Hz script variant for ranked play.
 - **[Tutorial: claim a game someone else added](docs/tutorials/claim-existing-game.md)** —
   prove repository control, take over the existing listing, and manage its hosting and deployments.
 
