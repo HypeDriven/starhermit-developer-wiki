@@ -233,6 +233,22 @@ A merge upload without a manifest retains existing policies; a supplied manifest
 Invalid settings reject publication before replacing live files (`422` for uploads; a failed
 repository deployment). See [bundle updates](api/github-games.md#partial-updates-modemerge).
 
+### Controls
+
+Declare the keyboard actions your game uses, with default keys players can rebind:
+
+```text
+control.left=KeyA+ArrowLeft | Move left
+control.jump=Space+KeyW | Jump
+```
+
+`control.<action>=<code>[+<code>...][ | <label>]`: action ids are lowercase letters, digits and
+`_`; codes are `KeyboardEvent.code` values (`KeyA`, `Space`, `ArrowLeft`), up to 4 per action joined
+with `+`; at most 32 actions, and no key on two actions. Invalid lines are skipped silently, and a
+game with no valid line has no controls — its controls API answers
+`404 "This game declares no controls."`. They take effect when you publish a build containing them.
+See [Tutorial: add controls to your game](tutorials/game-controls.md).
+
 ### Keys for a game with server logic
 
 Pick **one** server style. Declaring both `server=` and `container.image=` is refused.
@@ -447,3 +463,4 @@ for its directory prefix, so shorten very long folder chains.
 | Your description or release notes did not appear | The key is misspelled (unknown keys are ignored), the `*.file` path is not a `.md`/`.markdown`/`.txt` file relative to `starhermit.txt`, or the file was not in what you published. A missing file keeps the previous text. |
 | Your release notes show `\n` literally | Only the inline form turns `\n` into a line break. Text read from a `*.file` is used exactly as written. |
 | `container.image` refused | It is not digest-pinned. Use `name@sha256:<64 hex>`, not a tag. |
+| The controls API says "This game declares no controls." | No valid `control.*` line in the build that is live. Check the lines against [Controls](#controls) and publish a new build — see [Tutorial: add controls to your game](tutorials/game-controls.md). |

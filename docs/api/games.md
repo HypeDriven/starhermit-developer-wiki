@@ -146,7 +146,9 @@ accepted; a launch token's `game_scope` must match `{slug}`.
 ### `GET /api/v1/games/{slug}/controls`
 
 Returns the effective bindings in manifest order. `codes` contains the user's override when
-one exists, otherwise `defaultCodes`. Returns `404` when the game declares no controls.
+one exists, otherwise `defaultCodes`. Returns `404` `"This game declares no controls."` when the
+live build's `starhermit.txt` has no valid `control.*` line — declare them and publish a build; see
+[Tutorial: add controls to your game](../tutorials/game-controls.md).
 
 ```json
 {

@@ -46,6 +46,9 @@ not the subject of the docs.
   as a game's owner you are its publisher: create high-score and time boards and achievements
   through the API, post scores and unlock achievements from your script or container, and show
   them in your client.
+- **[Tutorial: add controls to your game](docs/tutorials/game-controls.md)** — declare rebindable
+  keyboard actions in `starhermit.txt`, publish them, read the player's bindings with the launch token,
+  build a rebinding screen, and fix `"This game declares no controls."`.
 - **[Tutorial: claim a game someone else added](docs/tutorials/claim-existing-game.md)** —
   prove repository control, take over the existing listing, and manage its hosting and deployments.
 

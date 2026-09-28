@@ -52,7 +52,9 @@ control.<action>=<code>[+<code>...][ | <label>]
 - The optional label is shown in control-remapping UIs and defaults to the action id.
 - A manifest may declare up to 32 actions and 4 codes per action. A code cannot be used by
   two actions. Invalid control lines are ignored.
-- Games with no `control.*` declarations have no controls API/UI.
+- Games with no `control.*` declarations have no controls API/UI (`404 "This game declares no
+  controls."`). Declarations are re-read from every published build — each deploy, folder upload
+  and replacing bundle push. Step by step: [Tutorial: add controls to your game](../tutorials/game-controls.md).
 
 Players can override these defaults per game through the
 [Games controls API](games.md#per-player-control-bindings).

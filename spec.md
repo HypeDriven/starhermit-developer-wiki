@@ -17,7 +17,7 @@ patterns, not the subject of the docs.
 ## Structure
 
 - `README.md` — the landing page: what StarHermit is, where to start, and the API-reference index table.
-- `docs/starhermit-txt.md` — the manifest every published game needs, where it must sit in the uploaded
+- `docs/starhermit-txt.md` — the manifest every published game needs (including `control.*` declarations), where it must sit in the uploaded
   folder, and why that folder should be the distributable build (everything beside the manifest is
   uploaded and served). It also documents matchmaking start deadlines, AI-seat limits and empty-seat behavior,
   folder cache lifetimes, exact additional CORS origins, and how upload modes replace or preserve hosting policies.
@@ -59,7 +59,9 @@ patterns, not the subject of the docs.
   the client rejoin/retry flow, and ending a world), `game-leaderboards-achievements` (a game's owner
   as its publisher: creating game-scoped leaderboards and achievements through
   `/me/github-games/{id}/…`, posting `scores` and unlocking from a script or container, reading them
-  in the client with a launch token, and retiring/season-rolling boards), and `claim-existing-game` (prove repository control and take over
+  in the client with a launch token, and retiring/season-rolling boards), `game-controls` (declaring
+  `control.*` actions, publishing them on each publish path, verifying, a client input map and
+  rebinding screen, and a troubleshooting table for the controls API's 404/400s), and `claim-existing-game` (prove repository control and take over
   an existing listing).
 
 Conventions the pages share and state: REST under `api/v1/...` at `https://api.starhermit.com`,
