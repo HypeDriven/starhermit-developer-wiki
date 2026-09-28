@@ -504,6 +504,12 @@ https://dashboard.starhermit.com/game-invite/<userId>/<gameSlug>
 
 - `<userId>` — the sharing player's user id. A game client already has it: it is the `sub` claim of its launch token (the chess reference implementation exposes it as `Net.userId`).
 - `<gameSlug>` — the game's slug (`game_scope` claim). Games without an authoritative script or container backend use the GitHub game id (a GUID) instead; the dashboard accepts either.
+- **Optional query string — yours.** Anything after `?` is passed to your game unchanged:
+  `…/game-invite/<userId>/<gameSlug>?room=K7MP2X&map=arena` opens your game at
+  `https://<game-id>.starhermit.com/…?room=K7MP2X&map=arena`. Use it to drop the recipient straight
+  into a room, a level or a lobby. It survives the recipient's sign-in, and it is added to your
+  game's URL rather than replacing anything there. The launch token still arrives in the
+  `#game_token=` fragment, so the two never collide. URL-encode the values you put in it.
 
 When the recipient opens the link, the **dashboard** (not the game) does the automated friend-invite part — no new backend endpoints are involved, it composes the existing APIs:
 
@@ -627,6 +633,62 @@ For a script runtime, durable commands run through `onPlayerMessage`; explicitly
   `server_failure`, `restore_failed`, `operator_ended` (the game's owner ended it). Stored as
   `{ "kind": "abandoned", "reason": "…" }`. A [persistent](../tutorials/persistent-sessions.md) game's sessions are never
   ended as `players_left`, `idle_no_players` or `superseded` — they pause instead.
+
+## Limits
+
+What the platform enforces on `ws/v1/games` and on ratings. The numbers are the platform's defaults;
+an operator can tune them.
+
+### Messages on `ws/v1/games`
+
+| Limit | Value | What happens past it |
+|---|---|---|
+| Frame size | 16 KB per text frame | The socket is closed with `1009` (message too big). |
+| Frame type | Text only | A binary frame gets an `error` frame; the socket stays open. |
+| Connections | One per player per session | A newer connection closes the older one with `1008`. |
+| Realtime inputs (`{"type":"input","realtime":true,…}`) | **60 per second** per connection, bursts up to 120 | Extra frames are **dropped silently** — no `error` frame. |
+| Durable commands (every other `cmd`) | No per-second cap | Processed one at a time, in order (see below). |
+
+**Realtime inputs** are sampled, not queued: the platform keeps each player's latest input and hands
+the batch to your script's next `onTick` in `ctx.inputs`. Sending faster than your game's
+[tick rate](game-scripts.md#tick-rate) gains nothing, because inputs between two ticks merge into
+one. Send at your tick rate, or when the input changes.
+
+**Durable commands** have no rate limit because they have natural backpressure: a connection's
+frames are handled strictly one after another, and the next is not read until the previous
+command's script invocation has finished. A client that floods commands only queues behind itself,
+and each invocation is still bounded by the game's [budgets](game-scripts.md#budgets). Your script
+should still reject commands that make no sense (a move out of turn) with an `error`.
+
+For a **container** game, commands are relayed to your container as they arrive, with no platform
+rate limit on them. Your server enforces its own. Realtime-input rate limiting applies to scripted
+games only.
+
+### Elo per match
+
+The platform does **not** cap how far a rating can move in one match. `eloUpdates` (script) and the
+`elo` control message (container) carry each player's **new absolute rating**, not a change, and the
+platform applies them as sent. What it does enforce:
+
+- **Only players in the session** are updated. Ids of anyone else, and the AI seat, are dropped.
+- Updates are applied whenever your server returns them. A session the **platform** ends
+  (`abandoned`: players left, idle, superseded, server failure, ended by the owner) publishes **no**
+  elo change.
+- The rating is written to the column matchmaking pairs on, and to the game's elo board as one
+  entry per player (their latest rating).
+- The game's owner can [reset one player's rating](leaderboards.md#resetting-a-players-rating) to 1200.
+
+So the size of a swing is your game's decision. Use a standard K-factor and clamp in your code. The
+[chess reference implementation](#example-chess-command-shapes) uses K = 32, so one game moves a
+rating by at most 32 points:
+
+```js
+function eloAfter(mine, theirs, score /* 1 win, 0.5 draw, 0 loss */, K = 32) {
+  const expected = 1 / (1 + Math.pow(10, (theirs - mine) / 400));
+  const next = mine + K * (score - expected);
+  return Math.round(Math.max(100, next));      // your floor, if you want one
+}
+```
 
 ## Owner diagnostics and webhooks
 

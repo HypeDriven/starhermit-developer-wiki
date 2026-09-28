@@ -202,7 +202,7 @@ Send JSON text messages on `WS /control` for durable effects:
 ```json
 { "type": "snapshot",     "sessionId": "...", "state": { "round": 3 } }
 { "type": "achievements", "sessionId": "...", "unlocks": { "<userId>": ["first-blood"] } }
-{ "type": "elo",          "sessionId": "...", "updates": { "<userId>": 1312 } }
+{ "type": "elo",          "sessionId": "...", "updates": { "<userId>": 1312 } }   // absolute ratings, not deltas — see games.md#elo-per-match
 { "type": "scores",       "sessionId": "...", "scores": { "<boardKey>": { "<userId>": 4200 } } }
 { "type": "result",       "sessionId": "...", "result": { "kind": "win", "winner": "..." } }
 { "type": "backpressure", "load": 0.75 }

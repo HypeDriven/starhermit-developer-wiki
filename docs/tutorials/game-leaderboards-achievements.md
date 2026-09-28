@@ -272,8 +272,14 @@ New bounds apply to new scores only.
 **Retire a board but keep its scores.** Send `{ "isActive": false }`. The board stops accepting
 scores and disappears from the game's list. Its entries can still be read by id.
 
-**Start a fresh season.** Keys and sort order are fixed, so create a new board (`high-score-s2`),
-point your script at it, and retire the old one.
+**Reset on a schedule.** Give a board `"resetSchedule": "daily"`, `"weekly"` or `"monthly"` (on
+create, or later with `PUT`) and it starts over at 00:00 UTC each period — perfect for a "this
+week's best" board beside an all-time one. Nothing to do in your script: report scores as usual, and
+each player's first score of a new period counts. See
+[Reset schedules](../api/leaderboards.md#reset-schedules).
+
+**Start a fresh season by hand.** For a one-off season rather than a schedule, create a new board
+(`high-score-s2`), point your script at it, and retire the old one.
 
 **Delete a board.** `DELETE .../leaderboards/{id}` removes the board and all of its entries, and
 cannot be undone.
@@ -296,7 +302,7 @@ declaration takes over the existing achievement, and players who have it keep it
 | `409` "already unlocked" | Players hold it, so it cannot be deleted |
 | `400` | A key with other characters, a missing name, or `minScore` > `maxScore` |
 
-Limits: 25 leaderboards and 200 created achievements per game, plus up to 100 declared ones.
+Limits: 2048 leaderboards and 200 created achievements per game, plus up to 100 declared ones.
 
 ## Checklist
 

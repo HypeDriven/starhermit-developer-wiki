@@ -244,7 +244,7 @@ Route `api/v1/publisher/leaderboards`; all routes require `Permission-publisher.
 }
 ```
 
-`resetSchedule`, `minScore`, `maxScore`, `region`, and `softwareTitleId` are optional. On `PUT`, all fields are nullable. See [leaderboards.md](leaderboards.md) for the player-facing surface.
+`resetSchedule`, `minScore`, `maxScore`, `region`, and `softwareTitleId` are optional. On `PUT`, all fields are nullable. `resetSchedule` is `daily`, `weekly`, `monthly` or `never`; anything else is a `400` — see [Reset schedules](leaderboards.md#reset-schedules). See [leaderboards.md](leaderboards.md) for the player-facing surface.
 
 ## Publish a build: flow
 

@@ -13,7 +13,7 @@ All REST endpoints require authentication and work with both a full user token a
 
 ## Data model
 
-**Room** lifecycle: `Lobby` → `Open` (matchmaking) → `Playing` (roster frozen, empty seats backfilled with AI) → `Closed`.
+**Room** lifecycle: `Lobby` → `Open` (matchmaking) → `Playing` (roster frozen, empty seats backfilled with AI up to the room's allowance) → `Closed`.
 
 ```json
 {
@@ -27,6 +27,7 @@ All REST endpoints require authentication and work with both a full user token a
     "seatsPerTeam": 5,
     "backfillAfterSeconds": 30,
     "aiPlayers": 0,
+    "backfillAiPlayers": null,
     "metadata": { "map": "arena" }
   },
   "participants": [
@@ -76,7 +77,7 @@ Base: `https://api.starhermit.com/api/v1/realtime` — so
 | POST | `/rooms` | anyone | Create a lobby, optionally with AI players; caller becomes host |
 | GET | `/rooms?gameSlug=` | anyone | Browse open, listed rooms that still have a seat (no code, no roster; max 50) |
 | POST | `/rooms/join-by-code` | anyone | Take a seat with the room's join code (works on unlisted / still-Lobby rooms) |
-| PATCH | `/rooms/{id}` | host | Rename, list/unlist, replace metadata (`expectedRevision` CAS) |
+| PATCH | `/rooms/{id}` | host | Rename, list/unlist, replace metadata, set the backfill allowance (`expectedRevision` CAS) |
 | POST | `/rooms/{id}/matchmake` | host, lobby | Queue the whole roster as one party/team |
 | GET | `/rooms/{id}` | participants + invitees | Room + roster |
 | POST | `/api/v1/realtime/connection-tickets` | anyone | One-time `?ticket=` for the realtime (and other) sockets |
@@ -85,7 +86,7 @@ Base: `https://api.starhermit.com/api/v1/realtime` — so
 | POST | `/rooms/invites/{inviteId}/accept` | invitee | Join the room (seat assigned) |
 | POST | `/rooms/invites/{inviteId}/decline` | invitee | Decline (`204`) |
 | POST | `/rooms/{id}/open` | host | Open to matchmaking; starts the backfill countdown |
-| POST | `/rooms/quick-join` | anyone | Join the oldest open room with a free seat for the game |
+| POST | `/rooms/quick-join` | anyone | Join the oldest open room with a free seat for the game, optionally matching filters |
 | POST | `/rooms/{id}/start` | host | Backfill empty seats with AI, status → `Playing` |
 | POST | `/rooms/{id}/leave` | participants | Leave; in Lobby/Open the seat is removed, in Playing the seat converts to an AI participant |
 | POST | `/rooms/{id}/seats` | host | Re-balance seats before the match starts |
@@ -95,13 +96,14 @@ Base: `https://api.starhermit.com/api/v1/realtime` — so
 ### Create a room — `POST /rooms`
 
 ```json
-{ "gameSlug": "my-game", "teamCount": 2, "seatsPerTeam": 5, "backfillAfterSeconds": 30, "aiPlayers": 0, "name": "Friday night", "isVisible": false, "metadata": { "map": "arena" } }
+{ "gameSlug": "my-game", "teamCount": 2, "seatsPerTeam": 5, "backfillAfterSeconds": 30, "aiPlayers": 0, "backfillAiPlayers": 4, "name": "Friday night", "isVisible": false, "metadata": { "map": "arena" } }
 ```
 
 - `gameSlug` is required for full user tokens. With a game-scoped launch token the slug is taken from the token's `game_scope` (a mismatching body value is rejected with `403`).
 - Caps: `teamCount` 1–2, `seatsPerTeam` 1–100, total seats ≤ 100 (one team of 100, or two of 50). `backfillAfterSeconds` defaults to `30`.
   Large rooms are bandwidth-bound, not seat-bound: every guest's frames go to the host, and every host frame is copied to every guest — see [Sizing a large room](#sizing-a-large-room).
 - `aiPlayers` defaults to `0`. Range `0`–`(teamCount × seatsPerTeam) − 1` — the host always needs a seat, so a fully-AI room is a `400`.
+- `backfillAiPlayers` caps how many seats still empty when the match starts are given to AI — see [Backfill allowance](#backfill-allowance). Omitted or `null` fills them all.
 - One active room per user: creating or joining while you are in any non-`Closed` room returns `409`.
 - The creator becomes the host, seated at team 0, slot 0. Returns the room.
 
@@ -112,7 +114,28 @@ Base: `https://api.starhermit.com/api/v1/realtime` — so
 - They are ordinary participants (`isAi: true`, `userId: null`, unique nickname) and appear in the roster and in every `roster` push from the moment the room exists.
 - They **occupy seats**, so they reduce the capacity left for humans: invites and quick-join fill only what remains, and `POST /rooms/invites/{id}/accept` returns `409` once no free seat is left. You get exactly the number of AI you asked for — never more from matchmaking.
 - Placement fills the **emptiest team first** (ties go to the lower team index), lowest free slot. So a `teamCount: 2, seatsPerTeam: 1` room with `aiPlayers: 1` puts the AI opposite the host, and bigger rooms stay balanced. Re-seat them however you like with `POST /rooms/{id}/seats` before the match starts.
-- Start-time backfill is unchanged: any seat nobody took still becomes an AI participant when the room starts.
+- They are separate from start-time backfill, which fills seats nobody took when the room starts — up to the room's [backfill allowance](#backfill-allowance).
+
+#### Backfill allowance
+
+When a room starts — at its backfill deadline, as soon as it fills, or on the host's force-start —
+seats nobody took are given to AI players. `backfillAiPlayers` decides how many:
+
+| `backfillAiPlayers` | At start |
+|---|---|
+| omitted / `null` (default) | every empty seat becomes an AI player |
+| `0` | no AI: the match starts with the empty seats left empty |
+| `n` | at most `n` empty seats become AI; any beyond that stay empty |
+
+Capped AI go to the **emptiest team first** (ties to the lower team index), so a `2 × 3` room with
+one host and `backfillAiPlayers: 3` starts 2-vs-2. Range `0`–`teamCount × seatsPerTeam`, else `400`.
+The host can change it before the match with `PATCH /rooms/{id}` (`"backfillAiPlayers": 2`), or
+return to filling every seat with `"backfillAllEmptySeats": true`. It does not affect `aiPlayers`,
+who are seated when the room is created.
+
+If your game is meant to be played underfilled — a free-for-all that is fine with six of eight
+players — use `0` and let your game handle the empty seats. With the default, a room never starts
+with an empty seat.
 
 **Playing solo against the computer** is therefore two calls — create the room with every other seat as AI, then start it:
 
@@ -149,7 +172,7 @@ An `Open` room does not wait out its countdown once **every seat is taken** — 
 
 `POST /rooms/join-by-code` with `{ "joinCode": "K7MP2X" }` takes a seat. Codes are whitespace- and case-insensitive. Unlike quick-join this works on an unlisted room still in `Lobby`. The code is released when the room closes.
 
-`PATCH /rooms/{id}` (host): `{ "name", "isVisible", "metadata", "expectedRevision" }`. Omitted fields are left alone; send `name: ""` to clear the name.
+`PATCH /rooms/{id}` (host): `{ "name", "isVisible", "metadata", "backfillAiPlayers", "backfillAllEmptySeats", "expectedRevision" }`. Omitted fields are left alone; send `name: ""` to clear the name.
 
 `POST /rooms/{id}/matchmake` (host, `Lobby` only) queues the room's **human** roster as one
 party/team; pre-seated AI participants are not party members. With the default policy, party size
@@ -172,9 +195,26 @@ and its room-level backfill countdown.
 
 `POST /rooms/quick-join` with `{ "gameSlug": "my-game", "seats": 1 }` places the caller in the **oldest open room with a free seat** for that game slug — AI seats count as taken, so a room whose remaining seats are all AI is skipped. `404` when no room qualifies — the client should then create its own room and open it. Only single-seat quick-join is supported (`seats` must be `1`).
 
+**Filters.** Add any of these to join only a room that fits; every filter given must hold, and
+none given is the behaviour above:
+
+```json
+{ "gameSlug": "my-game", "seats": 1, "teamCount": 2, "seatsPerTeam": 4, "metadata": { "mode": "ranked", "map": "arena" } }
+```
+
+| Filter | Matches a room whose… |
+|---|---|
+| `teamCount` | team count is exactly this |
+| `seatsPerTeam` | seats per team is exactly this |
+| `metadata` | metadata contains **every** property given, with an equal value. Properties you do not name are ignored, so `{"mode":"ranked"}` matches `{"mode":"ranked","map":"desert"}`. Values compare as JSON: numbers by value (`1` equals `1.0`), objects regardless of key order, arrays in order. Must be an object (`400` otherwise). |
+
+The oldest matching open room with a free seat wins. When none matches, the `404` says
+`"No open room with free seats matches those filters."` — the usual cue to create and open a room
+with that metadata yourself, so the next player's filtered quick-join finds it.
+
 ### Start, seats, leave, result
 
-`POST /rooms/{id}/start` (host only): fills every **still-empty** seat with an AI participant (`isAi: true`, `userId: null`, unique random nickname) — AI players seated at creation keep their id, nickname, and seat — freezes the roster, sets `status: "Playing"`, and returns the frozen roster. If the game has a `server=` script, this also creates the room-bound scripted session (see [the bridge](#room-bound-scripted-sessions)); the returned room and roster push carry `gameSessionId`. **Idempotent** — starting a `Playing` room returns the roster again. A room may start automatically when its backfill deadline passes.
+`POST /rooms/{id}/start` (host only): fills **still-empty** seats — all of them, or up to the room's [backfill allowance](#backfill-allowance) — with AI participants (`isAi: true`, `userId: null`, unique random nickname) — AI players seated at creation keep their id, nickname, and seat — freezes the roster, sets `status: "Playing"`, and returns the frozen roster. If the game has a `server=` script, this also creates the room-bound scripted session (see [the bridge](#room-bound-scripted-sessions)); the returned room and roster push carry `gameSessionId`. **Idempotent** — starting a `Playing` room returns the roster again. A room may start automatically when its backfill deadline passes.
 
 `POST /rooms/{id}/seats` (host only, `Lobby`/`Open` only) re-seats participants:
 
@@ -295,7 +335,7 @@ For a large room:
 
 ## Automatic room lifecycle
 
-- An `Open` room starts automatically when its backfill deadline passes; empty seats become uniquely named AI participants.
+- An `Open` room starts automatically when its backfill deadline passes; empty seats become uniquely named AI participants, up to the room's [backfill allowance](#backfill-allowance).
 - An `Open` room also starts automatically as soon as every seat is taken — by humans, by AI players configured at creation, or a mix — without waiting for that deadline.
 - A `Playing` room closes when its host has no active WebSocket connection for more than 60 seconds. Connected guests receive a final roster push showing the room closed.
 - A `Lobby` or `Open` room closes after more than 60 minutes without connected participants.
@@ -327,7 +367,7 @@ For a game that declares a `server=` script in its manifest, a realtime room can
 2. **Invite**: the host lists friends (`GET /api/v1/me/friends`) and sends `POST /rooms/{id}/invites`. The platform notifies each invitee (`game_invite` push + `GET /api/v1/me/game-invites`), so they can accept from the dashboard without having your game open; invitees already in the game see the same invites by polling `GET /rooms/invites`. Accepting seats them on the host's team.
 3. **Open**: the host calls `POST /rooms/{id}/open`. Solo players call `POST /rooms/quick-join` and land in the oldest open room with a free seat (on `404` they create and open their own room).
 4. **Connect**: everyone opens `ws/v1/realtime?roomId=…` and watches `roster`/`presence` pushes as seats fill.
-5. **Start**: at the backfill deadline, as soon as every seat is taken, or when the host force-starts, any remaining empty seats become AI participants and the roster freezes. **Host-routed game**: guests send inputs as binary frames (they reach only the host); the host broadcasts snapshots. **Room-bound scripted game**: everyone connects `ws/v1/games?sessionId=<gameSessionId>` and plays against the script with `cmd`/`game` frames.
+5. **Start**: at the backfill deadline, as soon as every seat is taken, or when the host force-starts, remaining empty seats become AI participants (up to the [backfill allowance](#backfill-allowance)) and the roster freezes. **Host-routed game**: guests send inputs as binary frames (they reach only the host); the host broadcasts snapshots. **Room-bound scripted game**: everyone connects `ws/v1/games?sessionId=<gameSessionId>` and plays against the script with `cmd`/`game` frames.
 6. **Leave mid-match**: a player who leaves during `Playing` is replaced where they sat by an AI participant (same seat, new server-generated nickname) and can immediately queue again; if the host leaves, the host role passes to the longest-joined remaining human. A host who drops their connection has 60 seconds to reconnect before the match closes.
 7. **Finish**: host-routed — the host POSTs the result; the server clamps scores, stores the result, pushes it to all sockets, and closes the room. Room-bound — the script returns `result` and the platform stores it and closes the room.
 

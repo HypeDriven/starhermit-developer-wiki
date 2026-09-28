@@ -244,7 +244,7 @@ Key rules:
 
 - `sessionState` and each entry of `playerStates` **replace** the stored documents — always return complete documents, never diffs.
 - Only messages listed in `broadcast` are delivered to clients, each addressed to explicit player ids or `"all"`. Nothing else leaks.
-- `eloUpdates` is the only way ratings change. The host denormalizes them onto `GamePlayerState.Elo` and publishes them to the game's leaderboard; clients can never submit scores directly (see [Leaderboards](leaderboards.md)).
+- `eloUpdates` is the only way ratings change. Values are each player's **new absolute rating**, applied as sent — the platform does not cap the change per match, so clamp it yourself (see [Elo per match](games.md#elo-per-match)). The host denormalizes them onto `GamePlayerState.Elo` and publishes them to the game's leaderboard; clients can never submit scores directly (see [Leaderboards](leaderboards.md)). Keep the rating in `playerStates[id].elo` so an owner's [rating reset](leaderboards.md#resetting-a-players-rating) reaches your copy too.
 - `achievements` is the only way achievements are granted. Keys are resolved against the game's achievements — declared, or created by its owner — and persisted by the platform; see [Achievements](#achievements).
 - `scores` is the only way your game's own leaderboards change — see [Leaderboards](#leaderboards).
 - End games via `result`. The host then finishes the session, and for a game with [replays](#replays) **archives the final `sessionState`** as the replay (served by `GET .../replays/{sessionId}` — see [Games API](games.md#replays)).

@@ -27,6 +27,11 @@ patterns, not the subject of the docs.
 - `docs/api/*.md` — one page per area: `auth`, `games`, `game-scripts`, `container-games`, `profile`,
   `friends`, `chat`, `voice`, `catalog`, `activity`, `achievements`, `leaderboards`,
   `external-libraries`, `relay`, `realtime`, `github-games`, `publisher`.
+  The games page has a Limits section: `ws/v1/games` frame size, connection and message-rate
+  limits (realtime inputs vs durable commands, container relay), and the elo rules (absolute
+  ratings, no platform cap per match, participants only, owner reset); it also documents share
+  links' pass-through query string. Leaderboards covers reset schedules and the owner's
+  per-player rating reset; realtime covers the backfill allowance and quick-join filters.
   The achievements, leaderboards, game-scripts, container-games, github-games and publisher pages
   all state that a game's owner is its publisher for leaderboards and achievements, and that only
   the game's server writes to them.

@@ -75,6 +75,7 @@ Players can override these defaults per game through the
 | PUT/DELETE | `/api/v1/me/github-games/{id}/achievements/{achievementId}` | JWT (owner) | Update / delete one you created |
 | GET/POST | `/api/v1/me/github-games/{id}/leaderboards` | JWT (owner) | [Your game's leaderboards](leaderboards.md#your-games-own-leaderboards): list all, create one |
 | PUT/DELETE | `/api/v1/me/github-games/{id}/leaderboards/{leaderboardId}` | JWT (owner) | Update / delete one |
+| DELETE | `/api/v1/me/github-games/{id}/players/{userId}/elo` | JWT (owner) | [Reset one player's rating](leaderboards.md#resetting-a-players-rating) to 1200 |
 | POST | `/api/v1/me/github-games/{id}/transfer` | JWT | Transfer a game to another user → `GitHubGameDto` |
 | DELETE | `/api/v1/me/github-games/{id}` | JWT | Remove a registered game → `204` |
 | POST | `/api/v1/me/github-games/{id}/bundle` | JWT | Publish a raw `.tar.gz` containing client files and/or a saved container image. `?mode=merge` patches live client files instead of replacing them |

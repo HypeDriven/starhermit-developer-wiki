@@ -26,7 +26,9 @@ Definitions are `LeaderboardDefinitionDto[]`:
     "name": "…",
     "scoreType": "…",
     "sortDirection": "…",
-    "resetSchedule": "…",
+    "resetSchedule": "weekly",
+    "currentPeriodStartedAt": "2026-10-12T00:00:00+00:00",
+    "nextResetAt": "2026-10-19T00:00:00+00:00",
     "minScore": 0,
     "maxScore": 100,
     "scope": "…",
@@ -79,6 +81,43 @@ GET /api/v1/leaderboards/{leaderboardId}/entries?friendsOnly=true&page=1&pageSiz
 
 Game-scoped launch tokens may read their own game's leaderboard. Publisher-side leaderboard CRUD lives in [publisher.md](publisher.md).
 
+### Resetting a player's rating
+
+The game's owner can put one player's rating back to the starting **1200** — for a smurf, a boosted
+account, or a rating a bug corrupted:
+
+```
+DELETE /api/v1/me/github-games/{id}/players/{userId}/elo      → 200 { "userId": "…", "elo": 1200 }
+```
+
+It resets the rating matchmaking pairs on, removes the player's row from the elo board (it returns
+with their next rated match), and sets a top-level numeric **`elo`** in your script's player document
+to 1200 — because your script computes the next rating from its own document, resetting only the
+platform's copy would be undone by the next match. Everything else in the document (wins, history)
+is left alone. If your script keeps its rating under any other name, it is **not** rewritten: keep
+it in `playerStates[id].elo` to get resets for free. A match already in progress may still report a
+rating computed before the reset. `404` when the game is not yours or the player has no rating in
+it. The rating is also subject to the [elo rules](games.md#limits).
+
+## Reset schedules
+
+Any leaderboard — a game's own board, or a catalog title's — can start over on a schedule:
+
+| `resetSchedule` | Starts over |
+|---|---|
+| `daily` | every day at 00:00 UTC |
+| `weekly` | every Monday at 00:00 UTC |
+| `monthly` | on the 1st of each month at 00:00 UTC |
+| omitted, `null` or `"never"` | never |
+
+Any other value is a `400`. The definition reports `currentPeriodStartedAt` and `nextResetAt` (both
+`null` for a board that never resets), so a client can show "resets in 2 days".
+
+A reset is applied when the board is **read**: the entries endpoint shows only scores submitted since
+the current period began, and ranks are computed within the period. Nothing is deleted at the
+boundary, so the reset takes effect at exactly 00:00 UTC. It also means the schedule can be changed
+at any time — it changes which entries are shown, not which are kept. Previous periods are not
+readable through the API.
 ## Your game's own leaderboards
 
 Beside its elo board, a game with a `server=` script or `container.image=` backend can have
@@ -115,17 +154,20 @@ Returns `201` with a `LeaderboardDefinitionDto` whose `gameDefinitionId` and `ke
 | `sortDirection` | `desc` (default — higher is better) or `asc` (lower is better, e.g. lap times) |
 | `minScore` / `maxScore` | Optional bounds; a score outside them is ignored |
 | `isActive` | Default `true`. An inactive board accepts no scores and is not listed to players. |
+| `resetSchedule` | Optional: `daily`, `weekly` or `monthly` — see [Reset schedules](#reset-schedules). Default: never resets. |
 
 **`key`, `scoreType` and `sortDirection` cannot change after creation**: your server submits by key,
 and the scores already stored were chosen by the other two. Need a different one? Create a new board.
-`PUT .../leaderboards/{leaderboardId}` accepts `name`, `minScore`, `maxScore` and `isActive`;
-`DELETE` removes the board **and its entries** — set `isActive: false` to retire it and keep them.
-A game may have at most 25 boards.
+`PUT .../leaderboards/{leaderboardId}` accepts `name`, `minScore`, `maxScore`, `isActive` and
+`resetSchedule` (send `"never"` to stop resetting); `DELETE` removes the board **and its entries** —
+set `isActive: false` to retire it and keep them. A game may have at most **2048** boards.
 
 ### How scores are kept
 
 - **One entry per player: their best.** "Best" follows the board's `sortDirection`. Submitting a
-  worse score changes nothing, so report after every match without checking first.
+  worse score changes nothing, so report after every match without checking first. On a board with
+  a reset schedule, it is the best **this period**: the first score after a reset always counts,
+  however good the player's score last period was.
 - Only players in the session can be scored; the AI seat and anybody else are ignored.
 - A score that breaks the board's rules (out of range, a fraction on an `integer` board, a negative
   `time-ms`) is ignored, as is a key with no active board. Nothing is reported back to your server.
