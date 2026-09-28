@@ -30,6 +30,8 @@ patterns, not the subject of the docs.
   The achievements, leaderboards, game-scripts, container-games, github-games and publisher pages
   all state that a game's owner is its publisher for leaderboards and achievements, and that only
   the game's server writes to them.
+  The catalog page covers saving to Cloud Saves from inside a game with its launch token (its own
+  `game:<id>` slot, separate from the desktop client's save-folder slot), and the auth page lists it in the fence.
   The authentication page includes direct-browser game sign-in: a provider chooser, return URL
   validation, game-scoped token handling and a copyable Sign in button example.
   The profile page documents current-terms discovery, explicit acceptance, account status fields,

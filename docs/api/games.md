@@ -206,7 +206,7 @@ so an in-game options screen works with nothing but the token the game already h
 controls, no manifest declaration is needed: every game has settings storage from the moment it
 exists, including a browser-only game with no server logic at all.
 
-Pick the right store — [cloud saves](catalog.md) hold progress (one opaque archive per title, 10 MB),
+Pick the right store — [cloud saves](catalog.md#saving-from-inside-a-game-launch-token) hold progress (one opaque archive per title, 10 MB, reachable with the launch token too),
 and a script or container backend's own player state is server-authoritative and not writable from a
 client. Settings are the small, client-owned preferences in between.
 

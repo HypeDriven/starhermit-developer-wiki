@@ -375,13 +375,15 @@ per-player, so a player's settings follow them to any machine:
 
 ## 11. Cloud saves (non-scripted / external games)
 
-Context page: [games.md](../api/games.md). Skip this section if your game is fully server-scripted — session state already lives on the platform.
+Context page: [catalog.md](../api/catalog.md#saving-from-inside-a-game-launch-token). Skip this section if your game is fully server-scripted — session state already lives on the platform.
 
 ```text
-Read docs/api/games.md (pasted below). Add save syncing to [my game],
+Read docs/api/catalog.md (pasted below). Add save syncing to [my game],
 which runs its own logic client-side:
 
-1. Save: serialize the save slot, zip it, base64-encode it, and
+0. The gameKey is `game:<game_scope>` — my launch token's game_scope
+   claim — and the launch token works for it; no other key is allowed.
+1. Save: serialize the save slot, base64-encode it, and
    PUT /api/v1/me/cloud-saves/{gameKey}. The payload must stay ≤ 10 MB.
 2. Load: GET /api/v1/me/cloud-saves/{gameKey} on startup; 404 means no
    save yet — start fresh.
