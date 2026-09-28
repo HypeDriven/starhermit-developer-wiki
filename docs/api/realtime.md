@@ -99,7 +99,8 @@ Base: `https://api.starhermit.com/api/v1/realtime` — so
 ```
 
 - `gameSlug` is required for full user tokens. With a game-scoped launch token the slug is taken from the token's `game_scope` (a mismatching body value is rejected with `403`).
-- Caps: `teamCount` 1–2, `seatsPerTeam` 1–11, total seats ≤ 32. `backfillAfterSeconds` defaults to `30`.
+- Caps: `teamCount` 1–2, `seatsPerTeam` 1–100, total seats ≤ 100 (one team of 100, or two of 50). `backfillAfterSeconds` defaults to `30`.
+  Large rooms are bandwidth-bound, not seat-bound: every guest's frames go to the host, and every host frame is copied to every guest — see [Sizing a large room](#sizing-a-large-room).
 - `aiPlayers` defaults to `0`. Range `0`–`(teamCount × seatsPerTeam) − 1` — the host always needs a seat, so a fully-AI room is a `400`.
 - One active room per user: creating or joining while you are in any non-`Closed` room returns `409`.
 - The creator becomes the host, seated at team 0, slot 0. Returns the room.
@@ -241,6 +242,56 @@ The server pushes JSON text frames on its own:
 | `NormalClosure` | Client-initiated close |
 | `MessageTooBig` | Frame over the 8 KB (binary) / 4 KB (text) cap |
 | `PolicyViolation` | Rate-limit violation, disallowed/invalid control frame, connection superseded by a newer one |
+
+## Sizing a large room
+
+A room holds up to 100 players, but the practical limit is bandwidth. The binary channel is
+host-routed:
+
+- every guest frame goes to the host;
+- every host frame is copied to every guest;
+- each frame carries a 16-byte sender prefix.
+
+Two things follow:
+
+- **The host's download grows with the number of guests.** It receives every guest's input.
+- **Platform egress grows with the square of the room size.** A host snapshot that describes every
+  player grows with the player count, and it is copied to every guest.
+
+Worked example: 100 players. Each guest sends 30 inputs/s of 32 bytes. The host sends 20
+snapshots/s at 12 bytes per player, about 1.2 KB each. Per-message TLS/TCP/WebSocket overhead is
+taken as about 70 bytes.
+
+| Link | Rate |
+|---|---|
+| Each guest, upload | ~26 kbit/s |
+| Each guest, download | ~0.21 Mbit/s |
+| Host, upload | ~0.21 Mbit/s |
+| **Host, download** | **~2.8 Mbit/s, as ~3,000 messages/s** |
+| **Platform egress for the room** | **~23 Mbit/s (~10.5 GB per hour)** |
+
+The same game at other sizes shows the quadratic growth in platform egress:
+
+| Players | 8 | 22 | 50 | 100 |
+|---|---|---|---|---|
+| Platform egress | ~0.4 Mbit/s | ~1.8 Mbit/s | ~6.9 Mbit/s | ~23 Mbit/s |
+
+The per-connection limits bound the worst case, not the typical one. A 100-player room in which
+every connection sends 8 KB frames at 30/s is about **390 Mbit/s** of platform egress.
+
+For a large room:
+
+- **Keep guest input rates low** (10–20 Hz), and send inputs only when they change. The host
+  receives every guest's input, and handling thousands of messages per second is usually a harder
+  limit for a browser host than the bandwidth.
+- **Keep snapshots small.** Quantize positions, send deltas against the last acknowledged state,
+  and spread entities that rarely change across several snapshots. A single frame is at most
+  8 KB, which leaves about 80 bytes per player at 100 players.
+- **The room channel cannot target one guest.** Host frames go to everyone, so every guest
+  receives the whole world. If your game needs per-player interest management (only nearby
+  players, fog of war), run it on a [container game server](container-games.md) instead. A
+  container can address frames to individual players, and the host is no longer a player's home
+  connection.
 
 ## Automatic room lifecycle
 
