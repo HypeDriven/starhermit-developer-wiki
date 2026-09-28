@@ -27,6 +27,9 @@ patterns, not the subject of the docs.
 - `docs/api/*.md` — one page per area: `auth`, `games`, `game-scripts`, `container-games`, `profile`,
   `friends`, `chat`, `voice`, `catalog`, `activity`, `achievements`, `leaderboards`,
   `external-libraries`, `relay`, `realtime`, `github-games`, `publisher`.
+  The achievements, leaderboards, game-scripts, container-games, github-games and publisher pages
+  all state that a game's owner is its publisher for leaderboards and achievements, and that only
+  the game's server writes to them.
   The authentication page includes direct-browser game sign-in: a provider chooser, return URL
   validation, game-scoped token handling and a copyable Sign in button example.
   The profile page documents current-terms discovery, explicit acceptance, account status fields,
@@ -51,7 +54,10 @@ patterns, not the subject of the docs.
   on realtime rooms: host-routed binary netcode with host migration, plus a server-authoritative
   script variant with matchmaking and client-side prediction), `persistent-sessions` (opt a script or
   container game into sessions that pause when empty and resume on join, game time via `ctx.pausedMs`,
-  the client rejoin/retry flow, and ending a world), and `claim-existing-game` (prove repository control and take over
+  the client rejoin/retry flow, and ending a world), `game-leaderboards-achievements` (a game's owner
+  as its publisher: creating game-scoped leaderboards and achievements through
+  `/me/github-games/{id}/…`, posting `scores` and unlocking from a script or container, reading them
+  in the client with a launch token, and retiring/season-rolling boards), and `claim-existing-game` (prove repository control and take over
   an existing listing).
 
 Conventions the pages share and state: REST under `api/v1/...` at `https://api.starhermit.com`,

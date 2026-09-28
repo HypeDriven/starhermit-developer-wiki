@@ -42,6 +42,10 @@ not the subject of the docs.
 - **[Tutorial: persistent sessions — games that pause when everyone leaves](docs/tutorials/persistent-sessions.md)** —
   opt a script or container game into sessions that pause instead of ending, keep game clocks still
   with `ctx.pausedMs`, and rejoin paused worlds from the client.
+- **[Tutorial: leaderboards and achievements for your game](docs/tutorials/game-leaderboards-achievements.md)** —
+  as a game's owner you are its publisher: create high-score and time boards and achievements
+  through the API, post scores and unlock achievements from your script or container, and show
+  them in your client.
 - **[Tutorial: claim a game someone else added](docs/tutorials/claim-existing-game.md)** —
   prove repository control, take over the existing listing, and manage its hosting and deployments.
 
@@ -72,12 +76,12 @@ WebSockets under `ws/v1/...`, JWT bearer auth
 | Voice | [voice.md](docs/api/voice.md) | Voice rooms, participant mute vs host server-mute, `ws/v1/voice` audio relay + WebRTC signaling |
 | Catalog | [catalog.md](docs/api/catalog.md) | Software titles, builds, downloads, cloud saves, wishlist, ratings & reviews |
 | Activity | [activity.md](docs/api/activity.md) | Launch sessions, playtime, friends' activity feeds |
-| Achievements | [achievements.md](docs/api/achievements.md) | Server-authoritative game achievements (script or container), client-claimed catalog-title achievements, secret achievements |
-| Leaderboards | [leaderboards.md](docs/api/leaderboards.md) | Definitions, entries, friends-only views, server-runtime-owned elo boards |
+| Achievements | [achievements.md](docs/api/achievements.md) | Server-authoritative game achievements (declared in code or created by the game's owner), client-claimed catalog-title achievements, secret achievements |
+| Leaderboards | [leaderboards.md](docs/api/leaderboards.md) | Definitions, entries, friends-only views, server-runtime-owned elo boards, **owner-created game boards written by the game's server** |
 | External libraries | [external-libraries.md](docs/api/external-libraries.md) | Linking Steam/Epic/GOG libraries, external launch URIs |
 | Relay | [relay.md](docs/api/relay.md) | Match-bound opaque byte fan-out with roster authorization and tick-aware rate limits (`ws/v1/relay`) |
 | Realtime rooms | [realtime.md](docs/api/realtime.md) | Lobbies, browse/join-by-code, friend invites, party matchmaking, AI-seat backfill, host-authoritative frame routing (`ws/v1/realtime`) |
-| GitHub games | [github-games.md](docs/api/github-games.md) | Publishing from GitHub, a hosted URL, **a local folder**, or an uploaded client/container bundle — over HTTP or **the `ws/v1/game-upload` socket for large builds** (`starhermit.txt`, hosting, deployments, **your audience figures**) |
+| GitHub games | [github-games.md](docs/api/github-games.md) | Publishing from GitHub, a hosted URL, **a local folder**, or an uploaded client/container bundle — over HTTP or **the `ws/v1/game-upload` socket for large builds** (`starhermit.txt`, hosting, deployments, **your audience figures**, **your game's leaderboards and achievements**) |
 | Publisher | [publisher.md](docs/api/publisher.md) | Publisher/member management, title & build publishing, achievement/leaderboard/entitlement management |
 
 The [Unity SDK](docs/sdk/unity.md) maps these areas to its clients; newer endpoints and fields can

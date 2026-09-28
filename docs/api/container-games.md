@@ -171,7 +171,7 @@ Return the standard envelope with a complete `sessionState` restore point:
 ```
 
 The platform checkpoints active sessions periodically. A snapshot response may also include
-`playerStates`, `eloUpdates`, `achievements`, or `result`; they pass through the same validation and
+`playerStates`, `eloUpdates`, `achievements`, `scores`, or `result`; they pass through the same validation and
 persistence rules as a script result. For a game with [replays](#get-describe), the last state a
 finished session reached is what the platform keeps as its replay — so make that state
 reconstructable, not just resumable.
@@ -203,12 +203,16 @@ Send JSON text messages on `WS /control` for durable effects:
 { "type": "snapshot",     "sessionId": "...", "state": { "round": 3 } }
 { "type": "achievements", "sessionId": "...", "unlocks": { "<userId>": ["first-blood"] } }
 { "type": "elo",          "sessionId": "...", "updates": { "<userId>": 1312 } }
+{ "type": "scores",       "sessionId": "...", "scores": { "<boardKey>": { "<userId>": 4200 } } }
 { "type": "result",       "sessionId": "...", "result": { "kind": "win", "winner": "..." } }
 { "type": "backpressure", "load": 0.75 }
 ```
 
 The platform accepts effects only for sessions routed to this deployment, filters recipients to
-session participants, limits achievement keys to the declaration, and applies state budgets.
+session participants, limits achievement keys to the game's achievements (declared, or created by
+its owner), limits `scores` to the game's own
+[owner-created leaderboards](leaderboards.md#your-games-own-leaderboards) — each player keeps their
+best — and applies state budgets.
 `result` ends the session; later effects for that session are ignored. `backpressure.load` is
 clamped to `0..1` and helps the platform account for current deployment load.
 

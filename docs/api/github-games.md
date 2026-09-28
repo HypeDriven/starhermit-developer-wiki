@@ -69,6 +69,10 @@ Players can override these defaults per game through the
 | GET | `/api/v1/me/github-games/{id}/stats` | JWT (owner) | **Audience figures for a game you added** → `GameStatsDto` |
 | GET | `/api/v1/me/github-games/{id}/sessions` | JWT (owner) | Live sessions of this game's server |
 | DELETE | `/api/v1/me/github-games/{id}/sessions/{sessionId}` | JWT (owner) | End one live session (`abandoned` / `operator_ended`) |
+| GET/POST | `/api/v1/me/github-games/{id}/achievements` | JWT (owner) | [Your game's achievements](achievements.md#achievements-created-by-the-games-owner): list all, create one |
+| PUT/DELETE | `/api/v1/me/github-games/{id}/achievements/{achievementId}` | JWT (owner) | Update / delete one you created |
+| GET/POST | `/api/v1/me/github-games/{id}/leaderboards` | JWT (owner) | [Your game's leaderboards](leaderboards.md#your-games-own-leaderboards): list all, create one |
+| PUT/DELETE | `/api/v1/me/github-games/{id}/leaderboards/{leaderboardId}` | JWT (owner) | Update / delete one |
 | POST | `/api/v1/me/github-games/{id}/transfer` | JWT | Transfer a game to another user → `GitHubGameDto` |
 | DELETE | `/api/v1/me/github-games/{id}` | JWT | Remove a registered game → `204` |
 | POST | `/api/v1/me/github-games/{id}/bundle` | JWT | Publish a raw `.tar.gz` containing client files and/or a saved container image. `?mode=merge` patches live client files instead of replacing them |
@@ -541,6 +545,15 @@ backend is disabled unless the destination declares one.
 `GET /api/v1/me/github-games/{id}/sessions` lists active sessions of the game's server.
 `DELETE .../sessions/{sessionId}` ends one through the platform abandonment path (no winner, no
 elo, reason `operator_ended`). That returns the capacity seat a stuck session was holding.
+
+### Leaderboards and achievements (owner)
+
+The owner of a game is its publisher: you can create **leaderboards** and **achievements** for it
+under `/me/github-games/{id}/leaderboards` and `/achievements` without a publisher account. Only
+your game's server writes to them, so the game needs a `server=` script or `container.image=`
+backend — a browser-only game gets `409`. See [Leaderboards](leaderboards.md#your-games-own-leaderboards),
+[Achievements](achievements.md#achievements-created-by-the-games-owner) and the
+[tutorial](../tutorials/game-leaderboards-achievements.md).
 
 ## DTOs
 

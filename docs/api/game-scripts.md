@@ -233,6 +233,9 @@ return {
   achievements: {                  // server-authoritative unlocks, by player id
     "7c9e6679-...": ["first-win", "flawless"]
   },
+  scores: {                        // to your game's own leaderboards, by board key
+    "high-score": { "7c9e6679-...": 4200 }
+  },
   result: { kind: "white-win", reason: "checkmate" }  // ends the session (example: a chess result)
 };
 ```
@@ -242,14 +245,18 @@ Key rules:
 - `sessionState` and each entry of `playerStates` **replace** the stored documents — always return complete documents, never diffs.
 - Only messages listed in `broadcast` are delivered to clients, each addressed to explicit player ids or `"all"`. Nothing else leaks.
 - `eloUpdates` is the only way ratings change. The host denormalizes them onto `GamePlayerState.Elo` and publishes them to the game's leaderboard; clients can never submit scores directly (see [Leaderboards](leaderboards.md)).
-- `achievements` is the only way achievements are granted. Keys are resolved against the game's own declaration and persisted by the platform — see [Achievements](#achievements).
+- `achievements` is the only way achievements are granted. Keys are resolved against the game's achievements — declared, or created by its owner — and persisted by the platform; see [Achievements](#achievements).
+- `scores` is the only way your game's own leaderboards change — see [Leaderboards](#leaderboards).
 - End games via `result`. The host then finishes the session, and for a game with [replays](#replays) **archives the final `sessionState`** as the replay (served by `GET .../replays/{sessionId}` — see [Games API](games.md#replays)).
 
 ## Achievements
 
 Your script is the **only** thing that can unlock your game's achievements. There is no client
 endpoint for them: `POST /api/v1/me/achievements/unlock` rejects game-scoped achievements outright,
-and the publisher CRUD endpoints refuse to touch them. This makes achievements as server-
+and the publisher CRUD endpoints refuse to touch them. The game's owner can add achievements beside
+the declared ones through
+[`/me/github-games/{id}/achievements`](achievements.md#achievements-created-by-the-games-owner);
+your script unlocks those by key in exactly the same way. This makes achievements as server-
 authoritative as the rest of the game, and it is the mechanism **any** game with a `server=` script
 should use — including one whose gameplay runs elsewhere (see
 [which games can use this](achievements.md#which-games-can-use-this)).
@@ -320,6 +327,33 @@ it is platform truth, not one of your `broadcast` messages:
 Unlocks granted from `createSession` land before any socket exists, so they arrive with no frame —
 clients should read `GET /api/v1/games/{slug}/achievements` on load and treat the frame as the
 live-update path. Full surface in [Achievements](achievements.md).
+
+## Leaderboards
+
+Besides the elo board, your game can have leaderboards its owner creates through
+[`POST /api/v1/me/github-games/{id}/leaderboards`](leaderboards.md#your-games-own-leaderboards),
+each with a `key`. Post to them by returning `scores` from any entry point — board key → player id →
+number:
+
+```js
+onPlayerMessage(ctx) {
+  var s = ctx.sessionState;
+  if (ctx.message.data.type === "finish-run") {
+    var scores = { "high-score": {}, "fastest-run": {} };
+    scores["high-score"][ctx.message.from] = s.points[ctx.message.from];
+    scores["fastest-run"][ctx.message.from] = ctx.now - s.startedAt;   // a time-ms board
+    return { ok: true, sessionState: s, scores: scores };
+  }
+  /* ... */
+}
+```
+
+- Each player keeps their **best** score on each board, by the board's sort direction, so report
+  every result — a worse one is simply ignored.
+- Only session participants count. Unknown or inactive keys, and scores outside the board's rules,
+  are dropped silently. At most 16 boards per return.
+- Unlike `eloUpdates`, nothing is published to `playerStates` — keep your own copy in
+  `playerStates` if the game needs to read a personal best back.
 
 ## Budgets
 

@@ -2,6 +2,11 @@
 
 The publisher surface: manage publisher organizations and members, create and upload software titles and builds, and manage achievements, entitlements, and leaderboard definitions for your titles.
 
+> **Publishing a game rather than a catalog title?** You don't need any of this. The owner of a
+> game with a script or container backend is its publisher and manages its leaderboards and
+> achievements under `/api/v1/me/github-games/{id}/…` — see
+> [Tutorial: leaderboards and achievements for your game](../tutorials/game-leaderboards-achievements.md).
+
 Base URL: `https://api.starhermit.com`. All routes require a JWT plus the listed permission claims. Roles: `PublisherMember`, `PublisherOwner`. Permission claims are assigned via roles; minted tokens carry the permission claims.
 
 ## Publishers and members

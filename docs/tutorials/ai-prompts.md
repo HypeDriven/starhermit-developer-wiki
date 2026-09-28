@@ -279,6 +279,28 @@ a player-stats card to [my lobby screen]:
 4. Resolve each entry's user id to a nickname via the profile helper.
 ```
 
+### 8b. Your game's own leaderboards (games with a server backend)
+
+Context pages: [leaderboards.md](../api/leaderboards.md), [game-scripts.md](../api/game-scripts.md),
+and the [leaderboards and achievements tutorial](game-leaderboards-achievements.md).
+
+```text
+Read docs/api/leaderboards.md and docs/api/game-scripts.md (pasted below).
+My game's owner has created leaderboards with these keys:
+[high-score: integer, desc], [fastest-lap: time-ms, asc].
+
+1. In server.js, when a run or match ends, return
+   scores: { "<key>": { "<userId>": <number> } } alongside sessionState.
+   Compute every score from the authoritative session state, never from
+   a number the client sent. Report every result — the platform keeps
+   each player's best, so do not compare against previous scores.
+2. In the client, GET /api/v1/games/<slug>/leaderboards with the launch
+   token and pick boards by key (never hard-code board ids). Render each
+   with GET /api/v1/leaderboards/{id}/entries?page=&pageSize=, plus a
+   friendsOnly=true toggle. Format time-ms scores as m:ss.cc.
+3. Never POST to /leaderboards/{id}/submit — it refuses these boards.
+```
+
 ## 9. Replays
 
 Context page: [games.md](../api/games.md).

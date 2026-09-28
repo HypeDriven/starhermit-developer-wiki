@@ -4,19 +4,25 @@ An achievement belongs to exactly **one owner**, and the owner decides who is al
 
 | Owner | Declared by | Unlocked by | Use it for |
 |---|---|---|---|
-| **An authoritative game** | `game.achievements` in a script, or `achievements` from a container's `/describe` | **The game's server runtime only** — server-authoritative | Games with a `server=` script or `container.image=` backend |
+| **An authoritative game** | `game.achievements` in a script, or `achievements` from a container's `/describe` — **or by the game's owner** through [`/me/github-games/{id}/achievements`](#achievements-created-by-the-games-owner) | **The game's server runtime only** — server-authoritative | Games with a `server=` script or `container.image=` backend |
 | **A catalog title** (`SoftwareTitle`) | A publisher, via the [publisher API](publisher.md#achievements) | The player's client, via `POST /api/v1/me/achievements/unlock` (entitlement required) | Distributed titles whose client is the only thing that knows the player earned something |
 
 The two are mutually exclusive and the platform enforces the split:
 
 - `POST /api/v1/me/achievements/unlock` **refuses game-scoped achievements** — a client can never claim one.
-- The publisher CRUD endpoints refuse them too — a game's achievements are owned by its script, not by a publisher.
+- The publisher CRUD endpoints refuse them too. You don't need a publisher for a game you own: as
+  its owner you **are** its publisher, and you manage its achievements through
+  [the owner endpoints](#achievements-created-by-the-games-owner) instead.
 
 Base URL: `https://api.starhermit.com`. All routes are under `/api/v1/...`.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/api/v1/games/{slug}/achievements` | Bearer | An authoritative game's achievements + the caller's unlock state |
+| GET | `/api/v1/me/github-games/{id}/achievements` | JWT (game owner) | Every achievement of your game, with its `origin` and unlock count |
+| POST | `/api/v1/me/github-games/{id}/achievements` | JWT (game owner) | Create an achievement for your game → `201` |
+| PUT | `/api/v1/me/github-games/{id}/achievements/{achievementId}` | JWT (game owner) | Update one you created |
+| DELETE | `/api/v1/me/github-games/{id}/achievements/{achievementId}` | JWT (game owner) | Delete one you created and nobody has unlocked → `204` |
 | GET | `/api/v1/software/{titleId}/achievements` | Anonymous | A catalog title's achievement definitions |
 | GET | `/api/v1/me/achievements?titleId=` | JWT | The caller's unlocks (all owners, or one title) |
 | POST | `/api/v1/me/achievements/unlock` | JWT | Client-claimed unlock — **catalog titles only** |
@@ -156,8 +162,82 @@ catalog-distributed titles, below.
   list; a container's declaration is read after it passes health checks. Verify with
   `GET /api/v1/games/{slug}/achievements` after deployment.
 - Definitions upsert by `key`. A key your backend stops declaring is deleted **only if nobody has
-  unlocked it** — earned history is never destroyed.
+  unlocked it** — earned history is never destroyed. Achievements the owner created through the API
+  are never touched by this: only declared ones are reconciled.
 - Unlocks for users who are not participants of the session, and for the AI seat, are ignored.
+
+## Achievements created by the game's owner
+
+Declaring achievements in code is not the only way to give your game some. If you own a game with a
+`server=` script or `container.image=` backend, you can also create achievements for it through the
+API — the way a publisher does for a catalog title, with no publisher account or permission needed.
+Owning the game is the whole of the grant. Use this when a designer wants to add or reword
+achievements without a code change, or when your backend grants keys it does not declare.
+
+**Only your game's server can unlock them**, exactly like declared ones: your script returns the key
+in `achievements`, or your container sends it on the control channel. Nothing changes on the
+unlocking side — keys are resolved against *all* of the game's achievements, declared and created.
+
+`{id}` is your game's id from `GET /api/v1/me/github-games`.
+
+### `POST /api/v1/me/github-games/{id}/achievements`
+
+```json
+{
+  "key": "speedrunner",
+  "name": "Speedrunner",
+  "description": "Finish a level in under a minute.",
+  "icon": "https://cdn.example/speedrunner.png",
+  "secret": false,
+  "points": 25
+}
+```
+
+`key`, `name` and `description` are required. Returns `201`:
+
+```json
+{
+  "id": "…",
+  "key": "speedrunner",
+  "name": "Speedrunner",
+  "description": "Finish a level in under a minute.",
+  "icon": "https://cdn.example/speedrunner.png",
+  "secret": false,
+  "points": 25,
+  "origin": "owner",
+  "unlocks": 0,
+  "createdAt": "…",
+  "updatedAt": "…"
+}
+```
+
+`GET` on the same path lists every achievement of the game in this shape: `origin` is `declared`
+for the ones your script or container declares and `owner` for the ones created here, and `unlocks`
+counts how many players hold each one.
+
+`PUT .../achievements/{achievementId}` takes any of `name`, `description`, `icon`, `secret` and
+`points`; the `key` cannot change. `DELETE` removes it.
+
+### Rules
+
+| Rule | Value |
+|---|---|
+| Key | 1–128 characters: letters, digits, `.`, `_`, `-`, starting with a letter or digit |
+| `name` / `description` | required; at most 200 / 2000 characters |
+| `points` | 0–10000; defaults to 0 |
+| Owner-created achievements per game | 200 (beside the up-to-100 declared ones) |
+
+- **A declared achievement stays your code's.** Creating a key the game already has returns `409`,
+  and so does editing or deleting a `declared` one — the next update would put it back as your code
+  declares it. Change it in your script or `/describe` instead.
+- **If your code later declares a key you created here**, the declaration takes that achievement
+  over (`origin` becomes `declared`). Players who earned it keep it.
+- **An achievement somebody has unlocked cannot be deleted** (`409`).
+- `404` means the game is not yours; `409` on any of these routes with a message about a server
+  backend means the game has none — a browser-only game has nothing that could unlock an
+  achievement.
+
+Step-by-step: [Tutorial: leaderboards and achievements for your game](../tutorials/game-leaderboards-achievements.md).
 
 ## Catalog title achievements
 
