@@ -97,7 +97,7 @@ two clients can run side by side against different environments, and one client 
 way should point at its own origin so the browser makes same-origin calls:
 
 ```csharp
-ApiBaseUri = new Uri("https://chess.starhermit.com/api/v1/")
+ApiBaseUri = new Uri("https://83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com/api/v1/") // your game's uid
 ```
 
 For a local backend, `AllowInsecureTransport = true` permits `http`/`ws`. Client construction refuses a

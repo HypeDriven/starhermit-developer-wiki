@@ -46,7 +46,7 @@ server=server.js
 Use the immutable `id` from `GET /api/v1/me` for `owner`; usernames and nicknames are display
 values and should not be used as manifest ownership identifiers.
 
-The platform clones the repo, serves the static files at `<slug>.starhermit.com` — for the example slug `chess`, that is [chess.starhermit.com](https://chess.starhermit.com), where the reference game is playable live — and proxies `/api` and `/ws` to the backend **same-origin**. That one decision removes an entire category of work: no CORS, no API-base configuration, no environment detection — game clients just use relative paths.
+The platform clones the repo, serves the static files at `<slug>.starhermit.com` — the slug is the uid the platform assigns the game, never a name you choose; the reference game's is `83fd04b1-3cbe-4b09-a251-3733ad4b9d94`, so it is playable live at [83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com](https://83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com) — and proxies `/api` and `/ws` to the backend **same-origin**. That one decision removes an entire category of work: no CORS, no API-base configuration, no environment detection — game clients just use relative paths.
 
 Full flow: [github-games.md](../api/github-games.md) and [publisher.md](../api/publisher.md).
 

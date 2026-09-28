@@ -100,7 +100,11 @@ Base: `https://api.starhermit.com/api/v1/realtime` — so
 ```
 
 - `gameSlug` is required for full user tokens. With a game-scoped launch token the slug is taken from the token's `game_scope` (a mismatching body value is rejected with `403`).
-- Caps: `teamCount` 1–2, `seatsPerTeam` 1–100, total seats ≤ 100 (one team of 100, or two of 50). `backfillAfterSeconds` defaults to `30`.
+- Caps: `teamCount` 1–2, `seatsPerTeam` 1–100, total seats ≤ 100 (one team of 100, or two of 50). `backfillAfterSeconds` defaults to `30` and must be
+  at least `1` (`400` otherwise); there is **no maximum** beyond the size of a 32-bit integer. A long
+  countdown only holds while somebody stays connected, though: an `Open` room with nobody on
+  `ws/v1/realtime` closes after 60 minutes (see [Automatic room lifecycle](#automatic-room-lifecycle)),
+  so a countdown longer than that is reached only if a participant keeps a socket open.
   Large rooms are bandwidth-bound, not seat-bound: every guest's frames go to the host, and every host frame is copied to every guest — see [Sizing a large room](#sizing-a-large-room).
 - `aiPlayers` defaults to `0`. Range `0`–`(teamCount × seatsPerTeam) − 1` — the host always needs a seat, so a fully-AI room is a `400`.
 - `backfillAiPlayers` caps how many seats still empty when the match starts are given to AI — see [Backfill allowance](#backfill-allowance). Omitted or `null` fills them all.
@@ -341,6 +345,32 @@ For a large room:
 - A `Lobby` or `Open` room closes after more than 60 minutes without connected participants.
 
 A participant who merely loses their connection is not affected: reconnecting the socket (newest connection supersedes) and `GET /rooms/mine` both keep working while the room is alive.
+
+### The 60-second host rule and room-bound sessions
+
+**Only a `ws/v1/realtime` socket counts as the host's connection.** A host who is connected to the
+bound session on `ws/v1/games` but has closed (or never opened) the realtime socket is "away" for
+this rule, and the room closes 60 seconds later. A game that plays over `ws/v1/games` must keep the
+host's realtime socket open for the whole match, even if it only uses it for roster pushes. The clock
+starts when the host's last realtime socket closes; a host who never connected is measured from the
+room's `startedAt`.
+
+**Closing the room does not end its room-bound session.** The sweep closes the room (roster push,
+every seat freed, pending invites expired) and nothing else:
+
+- The session stays `active`. Its players can keep playing on `ws/v1/games`, and the script keeps
+  running at its tick rate.
+- From the next invocation on, `ctx.room.roster` is **empty** and every human in `ctx.presence` has
+  `left: true`, because closing the room frees every seat. `online` still reflects `ws/v1/games`
+  sockets. A script that treats "everyone left" as the end of the match should return `result` then.
+- If the script later returns `result`, the session finishes as usual, but the room's `result` stays
+  `null`: the room was already closed, so the result is stored on the session only.
+- If the script never returns `result`, the session is retired like any other game session: 5 minutes
+  after the last `ws/v1/games` socket closes, or after 24 hours with no player action (see
+  [Games — Session model](games.md#session-model)).
+
+In short: if your match must survive the host stepping away from the room socket, don't rely on the
+room; if it must end with the room, end it in the script when `ctx.presence` shows everyone left.
 
 ## Security summary
 

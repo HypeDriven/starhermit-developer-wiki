@@ -10,13 +10,14 @@ A StarHermit authoritative game can be defined by a **single JavaScript file** e
 
 ## Entry points
 
-Expose the handlers on `globalThis.game`. Five optional **static** declarations sit alongside them:
+Expose the handlers on `globalThis.game`. Six optional **static** declarations sit alongside them:
 `tickRateHz` asks the platform how often to invoke `onTick` — declare it if your game depends on the
 tick, since a game that says nothing is ticked once every four seconds (see [Tick rate](#tick-rate)),
 `achievements` registers the game's achievements (see [Achievements](#achievements)), `replays`
 asks the platform to keep your finished sessions (see [Replays](#replays)), `persistent` pauses
 sessions instead of ending them when everyone leaves (see [Persistent sessions](#persistent-sessions)),
-and `queues` declares
+`linkedAchievements` names other games whose unlocks you receive in `ctx.linkedAchievements` (see
+[Achievements from other games](achievements.md#achievements-from-other-games)), and `queues` declares
 the shapes of match matchmaking accepts (see [Games — Matchmaking](games.md#matchmaking)). A game
 that declares no queues has one implicit 1v1:
 
@@ -70,6 +71,7 @@ ctx = {
 ```
 
 - The AI seat (if present) is flagged with `ai: true` on its player entry.
+- A game that declares `linkedAchievements` also gets `ctx.linkedAchievements`: `{ <playerId>: { <otherSlug>: [unlocked keys] } }`, re-read on every invocation. See [Achievements from other games](achievements.md#achievements-from-other-games).
 - Room-bound sessions (started from a realtime room) get two additional ctx fields, `ctx.room` and `ctx.presence`, on **every** invocation — see [Room-bound sessions](#room-bound-sessions).
 - **Trust nothing from `ctx.message.data` or `ctx.inputs[].data`.** The trusted identity is the corresponding `from`, which the server attaches from the authenticated connection — the client can never supply or spoof it.
 - Inputs opt into batching with `{type:"input", realtime:true, ...}`. Unmarked `input` commands remain durable `onPlayerMessage` calls for backward compatibility. Realtime inputs use one pending slot per sender: movement is latest-wins, while `pass`, `shoot`, and `tackle` action edges are merged so a following movement sample cannot erase them before the next tick. Scripts must clamp and validate every value when consuming the batch.
@@ -209,6 +211,8 @@ ctx.presence = {                  // every user who is or was a human participan
 - The roster is re-read on every invocation, so seat conversions (human → AI) show up as they happen.
 
 When a room-bound script returns `result`, the platform finishes the session, **stores the result on the room, and closes the room** — no host-submitted result is involved.
+
+The reverse is not true: **a room closing does not finish its session.** If the room closes first (for example because the host had no `ws/v1/realtime` socket for 60 seconds), the session keeps running, `ctx.room.roster` becomes empty and every human shows `left: true`. Return `result` then if the match should end with the room. See [Realtime Rooms — the 60-second host rule](realtime.md#the-60-second-host-rule-and-room-bound-sessions).
 
 ## Return shape
 

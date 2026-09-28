@@ -11,7 +11,8 @@ The reference example used throughout this wiki is
 [HypeDriven/starhermit-chess](https://github.com/HypeDriven/starhermit-chess) — a
 correspondence-chess game (no-build static site + one server-side JS rules file) that uses
 launch tokens, elo matchmaking, friend invites, the gameplay WebSocket, in-game chat, voice,
-leaderboards, and replays — playable live at [chess.starhermit.com](https://chess.starhermit.com).
+leaderboards, and replays — playable live at [83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com](https://83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com)
+(a game's address is its platform-assigned uid, not its name).
 It is one concrete implementation of the patterns described here,
 not the subject of the docs.
 

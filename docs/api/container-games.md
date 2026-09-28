@@ -124,6 +124,10 @@ that `snapshot`, exactly like a crash restore but without spending the restart b
 `resumed`. Restored persistent sessions also carry `pausedMs`, the total time spent paused. See the
 [persistent sessions tutorial](../tutorials/persistent-sessions.md).
 
+`linkedAchievements` (an array of up to 8 other games' slugs) puts the players' unlocks in those
+games into the ctx of `POST /sessions`, at create and restore. See
+[Achievements from other games](achievements.md#achievements-from-other-games).
+
 The current `/describe` reader does not import a `queues` property. Container games therefore use
 the implicit `default` 1v1 matchmaking queue; adding shapes here does not enable larger matches.
 Check `GET /api/v1/games/{slug}/queues` for the effective shape. Manifest deadline starts and AI-seat

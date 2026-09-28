@@ -27,6 +27,7 @@ platform-hosted browser game — from `location.hostname`, since the subdomain i
 | GET | `/api/v1/games/{slug}` | Bearer | Game info + caller's stats |
 | POST | `/api/v1/games/{slug}/launch-token` | Bearer | Mint a game-scoped launch token |
 | GET | `/api/v1/games/{slug}/achievements` | Bearer | The game's achievements + the caller's unlock state |
+| GET | `/api/v1/games/{slug}/linked-achievements/{otherSlug}` | Bearer | What the caller unlocked in another game |
 | GET | `/api/v1/games/{slug}/controls` | Bearer | Get the caller's effective control bindings |
 | PUT | `/api/v1/games/{slug}/controls` | Bearer | Replace the caller's control overrides |
 | DELETE | `/api/v1/games/{slug}/controls` | Bearer | Reset the caller's controls to manifest defaults |
@@ -135,6 +136,12 @@ and the client-claimed `POST /api/v1/me/achievements/unlock` endpoint refuses th
 arrive on the gameplay socket as `{"type":"achievement"}` frames. Full contracts are in
 [Achievements](achievements.md), [Game Scripts](game-scripts.md#achievements), and
 [Container Game Servers](container-games.md#control-channel).
+
+### `GET /api/v1/games/{slug}/linked-achievements/{otherSlug}`
+
+The caller's own unlocks in **another** game, so this game can open features based on them. Works
+with this game's launch token. See
+[Achievements — Achievements from other games](achievements.md#achievements-from-other-games).
 
 ## Per-player control bindings
 
@@ -298,6 +305,8 @@ game being disabled or delisted, because they are the player's data rather than 
 ### `GET /api/v1/games/{slug}/sessions/mine`
 
 The caller's active sessions for this game. `myTurn` and `deadline` are parsed from the script state's `summary` object (see [Game Scripts](game-scripts.md#the-platform-readable-window)). `pausedAt` is set while a [persistent](../tutorials/persistent-sessions.md) session is paused with nobody in it, and `null` otherwise.
+
+**Room-bound sessions are included.** A [realtime room](realtime.md#room-bound-scripted-sessions)'s bound session lists every human who held a seat when the room started, so it appears here for each of them while it is `active`. AI seats are not in `players`. Leaving the room, or the room closing, does not remove anyone from the session, so it stays in this list until the session itself ends. There is no room id in the response: use `GET /api/v1/realtime/rooms/mine` for the room, and match its `gameSessionId` against `sessionId`.
 
 ```json
 [
@@ -584,6 +593,7 @@ existed report `null`.
 - Each session gets a per-session chat conversation (type `"game"`) so opponents can chat and voice-call **without being friends** (see [Chat](chat.md) and [Voice](voice.md)).
 - Concurrent-session cap per player defaults to `20`.
 - A game that declares `persistent` keeps empty sessions **paused** instead of ending them; connecting to one resumes it. Paused sessions count toward the cap. See the [persistent sessions tutorial](../tutorials/persistent-sessions.md).
+- An active session that nobody is playing is **retired** (status `finished`, abandoned): 5 minutes after its last `ws/v1/games` socket closes with nobody rejoining, or after 24 hours with no player action. Persistent sessions pause instead. This applies to room-bound sessions too; closing their room does not end them.
 - Matchmaking ticket statuses: `queued` | `matched` | `cancelled` | `expired`.
 - Invite statuses: `pending` | `accepted` | `declined` | `cancelled`.
 - **Sessions are created via matchmaking, invite-accept, the AI endpoint, or a realtime room start** (room-bound sessions — see [Realtime Rooms](realtime.md#room-bound-scripted-sessions)) — there is no "create lobby" endpoint.

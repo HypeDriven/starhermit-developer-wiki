@@ -166,6 +166,72 @@ catalog-distributed titles, below.
   are never touched by this: only declared ones are reconciled.
 - Unlocks for users who are not participants of the session, and for the AI seat, are ignored.
 
+## Achievements from other games
+
+A game can open features based on what the player unlocked in **another** game: a sequel honouring
+the original, or games in a series sharing cosmetics. There are two ways to read them.
+
+### From your server: `ctx.linkedAchievements` (trusted)
+
+Name the other games in your script, next to your other declarations:
+
+```js
+globalThis.game = {
+  linkedAchievements: ["83fd04b1-3cbe-4b09-a251-3733ad4b9d94"], // other games' slugs (uids)
+  // ...
+};
+```
+
+A container returns the same `linkedAchievements` array from `GET /describe`. Every script
+invocation's ctx then carries each human player's unlocked keys in those games:
+
+```js
+ctx.linkedAchievements = {
+  "7c9e6679-...": {                                   // player id
+    "83fd04b1-3cbe-4b09-a251-3733ad4b9d94": ["first-win", "checkmate-10"]
+  }
+};
+```
+
+- It is re-read on **every invocation**, so an unlock earned in the other game mid-match is seen on
+  the next one. A container receives it in the ctx of `POST /sessions`, that is, at create and at
+  restore.
+- At most **8** games; entries that are not non-empty strings, duplicates, and slugs over 100
+  characters are dropped. Like the other declarations it is read when the game is published or
+  updated.
+- A game that declares nothing gets no `linkedAchievements` field and pays nothing.
+- Use this route for anything the platform must enforce, such as unlocking gameplay or granting an
+  achievement of your own.
+
+### From your client: `GET /api/v1/games/{slug}/linked-achievements/{otherSlug}`
+
+The caller's own unlocks in `otherSlug`. It needs no declaration, so a browser-only game with no
+server can use it, and it works with the launch token for `{slug}`: the other game's own endpoints
+stay fenced off from that token.
+
+```json
+{
+  "game": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "hidden": false,
+  "unlocked": [
+    { "key": "first-win", "unlockedAt": "2026-07-25T09:14:02Z" }
+  ]
+}
+```
+
+A client can lie about what it received, so treat this as a hint for UI and cosmetics, not as proof.
+
+### What is disclosed
+
+- **Only unlock state of the game you named**: keys and unlock times, never names, descriptions or
+  the list of other games the player has played. A secret achievement the player has unlocked is
+  included.
+- A slug that matches no game answers like a game with nothing unlocked.
+- **Privacy is respected.** A player whose achievements privacy is `Private` is **hidden**: absent
+  from `ctx.linkedAchievements`, and `"hidden": true` with an empty list from the endpoint. Hidden
+  is not the same as "has none", so don't treat it as such. `FriendsOnly` (the default) is disclosed,
+  because the reader is acting for the player.
+
 ## Achievements created by the game's owner
 
 Declaring achievements in code is not the only way to give your game some. If you own a game with a
