@@ -277,6 +277,28 @@ A successful upload does not mean the new process has passed health checks yet. 
 `GET /api/v1/me/github-games/{id}/deployment` view and test a real session before promoting the
 build. Pinning a repository commit later explicitly switches deployment back to repository content.
 
+### Switching an existing game from `server=` to a container
+
+Supported, and it keeps the game: the same id, slug, `<uid>.starhermit.com` address, players,
+leaderboards and achievements. There is no separate registration step.
+
+1. Replace `server=...` with your `container.*` block in `starhermit.txt`. The two are mutually
+   exclusive; a manifest declaring both is refused.
+2. Push one bundle carrying `client/` (with that manifest) **and** `server/image.tar`, over
+   `ws/v1/game-upload` if it is large.
+3. The image you upload is the one that runs. A `container.image=` line in the same manifest is
+   fine to keep, but the uploaded digest wins over it.
+4. Poll `GET /api/v1/me/github-games/{id}/deployment` until it reads `running`, then start a real
+   room or match.
+
+> Until 4 October 2026, doing this in one push left a game with two deployment records that took
+> turns evicting each other's container. It worked straight after the upload and then, once the
+> container idle-stopped, every start answered
+> `503 '<slug>' is failed: The game container returned 401 for GET /describe.`
+> That was a platform defect, not your key handling. It is fixed for new pushes. A game already in
+> that state needs an operator to clear the extra record, so contact support with the game id;
+> pushing again does not repair it.
+
 ## Part 4: renew the container's platform token
 
 At startup the container receives:
@@ -539,6 +561,7 @@ for every match or every storefront launch.
 
 - [ ] Existing owned game has a non-null `gameSlug`.
 - [ ] Container rejects a wrong or missing invoke key.
+- [ ] Invoke key, refresh key and server token are read from the environment at process start, never baked into the image or cached on disk (all three rotate on every container start).
 - [ ] `/health` does not return `200` before state can be accepted.
 - [ ] Bundle uses raw `application/gzip`, not multipart encoding.
 - [ ] Image works read-only, non-root, offline, and without volumes.

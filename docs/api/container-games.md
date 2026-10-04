@@ -259,6 +259,16 @@ from `STARHERMIT_INVOKE_KEY`: the invoke key authenticates platform calls to you
 refresh key authenticates your process to the platform. Both rotate whenever the container starts.
 Schedule renewal at roughly half the reported lifetime and replace the token atomically.
 
+"Whenever the container starts" includes more than a deploy. An idle deployment is stopped after a
+quiet spell with no sessions (15 minutes by default) and started again by the next player. A crashed container is
+restarted. Each start is a new container with new keys and a new token, so read all three from the
+environment of the running process. Never bake them into the image, a config file or a snapshot.
+
+If a start fails with `The game container returned 401 for GET /describe`, the platform's key and
+your process's key disagree. When your server reads `STARHERMIT_INVOKE_KEY` at startup and compares
+it unmodified, that mismatch is on the platform side. Report it with the game id rather than
+loosening the check.
+
 ### Reconcile a session
 
 `GET /api/v1/games/{slug}/server/sessions/{sessionId}` with
