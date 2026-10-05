@@ -31,7 +31,7 @@ patterns, not the subject of the docs.
   limits (realtime inputs vs durable commands, container relay), and the elo rules (absolute
   ratings, no platform cap per match, participants only, owner reset); it also documents share
   links' pass-through query string. Leaderboards covers reset schedules and the owner's
-  per-player rating reset; realtime covers the backfill allowance and quick-join filters.
+  per-player rating reset; realtime covers the backfill allowance, quick-join filters and join in progress.
   The achievements, leaderboards, game-scripts, container-games, github-games and publisher pages
   all state that a game's owner is its publisher for leaderboards and achievements, and that only
   the game's server writes to them.

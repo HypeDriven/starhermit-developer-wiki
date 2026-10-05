@@ -132,7 +132,7 @@ The mechanism is available to a game that declares either a `server=` script or 
 server runtime makes the unlock authoritative. Script-backed use cases include:
 
 - **Scripted platform games** — unlock from `onPlayerMessage` / `onTick` as the match plays out.
-- **Room-bound realtime games** — a [realtime room](realtime.md#room-bound-scripted-sessions) for a
+- **Room-bound realtime games** — a [realtime room](realtime.md#room-bound-sessions) for a
   game with a `server=` script creates a bound session when it starts, and every hook of that
   session can grant achievements.
 - **Single-player and practice games** — a session against the AI seat

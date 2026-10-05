@@ -187,7 +187,7 @@ With AI count `0`, vacant seats remain empty. The same context is delivered to c
 
 ## Room-bound sessions
 
-A session can be **bound to a realtime room**: when a [realtime room](realtime.md) for a game with a `server=` script starts, the platform creates one N-player session for the room's **human** participants (AI seats exist only in the script-facing roster). This is how server-authoritative realtime games (e.g. football) run: rooms provide the lobby/matchmaking, the script runs the match. See [Realtime Rooms — the bridge](realtime.md#room-bound-scripted-sessions) for the room-side lifecycle.
+A session can be **bound to a realtime room**: when a [realtime room](realtime.md) for a game with a `server=` script starts, the platform creates one N-player session for the room's **human** participants (AI seats exist only in the script-facing roster). This is how server-authoritative realtime games (e.g. football) run: rooms provide the lobby/matchmaking, the script runs the match. See [Realtime Rooms — the bridge](realtime.md#room-bound-sessions) for the room-side lifecycle.
 
 Every invocation (`createSession`, `onPlayerMessage`, `onTick`) of a room-bound session receives two extra ctx fields:
 

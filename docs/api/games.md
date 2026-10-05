@@ -306,7 +306,7 @@ game being disabled or delisted, because they are the player's data rather than 
 
 The caller's active sessions for this game. `myTurn` and `deadline` are parsed from the script state's `summary` object (see [Game Scripts](game-scripts.md#the-platform-readable-window)). `pausedAt` is set while a [persistent](../tutorials/persistent-sessions.md) session is paused with nobody in it, and `null` otherwise.
 
-**Room-bound sessions are included.** A [realtime room](realtime.md#room-bound-scripted-sessions)'s bound session lists every human who held a seat when the room started, so it appears here for each of them while it is `active`. AI seats are not in `players`. Leaving the room, or the room closing, does not remove anyone from the session, so it stays in this list until the session itself ends. There is no room id in the response: use `GET /api/v1/realtime/rooms/mine` for the room, and match its `gameSessionId` against `sessionId`.
+**Room-bound sessions are included.** A [realtime room](realtime.md#room-bound-sessions)'s bound session lists every human who held a seat when the room started, so it appears here for each of them while it is `active`. AI seats are not in `players`. Leaving the room, or the room closing, does not remove anyone from the session, so it stays in this list until the session itself ends — except in a [join-in-progress](realtime.md#join-in-progress) room, where a player who leaves gives their seat up and is removed from the session, and a newcomer admitted mid-match is added to it. There is no room id in the response: use `GET /api/v1/realtime/rooms/mine` for the room, and match its `gameSessionId` against `sessionId`.
 
 ```json
 [
@@ -614,7 +614,7 @@ existed report `null`.
 - An active session that nobody is playing is **retired** (status `finished`, abandoned): 5 minutes after its last `ws/v1/games` socket closes with nobody rejoining, or after 24 hours with no player action. Persistent sessions pause instead. This applies to room-bound sessions too; closing their room does not end them.
 - Matchmaking ticket statuses: `queued` | `matched` | `cancelled` | `expired`.
 - Invite statuses: `pending` | `accepted` | `declined` | `cancelled`.
-- **Sessions are created via matchmaking, invite-accept, the AI endpoint, or a realtime room start** (room-bound sessions — see [Realtime Rooms](realtime.md#room-bound-scripted-sessions)) — there is no "create lobby" endpoint.
+- **Sessions are created via matchmaking, invite-accept, the AI endpoint, or a realtime room start** (room-bound sessions — see [Realtime Rooms](realtime.md#room-bound-sessions)) — there is no "create lobby" endpoint.
 - Elo updates come from the authoritative script (`eloUpdates`) or container control channel, are denormalized onto `GamePlayerState.Elo`, and are published to the game's leaderboard (score type `elo`). **Clients can never submit scores to a game leaderboard directly** (see [Leaderboards](leaderboards.md)).
 
 ## Gameplay WebSocket
