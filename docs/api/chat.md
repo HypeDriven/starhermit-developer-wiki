@@ -193,7 +193,7 @@ This is a **pure server→client push channel**: client frames are ignored (only
 | `message_updated` | `MessageDto` |
 | `message_deleted` | `MessageDto` |
 | `conversation_read` | Read-state change for the signed-in user; refetch unread counts |
-| `game_invite` | `{ "inviteId", "kind", "gameSlug", "gameName", "roomId", "from": { "userId", "username" }, "createdAt", "acceptPath", "declinePath" }` — see below |
+| `game_invite` | `{ "inviteId", "kind", "gameSlug", "gameName", "roomId", "from": { "userId", "username" }, "createdAt", "acceptPath", "declinePath", "inProgress", "sessionId" }` — see below |
 
 ### `game_invite`: one event for both invite systems
 
@@ -205,6 +205,8 @@ Anyone can be invited to play in two ways, and this single event carries both �
 | `"room"` | [`POST /realtime/rooms/{id}/invites`](realtime.md#invites) | Takes a seat in a room the inviter is already sitting in; `roomId` is that room |
 
 `acceptPath` and `declinePath` are the endpoints that answer **this** invite — use them and the distinction never matters. Answering at the other system's endpoint is a `404`: the two keep separate invite ids.
+
+`inProgress` is `true` when accepting joins a game that is already being played — a session invite that names a running session, or a room invite to a started room that allows joining in progress — and `sessionId` is that game's session. Use it to say "join their game" instead of "play".
 
 ```json
 {

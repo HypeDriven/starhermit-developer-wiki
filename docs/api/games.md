@@ -50,9 +50,9 @@ platform-hosted browser game — from `location.hostname`, since the subdomain i
 | POST | `/api/v1/games/{slug}/webhooks` | JWT (owner) | Create a webhook; secret returned once |
 | DELETE | `/api/v1/games/{slug}/webhooks/{id}` | JWT (owner) | Delete a webhook |
 | POST | `/api/v1/games/{slug}/webhooks/{id}/resume` | JWT (owner) | Clear the breaker after fixing the endpoint |
-| POST | `/api/v1/games/{slug}/invites` | Bearer | Invite a friend to a game |
+| POST | `/api/v1/games/{slug}/invites` | Bearer | Invite a friend to a new game, or into one you are playing |
 | GET | `/api/v1/games/{slug}/invites` | Bearer | Incoming pending + all outgoing invites |
-| POST | `/api/v1/games/{slug}/invites/{inviteId}/accept` | Bearer | Accept an invite (creates the session) |
+| POST | `/api/v1/games/{slug}/invites/{inviteId}/accept` | Bearer | Accept an invite (creates the session, or joins the one it names) |
 | POST | `/api/v1/games/{slug}/invites/{inviteId}/decline` | Bearer | Decline an invite |
 | GET | `/api/v1/me/game-invites` | Bearer | All pending invites — every game, both invite systems (max 50) |
 | GET | `/api/v1/games/{slug}/replays/mine` | Bearer | Caller's finished sessions (games with replays) |
@@ -433,7 +433,24 @@ Request body:
 
 The target must be a friend (`403` otherwise — see [Friends](friends.md)); `409` on a duplicate invite or when either player is at the session cap. The invitee also receives a [`game_invite` event](chat.md#game_invite-one-event-for-both-invite-systems) pushed over their chat socket, with `kind: "session"`.
 
-**Which invite should you send?** Accepting this one *creates a new session* for the two players. If the inviter is already sitting in a [realtime room](realtime.md) (a lobby with seats), invite them into that room instead — `POST /api/v1/realtime/rooms/{id}/invites` — so accepting seats them at the table you are actually at. Both notify the invitee the same way, so never send both for one invitation: that notifies twice.
+#### Inviting a friend into a game in progress
+
+Add the session you are playing in:
+
+```json
+{ "toUserId": "9b2f8c1a-1111-4222-8333-444455556666", "sessionId": "3f0c…" }
+```
+
+Accepting then **admits the friend to that running session** instead of starting a new one — they become a player in every sense (socket, `ctx.players`, restores, reconnects). Your game decides whether it takes them: the platform asks a script's `game.onMembershipChange(ctx)` or a container's [`POST /sessions/{id}/members`](container-games.md), and a game that has neither refuses every such join. Rules:
+
+- The session must be an active session of this game that **you** play in (`403` otherwise, `410` if it has ended), your friend must not already be in it (`409`), and it must not belong to a realtime room (`409` — invite through the room, whose seats are the roster).
+- The response carries `targetSessionId`; `sessionId` stays `null` until the invite is accepted.
+- At accept everything is checked again. If the game refuses (full, closed…) the accept is a `409` and the invite **stays pending**. If the match has ended the invite is **cancelled** and the accept answers `410` — it never turns into a new game.
+- Only the invitee's concurrent-session cap applies. You may hold one pending invite per friend per destination, so an invite into your match and an invite to a new game can coexist.
+
+A platform build from before this feature ignores `sessionId` and starts a new session on accept; `targetSessionId` in the response tells you which you got.
+
+**Which invite should you send?** Accepting a plain invite (no `sessionId`) *creates a new session* for the two players. If the inviter is already sitting in a [realtime room](realtime.md) (a lobby with seats), invite them into that room instead — `POST /api/v1/realtime/rooms/{id}/invites` — so accepting seats them at the table you are actually at. Both notify the invitee the same way, so never send both for one invitation: that notifies twice.
 
 Response:
 
@@ -445,6 +462,7 @@ Response:
   "status": "pending",
   "createdAt": "2026-07-20T14:10:00Z",
   "sessionId": null,
+  "targetSessionId": null,
   "notified": true
 }
 ```
@@ -464,7 +482,7 @@ Response:
 
 ### `POST /api/v1/games/{slug}/invites/{inviteId}/accept`
 
-Accepts the invite and creates the session. Returns the `GameInviteDto` with `status` `accepted` and `sessionId` set.
+Accepts the invite and creates the session — or, for an invite with a `targetSessionId`, joins that one. Returns the `GameInviteDto` with `status` `accepted` and `sessionId` set to the session to open.
 
 ### `POST /api/v1/games/{slug}/invites/{inviteId}/decline`
 
@@ -501,7 +519,7 @@ Every pending invite addressed to the caller (max 50, newest first) — the poll
 ]
 ```
 
-Answer each entry at its own `acceptPath`/`declinePath` — the two systems keep separate invite ids, so a room invite id at `/games/{slug}/invites/...` is a `404`. Room invites whose room has already started or closed are omitted; there is nothing left to accept.
+Answer each entry at its own `acceptPath`/`declinePath` — the two systems keep separate invite ids, so a room invite id at `/games/{slug}/invites/...` is a `404`. Room invites whose room has closed, or has started without join-in-progress, are omitted; there is nothing left to accept. So are session invites into a match that has ended. Each entry carries `inProgress` (accepting joins a game already being played — a session invite with a target, or a room invite to a started join-in-progress room) and that game's `sessionId`, so a client can say "join their game" rather than "play".
 
 ### Share links (invite by URL)
 
