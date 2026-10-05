@@ -93,6 +93,7 @@ Base: `https://api.starhermit.com/api/v1/realtime` — so
 | POST | `/rooms/{id}/seats` | host | Re-balance seats before the match starts |
 | POST | `/rooms/{id}/result` | host | Submit the result; room → `Closed` |
 | GET | `/rooms/mine` | anyone | Caller's active room, if any (reconnect) |
+| GET | `/rooms/joined[?gameSlug=]` | anyone | Every room the caller holds a seat in, worlds included (an empty list when none) |
 
 ### Create a room — `POST /rooms`
 
@@ -164,7 +165,7 @@ Because one notification covers both invite systems, its payload carries `kind: 
 
 `GET /rooms/invites` lists the caller's pending room invites across all games (launch tokens see only their own game's). Use it as the room-invite inbox a game client polls. The unified invite inbox at `GET /api/v1/me/game-invites` returns these too.
 
-`POST /rooms/invites/{inviteId}/accept` seats the caller and returns the room. **Party pinning**: invite-joins are seated on the host's team while space lasts, then overflow to other teams. `409` if the room is full, already started/closed, or the caller is in another active room.
+`POST /rooms/invites/{inviteId}/accept` seats the caller and returns the room. **Party pinning**: invite-joins are seated on the host's team while space lasts, then overflow to other teams. `409` if the room is full, already started/closed, or the caller is in another active room ([worlds](#worlds-do-not-count-as-your-room) excepted). Accepting an invite to a room the caller already sits in just accepts it.
 
 `POST /rooms/invites/{inviteId}/decline` → `204`.
 
@@ -248,7 +249,14 @@ Returns the room.
 
 `teamScores` must have exactly one entry per team; each score is sanity-clamped to 0–50. The clamped result is stored on the room's `result` and pushed to connected participants as a `{"type":"result"}` control frame.
 
-`GET /rooms/mine` returns the caller's current non-`Closed` room (for reconnects), or `404`.
+`GET /rooms/mine` returns the caller's current non-`Closed` room (for reconnects), or `404`. A player
+who also belongs to [worlds](#worlds-do-not-count-as-your-room) gets the room that occupies them, else the
+world they joined most recently.
+
+`GET /rooms/joined` lists **every** room the caller holds a seat in, newest first — their worlds as
+well as the one room that occupies them — as full rooms (roster and join code included). A launch
+token sees only its own game's rooms; with a full token, `?gameSlug=` narrows it. It answers an empty
+list, not a `404`, so a client can ask on every start without a logged error.
 
 ### Join in progress
 
@@ -272,7 +280,19 @@ with a **vacant** seat — nobody in it, not an AI — so such a room is normall
   instead of ending — and the room closes with it.
 - **Finding one.** `GET /rooms?includeInProgress=true` lists running join-in-progress rooms with a vacant
   seat; `POST /rooms/quick-join` with `includeInProgress: true` joins one (add a `metadata` filter to
-  pick a particular room).
+  pick a particular room). Quick-join passes over rooms the caller already sits in.
+
+#### Worlds do not count as your room
+
+A player may be in **one active room at a time**: creating, joining by code, quick-joining or
+accepting an invite is a `409 "You are already in an active room."` while they hold a seat in another
+room that is not closed. A seat in a **world** does not count: a `Playing`, `joinInProgress` room bound
+to an active session of a [persistent](../tutorials/persistent-sessions.md) game. A world lasts as long
+as its session and its room stays open after the last visitor leaves, so a seat in one is membership,
+not a lobby the player is sitting in — they can belong to several worlds, in any games, and still use
+one ordinary room. A join-in-progress match that is not persistent still counts: it ends, and while
+it runs the player is in it. A second seat in the same room is refused (`409`) on every path. List a
+player's worlds with [`GET /rooms/joined`](#start-seats-leave-result).
 
 ## WebSocket: `ws/v1/realtime`
 
@@ -411,7 +431,7 @@ room; if it must end with the room, end it in the script when `ctx.presence` sho
 
 - Every endpoint works with a full JWT **or** a game-scoped launch token; a launch token's `game_scope` must match the room's `gameSlug`, so two games can never see or join each other's rooms.
 - Reads are participant-only (plus pending invitees); `open`, `seats`, `start`, and `result` are host-only; invites are friends-only.
-- Validation: seat/team caps, an AI count that always leaves the host a seat, one active room per user, one occupant per seat, idempotent start, result scores clamped to 0–50, invites expire with the room.
+- Validation: seat/team caps, an AI count that always leaves the host a seat, one active room per user (worlds excepted), one occupant per seat, idempotent start, result scores clamped to 0–50, invites expire with the room.
 - Transport: server-tagged sender ids, role-based routing, frame size caps, per-connection rate limits, no server-side parsing of binary payloads.
 
 ## Room-bound sessions
