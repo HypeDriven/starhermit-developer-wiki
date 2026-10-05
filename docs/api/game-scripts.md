@@ -41,6 +41,7 @@ to apply a change.
 
 - `createSession(ctx)` — called when a session is created (matchmaking, invite-accept, AI practice, or a realtime room starting — see [Room-bound sessions](#room-bound-sessions)).
 - `onPlayerMessage(ctx)` — called for durable client commands received over the gameplay WebSocket. Inputs explicitly marked `realtime:true` bypass this entry point.
+- `onMembershipChange(ctx)` — optional. Called when a player joins or leaves a running session (a [join-in-progress room](realtime.md), or an [invite into a game in progress](games.md#inviting-a-friend-into-a-game-in-progress)). `ctx.players` already reflects the change, and `ctx.membership` is `{ change: "joined" | "left", userId, name, team, slot }`. Return `{ ok: false }` to refuse a join; a script without this hook refuses every join. A leave is final whatever you return. Achievements and scores may ride the result; a `sessionState` is ignored.
 - `onTick(ctx)` — called by the platform's timer service at the effective tick rate; latest realtime inputs are available in `ctx.inputs`. A game resolving to 0 Hz does not receive periodic calls, but the function should still be present to satisfy the script contract.
 
 ## Context object

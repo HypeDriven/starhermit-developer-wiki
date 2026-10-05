@@ -79,6 +79,7 @@ matches the injected `STARHERMIT_INVOKE_KEY`; reject a request when it is absent
 | `POST /sessions` | Start a session, or restore it when `snapshot` is present |
 | `GET /sessions/{sessionId}/snapshot` | Return the current durable state |
 | `DELETE /sessions/{sessionId}` | Tear down a session |
+| `POST /sessions/{sessionId}/members` | *Optional:* a player is joining or leaving a running session |
 | `WS /control` | Deployment-wide outbound control channel |
 | `WS /stream` | Gameplay frames in both directions |
 
@@ -179,6 +180,46 @@ The platform checkpoints active sessions periodically. A snapshot response may a
 persistence rules as a script result. For a game with [replays](#get-describe), the last state a
 finished session reached is what the platform keeps as its replay — so make that state
 reconstructable, not just resumable.
+
+### `POST /sessions/{sessionId}/members`
+
+Optional. Players can **join a session in progress**, through a [realtime room](realtime.md) that allows
+it or by accepting a friend's [invite into the session they are playing](games.md#inviting-a-friend-into-a-game-in-progress),
+and rooms let a player give up their seat without an AI taking it. The platform asks your container
+before the change is final. The body is the ordinary ctx, with `players` already reflecting the
+change, plus `membership`:
+
+```json
+{
+  "now": 1769500000000,
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [
+    { "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "name": "alice" },
+    { "id": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol" }
+  ],
+  "membership": { "change": "joined", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol", "team": 0, "slot": 1 }
+}
+```
+
+`change` is `joined` or `left`. Answer with the standard envelope:
+
+- **A join can be refused.** `{"ok": false, "error": "This world is full."}` turns the player away, the
+  seat is given back and nothing is recorded; an invite accept answers `409` and the invite stays
+  pending. If you do not implement the endpoint, every join is refused: `404`, `405` and `501` mean
+  "this game does not take players mid-match", so a game written for a fixed roster never has a
+  stranger dropped into it.
+- **A leave is final** whatever you answer.
+- The answer may carry `achievements` and `scores`. A `sessionState` is ignored: send a `snapshot`
+  over [`/control`](#control-channel) if the change is worth a checkpoint.
+
+After a join, the new player's commands start arriving on `/stream` and they are in `players` on every
+later restore. After a leave, their frames stop and their socket is closed. Every connected client
+receives a [`membership` frame](games.md#server--client) either way, and the session chat gains or loses
+the member.
+
+A [paused persistent session](../tutorials/persistent-sessions.md) is not asked, because it is not running. The restore that
+resumes it carries the current `players`, so treat a player you have not seen before in a restore as
+joined.
 
 ## Gameplay stream
 

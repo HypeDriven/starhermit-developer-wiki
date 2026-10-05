@@ -641,6 +641,7 @@ For a script runtime, durable commands run through `onPlayerMessage`; explicitly
 { "type": "game", "data": { "...": "server-authorized message addressed to you" } }
 { "type": "error", "error": "Illegal move" }
 { "type": "presence", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "online": true }
+{ "type": "membership", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "change": "joined", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol", "team": 0, "slot": 1 }
 { "type": "achievement", "data": { "key": "first-win", "name": "First Win", "description": "Win a match.", "icon": null, "points": 10, "unlockedAt": "2026-07-25T09:14:02Z" } }
 { "type": "resumed", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "lostMs": 750 }
 { "type": "abandoned", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "reason": "server_failure" }
@@ -649,6 +650,7 @@ For a script runtime, durable commands run through `onPlayerMessage`; explicitly
 - `game` — a server-authorized message addressed to you.
 - `error` — an error from the platform or from your last command.
 - `presence` — broadcast to the other participants when someone joins or leaves.
+- `membership` — someone became a player in this session mid-match (`joined`) or gave up their seat (`left`); sent to every connected participant. See [Container Game Servers — members](container-games.md#post-sessionssessionidmembers).
 - `achievement` — an achievement the game's script just granted **you**, sent to the earning player
   only. A separate frame type on purpose: this is platform truth, not script-relayed game data.
   Emitted from both runtimes' durable update paths. See
