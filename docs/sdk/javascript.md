@@ -107,6 +107,7 @@ These need a game with a server (a [script](../api/game-scripts.md) or a
 | Gameplay socket | `const conn = connect(sessionId, { onGame, onError, onPresence, onAchievement, onResumed, onAbandoned, onOpen, onClose, onAuthLost })`, then `conn.send(data)`; reconnects with back-off, renewing the token first, and stops on 4403/4404 or when renewal is refused (see [reconnecting](#reconnecting-and-expired-tokens)) |
 | Matchmaking | `queues()`, `joinQueue([keys])`, `matchStatus()`, `cancelMatch()`, `waitForMatch(opts)` |
 | Invites | `sendInvite(toUserId[, sessionId])` (with a `sessionId` the friend joins that running session), `invites()`, `acceptInvite(id)`, `declineInvite(id)`; `inviteLink(query)` for a share link |
+| Post a run to your leaderboards | `submitScores({ boardKey: number })` → accepted keys (see [single-player leaderboards](#single-player-leaderboards)) |
 | Achievements and leaderboards (read-only) | `achievements()`, `linkedAchievements(otherSlug)`, `leaderboards()`, `leaderboard(key, opts)`, `leaderboardEntries(boardId, opts)`; unlock toasts via `on('achievement', …)` |
 | Replays | `myReplays(limit)`, `getReplay(id)` |
 | Session chat | `chatMessages(id)`, `sendChat(id, text)`, `pollChat(id, onMessages, intervalMs)` — REST and polling only for launch tokens |
@@ -115,6 +116,38 @@ These need a game with a server (a [script](../api/game-scripts.md) or a
 Anything not wrapped is one call away: `StarHermit.api(path, { method, body })` sends an
 authenticated JSON request (resolves `null` on 404/204 or when signed out, rejects
 `{ status, message }` on other failures, renews once on 401).
+
+## Single-player leaderboards
+
+A client can never post a score — only the game's server can — so a single-player game needs a
+small platform script to own its boards. [`score-script.js`](score-script.js) is one: copy it next
+to your game, declare it in [`starhermit.txt`](../starhermit-txt.md) as `server=score-script.js`, and
+edit only its `BOARDS` block, which lists each board as you
+[create it](../tutorials/game-leaderboards-achievements.md#1-create-the-leaderboards):
+
+```js
+var BOARDS = {
+  "high-score": { "name": "High score", "scoreType": "integer", "sortDirection": "desc", "minScore": 0, "maxScore": 1000000 }
+};
+```
+
+When a run ends, post it and show the player's place:
+
+```js
+const accepted = await StarHermit.submitScores({ 'high-score': total });   // [] when signed out or refused
+if (accepted.includes('high-score')) {
+  const board = await StarHermit.leaderboard('high-score', { pageSize: 100 });
+  const me = board.items.find(e => e.userId === StarHermit.userId);
+  showRank(me && me.rank);
+}
+```
+
+`submitScores` opens a practice session (`POST .../sessions/ai`), sends `{type:'result', scores}` on
+the gameplay socket, and resolves the board keys the script accepted; it also emits `scores` with
+that list. The script drops a score that is not a number of the board's type or falls outside its
+`minScore`/`maxScore`, posts the rest through its `scores` return, and ends the session. The client
+still reports the result, so the range is your guard: set it to what the game can really produce,
+or verify the run in the script (replaying recorded inputs, for instance) when cheating matters.
 
 ## Reconnecting and expired tokens
 
@@ -167,6 +200,7 @@ Concurrent renewals share one request, so calling it from several sockets at onc
 | `saved` | `true` / `false` after each cloud write |
 | `saveerror` | `{ op: 'load' }` after a failed read; `{ op: 'write', blocked: true }` for a refused write |
 | `achievement` | an unlock pushed on the gameplay socket |
+| `scores` | the board keys accepted by `submitScores` (`[]` when nothing was posted) |
 
 ## Keeping your copy current
 
