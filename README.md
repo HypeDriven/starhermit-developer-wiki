@@ -61,6 +61,7 @@ same API, with the token refresh, retry, reconnection and redaction rules alread
 | Platform | Page | Package |
 |---|---|---|
 | Unity | [Unity SDK](docs/sdk/unity.md) | [`com.starhermit.sdk`](https://github.com/HypeDriven/starhermit-unity-sdk) — typed clients for the REST API v1 and all six WebSocket protocols |
+| Browser (JavaScript) | [JavaScript SDK](docs/sdk/javascript.md) | [`starhermit-sdk.js`](docs/sdk/starhermit-sdk.js) — one dependency-free file covering the launch-token surface: sign-in, cloud saves, settings, controls, invites, matchmaking, the gameplay socket and read-only achievements/leaderboards |
 
 ## API reference
 
