@@ -52,7 +52,8 @@ patterns, not the subject of the docs.
   example using raw JSON with the existing acceptance method), and `javascript` (the single-file browser client
   `docs/sdk/starhermit-sdk.js`, shipped beside its page: loading and `init`, sign-in and identity, cloud saves
   with the load-before-save rule and the failed-read write block, settings and controls, multiplayer/social
-  calls, events, and keeping a vendored copy current). These pages describe how to reach
+  calls, reconnecting sockets — renew the launch token before every reconnect, and relaunch once renewal is
+  refused — events, and keeping a vendored copy current). These pages describe how to reach
   the documented API from an engine; they do not restate the API itself.
 - `docs/tutorials/*.md` — `chess-walkthrough` (the full lifecycle from launch token to replay viewer),
   `ai-prompts` (copy-pasteable prompts for an AI coding assistant, one per feature plus a mega-prompt),

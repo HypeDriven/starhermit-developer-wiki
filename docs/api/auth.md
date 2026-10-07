@@ -373,6 +373,16 @@ The token carries a `game_scope` claim and defaults to a 60-minute lifetime. Ren
 `launch_chain` start time forward; past 12 hours (default) renewal is `403` and the holder must go
 back to a full account session. Full details are in [Games](games.md).
 
+**Reconnecting sockets.** A socket opened with a launch token (`?access_token=` on `ws/v1/games`,
+`ws/v1/realtime`, `ws/v1/voice`) carries that token in its URL, and a handshake with an expired token
+is refused with `401` before the upgrade — the browser reports only close code `1006`, the same as a
+network drop. Treat a failed reconnect as possibly an auth failure: before reopening, renew through
+`POST /api/v1/games/{slug}/launch-token` (possible only while the current token is still valid and
+within 12 hours of the original launch) and build the URL with the new token. Once renewal is
+refused, send the player back to the launcher, or through
+[game sign-in](#sign-in-from-a-directly-opened-browser-game) if that is how the game was opened.
+Retrying the same URL can never recover.
+
 ### Game-scope fencing
 
 A game-scoped token can only reach:

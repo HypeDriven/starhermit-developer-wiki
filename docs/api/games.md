@@ -98,7 +98,7 @@ Returns the game definition plus the caller's stats for that game. `404` if no s
 
 ### `POST /api/v1/games/{slug}/launch-token`
 
-Mints a game-scoped JWT (default lifetime 60 minutes) carrying `game_scope={slug}` and no permission claims. A scoped token may re-mint a token for its own game — this is the client refresh pattern — but renewal is bounded by `launch_chain` (default 12 hours from the original user session). Past that ceiling renewal is `403`. Clients should refresh before the token expires; the chess reference client, for example, refreshes every 45 minutes.
+Mints a game-scoped JWT (default lifetime 60 minutes) carrying `game_scope={slug}` and no permission claims. A scoped token may re-mint a token for its own game — this is the client refresh pattern — but renewal is bounded by `launch_chain` (default 12 hours from the original user session). Past that ceiling renewal is `403`. Clients should refresh before the token expires; the chess reference client, for example, refreshes every 45 minutes. Renew before reconnecting a socket, too — see [Gameplay WebSocket](#gameplay-websocket).
 
 ```json
 {
@@ -624,6 +624,7 @@ existed report `null`.
 - Text frames only, max 16 KB per frame.
 - A newer connection supersedes the old one: the previous connection is closed with `PolicyViolation`.
 - Connecting to a paused [persistent](../tutorials/persistent-sessions.md) session resumes it before your first command. If it cannot be resumed (typically a container still starting), you get an `error` frame and the socket closes with code `1001`; the session stays paused — reconnect with backoff.
+- **Renew the token before every reconnect.** An expired token is refused with `401` before the upgrade, which the browser reports only as close code `1006` — indistinguishable from a network drop — so a failed reconnect may be an auth failure, and reopening the same `?access_token=` URL can never recover. Renew through [`POST /api/v1/games/{slug}/launch-token`](#post-apiv1gamessluglaunch-token) and reconnect with the new token. Renewal works only while the current token is valid and within 12 hours (default) of the original launch; once it is refused (`401`/`403`), stop reconnecting and send the player back to the launcher for a fresh launch token.
 
 ### Client → server
 

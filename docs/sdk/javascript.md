@@ -35,10 +35,11 @@ it before your own code:
 ```
 
 Call `init()` once, before any router touches `location.hash`. Options:
-`init({ base, gameId, autoRefresh })` — `base` points REST calls at another origin during local
-development (platform-hosted games use same-origin), `gameId` is only needed for sign-in when the
-game is not served from `<id>.starhermit.com`, and `autoRefresh: false` leaves token renewal to a
-game that runs its own chain.
+`init({ base, gameId, autoRefresh, launcherUrl })` — `base` points REST calls at another origin during
+local development (platform-hosted games use same-origin), `gameId` is only needed for sign-in when the
+game is not served from `<id>.starhermit.com`, `autoRefresh: false` leaves token renewal to a game that
+runs its own chain, and `launcherUrl` overrides where `relaunch()` sends the player (default
+`https://dashboard.starhermit.com/`).
 
 ## Sign-in and identity
 
@@ -103,7 +104,7 @@ These need a game with a server (a [script](../api/game-scripts.md) or a
 | Area | Calls |
 |---|---|
 | Sessions | `mySessions()`, `getSession(id)`, `startAiSession()`; `StarHermit.launchSessionId` after an invite launch |
-| Gameplay socket | `const conn = connect(sessionId, { onGame, onError, onPresence, onAchievement, onResumed, onAbandoned, onOpen, onClose })`, then `conn.send(data)`; reconnects with back-off and stops on 4403/4404 |
+| Gameplay socket | `const conn = connect(sessionId, { onGame, onError, onPresence, onAchievement, onResumed, onAbandoned, onOpen, onClose, onAuthLost })`, then `conn.send(data)`; reconnects with back-off, renewing the token first, and stops on 4403/4404 or when renewal is refused (see [reconnecting](#reconnecting-and-expired-tokens)) |
 | Matchmaking | `queues()`, `joinQueue([keys])`, `matchStatus()`, `cancelMatch()`, `waitForMatch(opts)` |
 | Invites | `sendInvite(toUserId[, sessionId])` (with a `sessionId` the friend joins that running session), `invites()`, `acceptInvite(id)`, `declineInvite(id)`; `inviteLink(query)` for a share link |
 | Achievements and leaderboards (read-only) | `achievements()`, `linkedAchievements(otherSlug)`, `leaderboards()`, `leaderboard(key, opts)`, `leaderboardEntries(boardId, opts)`; unlock toasts via `on('achievement', …)` |
@@ -115,13 +116,54 @@ Anything not wrapped is one call away: `StarHermit.api(path, { method, body })` 
 authenticated JSON request (resolves `null` on 404/204 or when signed out, rejects
 `{ status, message }` on other failures, renews once on 401).
 
+## Reconnecting and expired tokens
+
+A socket carries the launch token in its URL, and a handshake with an expired token is refused before
+the upgrade — the browser reports only close code `1006`, exactly like a network drop. So a failed
+reconnect may be an auth failure, and retrying the same URL can never recover. Renewal works only
+while the current token is valid and within 12 hours of the original launch; after that only the
+launcher can mint a new token.
+
+`connect()` handles this itself: before every reconnect it renews the token through
+`POST /api/v1/games/{slug}/launch-token` (unless it was renewed since the socket opened) and reopens
+with the new one. A network or server error while renewing backs off and renews again — it never
+reopens the old URL. When renewal is refused or the token has expired, the SDK signs out (`auth` with
+`reason: 'expired'`), stops reconnecting and calls `onAuthLost()`:
+
+```js
+const conn = StarHermit.connect(sessionId, {
+  onGame, onClose,
+  onAuthLost: () => showReconnectPanel(),   // e.g. "Session expired — Back to StarHermit"
+});
+backButton.onclick = () => StarHermit.relaunch();
+```
+
+`relaunch()` sends the player back for a fresh launch token: through sign-in when the game was opened
+that way (`StarHermit.launchKind === 'sign-in'`), otherwise to the launcher. Inside the launcher's
+game frame it navigates the top window, which browsers allow only from a user gesture, so call it
+from a click; it returns `false` when the navigation was refused.
+
+Sockets your game opens itself (`realtime.socketUrl(roomId)`, `voice.socketUrl(roomId)`) need the
+same rule. Before reopening one, call `renewForReconnect()` and act on its result:
+
+```js
+async function reopen() {
+  const r = await StarHermit.renewForReconnect();
+  if (r === 'renewed') ws = new WebSocket(StarHermit.realtime.socketUrl(roomId)); // fresh token in the URL
+  else if (r === 'retry') setTimeout(reopen, backoff());                         // renewal itself failed
+  else showReconnectPanel();                                                     // 'relaunch'
+}
+```
+
+Concurrent renewals share one request, so calling it from several sockets at once is safe.
+
 ## Events
 
 `StarHermit.on(type, fn)` returns an unsubscribe function; `off(type, fn)` also works.
 
 | Event | Payload |
 |---|---|
-| `auth` | `{ signedIn, userId }` on sign-in; `{ signedIn: false, reason }` on sign-out or expiry |
+| `auth` | `{ signedIn, userId }` on sign-in; `{ signedIn: false, reason }` on sign-out or expiry (`reason: 'expired'` when renewal is refused — offer `relaunch()`) |
 | `saved` | `true` / `false` after each cloud write |
 | `saveerror` | `{ op: 'load' }` after a failed read; `{ op: 'write', blocked: true }` for a refused write |
 | `achievement` | an unlock pushed on the gameplay socket |
