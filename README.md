@@ -47,6 +47,10 @@ not the subject of the docs.
   as a game's owner you are its publisher: create high-score and time boards and achievements
   through the API, post scores and unlock achievements from your script or container, and show
   them in your client.
+- **[Tutorial: graphics options with auto-detected quality](docs/tutorials/graphics-options.md)** —
+  drop in [`graphics-options.js`](docs/sdk/graphics-options.js): quality presets picked from the
+  player's hardware, per-effect overrides, adaptive resolution, an options panel, and settings that
+  follow the player through StarHermit; wired to a three.js renderer.
 - **[Tutorial: add controls to your game](docs/tutorials/game-controls.md)** — declare rebindable
   keyboard actions in `starhermit.txt`, publish them, read the player's bindings with the launch token,
   build a rebinding screen, and fix `"This game declares no controls."`.

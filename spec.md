@@ -52,7 +52,7 @@ patterns, not the subject of the docs.
   example using raw JSON with the existing acceptance method), and `javascript` (the single-file browser client
   `docs/sdk/starhermit-sdk.js`, shipped beside its page: loading and `init`, sign-in and identity, cloud saves
   with the load-before-save rule and the failed-read write block, settings and controls, multiplayer/social
-  calls, single-player leaderboards through the shipped `docs/sdk/score-script.js` and `submitScores`, reconnecting sockets — renew the launch token before every reconnect, and relaunch once renewal is
+  calls (pointing at the graphics-options tutorial for a Graphics menu), single-player leaderboards through the shipped `docs/sdk/score-script.js` and `submitScores`, reconnecting sockets — renew the launch token before every reconnect, and relaunch once renewal is
   refused — events, and keeping a vendored copy current). These pages describe how to reach
   the documented API from an engine; they do not restate the API itself.
 - `docs/tutorials/*.md` — `chess-walkthrough` (the full lifecycle from launch token to replay viewer),
@@ -70,7 +70,10 @@ patterns, not the subject of the docs.
   `/me/github-games/{id}/…`, posting `scores` and unlocking from a script or container, reading them
   in the client with a launch token, and retiring/season-rolling boards), `game-controls` (declaring
   `control.*` actions, publishing them on each publish path, verifying, a client input map and
-  rebinding screen, and a troubleshooting table for the controls API's 404/400s), and `claim-existing-game` (prove repository control and take over
+  rebinding screen, and a troubleshooting table for the controls API's 404/400s), `graphics-options` (the shipped
+  `docs/sdk/graphics-options.js` module: hardware-detected Auto preset with a runtime step-down, per-effect
+  overrides, adaptive resolution, a ready-made panel, `localStorage` plus per-player-settings persistence keyed
+  by device kind and detected preset, and a three.js renderer wiring example), and `claim-existing-game` (prove repository control and take over
   an existing listing).
 
 Conventions the pages share and state: REST under `api/v1/...` at `https://api.starhermit.com`,

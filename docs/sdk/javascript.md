@@ -96,6 +96,11 @@ Route `keydown` through `event.code` and the bindings from `loadBindings`. See
 [add controls to your game](../tutorials/game-controls.md) and the
 [`starhermit.txt` manifest](../starhermit-txt.md).
 
+For a Graphics menu, [`graphics-options.js`](graphics-options.js) sits on top of the settings calls:
+it auto-detects a quality preset, keeps the player's choice in `localStorage` and their per-game
+settings, and ships a ready-made panel. See
+[graphics options with auto-detected quality](../tutorials/graphics-options.md).
+
 ## Multiplayer, invites and social
 
 These need a game with a server (a [script](../api/game-scripts.md) or a
