@@ -9,18 +9,21 @@ Errors are returned as `{"error":"..."}` with standard status codes (400/401/403
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/v1/auth/public-key/register` | Anonymous | Begin public-key registration; sends a verification email |
-| GET | `/api/v1/auth/public-key/verify` | Anonymous | Complete registration from the emailed link |
+| GET | `/api/v1/auth/public-key/verify` | Emailed one-time token | The page the verification email opens; changes nothing |
+| POST | `/api/v1/auth/public-key/verify` | Emailed one-time token | Complete registration |
 | POST | `/api/v1/auth/public-key/challenge` | Anonymous | Request a login challenge to sign |
 | POST | `/api/v1/auth/public-key/complete` | Anonymous | Submit a signed challenge to log in |
 | POST | `/api/v1/auth/refresh` | Anonymous | Rotate a refresh token for a new token pair |
 | POST | `/api/v1/auth/logout` | Anonymous | Revoke a refresh token |
 | POST | `/api/v1/auth/public-key/revoke-request` | Anonymous | Email a link that revokes every active key on the matching account |
-| GET | `/api/v1/auth/public-key/revoke/confirm` | Emailed one-time token | Confirm that revocation; issues no session |
+| GET | `/api/v1/auth/public-key/revoke/confirm` | Emailed one-time token | The page the revocation email opens; changes nothing |
+| POST | `/api/v1/auth/public-key/revoke/confirm` | Emailed one-time token | Confirm that revocation; issues no session |
 | GET | `/api/v1/auth/games/{gameId}/sign-in` | Anonymous | Sign in or create an account, then return directly to a hosted game |
 | GET | `/api/v1/auth/oauth/providers` | Anonymous | Live OAuth providers this deployment can actually sign people in with |
 | GET | `/api/v1/auth/oauth/{provider}/authorize` | Anonymous | Redirect to the OAuth provider |
 | GET | `/api/v1/auth/oauth/{provider}/callback` | Anonymous | OAuth callback; redirects to the frontend with tokens |
-| GET | `/api/v1/auth/oauth/link/confirm` | Emailed one-time token | Confirm an identity link held for account-owner approval |
+| GET | `/api/v1/auth/oauth/link/confirm` | Emailed one-time token | The page the identity-link email opens; changes nothing |
+| POST | `/api/v1/auth/oauth/link/confirm` | Emailed one-time token | Confirm an identity link held for account-owner approval |
 | POST | `/api/v1/games/{slug}/launch-token` | JWT | Mint a game-scoped launch token (see below) |
 | POST | `/api/v1/realtime/connection-tickets` | JWT | One-time ticket for opening a `/ws/**` socket |
 
@@ -83,18 +86,27 @@ Response — 202:
 `emailSent: false` means the email is queued for retry (`deferralReason` says why); the registration
 is still accepted. Invalid email or key material is `400`.
 
-### `GET /api/v1/auth/public-key/verify?token=`
+### `GET` / `POST /api/v1/auth/public-key/verify?token=`
 
-Completes registration from the emailed link: attaches the key, creating the user (username
-`pk-<hex12>`, role `User`) unless an account already uses that email address, in which case the key
-joins that account. The email is marked verified. The link is single-use and expires after 4 hours;
-an unknown, used or expired token is `400`.
+**Opening the emailed link changes nothing.** `GET` shows a page saying what confirming would do —
+create an account, or **add a key to the existing account** that already uses the address — with a
+Confirm button. Mail scanners fetch links to preview them, so an emailed link that acted on `GET`
+would be redeemed by whatever scanned it. The same applies to the
+[revocation](#emailed-key-revocation) and [identity-link](#get-apiv1authoauthproviderauthorizelinkclient)
+confirmations below.
 
-When the deployment sets `PublicKeyAuth:VerificationSuccessRedirectUri` — starhermit.com does, to
-the dashboard — the link answers `302` to that page with the tokens in the fragment
-(`#access_token=…&refresh_token=…&token_type=Bearer&expires_in=900`), signing the player into the
-dashboard. A native client therefore does not receive these tokens; it signs in with its key once
-the link has been opened. Otherwise the response is:
+`POST` to the same URL redeems it: attaches the key, creating the user (username `pk-<hex12>`, role
+`User`) unless an account already uses that email address, in which case the key joins that account.
+The email is marked verified. The link is single-use and expires after 4 hours; an unknown, used or
+expired token is `400`, and so is a link whose address is no longer the account's — it proves
+control of the inbox it was sent to, and only while that address is still the account's.
+
+When the player presses Confirm on the page and the deployment sets
+`PublicKeyAuth:VerificationSuccessRedirectUri` — starhermit.com does, to the dashboard — they are
+sent there with the tokens in the fragment
+(`#access_token=…&refresh_token=…&token_type=Bearer&expires_in=900`), signed in to the dashboard. A
+native client therefore does not receive these tokens; it signs in with its key once the player has
+confirmed. An API client that `POST`s the URL itself gets JSON:
 
 ```json
 {
@@ -284,8 +296,10 @@ When `link=true`, the callback does not automatically promote the session merely
 an OAuth provider. A link started from an OAuth session is attached immediately. A link started from
 a public-key, email-verification, or legacy session is held until the account owner opens the
 confirmation sent to the account's verified email; the redirect fragment reports
-`link=pending_email_confirmation`. The one-time email leads to
-`GET /api/v1/auth/oauth/link/confirm?token=…`. This prevents a stolen public key from linking the
+`link=pending_email_confirmation`. The one-time email opens `GET /api/v1/auth/oauth/link/confirm?token=…`,
+a page naming the provider account that changes nothing; its Confirm button `POST`s the same URL,
+which creates the identity (`{ "provider", "linked": true }` to an API client). A link whose address
+is no longer the account's is refused. This prevents a stolen public key from linking the
 attacker's provider account and turning that into a permanent OAuth sign-in.
 
 GitHub identity metadata stores `{"login":"…"}` — this is used for repository-ownership checks in
@@ -465,11 +479,13 @@ OAuth login is browser-driven: read `GET /api/v1/auth/oauth/providers`, open a l
 
 For an owner who cannot reach `DELETE /me/public-keys` (no OAuth session, or locked out by a stolen
 key). `POST /api/v1/auth/public-key/revoke-request` with `{ "email": "…" }` holds a request and
-emails a link. `GET /api/v1/auth/public-key/revoke/confirm?token=…` revokes **every** active key on
-that account and ends the sessions they authenticated. Both are unauthenticated and **issue no
+emails a link. Opening it (`GET /api/v1/auth/public-key/revoke/confirm?token=…`) shows a page that
+changes nothing; its Confirm button `POST`s the same URL, which revokes **every** active key on that
+account and ends the sessions they authenticated. Both are unauthenticated and **issue no
 session**. The request always answers `202` with the same body, whatever it finds; one request per
-account per 15 minutes, and the link expires after 4 hours. The confirm answers `200`
-`{ "revoked": <count>, "sessionsEnded": <count> }`, or `400` for an unknown, used or expired token.
+account per 15 minutes, and the link expires after 4 hours. The confirming `POST` answers `200`
+`{ "revoked": <count>, "sessionsEnded": <count> }` to an API client, or `400` for an unknown, used or
+expired token, or one whose address is no longer the account's.
 
 ## WebSocket connection tickets
 

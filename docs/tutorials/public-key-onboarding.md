@@ -23,10 +23,10 @@ anything that runs on the player's machine and can keep a private key there.
 ## What the player sees
 
 1. Your game asks for an email address and their consent to create a StarHermit account.
-2. They open the confirmation email and click the link.
+2. They open the confirmation email, click the link, and press **Confirm** on the page it opens.
 3. Back in your game, they are signed in. On later launches nothing is asked at all.
 
-An email address is required, and the player must click the link once. There is no way to create a
+An email address is required, and the player must confirm it once. There is no way to create a
 StarHermit account silently from a Steam, Epic or GOG identity alone.
 
 ## Before you start
@@ -189,7 +189,7 @@ function derEcdsaSignature(rs) {
 }
 
 // Resolves to { userId, accessToken, refreshToken }, or null while the key is not attached to
-// an account yet — the player has not opened the link, it expired, or the key was revoked.
+// an account yet — the player has not confirmed, the link expired, or the key was revoked.
 export async function signIn(key) {
   const { keyType, keyData } = key;
   const challenge = await post('/api/v1/auth/public-key/challenge', { keyType, keyData });
@@ -208,17 +208,19 @@ for every attempt. Challenge and complete share a limit of 60 requests a minute 
 
 ## 4. Wait for the player to confirm
 
-When the player opens the emailed link, StarHermit creates their account, attaches your key and
-marks the address verified. If an account already uses that address, the key is added to it instead,
-so a player who already has a StarHermit account keeps it. On starhermit.com the link then opens the
-StarHermit dashboard, already signed in.
+The emailed link opens a StarHermit page saying what confirming will do; opening it changes
+nothing, so a mail scanner previewing the link cannot confirm on the player's behalf. When the
+player presses **Confirm**, StarHermit creates their account, attaches your key and marks the address
+verified. If an account already uses that address, the page says so and the key is added to it
+instead, so a player who already has a StarHermit account keeps it. On starhermit.com they then land
+on the StarHermit dashboard, already signed in.
 
-**Your game never receives the tokens from that link**, and does not need them. The link may be
-opened on a phone, in another browser, or by a mail scanner that previews links. Once the key is
-attached, your game can simply sign in with it. So show a "check your inbox" screen and keep trying:
+**Your game never receives the tokens from that page**, and does not need them. The player may
+confirm on a phone or in another browser. Once the key is attached, your game can simply sign in
+with it. So show a "check your inbox" screen and keep trying:
 
 ```js
-// Poll until the player opens the emailed link. Two requests per attempt, so every 5 s stays
+// Poll until the player confirms the emailed link. Two requests per attempt, so every 5 s stays
 // well inside the 60-per-minute sign-in limit.
 export async function waitUntilConfirmed(key, { intervalMs = 5000, signal } = {}) {
   for (;;) {
@@ -292,8 +294,8 @@ player confirms, the key joins their existing account rather than creating a new
 limit per address applies here too.
 
 **A lost or stolen device.** `POST /api/v1/auth/public-key/revoke-request` with `{ "email": "…" }`
-emails a confirmation link. Opening it revokes **every** key on the account and ends the sessions
-those keys signed in. The request always answers `202` with the same message, whether or not the
+emails a link to a page; confirming there revokes **every** key on the account and ends the sessions
+those keys signed in. Opening the link alone changes nothing. The request always answers `202` with the same message, whether or not the
 address has an account. The link expires after four hours, and an account can ask once every 15
 minutes. Afterwards, each remaining device registers again (step 2).
 
@@ -316,11 +318,10 @@ See [`authorize?link=true`](../api/auth.md#get-apiv1authoauthproviderauthorizeli
 |---|---|---|
 | `register` → `400` "Key data is not a valid … key" | `keyData` is in the wrong format for its `keyType` | Check the table in step 1. Ed25519 and ECDSA take raw key bytes, not `SubjectPublicKeyInfo` |
 | `register` → `429` | This address or IP registered in the last 24 hours | Wait for `Retry-After`; don't retry in a loop |
-| `complete` → `401` "Public key not registered or revoked." | The player hasn't opened the link, it expired, or the key was revoked | Keep waiting (step 4), or register again |
+| `complete` → `401` "Public key not registered or revoked." | The player hasn't confirmed yet, the link expired, or the key was revoked | Keep waiting (step 4), or register again |
 | `complete` → `401` "Invalid signature." | The signed bytes or signature format don't match | Rebuild the signed string exactly (step 3). For ECDSA, send DER, not `r‖s` |
 | `complete` → `401` "Challenge not found or expired." | The challenge was older than five minutes or already used | Request a new challenge for each attempt |
 | `challenge` / `complete` → `429` | More than 60 sign-in requests a minute from this IP | Poll less often |
-| `verify` link → `400` "Verification token not found." or "…already been used." | The link was opened before — often by a mail scanner previewing it | If your game can sign in, the key is attached and nothing is wrong. If not, register again |
-| `verify` link → `400` "Verification token has expired." | More than four hours passed | Register again |
-| `verify` link → `400` "…already registered to another account." | This key belongs to a different account | Generate a new key on this device |
+| Confirm page → "This link can't be used" | Already confirmed, expired, copied incompletely, or the account's address changed since it was sent | If your game can sign in, the key is attached and nothing is wrong. If not, register again |
+| Pressing Confirm → "That public key is already registered to another account." | This key belongs to a different account | Generate a new key on this device |
 | `403` "This account is suspended." | The account is suspended | Nothing your game can fix |

@@ -29,7 +29,7 @@ Public-key registration also requires a valid email and a one-time verification 
   intentionally taking responsibility for all of those accounts.
 
 For a native game, the smoothest supported experience is: an in-game account panel generates the
-key, asks for email and consent, waits while the player clicks the link in their inbox, then signs in
+key, asks for email and consent, waits while the player confirms the link in their inbox, then signs in
 with the key and keeps the refresh token in the OS credential vault. The player never needs to
 navigate the StarHermit site.
 A player who cannot provide and verify an email cannot complete this flow with the current API.
@@ -352,11 +352,11 @@ in short:
    `{ email, keyType, keyData }` from the player's device. It is throttled to one registration per
    address and per IP every 24 hours (`429` with `Retry-After`), so never proxy it through your
    server — every player would share its IP.
-3. **Wait for the emailed link.** Opening it creates the account and attaches the key; on
-   starhermit.com it then lands on the StarHermit dashboard, so your game does not receive those
-   tokens. Instead it **signs in with the key until that succeeds**: `challenge`, sign StarHermit's
+3. **Wait for the player to confirm.** The emailed link opens a page that changes nothing until
+   the player presses Confirm, which creates the account and attaches the key; on starhermit.com
+   they then land on the StarHermit dashboard, so your game does not receive those tokens. Instead it **signs in with the key until that succeeds**: `challenge`, sign StarHermit's
    [exact challenge bytes](public-key-onboarding.md#3-sign-in-with-the-key), `complete`. Until the
-   link is opened, `complete` answers `401 "Public key not registered or revoked."`.
+   player confirms, `complete` answers `401 "Public key not registered or revoked."`.
 4. **Keep the session** with `POST /api/v1/auth/refresh`, and sign in with the key again whenever
    refresh fails. Accept the current terms when `GET /api/v1/me` reports `termsAcceptanceRequired`
    (a public-key session can; a launch token cannot — see
