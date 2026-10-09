@@ -28,6 +28,10 @@ These details about that push are worth knowing before you build a release pipel
 - **A re-push applies the knobs its manifest declares and keeps the ones it omits.** Changing
   `container.port` and re-uploading now moves the deployment to that port; leaving the manifest out
   of the bundle changes nothing but the image.
+- **The name you gave the image is ignored.** The platform strips every tag from `image.tar` before
+  loading it — the Docker daemon is shared, and a load would otherwise move that name off whatever
+  image held it — and pins your deployment to the loaded image's content id. Tag it however you like
+  locally; nothing on the platform refers to it by that name.
 - **`?mode=merge` patches client files only.** A `server/image.tar` in a merge is loaded exactly as
   on a replace — an image cannot be half-updated. See
   [partial updates](github-games.md#partial-updates-modemerge).
