@@ -33,6 +33,10 @@ not the subject of the docs.
 - **[Tutorial: publish a dedicated server and onboard players in-game](docs/tutorials/dedicated-server-onboarding.md)** —
   push a container bundle, renew its server token, and use public-key registration to onboard
   Steam/Epic/GOG/native players without OAuth or a StarHermit dashboard visit.
+- **[Tutorial: onboard players with a public key](docs/tutorials/public-key-onboarding.md)** — create
+  and sign in to a StarHermit account with a key the game generates on the player's device and one
+  emailed confirmation: key formats, the exact bytes to sign, waiting for confirmation, sessions,
+  second devices and lost keys, and what a key-only account cannot do.
 - **[Tutorial: upload builds from CI/CD](docs/tutorials/ci-cd-build-upload.md)** — enroll a dedicated
   deployment public key from an OAuth session, authenticate non-interactively, and publish client or
   container builds from GitHub Actions (including large uploads over WebSockets).

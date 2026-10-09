@@ -39,6 +39,14 @@ it can read `GET /api/v1/terms`. Do not treat this response as an expired-token 
 
 ## Public-key registration
 
+Step by step, with tested client code: [Tutorial: onboard players with a public key](../tutorials/public-key-onboarding.md).
+
+| `keyType` | `keyData` (standard Base64) | Signature |
+|---|---|---|
+| `Ed25519` | Raw 32-byte public key | Raw 64-byte Ed25519 signature |
+| `ECDSA-P256` | Public point, 65-byte uncompressed or 33-byte compressed | ECDSA-SHA256, ASN.1 DER (not raw `r‖s`) |
+| `RSA-PSS` | `SubjectPublicKeyInfo` DER, 2048–8192 bits, exponent ≤ 32 bits | RSASSA-PSS, SHA-256, MGF1-SHA-256, 32-byte salt |
+
 ### `POST /api/v1/auth/public-key/register`
 
 Begins public-key registration and sends a verification email. The pending registration record expires after 4 hours. If `userId` is set, the email must match that account. Throttled to 1 email per address and per IP per 24 hours — when throttled, the response is 429 with a `Retry-After` header.
@@ -67,15 +75,26 @@ Response — 202:
   "registrationId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "email": "dev@example.com",
   "emailSent": true,
-  "message": "Verification email sent."
+  "deferralReason": null,
+  "message": "A verification email has been sent. The key will be attached once you confirm."
 }
 ```
 
+`emailSent: false` means the email is queued for retry (`deferralReason` says why); the registration
+is still accepted. Invalid email or key material is `400`.
+
 ### `GET /api/v1/auth/public-key/verify?token=`
 
-Completes registration from the emailed link. Creates the user (username `pk-<hex12>`, role `User`), attaches the key, and marks the email verified.
+Completes registration from the emailed link: attaches the key, creating the user (username
+`pk-<hex12>`, role `User`) unless an account already uses that email address, in which case the key
+joins that account. The email is marked verified. The link is single-use and expires after 4 hours;
+an unknown, used or expired token is `400`.
 
-Response:
+When the deployment sets `PublicKeyAuth:VerificationSuccessRedirectUri` — starhermit.com does, to
+the dashboard — the link answers `302` to that page with the tokens in the fragment
+(`#access_token=…&refresh_token=…&token_type=Bearer&expires_in=900`), signing the player into the
+dashboard. A native client therefore does not receive these tokens; it signs in with its key once
+the link has been opened. Otherwise the response is:
 
 ```json
 {
@@ -90,7 +109,13 @@ Response:
 
 ### `POST /api/v1/auth/public-key/challenge`
 
-Issues a login challenge (valid 5 minutes). The client signs the serialized `payload` JSON.
+Issues a login challenge, valid for 5 minutes and single-use.
+
+**The signature covers the server's own serialization of `payload`, not the JSON you received:**
+compact, PascalCase names in the order `ChallengeId`, `Fingerprint`, `Issuer`, `Audience`, `Expiry`,
+`Nonce`, `ClientTimestamp`, values copied exactly as served, and every `+` in the nonce written as
+`\u002B` (the dates keep their `+`). See the
+[worked example](../tutorials/public-key-onboarding.md#3-sign-in-with-the-key).
 
 Request:
 
@@ -111,9 +136,9 @@ Response:
     "fingerprint": "4d9f3c...",
     "issuer": "starhermit",
     "audience": "starhermit",
-    "expiry": "2026-07-22T07:24:44Z",
-    "nonce": "f2e1d0c9b8a7...",
-    "clientTimestamp": "2026-07-22T07:19:44Z"
+    "expiry": "2026-07-22T07:24:44.1234567+00:00",
+    "nonce": "NmL+tgMum6HXU/pa3T9xjQ==",
+    "clientTimestamp": "2026-07-22T07:19:44.1235521+00:00"
   },
   "expiresIn": 300
 }
@@ -121,7 +146,10 @@ Response:
 
 ### `POST /api/v1/auth/public-key/complete`
 
-Verifies the signature against a registered, non-revoked key and returns a token pair.
+Verifies the signature against a registered, non-revoked key and returns a token pair. A failure is
+`401`: `"Public key not registered or revoked."` (including a key whose emailed link has not been
+opened yet), `"Invalid signature."`, or `"Challenge not found or expired."`. Challenge and complete
+share a limit of 60 requests a minute per IP (`429`).
 
 Request:
 
@@ -438,8 +466,10 @@ OAuth login is browser-driven: read `GET /api/v1/auth/oauth/providers`, open a l
 For an owner who cannot reach `DELETE /me/public-keys` (no OAuth session, or locked out by a stolen
 key). `POST /api/v1/auth/public-key/revoke-request` with `{ "email": "…" }` holds a request and
 emails a link. `GET /api/v1/auth/public-key/revoke/confirm?token=…` revokes **every** active key on
-that account and ends the sessions they authenticated. Both are unauthenticated, answer `202` with
-the same body whatever they find, and **issue no session**.
+that account and ends the sessions they authenticated. Both are unauthenticated and **issue no
+session**. The request always answers `202` with the same body, whatever it finds; one request per
+account per 15 minutes, and the link expires after 4 hours. The confirm answers `200`
+`{ "revoked": <count>, "sessionsEnded": <count> }`, or `400` for an unknown, used or expired token.
 
 ## WebSocket connection tickets
 
@@ -454,5 +484,6 @@ until clients have moved.
 A Steam, Epic, GOG, or standalone client can generate a key on the player's device and present the
 public-key registration flow inside its own UI, avoiding OAuth and a visit to the StarHermit
 dashboard. Registration is not silent: the player must consent, provide an email, and follow the
-one-time verification link. A game server token cannot create or impersonate players. See the
-[dedicated-server and embedded-onboarding tutorial](../tutorials/dedicated-server-onboarding.md).
+one-time verification link. A game server token cannot create or impersonate players. See
+[Tutorial: onboard players with a public key](../tutorials/public-key-onboarding.md), and the
+[dedicated-server tutorial](../tutorials/dedicated-server-onboarding.md) for a game that also ships a server.

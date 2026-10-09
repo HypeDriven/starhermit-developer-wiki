@@ -29,8 +29,9 @@ Public-key registration also requires a valid email and a one-time verification 
   intentionally taking responsibility for all of those accounts.
 
 For a native game, the smoothest supported experience is: an in-game account panel generates the
-key, asks for email and consent, opens the verification link in an embedded browser, then stores the
-returned tokens in the OS credential vault. The player never needs to navigate the StarHermit site.
+key, asks for email and consent, waits while the player clicks the link in their inbox, then signs in
+with the key and keeps the refresh token in the OS credential vault. The player never needs to
+navigate the StarHermit site.
 A player who cannot provide and verify an email cannot complete this flow with the current API.
 
 ## Architecture and trust boundaries
@@ -341,114 +342,30 @@ snapshot, or send them to a player.
 
 ## Part 5: onboard a non-StarHermit player without OAuth
 
-Run this flow in the native game or launcher, not in the dedicated container.
+Run this flow in the native game or launcher, not in the dedicated container. The full walkthrough,
+with tested client code, is [Tutorial: onboard players with a public key](public-key-onboarding.md);
+in short:
 
-### 1. Generate a per-installation key
+1. **Generate a per-installation key** on first launch (Ed25519 recommended) and keep the private key
+   in the OS credential store. Never upload it, and never generate players' keys on your server.
+2. **Ask for consent and an email address**, then `POST /api/v1/auth/public-key/register` with
+   `{ email, keyType, keyData }` from the player's device. It is throttled to one registration per
+   address and per IP every 24 hours (`429` with `Retry-After`), so never proxy it through your
+   server — every player would share its IP.
+3. **Wait for the emailed link.** Opening it creates the account and attaches the key; on
+   starhermit.com it then lands on the StarHermit dashboard, so your game does not receive those
+   tokens. Instead it **signs in with the key until that succeeds**: `challenge`, sign StarHermit's
+   [exact challenge bytes](public-key-onboarding.md#3-sign-in-with-the-key), `complete`. Until the
+   link is opened, `complete` answers `401 "Public key not registered or revoked."`.
+4. **Keep the session** with `POST /api/v1/auth/refresh`, and sign in with the key again whenever
+   refresh fails. Accept the current terms when `GET /api/v1/me` reports `termsAcceptanceRequired`
+   (a public-key session can; a launch token cannot — see
+   [terms acceptance](../api/profile.md#terms-acceptance)). Your container's deployment token is
+   exempt from terms; that exemption does not extend to its players.
 
-Generate an Ed25519 keypair on first launch. Store the private key in the operating system's secure
-credential storage (for example, Windows Credential Manager/DPAPI, macOS Keychain, or a platform
-secure-storage API). Export the raw 32-byte Ed25519 public key as standard Base64 for `keyData`.
-
-Never upload the private key. If the player uses multiple devices, authenticate the first device and
-add each additional public key with `POST /api/v1/me/public-keys`, or let each installation complete
-its own registration according to your account-linking policy.
-
-### 2. Ask for consent and email
-
-Inside your game's UI, explain that continuing creates a StarHermit identity used for multiplayer
-and social services. Link your privacy notice and StarHermit's terms. Collect an email address.
-
-Begin registration:
-
-```http
-POST /api/v1/auth/public-key/register
-Content-Type: application/json
-```
-
-```json
-{
-  "email": "player@example.com",
-  "keyType": "Ed25519",
-  "keyData": "<base64-raw-32-byte-public-key>",
-  "userId": null
-}
-```
-
-A `202` response means the verification message was accepted:
-
-```json
-{
-  "registrationId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "email": "player@example.com",
-  "emailSent": true,
-  "message": "A verification email has been sent. The key will be attached once you confirm."
-}
-```
-
-Registration expires after four hours. The endpoint is throttled to one email per address and per
-source IP per 24 hours and may return `429` with `Retry-After`. Do not retry in a loop or funnel all
-players through a server-side proxy; doing so can make every player share one throttled IP.
-
-### 3. Complete verification inside the game experience
-
-The email links to:
-
-```text
-GET /api/v1/auth/public-key/verify?token=<one-time-email-token>
-```
-
-The endpoint creates the account, attaches the public key, and returns `userId`, `keyId`,
-`accessToken`, and `refreshToken`. Open the link in a secure embedded browser controlled by the
-native client if you want the player to stay inside the game experience. Capture the successful
-response locally and immediately close or clear the browser view.
-
-Do not route the one-time token or returned token pair through your game server merely to make the
-flow look invisible. The refresh token and private key are player credentials. If your platform's
-email client forces an external browser, explain that the player must return to the game afterward;
-the current API has no registration-status polling or custom callback parameter.
-
-Before proceeding to multiplayer, use the player's account token to check `GET /api/v1/me`.
-If `termsAcceptanceRequired` is true, display the current text from `GET /api/v1/terms` and, after
-explicit acceptance, post its hash to `POST /api/v1/me/terms/accept`. Public-key account sessions
-can do this inside the native client; player launch tokens cannot. Repeat the check on later
-launches because revisions change. See [the acceptance example and error handling](../api/profile.md#terms-acceptance).
-Your container's deployment token is exempt; that exemption does not extend to its players.
-
-### 4. Log in on later launches
-
-Request a five-minute challenge:
-
-```http
-POST /api/v1/auth/public-key/challenge
-Content-Type: application/json
-```
-
-```json
-{
-  "keyType": "Ed25519",
-  "keyData": "<same-public-key>"
-}
-```
-
-Sign the UTF-8 JSON serialization of the returned `payload` with the local private key, then send:
-
-```http
-POST /api/v1/auth/public-key/complete
-Content-Type: application/json
-```
-
-```json
-{
-  "challengeId": "<challengeId>",
-  "signature": "<base64-ed25519-signature>",
-  "keyType": "Ed25519",
-  "keyData": "<same-public-key>"
-}
-```
-
-The response contains a 15-minute access token and rotating seven-day refresh token. Use
-`POST /api/v1/auth/refresh` before expiry and replace both returned tokens atomically. Refresh-token
-reuse revokes the token family, so serialize refresh operations across game threads/processes.
+**More devices.** Each installation registers its own key with the player's same email address, and
+the key joins the existing account. `POST /api/v1/me/public-keys` is not an option for these players:
+it requires a session that signed in through an OAuth provider.
 
 ### 5. Add a player-facing name and external identity
 

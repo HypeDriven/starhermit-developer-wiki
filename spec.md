@@ -58,7 +58,11 @@ patterns, not the subject of the docs.
 - `docs/tutorials/*.md` — `chess-walkthrough` (the full lifecycle from launch token to replay viewer),
   `ai-prompts` (copy-pasteable prompts for an AI coding assistant, one per feature plus a mega-prompt),
   `dedicated-server-onboarding` (push a container bundle, renew its server token, onboard
-  Steam/Epic/GOG/native players via public-key registration without OAuth), `ci-cd-build-upload`
+  Steam/Epic/GOG/native players via public-key registration without OAuth), `public-key-onboarding`
+  (the full key-only account flow for a native client: key formats per type, registration and its
+  24-hour throttles, the exact challenge bytes to sign, polling sign-in until the emailed link is
+  opened, refresh, terms and nickname, second devices, emailed revoke-all, and the OAuth-only limits;
+  its `js` blocks concatenate into one tested module), `ci-cd-build-upload`
   (enrol a labelled machine key from an OAuth session, authenticate a pipeline by signed challenge
   with the server’s exact JSON escaping (including Base64 nonce plus signs),
   and upload client or container builds over HTTP/WebSocket), `kart-racer` (a multiplayer racing game
