@@ -179,7 +179,7 @@ save.
 | Response | Cause | Fix |
 |---|---|---|
 | `404` "This game declares no controls." | No valid `control.*` line in the **published** build. | Add lines to `starhermit.txt`, check them against [the rules](#1-declare-the-actions), and [publish a new build](#2-publish-them). |
-| `404` "No game with that slug." | The slug is wrong, or the game has no slug. | Use the launch token's `game_scope` or `gameSlug` from `GET /me/github-games`. A game gets a slug when a verified owner adds it from a repository, or when it declares a `server=` script or `container.image=`. A browser-only game created by folder upload has none yet, so it cannot use the controls API. |
+| `404` "No game with that slug." | The slug is wrong, or the game has no slug. | Use the launch token's `game_scope` or `gameSlug` from `GET /me/github-games`. Every game added from a local folder and every repository game a verified owner added has a slug, browser-only or not. Only a repository submission whose owner is not verified has none; [claim it](claim-existing-game.md) to get one. |
 | `403` "This token is scoped to the game '…'." | A launch token used with another game's slug. | Call with the slug in the token's `game_scope`. |
 | `400` "Unknown action '…' — not declared in the game's manifest." | `PUT` named an action the manifest does not declare. | Use `action` values from `GET …/controls`. |
 | `400` "'…' is bound to both '…' and '…'." | After merging with your defaults, one key would trigger two actions. | Move the other action in the same `PUT`, or pick another key. |

@@ -115,7 +115,7 @@ Despite its historical name, `repoUrl` accepts three launch sources:
 - `displayName` and `launchPath` are optional fallbacks. They are useful for a third-party repo
   without trusted manifest metadata; a direct hosted URL is itself the launch location.
 - For verified repository owners the platform validates `starhermit.txt`.
-- An optional `server=` script or `container.image=` backend provisions an authoritative game (`gameSlug`); see [game-scripts.md](game-scripts.md) and [container-games.md](container-games.md). Container hosting is open to any signed-in user on starhermit.com; a self-hosted deployment can restrict it to an operator allowlist.
+- An optional `server=` script or `container.image=` backend provisions an authoritative game; see [game-scripts.md](game-scripts.md) and [container-games.md](container-games.md). Container hosting is open to any signed-in user on starhermit.com; a self-hosted deployment can restrict it to an operator allowlist.
 - **A declared server backend needs a proven owner.** Submitting a repo that declares `server=` or `container.image=` without GitHub-login or `owner=` proof is `403` (naming both proofs), not a browser-only listing that pretends to have a backend.
 - Limits: 100 games per user (operator-overridable per account). Registering a duplicate returns `409`.
 
@@ -134,6 +134,12 @@ Errors use the standard shape:
 The counterpart to registering a URL: **there is no repository**, and nothing is cloned. The folder
 travels as one `.tar.gz` on the request body and the platform hosts what it contains. Same archive
 format as [pushing a bundle](#push-a-game-bundle), so the same packaging works for both.
+
+The created game has a `gameSlug` from the start, whether or not it declares a server, so a
+browser-only upload can use [controls](games.md#per-player-control-bindings),
+[per-player settings](games.md#per-player-game-settings), its
+[cloud-save slot](catalog.md#saving-from-inside-a-game-launch-token), [realtime rooms](realtime.md)
+and launch tokens like any other game.
 
 ```text
 client/           the game's files, published as-is
@@ -192,8 +198,8 @@ Limits are the same as any other push: see [Upload limits](#upload-limits).
 #### An uploaded folder can bring its own server backend
 
 If the archive's [`starhermit.txt`](../starhermit-txt.md) declares server logic, the upload
-provisions it and the created game comes back with a `gameSlug` — the same thing the repository flow
-does, without a repository. Pick one style; declaring both is refused.
+provisions it as well — the same thing the repository flow does, without a repository. Pick one
+style; declaring both is refused.
 
 | Declaration | What happens |
 |---|---|
@@ -329,7 +335,7 @@ Anything else in the archive is ignored.
 
 **Uploading an image is itself the declaration.** If the game has no server backend yet — an
 uploaded folder that declared none — pushing `server/image.tar` provisions one from the digest just
-loaded and gives the game its `gameSlug`. You do not have to name a digest-pinned image in a
+loaded, under the `gameSlug` the game already has. You do not have to name a digest-pinned image in a
 manifest first, which was circular: the definition had to exist before it could receive an image,
 and the image was the only thing that could describe it.
 
@@ -416,9 +422,9 @@ The same parameter works on the socket: `ws/v1/game-upload?gameId=…&mode=merge
 echoes it as `"apply":"merge"`.
 
 The endpoint updates an existing registered game; it never creates the game record — for that, see
-[adding a game from a local folder](#add-a-game-from-a-local-folder). It *can* now mint the game's
-`gameSlug`, but only as a side effect of loading a server image into a game that had no backend. See
-the [dedicated-server publishing tutorial](../tutorials/dedicated-server-onboarding.md).
+[adding a game from a local folder](#add-a-game-from-a-local-folder). It *can* provision the game's
+server backend, as a side effect of loading a server image into a game that had none. See the
+[dedicated-server publishing tutorial](../tutorials/dedicated-server-onboarding.md).
 
 ### Upload from CI/CD
 
@@ -570,7 +576,7 @@ backend — a browser-only game gets `409`. See [Leaderboards](leaderboards.md#y
   "displayName": "...",
   "launchPath": "index.html",
   "serverScriptPath": "server.js",
-  "gameSlug": "yourgame",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "isVerifiedOwner": true,
   "metadataSource": "...",
   "createdAt": "...",
@@ -582,7 +588,8 @@ backend — a browser-only game gets `409`. See [Leaderboards](leaderboards.md#y
 }
 ```
 
-- `serverScriptPath` is present only for a JavaScript backend. `gameSlug` may be present for either a script or container backend. The current DTO does not expose a container image reference.
+- `serverScriptPath` is present only for a JavaScript backend. The current DTO does not expose a container image reference.
+- `gameSlug` is present for every game added from a local folder and every game a verified owner added, **with or without a server backend** — it addresses the game's controls, settings, cloud-save slot, rooms and launch tokens. It is `null` only for a repository submission whose owner is not proven. It does not tell you whether the game has a backend: `GET /api/v1/games/{gameSlug}` answers `404` until it does.
 - For a game added from a local folder, `repoUrl` is a synthetic `upload:<id>` marker and `ownerLogin`/`repoName` are empty — there is no repository to name, and an empty owner is what makes the listing unclaimable.
 - `coverArtSource` is `"upload"`, `"manifest"` or `null`, and `coverArtUpdatedAt` is when that cover last changed — use it to cache-bust the `/cover` URL. Anything non-null means the game has cover art to fetch; `null` means fall back to `/icon`. The two sources are not equal: an upload always wins, and it is the only one `DELETE /cover` can remove.
 - `description` is the manifest's description, or `null`. `releaseNotesUpdatedAt` is when the release notes last *changed text* (`null` when the game has none). Redeploying identical notes does not move it, so it is safe to drive a "What's new" badge: remember the value a player last saw and compare. The notes themselves are not in the listing; see [Description and release notes](#description-and-release-notes).
@@ -656,7 +663,7 @@ track.
 3. **Register the game**: `POST /api/v1/me/github-games` with the repository or hosted-game URL in `repoUrl`.
 4. **Repository games only — enable hosting**: `PUT /api/v1/me/github-games/{id}/hosting` with `{ "enabled": true }`.
 5. **Repository games only — pin a commit**: `PUT /api/v1/me/github-games/{id}/deployment` with `{ "commit": "<sha>" }`. The pinned commit controls the live version.
-6. **Players launch the game**: a deployed repository game is served at `<slug>.starhermit.com`; a direct hosted game opens its submitted URL. Games with either authoritative backend receive a launch token from `POST /api/v1/games/<slug>/launch-token` in the URL fragment (optionally with `&session_id=<guid>` for invite deep-links).
+6. **Players launch the game**: a deployed repository game is served at `<slug>.starhermit.com`; a direct hosted game opens its submitted URL. Every game with a `gameSlug` — backend or not — receives a launch token from `POST /api/v1/games/<slug>/launch-token` in the URL fragment (optionally with `&session_id=<guid>` for invite deep-links).
 
 For the full client-side contract — how the game reads the launch token and talks to the API — see the [chess walkthrough](../tutorials/chess-walkthrough.md) of the reference implementation.
 

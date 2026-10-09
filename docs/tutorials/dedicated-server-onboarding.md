@@ -172,9 +172,11 @@ curl -sS -X POST "$API/api/v1/me/github-games" \
   }'
 ```
 
-Save the returned `id` as `GAME_ID` and confirm `gameSlug` is present. If `gameSlug` is null, the
-game has no authoritative backend and an uploaded server image will be rejected. Initial
-registration may also fail when container hosting is unavailable or restricted.
+Save the returned `id` as `GAME_ID` and `gameSlug` as `GAME_SLUG`, then confirm the backend exists:
+`GET $API/api/v1/games/$GAME_SLUG` answers `200` once it does. A present `gameSlug` alone does not
+prove it — every verified game has one, browser-only included. A registration that declares a
+container without proving you own the repository is refused with `403`, and initial registration
+may also fail when container hosting is unavailable or restricted.
 
 The registry-backed image in the manifest is enough to deploy the first version. The next section
 covers the newly released direct-upload path, useful for CI and for builds you do not want the

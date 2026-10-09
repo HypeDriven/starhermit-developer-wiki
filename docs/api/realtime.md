@@ -390,7 +390,7 @@ For a large room:
 
 - An `Open` room starts automatically when its backfill deadline passes; empty seats become uniquely named AI participants, up to the room's [backfill allowance](#backfill-allowance).
 - An `Open` room also starts automatically as soon as every seat is taken — by humans, by AI players configured at creation, or a mix — without waiting for that deadline.
-- A `Playing` room closes when its host has no active WebSocket connection for more than 60 seconds — unless it is bound to a game session that is still active (see below). Connected guests receive a final roster push showing the room closed.
+- A `Playing` room closes when its host has no `ws/v1/realtime` connection for more than 60 seconds — unless it is bound to a game session that is still active, in which case the host role moves instead (see below). Connected guests receive a final roster push showing the room closed.
 - A `Lobby` or `Open` room closes after more than 60 minutes without connected participants.
 
 A participant who merely loses their connection is not affected: reconnecting the socket (newest connection supersedes) and `GET /rooms/mine` both keep working while the room is alive.
@@ -403,15 +403,18 @@ if there is one, and otherwise nothing happens. The session's lifecycle decides 
 over, and closes the room when it is. The rule below applies to host-routed rooms (no session), and
 to a bound room once its session has ended.
 
-**Only a `ws/v1/realtime` socket counts as the host's connection.** A host who is connected to the
-bound session on `ws/v1/games` but has closed (or never opened) the realtime socket is "away" for
-this rule, and the room closes 60 seconds later. A game that plays over `ws/v1/games` must keep the
-host's realtime socket open for the whole match, even if it only uses it for roster pushes. The clock
+**So a room-bound game does not need the host's realtime socket.** A host who plays over
+`ws/v1/games` and closes (or never opens) `ws/v1/realtime` does not close the room while the session
+is `active`; open the realtime socket only if your game wants roster pushes.
+
+**For a host-routed room, only a `ws/v1/realtime` socket counts as the host's connection.** The clock
 starts when the host's last realtime socket closes; a host who never connected is measured from the
 room's `startedAt`.
 
-**Closing the room does not end its room-bound session.** The sweep closes the room (roster push,
-every seat freed, pending invites expired) and nothing else:
+**Closing a room does not end its room-bound session.** A bound room can still close while its
+session runs — most often when its last human [leaves](#start-seats-leave-result) a room without
+[join-in-progress](#join-in-progress). Closing it (roster push, every seat freed, pending invites
+expired) does nothing else:
 
 - The session stays `active`. Its players can keep playing on `ws/v1/games`, and the script keeps
   running at its tick rate.
@@ -424,8 +427,8 @@ every seat freed, pending invites expired) and nothing else:
   after the last `ws/v1/games` socket closes, or after 24 hours with no player action (see
   [Games — Session model](games.md#session-model)).
 
-In short: if your match must survive the host stepping away from the room socket, don't rely on the
-room; if it must end with the room, end it in the script when `ctx.presence` shows everyone left.
+In short: a room-bound match survives its host going offline; if it must end when its players
+leave the room, end it in the script when `ctx.presence` shows everyone left.
 
 ## Security summary
 
@@ -453,7 +456,7 @@ For a game with a server backend — a `server=` script in its manifest, or a [c
 3. **Open**: the host calls `POST /rooms/{id}/open`. Solo players call `POST /rooms/quick-join` and land in the oldest open room with a free seat (on `404` they create and open their own room).
 4. **Connect**: everyone opens `ws/v1/realtime?roomId=…` and watches `roster`/`presence` pushes as seats fill.
 5. **Start**: at the backfill deadline, as soon as every seat is taken, or when the host force-starts, remaining empty seats become AI participants (up to the [backfill allowance](#backfill-allowance)) and the roster freezes. **Host-routed game**: guests send inputs as binary frames (they reach only the host); the host broadcasts snapshots. **Room-bound scripted game**: everyone connects `ws/v1/games?sessionId=<gameSessionId>` and plays against the script with `cmd`/`game` frames.
-6. **Leave mid-match**: in a [join-in-progress](#join-in-progress) room the seat is vacated for the next player. Otherwise a player who leaves during `Playing` is replaced where they sat by an AI participant (same seat, new server-generated nickname) and can immediately queue again; if the host leaves, the host role passes to the longest-joined remaining human. A host who drops their connection has 60 seconds to reconnect before the match closes.
+6. **Leave mid-match**: in a [join-in-progress](#join-in-progress) room the seat is vacated for the next player. Otherwise a player who leaves during `Playing` is replaced where they sat by an AI participant (same seat, new server-generated nickname) and can immediately queue again; if the host leaves, the host role passes to the longest-joined remaining human. In a host-routed game, a host who drops their realtime connection has 60 seconds to reconnect before the match closes; a room-bound match is never closed for its host being away.
 7. **Finish**: host-routed — the host POSTs the result; the server clamps scores, stores the result, pushes it to all sockets, and closes the room. Room-bound — the script returns `result` and the platform stores it and closes the room.
 
 ## See also

@@ -213,7 +213,7 @@ ctx.presence = {                  // every user who is or was a human participan
 
 When a room-bound script returns `result`, the platform finishes the session, **stores the result on the room, and closes the room** — no host-submitted result is involved.
 
-The reverse is not true: **a room closing does not finish its session.** If the room closes first (for example because the host had no `ws/v1/realtime` socket for 60 seconds), the session keeps running, `ctx.room.roster` becomes empty and every human shows `left: true`. Return `result` then if the match should end with the room. See [Realtime Rooms — the 60-second host rule](realtime.md#the-60-second-host-rule-and-room-bound-sessions).
+The reverse is not true: **a room closing does not finish its session.** If the room closes first (for example because its last human left a room without join-in-progress — never merely because the host went offline, which only moves the host role while the session is active), the session keeps running, `ctx.room.roster` becomes empty and every human shows `left: true`. Return `result` then if the match should end with the room. See [Realtime Rooms — the 60-second host rule and room-bound sessions](realtime.md#the-60-second-host-rule-and-room-bound-sessions).
 
 ## Return shape
 

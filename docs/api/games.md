@@ -21,6 +21,18 @@ can set it**: not `starhermit.txt`, not the repo name, not an operator. A name a
 choose would be something two games could contend for, and would need the platform to arbitrate who
 got it; a uid can neither collide nor be asked for.
 
+**A slug is not a server backend.** Every game added from a local folder, and every repository game
+a verified owner added, has one — with or without `server=` or `container.image=` — because it is
+the address of the game's player-facing surface: [launch tokens](#launch-tokens),
+[controls](#per-player-control-bindings), [settings](#per-player-game-settings), its
+[cloud-save slot](catalog.md#saving-from-inside-a-game-launch-token) and [rooms](realtime.md). A
+browser-only game needs those as much as any other. The only games with no slug are repository
+submissions whose owner is not verified (`gameSlug` is `null` in `GET /api/v1/me/github-games`).
+
+The endpoints about a game's server — game info, achievements, sessions, matchmaking, invites,
+replays — need a backend. `GET /api/v1/games/{slug}` answers `404` for a game that has a slug and no
+backend, which is the way to tell the two apart.
+
 Do not hard-code it. Read it from the launch token's `game_scope` claim, or — for a
 platform-hosted browser game — from `location.hostname`, since the subdomain is the uid.
 
@@ -67,7 +79,8 @@ Errors are returned as `{"error":"..."}` with standard status codes.
 
 ### `GET /api/v1/games/{slug}`
 
-Returns the game definition plus the caller's stats for that game. `404` if no such game exists.
+Returns the game definition plus the caller's stats for that game. `404` if no such game exists,
+or if the game is browser-only (it has a slug but no server backend).
 
 ```json
 {

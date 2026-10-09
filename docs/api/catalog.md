@@ -99,14 +99,18 @@ production catalog downloads; see [the publisher pipeline limitation](publisher.
 
 ## Cloud saves
 
-One slot per game, 10 MB maximum, last write wins. All routes require a JWT — a full user token,
-or a game's launch token for that game's own slot (below).
+One slot per game, last write wins. All routes require a JWT — a full user token, or a game's
+launch token for that game's own slot (below).
+
+The 10 MB cap (10,485,760 bytes) applies to the **decoded save**, not the request. `PUT` takes the
+save base64-encoded in JSON, so the body is about a third larger than the save — roughly 14 MB at
+the cap — and the API accepts that.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/api/v1/me/cloud-saves/{gameKey}/info` | JWT | Save metadata: `{ exists, sizeBytes, updatedAt? }` |
 | GET | `/api/v1/me/cloud-saves/{gameKey}` | JWT | `application/zip` bytes, 404 if none |
-| PUT | `/api/v1/me/cloud-saves/{gameKey}` | JWT | Upload a save (zip ≤ 10 MB, `gameKey` ≤ 300 chars) |
+| PUT | `/api/v1/me/cloud-saves/{gameKey}` | JWT | Upload a save (decoded save ≤ 10 MB, `gameKey` ≤ 300 chars) |
 
 PUT body:
 
@@ -159,6 +163,8 @@ await fetch(`/api/v1/me/cloud-saves/${key}`, {
   served as `application/zip` regardless). Up to 10 MB.
 - **Last write wins** and there is no history: two tabs or devices playing at once overwrite each
   other. Load on start, save at checkpoints and on page hide.
+- **Writes are unconditional.** `PUT` takes no `If-Match`, ETag or expected `updatedAt`, so
+  comparing `/info`'s `updatedAt` before a write narrows the race but cannot close it.
 - A game with no hosted listing (an operator-provisioned game) has no slot.
 
 Small, frequently-changing preferences belong in [per-player settings](games.md#per-player-game-settings)

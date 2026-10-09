@@ -43,8 +43,9 @@ curl -s "$API/api/v1/me/github-games" -H "Authorization: Bearer $ACCESS_TOKEN" |
 GAME_ID='the-id-from-above'
 ```
 
-`gameSlug` is what your client calls the game in `/api/v1/games/{slug}/...`. If it is `null`, the
-game has no server backend yet.
+`gameSlug` is what your client calls the game in `/api/v1/games/{slug}/...`. Every game you added
+or uploaded has one, browser-only games included, so it does not tell you whether there is a server:
+`GET /api/v1/games/{slug}` does — it answers `404` until the game has a backend.
 
 ## 1. Create the leaderboards
 
