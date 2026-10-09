@@ -368,6 +368,19 @@ Scripts run under these resource budgets:
 - 32 MB memory
 - A statement cap per invocation
 - A per-player state byte budget — all state documents must stay serializable and small
+- Values nest at most 64 levels deep when they become text. Anything an entry point returns, every
+  declaration, `JSON.stringify`, and `Array.prototype.join`/`toString`/`toLocaleString` refuse a
+  deeper value with a `RangeError` (a returned one fails the invocation: "nested more than 64 levels
+  deep"). `JSON.parse` already stopped at 64, so a deeper value could never round-trip. `flat`
+  flattens up to 64 levels and throws if the array nests deeper — including an array that contains
+  itself.
+- One call cannot allocate more than the memory budget. `repeat`, `padStart`/`padEnd`, `concat` and
+  `replace`/`replaceAll` throw `RangeError: Invalid string length` when the result could exceed half
+  the budget in characters (16M at the default 32 MB; a regex replacement is bounded as if every
+  position matched, which only affects strings of about a million characters or more).
+  `ArrayBuffer` and typed arrays throw `RangeError` past the budget in bytes, and arrays past
+  budget/8 elements are refused. The budget is also checked after your hook returns, so an
+  over-budget final statement fails the invocation instead of succeeding.
 
 The chess reference script keeps its documents small on purpose — as an example of staying within budget, its per-player doc is
 
