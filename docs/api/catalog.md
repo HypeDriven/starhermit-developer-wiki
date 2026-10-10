@@ -106,6 +106,17 @@ The 10 MB cap (10,485,760 bytes) applies to the **decoded save**, not the reques
 save base64-encoded in JSON, so the body is about a third larger than the save — roughly 14 MB at
 the cap — and the API accepts that.
 
+| Limit (per account) | Default | Refusal |
+|---|---|---|
+| One save, decoded | 10 MB | `413 cloud_save_too_large` |
+| Games with a save | 200 | `409 cloud_save_slots_exhausted` (a save for a new game) |
+| All saves together | 1 GB | `507 cloud_save_quota_exceeded`, with `used` |
+| Uploads | 30 a minute | `429`, with `Retry-After` |
+
+Each refusal names the number in force as `limit`. The total is measured over the account's *other*
+saves, so a slot can always be overwritten with something no bigger. Operators can change any of
+these for one account.
+
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/api/v1/me/cloud-saves/{gameKey}/info` | JWT | Save metadata: `{ exists, sizeBytes, updatedAt? }` |

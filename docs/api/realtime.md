@@ -56,7 +56,9 @@ All REST endpoints require authentication and work with both a full user token a
 }
 ```
 
-- `config.metadata` is an opaque JSON blob the platform never interprets.
+- `config.metadata` is an opaque JSON blob the platform never interprets. It, and a submitted
+  result's metadata, may be at most 16 KB (`413`), and a room has at most 100 seats; an operator can
+  change either for one game.
 - `config.aiPlayers` is how many AI players the creator asked the match to start with — they are seated when the room is created (see [below](#ai-players)). It records the request; the `participants` roster is authoritative for who actually holds a seat.
 - AI participants have `userId: null`, `isAi: true`, and a server-generated random nickname, unique within the room.
 - `(team, slot)` is a participant's seat coordinate; humans are seated in join order.

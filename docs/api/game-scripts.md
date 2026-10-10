@@ -360,6 +360,33 @@ onPlayerMessage(ctx) {
 - Unlike `eloUpdates`, nothing is published to `playerStates` — keep your own copy in
   `playerStates` if the game needs to read a personal best back.
 
+## Where your script runs
+
+Your script runs in an isolated worker process, not inside the platform's API server. A script that
+recurses without limit, exhausts its memory or runs past its CPU budget fails only the invocation that
+did it; the platform replaces the worker and every other game carries on. The command or tick that
+failed receives one of:
+
+- `Game script error: the script crashed its runtime (for example, by recursing without limit).`
+- `Game script error: the script exceeded its memory budget.`
+- `Game script error: the script exceeded its time budget.`
+
+## Your game's share of the server
+
+- **Script time.** All of a game's sessions share a budget of script time, 2000 ms per second by
+  default, charged with what each invocation actually took. A game over its share is refused rather
+  than queued: a tick is skipped, a command is answered with "This game is using more than its share
+  of the server right now; try again shortly.", and creating a session returns `429`.
+- **Commands.** Each player may send 20 durable commands per second per session (with a short burst
+  allowance); beyond that a command is answered with a `429` error frame, "Too many commands; slow
+  down." Realtime input is limited separately.
+- **Results.** The result a session finishes with may be at most 64 KB; a larger one is refused with
+  `422`.
+- **Script size.** A `server=` script may be at most 2 MB; a larger one is refused with `422` before
+  it is stored or parsed.
+
+Operators can raise or lower each of these for an individual game.
+
 ## Budgets
 
 Scripts run under these resource budgets:

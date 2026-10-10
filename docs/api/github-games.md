@@ -499,8 +499,13 @@ All upload routes — both HTTP endpoints and the WebSocket — share the same r
 | Limit | Value |
 |---|---|
 | Disk allowance per game | **2 GB** on starhermit.com (operator-tunable per game; code default 4 GB) |
+| Hosted files per account | **20 GB** across all of an account's games (operator-tunable per account) |
+| Repository deploy | **50 MB** archive |
+| `starhermit.txt` / `remove.txt` | **256 KB** each; `remove.txt` lists at most 10,000 paths (`422`) |
 | Enforcement | applied **while streaming**, so an oversized push is cut off mid-flight |
 
+An upload or push is cut off at whatever is left of the account's hosting allowance (`413` with
+`limitBytes`), and a repository deploy that would pass it fails with a reason naming the allowance.
 Per-push and per-game are the same number on a replace. A merge is bounded by the **resulting**
 game size, so a small patch that would make the live tree exceed the allowance is refused.
 
@@ -516,6 +521,12 @@ Archives may not escape their root or contain links, and only regular files and 
 extracted — symlinks, hard links and device nodes are rejected. `git archive` PAX global headers,
 `./`-prefixed names from `tar -czf game.tgz .`, and file names that merely contain `..`
 (`sprite..png`) are accepted. A `..` path segment is still refused.
+
+### Rate limit
+
+Submit, claim, change URL, hosting and deployment all reach GitHub on the platform's one token, so
+together they are limited to 10 requests a minute per account (`429`, with `Retry-After`). An
+operator can raise it for one account.
 
 ### Enable hosting
 

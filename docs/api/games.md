@@ -248,13 +248,14 @@ anything — that is a `200`, not a `404`. Keys come back sorted.
   "count": 3,
   "bytes": 118,
   "updatedAt": "2026-08-07T15:04:11Z",
-  "limits": { "maxKeys": 200, "maxKeyLength": 128, "maxTotalBytes": 2097152 }
+  "limits": { "maxKeys": 200, "maxKeyLength": 128, "maxTotalBytes": 2097152, "maxAccountBytes": 67108864 }
 }
 ```
 
 `bytes` is what this player's settings currently cost against `limits.maxTotalBytes`. Read the
 limits rather than hard-coding them: the allowance is an operator setting, and a game can be granted
-its own.
+its own. `maxKeys` (200 by default) can also be set per game, and `maxAccountBytes` bounds one
+account's settings across every game (64 MB by default).
 
 ### `PUT /api/v1/games/{slug}/settings`
 
