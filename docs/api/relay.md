@@ -7,7 +7,9 @@ uses that match's roster for authorization.
 
 All REST endpoints require authentication — a full user token, or a game's launch token for relays
 bound to that game's own sessions and rooms: listing shows only those, and any other relay answers
-`404` (or `403` to create one). Errors are returned as `{"error":"..."}`: `403` when the caller is
+`404` (or `403` to create one). A launch token's relay takes **its own game's id as `titleId`** —
+the uid in its `game_scope` claim — and any other title is refused `403`, because the per-title
+session cap counts by it. Errors are returned as `{"error":"..."}`: `403` when the caller is
 not in the bound match or the relay belongs to another game, `404` for an unknown relay, `409` for a
 state that refuses the request (unbound, full, closed, already joined, or at the session cap), and
 `503` when the relay is turned off.
