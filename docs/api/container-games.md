@@ -60,6 +60,11 @@ container.env.LOG_LEVEL=info
 
 Only `container.image` is required. The port and health path default to `8080` and `/health`.
 Memory and CPU are requests, not guarantees; the platform clamps them to operator limits.
+
+Your image has a size ceiling: 2 GiB uncompressed unless the operator has set your game another, and
+a registry pull has five minutes. A pull that grows past the ceiling is abandoned part-way, an uploaded
+`image.tar` over it is refused with `413`, and an image that turns out larger once uncompressed is
+removed again.
 `container.env.*` is for non-secret configuration only.
 
 A submission is rejected unless:
@@ -367,10 +372,13 @@ restarted too often. The platform finishes it without a winner or elo change and
 
 `reason` is `server_failure` when recovery is unsafe or the replacement never starts, and
 `restore_failed` when recreating the session fails. Publishing a new image restores live sessions
-into the replacement (or abandons those too stale). A repeatedly crashing deployment is disabled
-(`failed`) and is **not** woken by player demand.
+into the replacement (or abandons those too stale). A start that fails — the pull timed out, the
+container exited, or it never answered its health check in time — is retried with a backoff, like a
+crash. Three failed attempts inside ten minutes (operator-tunable) disable the deployment (`failed`),
+and it is **not** woken by player demand. A platform-side hiccup, such as the runner restarting, is
+waited out without counting against you.
 
-A deployment with no live sessions is stopped after 15 minutes of idle (operator-configurable).
+A deployment with no live sessions is stopped after 15 minutes of idle (the operator can set your game a different window).
 Paused [persistent](#get-describe) sessions are parked out of the container and do not keep it up.
 The next session request against a `stopped` deployment wakes it (`pending` → health gate →
 `running`); losing that race is `503` saying the game is starting. Only `stopped` is woken this
