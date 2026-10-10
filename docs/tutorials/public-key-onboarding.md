@@ -250,6 +250,12 @@ if (!session) {
 `loadStoredKey`, `saveKey`, `askForEmailAndConsent` and `showCheckYourInbox` are yours to write.
 Offer a **Cancel** that aborts the wait, and stop polling after four hours, when the link expires.
 
+Keep polling even if your platform's confirm page redirects back to your site. The player often
+opens the email on a different device from the one waiting, and then the redirect lands nowhere
+near your waiting screen; polling is what signs the waiting device in. If the redirect does arrive
+in a second tab, sign in with only one of them and revoke the extra session, or the player ends up
+with two.
+
 ## 5. Keep the session
 
 `complete` returns a 15-minute access token and a refresh token that lasts seven days and rotates.
