@@ -98,6 +98,25 @@ StarHermit.on('saveconflict', async () => {
 Lower level: `loadSave()` / `writeSave(text)` for raw strings, `saveInfo()` for
 `{ exists, sizeBytes, updatedAt, etag }`.
 
+## Crash and bug reports
+
+Players can report problems from inside the game; the owner triages them through the
+[reports API](../api/reports.md).
+
+```js
+await StarHermit.reportBug('Score did not save', 'Finished level 3, score shows 0', {
+  clientVersion: '1.4.2',
+  attachments: [{ fileName: 'state.json', contentType: 'application/json', data: JSON.stringify(state) }],
+});
+StarHermit.captureCrashes({ clientVersion: '1.4.2' });   // opt-in: uncaught errors become crash reports
+const mine = await StarHermit.myReports();               // [{ id, kind, status, title, ... }]
+```
+
+`report(kind, title, description, opts)` is the general form (`reportBug` and `reportCrash` fix the
+kind). `captureCrashes` files at most one report per distinct message and three per page load, so a
+crash loop cannot use up the player's daily allowance (20 per game by default). Ask the player before
+attaching anything personal.
+
 ## Settings and controls
 
 | Need | Call |

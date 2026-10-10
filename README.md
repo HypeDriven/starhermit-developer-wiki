@@ -92,6 +92,7 @@ WebSockets under `ws/v1/...`, JWT bearer auth
 | Achievements | [achievements.md](docs/api/achievements.md) | Server-authoritative game achievements (declared in code or created by the game's owner), client-claimed catalog-title achievements, secret achievements |
 | Leaderboards | [leaderboards.md](docs/api/leaderboards.md) | Definitions, entries, friends-only views, server-runtime-owned elo boards and per-player rating resets, **owner-created game boards written by the game's server**, daily/weekly/monthly reset schedules |
 | External libraries | [external-libraries.md](docs/api/external-libraries.md) | Linking Steam/Epic/GOG libraries, external launch URIs |
+| Reports | [reports.md](docs/api/reports.md) | Player crash and bug reports: filing from a game, owner triage, attachments, limits |
 | Relay | [relay.md](docs/api/relay.md) | Match-bound opaque byte fan-out with roster authorization and tick-aware rate limits (`ws/v1/relay`) |
 | Realtime rooms | [realtime.md](docs/api/realtime.md) | Lobbies, browse/join-by-code, filtered quick-join, friend invites, party matchmaking, AI-seat backfill with a per-room allowance, host-authoritative frame routing (`ws/v1/realtime`) |
 | GitHub games | [github-games.md](docs/api/github-games.md) | Publishing from GitHub, a hosted URL, **a local folder**, or an uploaded client/container bundle — over HTTP or **the `ws/v1/game-upload` socket for large builds** (`starhermit.txt`, hosting, deployments, **your audience figures**, **your game's leaderboards and achievements**) |

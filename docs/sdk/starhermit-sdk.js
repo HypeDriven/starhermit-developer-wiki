@@ -469,6 +469,46 @@
       return sh.writeSave(t, { keepalive: keepalive === true });
     };
 
+    // ---------------- crash and bug reports ----------------
+    /**
+     * File a report for this game. kind: 'crash' | 'bug'. opts: { clientVersion, platform,
+     * buildId, sessionId, attachments: [{ fileName, contentType, data: Uint8Array | string }] }.
+     * Resolves { id, kind, status, createdAt }; rejects {status,message} (413 over a limit,
+     * 429 over the daily limit).
+     */
+    sh.report = function (kind, title, description, opts) {
+      opts = opts || {};
+      var files = (opts.attachments || []).map(function (a) {
+        var bytes = typeof a.data === 'string' ? new TextEncoder().encode(a.data) : a.data;
+        return { fileName: a.fileName, contentType: a.contentType || 'application/octet-stream', dataBase64: b64(bytes) };
+      });
+      return sh.api(gamePath('/reports'), { method: 'POST', body: {
+        kind: kind, title: String(title).slice(0, 200), description: description || '',
+        clientVersion: opts.clientVersion, platform: opts.platform, buildId: opts.buildId,
+        sessionId: opts.sessionId, attachments: files.length ? files : undefined } });
+    };
+    sh.reportBug = function (title, description, opts) { return sh.report('bug', title, description, opts); };
+    sh.reportCrash = function (title, description, opts) { return sh.report('crash', title, description, opts); };
+    /** The player's own reports for this game, newest first, with their status. */
+    sh.myReports = function () { return soft(sh.api(gamePath('/reports/mine')), []); };
+    /**
+     * Opt-in: file uncaught errors and unhandled rejections as crash reports — at most one per
+     * distinct message and `max` (default 3) per page load, so a crash loop cannot spend the
+     * player's daily report allowance. Filing failures are swallowed.
+     */
+    sh.captureCrashes = function (opts) {
+      if (typeof addEventListener !== 'function') return;
+      var seen = {}, sent = 0, max = (opts && opts.max) || 3;
+      function send(msg, stack) {
+        msg = String(msg || 'Uncaught error');
+        if (sent >= max || seen[msg]) return;
+        seen[msg] = 1; sent++;
+        try { sh.reportCrash(msg.slice(0, 200), String(stack || msg), opts).catch(function () {}); } catch (e) { /* never throw from a crash handler */ }
+      }
+      addEventListener('error', function (e) { send(e.message, e.error && e.error.stack); });
+      addEventListener('unhandledrejection', function (e) { var r = e.reason; send(r && r.message || String(r), r && r.stack); });
+    };
+
     // ---------------- per-player settings (KV) ----------------
     sh.getSettings = function () { return g('/settings', null).then(function (j) { return j && j.settings || {}; }); };
     sh.getSetting = function (key) { return g('/settings/' + encodeURIComponent(key), null).then(function (j) { return j ? j.value : undefined; }); };

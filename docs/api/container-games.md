@@ -382,6 +382,29 @@ optional optimization.
 The game's owner can list and end stranded sessions:
 `GET`/`DELETE /api/v1/me/github-games/{id}/sessions[/{sessionId}]`.
 
+## Your server's output and crash reports
+
+As the game's owner you can read what your server printed, and what happened when it went down:
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/v1/me/github-games/{id}/container/logs?tail=N` | Recent output: `{ source, deploymentStatus, capturedAt, truncated, logs }` |
+| GET | `/api/v1/me/github-games/{id}/container/crashes?page=&pageSize=` | Crash records, newest first |
+| GET | `/api/v1/me/github-games/{id}/container/crashes/{crashId}` | One crash record, with the output captured |
+
+- **Logs** come live from the running server (`source: "live"`), newest kept, up to 500 lines and
+  256 KiB by default. When nothing is running you get the output captured at the last crash
+  (`source: "last_crash"`). A game whose backend is a script, or that has none, gets `409`.
+- **A crash record** is written whenever your server crashes, stops answering, times out during
+  startup or fails to start — before the container is removed. It carries the kind, exit code,
+  image digest, restart count, the sessions affected, and your server's last 64 KiB of output. The
+  50 most recent are kept, for 30 days.
+- **Secrets are redacted.** Your server's invoke key, refresh key and any server token appear as
+  `[redacted]`. Your own `container.env.*` values appear as printed — don't log what you would not
+  want stored.
+
+Operators can change each of those limits, per game.
+
 ## See also
 
 - [GitHub Games](github-games.md) — repository registration and deployment
