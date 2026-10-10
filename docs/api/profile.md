@@ -20,6 +20,7 @@ Errors are returned as `{"error":"..."}` with standard status codes (400/401/403
 | POST | `/api/v1/me/public-keys` | **OAuth-authenticated** JWT (`Permission-user.profile.update`) | Add a public key immediately |
 | DELETE | `/api/v1/me/public-keys/{keyId}` | **OAuth-authenticated** JWT (`Permission-user.profile.update`) | Revoke one key and its sessions |
 | DELETE | `/api/v1/me/public-keys/all` | **OAuth-authenticated** JWT (`Permission-user.profile.update`) | Revoke every active key and its sessions |
+| DELETE | `/api/v1/me/public-keys/current` | Public-key session (`Permission-user.profile.update`) | Revoke the key this session signed in with, and its sessions. It names no key, so it cannot reach a sibling; a session with no key gets `409 no_public_key_session` |
 | GET | `/api/v1/me/identities` | JWT (`Permission-user.profile.read`) | List your linked identities |
 | POST | `/api/v1/me/identities` | JWT (`Permission-user.profile.update`) | Link an identity (non-OAuth providers only) |
 | DELETE | `/api/v1/me/identities/{identityId}` | JWT (`Permission-user.profile.update`) | Unlink an identity |

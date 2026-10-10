@@ -5,8 +5,12 @@ sessions, and `ws/v1/relay` forwards binary frames verbatim between participants
 bound to exactly one existing match—a [game session](games.md) or a [realtime room](realtime.md)—and
 uses that match's roster for authorization.
 
-All REST endpoints require authentication. Errors are returned as `{"error":"..."}` with standard
-status codes. Relay availability may vary; unavailable requests return `503`.
+All REST endpoints require authentication — a full user token, or a game's launch token for relays
+bound to that game's own sessions and rooms: listing shows only those, and any other relay answers
+`404` (or `403` to create one). Errors are returned as `{"error":"..."}`: `403` when the caller is
+not in the bound match or the relay belongs to another game, `404` for an unknown relay, `409` for a
+state that refuses the request (unbound, full, closed, already joined, or at the session cap), and
+`503` when the relay is turned off.
 
 ## REST endpoints
 

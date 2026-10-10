@@ -435,7 +435,11 @@ A game-scoped token can only reach:
 - `GET /api/v1/users/{id}/avatar` and `GET /api/v1/users/{id}/profile`,
 - its game's leaderboard,
 - the player's [cloud save](catalog.md#saving-from-inside-a-game-launch-token) for its own game (`/api/v1/me/cloud-saves/game:<scope>` and its `/info`) — no other key,
-- the chat/voice REST and WebSocket endpoints attached to its own game sessions.
+- the chat/voice REST and WebSocket endpoints attached to its own game sessions,
+- `GET /api/v1/github-games/{id}/icon` and `/cover` for any game (both are public anyway),
+- `POST /api/v1/me/heartbeat`, which only marks the player online,
+- `GET /api/v1/github-games/{id}/release-notes` for its own game,
+- [relay](relay.md) routes, for relays bound to one of its own game's sessions or rooms.
 
 `/ws/v1/chat` is blocked for launch tokens. Everything else returns 403.
 

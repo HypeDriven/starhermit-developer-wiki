@@ -81,8 +81,22 @@ opposed to an empty slot) it sets `saveLoadFailed()`, emits `saveerror`, and ref
 `/info` confirms the slot is empty or a later `loadSave()` succeeds. A refused write resolves
 `false` and emits `saved` with `false`.
 
+**Writes after a load are conditional.** The SDK remembers the version (`ETag`) of the save it last
+read or wrote and sends it back, so a write lands only on the save it was based on — or, for a slot
+that was empty, only while it still is. When another device saved in between, the write is refused
+(`412`): the SDK emits `saveconflict`, sets `saveConflicted()`, and refuses further writes until a
+`loadSave()` lets the game merge or adopt the newer save. A game that never loads writes
+unconditionally, as before.
+
+```js
+StarHermit.on('saveconflict', async () => {
+  const remote = await StarHermit.loadJSON();       // lifts the block
+  StarHermit.saveJSON(merge(remote, local));        // conditional on the version just loaded
+});
+```
+
 Lower level: `loadSave()` / `writeSave(text)` for raw strings, `saveInfo()` for
-`{ exists, sizeBytes, updatedAt }`.
+`{ exists, sizeBytes, updatedAt, etag }`.
 
 ## Settings and controls
 

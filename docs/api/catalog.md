@@ -163,8 +163,12 @@ await fetch(`/api/v1/me/cloud-saves/${key}`, {
   served as `application/zip` regardless). Up to 10 MB.
 - **Last write wins** and there is no history: two tabs or devices playing at once overwrite each
   other. Load on start, save at checkpoints and on page hide.
-- **Writes are unconditional.** `PUT` takes no `If-Match`, ETag or expected `updatedAt`, so
-  comparing `/info`'s `updatedAt` before a write narrows the race but cannot close it.
+- **Every save has a version.** Its `ETag` is on the download, on `/info` (also as `etag`) and on
+  the `PUT` response. Send it back as `If-Match` and the write happens only if nobody has saved
+  since; otherwise `412 {"error":"precondition_failed","etag":"<current>"}` tells you the version to
+  load. `If-Match: *` requires an existing save; `If-None-Match: *` writes only when there is none.
+  With neither header a `PUT` is unconditional — last write wins. A `GET` with
+  `If-None-Match: <etag>` answers `304` when you already hold the newest save.
 - A game with no hosted listing (an operator-provisioned game) has no slot.
 
 Small, frequently-changing preferences belong in [per-player settings](games.md#per-player-game-settings)

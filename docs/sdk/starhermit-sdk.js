@@ -253,6 +253,7 @@
     function raw(method, path, body, extra) {
       var headers = {};
       if (sh.token) headers.Authorization = 'Bearer ' + sh.token;
+      if (extra && extra.headers) for (var h in extra.headers) headers[h] = extra.headers[h];
       var init = { method: method, headers: headers };
       if (body !== undefined) { headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
       if (extra && extra.keepalive) init.keepalive = true;
@@ -378,7 +379,12 @@
     sh.saveInfo = function () { return sh.slug ? soft(sh.api(savePath() + '/info'), null) : Promise.resolve(null); };
     // 'unknown' until the first read, then 'ok' or 'failed'. A failed read is
     // not an empty slot, so writes stay blocked until the slot is known.
+    // 'conflict' after a write lost to a newer save: blocked until loadSave().
     var saveLoad = 'unknown';
+    // The version of the save this game last read or wrote (the slot's ETag), or
+    // null for a slot known to be empty. Sent back so a write lands only on the
+    // save it was based on.
+    var saveETag = null;
     /** The saved string (null when none / signed out). Checks /info first so an
      *  empty slot never produces a 404 in the console. A network/server error
      *  also resolves null, but sets saveLoadFailed() and emits 'saveerror'. */
@@ -387,6 +393,7 @@
       return sh.api(savePath() + '/info').then(function (info) {
         // The platform answers {exists:false} for an empty slot; only an
         // unexpected missing /info falls through to the direct read.
+        saveETag = info && info.etag || null;
         if (info && info.exists === false) return null;
         return sh.api(savePath(), { bytes: true });
       }).then(function (bytes) {
@@ -402,6 +409,8 @@
     };
     /** True when the last cloud-save read failed (as opposed to an empty slot). */
     sh.saveLoadFailed = function () { return saveLoad === 'failed'; };
+    /** True when a write lost to a newer save made elsewhere; loadSave() clears it. */
+    sh.saveConflicted = function () { return saveLoad === 'conflict'; };
     /**
      * Write the save slot (string; last write wins). Resolves true on success.
      * After a failed read, a write goes through only once /info confirms the
@@ -411,6 +420,11 @@
      */
     sh.writeSave = function (text, opts) {
       if (!sh.token || !sh.slug) return Promise.resolve(false);
+      if (saveLoad === 'conflict') {
+        emit('saveerror', { op: 'write', conflict: true });
+        emit('saved', false);
+        return Promise.resolve(false);
+      }
       if (saveLoad === 'failed') {
         return sh.api(savePath() + '/info').then(function (info) {
           return !!(info && info.exists === false);
@@ -422,8 +436,23 @@
         });
       }
       var data = zip('save.json', new TextEncoder().encode(String(text)));
-      return sh.api(savePath(), { method: 'PUT', body: { dataBase64: b64(data) }, keepalive: opts && opts.keepalive })
-        .then(function () { emit('saved', true); return true; }, function () { emit('saved', false); return false; });
+      // After a load the write is conditional on the version that load saw, so a
+      // save made on another device in between is never overwritten silently. A
+      // game that never loaded writes unconditionally, as before.
+      var headers = saveLoad === 'ok' ? (saveETag ? { 'If-Match': saveETag } : { 'If-None-Match': '*' }) : null;
+      return sh.api(savePath(), { method: 'PUT', body: { dataBase64: b64(data) }, keepalive: opts && opts.keepalive, headers: headers })
+        .then(function (res) {
+          if (res && res.etag) saveETag = res.etag;
+          emit('saved', true);
+          return true;
+        }, function (err) {
+          if (err && err.status === 412) {
+            saveLoad = 'conflict';
+            emit('saveconflict', { etag: err.body && err.body.etag || null });
+          }
+          emit('saved', false);
+          return false;
+        });
     };
     sh.loadJSON = function () { return sh.loadSave().then(function (t) { try { return t ? JSON.parse(t) : null; } catch (e) { return null; } }); };
     var saveTimer = null, pending = null;
