@@ -61,9 +61,10 @@ Errors are returned as `{"error":"..."}` with standard status codes (400/401/403
 
 ### `PATCH /api/v1/me`
 
-All fields optional. Constraints: `username` 1–32 characters and unique; `nickname` ≤64 characters
-and, **when set, unique among nicknames** (`409` if another account already holds it; many accounts
-may have none); `metadata` ≤4096 characters. Changing `email` additionally requires an
+All fields optional. Constraints: `username` 1–32 characters; `nickname` ≤64 characters (many
+accounts have none); `metadata` ≤4096 characters. **Usernames and nicknames share one
+case-insensitive namespace:** `409` when another account uses the name as its username or nickname,
+ignoring case. Nicknames are NFKC-normalised, and control or invisible characters are `400`. Changing `email` additionally requires an
 OAuth-authenticated session because the account email can approve credential links; a public-key or
 email-verification session gets `403` for that field but may still update the others. Returns 204 on
 success, 409 on conflict (username or nickname already taken).

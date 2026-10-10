@@ -78,6 +78,8 @@ Players can override these defaults per game through the
 | DELETE | `/api/v1/me/github-games/{id}/players/{userId}/elo` | JWT (owner) | [Reset one player's rating](leaderboards.md#resetting-a-players-rating) to 1200 |
 | POST | `/api/v1/me/github-games/{id}/transfer` | JWT | Transfer a game to another user → `GitHubGameDto` |
 | DELETE | `/api/v1/me/github-games/{id}` | JWT | Remove a registered game → `204` |
+| GET | `/api/v1/me/github-games/removed` | JWT | Your removed games: `restorable` (uploaded games), `filesKept` |
+| POST | `/api/v1/me/github-games/{id}/restore` | JWT | Restore a removed uploaded game: same id and history, its files if not yet reclaimed (30 days); `409` for a game with a source — add its URL again |
 | POST | `/api/v1/me/github-games/{id}/bundle` | JWT | Publish a raw `.tar.gz` containing client files and/or a saved container image. `?mode=merge` patches live client files instead of replacing them |
 | WS | `/ws/v1/game-upload` | JWT (`?access_token=`) | **The same two uploads over a WebSocket** — the transport to use for anything over ~100 MB |
 | PUT | `/api/v1/me/github-games/{id}/hosting` | JWT | Enable/disable hosting ("Deploy to starhermit") → `GameHostingView` |
@@ -330,8 +332,9 @@ remove.txt         merge only: client-relative paths to delete, one per line
 
 At least `client/` or `server/image.tar` must be present (a merge may also be only `remove.txt`). Client files are swapped atomically. A
 server image is loaded, digest-pinned by the platform, and queues the container deployment to
-restart on that image. An uploaded image takes precedence over the manifest's registry reference.
-Anything else in the archive is ignored.
+restart on that image. An uploaded image takes precedence over the manifest's registry reference,
+and over a `server=` line; a manifest declaring both `server=` and `container.image=` is refused
+before anything is loaded. Anything else in the archive is ignored.
 
 **Uploading an image is itself the declaration.** If the game has no server backend yet — an
 uploaded folder that declared none — pushing `server/image.tar` provisions one from the digest just

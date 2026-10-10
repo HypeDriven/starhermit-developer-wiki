@@ -28,6 +28,8 @@ These details about that push are worth knowing before you build a release pipel
 - **A re-push applies the knobs its manifest declares and keeps the ones it omits.** Changing
   `container.port` and re-uploading now moves the deployment to that port; leaving the manifest out
   of the bundle changes nothing but the image.
+- **An uploaded image wins over the manifest**, including over a `server=` line, and a manifest
+  declaring both `server=` and `container.image=` is refused before anything is loaded.
 - **The name you gave the image is ignored.** The platform strips every tag from `image.tar` before
   loading it — the Docker daemon is shared, and a load would otherwise move that name off whatever
   image held it — and pins your deployment to the loaded image's content id. Tag it however you like

@@ -499,6 +499,10 @@ claims verbatim (including `game_scope` and `pk`), is refused on REST, and is sp
 Any authenticated caller may ask, including a game-scoped launch token. `?access_token=` still works
 until clients have moved.
 
+**An open socket ends when its credential is revoked.** Revoking the public key that opened it ends
+it immediately; a suspension or a sign-out everywhere ends it within about 30 seconds. Token expiry
+does not end an open socket — refresh before reconnecting.
+
 ## Embedded onboarding for native/storefront games
 
 A Steam, Epic, GOG, or standalone client can generate a key on the player's device and present the
