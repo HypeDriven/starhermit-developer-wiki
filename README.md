@@ -79,6 +79,7 @@ WebSockets under `ws/v1/...`, JWT bearer auth
 
 | Area | Page | What's inside |
 |---|---|---|
+| Content moderation | [moderation.md](docs/api/moderation.md) | Exact hashes, scoped checks/discovery, screened flags, owner review, approval validity and withdrawal recovery; no production classifier |
 | Auth | [auth.md](docs/api/auth.md) | Public-key registration/login, live OAuth providers (`GET /auth/oauth/providers`), refresh rotation, launch tokens & game-scope fencing, WebSocket connection tickets |
 | Games | [games.md](docs/api/games.md) | Sessions, declared match queues, elo matchmaking, friend invites and share links (with pass-through query strings), per-player controls and settings, AI practice, opt-in replays, owner diagnostics/webhooks, `ws/v1/games` protocol, **limits: message rates and elo per match** |
 | Game scripts | [game-scripts.md](docs/api/game-scripts.md) | Authoring the server-side JS rules file (Jint sandbox contract, budgets, tick rate, elo, achievements, replays, persistent sessions) |

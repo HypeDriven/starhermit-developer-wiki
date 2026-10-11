@@ -26,7 +26,8 @@ patterns, not the subject of the docs.
   with an optional script or container server, or an external client calling the REST/WS API directly.
 - `docs/api/*.md` — one page per area: `auth`, `games`, `game-scripts`, `container-games`, `profile`,
   `friends`, `chat`, `voice`, `catalog`, `activity`, `achievements`, `leaderboards`,
-  `external-libraries`, `relay`, `realtime`, `github-games`, `publisher`, `reports` (player crash and
+  `external-libraries`, `relay`, `realtime`, `github-games`, `publisher`, `moderation` (shared content hashes, checks and availability, screened evidence, owner review,
+  withdrawal recovery and production readiness), `reports` (player crash and
   bug reports: filing with a launch token, owner triage, attachments and limits). The
   container-games page also covers the owner's server logs and crash records.
   The games page has a Limits section: `ws/v1/games` frame size, connection and message-rate
