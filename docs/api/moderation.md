@@ -128,7 +128,7 @@ for identical findings that still pass the current baseline under the same polic
 Poll `/removed` before distributing a shared pack and regularly during play. Hide matching hashes
 and stop distribution on a withdrawal; removals include both upheld flags and reclassification
 from allow to review/block. Feed entries include qualifiers, scope, decision, revision, policy,
-removal time and a safe reason. Cursors use durable database order, not wall-clock order.
+removal time and a safe reason. Cursors are opaque ordering markers; use the returned cursor rather than deriving one from a time.
 
 An expired cursor returns `410 cursor_expired`. Fetch a fresh cursor without `since`, batch-lookup
 all loaded shared hashes, and resume only when validated. Absence from the feed is never approval.

@@ -646,7 +646,7 @@ existed report `null`.
 - Matchmaking ticket statuses: `queued` | `matched` | `cancelled` | `expired`.
 - Invite statuses: `pending` | `accepted` | `declined` | `cancelled`.
 - **Sessions are created via matchmaking, invite-accept, the AI endpoint, or a realtime room start** (room-bound sessions — see [Realtime Rooms](realtime.md#room-bound-sessions)) — there is no "create lobby" endpoint.
-- Elo updates come from the authoritative script (`eloUpdates`) or container control channel, are denormalized onto `GamePlayerState.Elo`, and are published to the game's leaderboard (score type `elo`). **Clients can never submit scores to a game leaderboard directly** (see [Leaderboards](leaderboards.md)).
+- Elo updates come from the authoritative script (`eloUpdates`) or container control channel, set the ratings used for matchmaking and are published to the game's leaderboard (score type `elo`). **Clients can never submit scores to a game leaderboard directly** (see [Leaderboards](leaderboards.md)).
 
 ## Gameplay WebSocket
 

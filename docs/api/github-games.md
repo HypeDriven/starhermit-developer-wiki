@@ -515,7 +515,7 @@ game size, so a small patch that would make the live tree exceed the allowance i
 | `409` | A merge against a game that has no published files yet. |
 | `413` | Over the allowance. Body carries `{ "error", "limitBytes" }`. A `413` **without** `limitBytes` is the CDN's ~100 MB body cap, not this — [use the upload socket](#upload-over-a-websocket). |
 | `422` | Malformed archive, or unusable contents (missing launch file, no `client/`, a `server/image.tar` on the create route, a merge that would delete the launch file, `remove.txt` on a replace). Also a **truncated** archive — the ordinary result of a dropped connection mid-upload. |
-| `507` | The server does not have room right now. Checked **before the body is read**, on both the staging and hosting volumes, so a doomed upload is refused rather than half-landed. |
+| `507` | The server does not have room right now. Refused **before the body is read** when publication capacity is unavailable; retry later. |
 
 Archives may not escape their root or contain links, and only regular files and directories are
 extracted — symlinks, hard links and device nodes are rejected. `git archive` PAX global headers,
