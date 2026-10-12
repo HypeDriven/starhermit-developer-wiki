@@ -244,7 +244,7 @@ def main():
         for key, typ in patch.get('modelTypes', {}).items():
             resolved = type_schema(typ, '')
             document['components']['schemas'][key] = resolved
-        
+
         for key, value in schemas.items(): document['components']['schemas'].setdefault(key, value)
         document['components']['schemas'].update(patch.get('schemas',{}))
         for route, operations in patch.get('responses', {}).items():
@@ -261,7 +261,7 @@ def main():
                         result['content'] = {definition.get('contentType', 'application/json'): {'schema': definition['schema']}}
                     operation['responses'][status] = result
                 operation['responses']['default'] = {'description':'Endpoint-specific errors; JSON, plain text, validation problem, or empty response as documented.'}
-        
+
         for key, value in schemas.items(): document['components']['schemas'].setdefault(key, value)
         for route, operations in patch.get('paths',{}).items():
             for verb, changes in operations.items():
