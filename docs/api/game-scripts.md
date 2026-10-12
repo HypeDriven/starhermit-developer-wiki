@@ -5,7 +5,7 @@ A StarHermit authoritative game can be defined by a **single JavaScript file** e
 ## Execution model
 
 - One JS file per game, executed in a **fresh sandboxed Jint engine per invocation**. Nothing persists in memory between calls — all state lives in the documents you return.
-- No `Date` access, no own RNG. Clock and randomness come from the host: `ctx.now` (ms epoch) and `ctx.random` (float in `[0, 1)`).
+- No ambient `Date` or `Math.random`. Time and randomness are supplied as: `ctx.now` (ms epoch) and `ctx.random` (float in `[0, 1)`).
 - The platform invokes the script when a player sends a durable command, when a session is created, and on periodic `onTick` sweeps (see [Games API — Runtime timing](games.md#runtime-timing)). Realtime `{type:"input", realtime:true}` frames are the exception: they are buffered latest-wins and delivered as a batch to the next tick.
 
 ## Entry points
@@ -138,8 +138,9 @@ globalThis.game = {
 
 A game that declares `persistent: true` keeps its sessions when every player leaves. About 15
 seconds after the last disconnect the session is **paused** — no `onTick` calls — and the first
-player to reconnect resumes it. It is never ended as `players_left`, `idle_no_players` or
-`superseded`; it ends only when your script returns a `result` (or the owner ends it).
+player to reconnect resumes it. Disconnecting or inactivity pauses the session instead of abandoning it. A game result, owner
+action, explicit final-member leave, configured retention expiry, or terminal recovery failure can
+still end it. See [Session lifecycle](../session-lifecycle.md).
 
 ```js
 globalThis.game = {
@@ -249,7 +250,7 @@ Key rules:
 
 - `sessionState` and each entry of `playerStates` **replace** the stored documents — always return complete documents, never diffs.
 - Only messages listed in `broadcast` are delivered to clients, each addressed to explicit player ids or `"all"`. Nothing else leaks.
-- `eloUpdates` is the only way ratings change. Values are each player's **new absolute rating**, applied as sent — the platform does not cap the change per match, so clamp it yourself (see [Elo per match](games.md#elo-per-match)). The host denormalizes them onto `GamePlayerState.Elo` and publishes them to the game's leaderboard; clients can never submit scores directly (see [Leaderboards](leaderboards.md)). Keep the rating in `playerStates[id].elo` so an owner's [rating reset](leaderboards.md#resetting-a-players-rating) reaches your copy too.
+- `eloUpdates` is the only way ratings change. Values are each player's **new absolute rating**, applied as sent — the platform does not cap the change per match, so clamp it yourself (see [Elo per match](games.md#elo-per-match)). The host uses them for matchmaking and publishes them to the game's leaderboard; clients can never submit scores directly (see [Leaderboards](leaderboards.md)). Keep the rating in `playerStates[id].elo` so an owner's [rating reset](leaderboards.md#resetting-a-players-rating) reaches your copy too.
 - `achievements` is the only way achievements are granted. Keys are resolved against the game's achievements — declared, or created by its owner — and persisted by the platform; see [Achievements](#achievements).
 - `scores` is the only way your game's own leaderboards change — see [Leaderboards](#leaderboards).
 - End games via `result`. The host then finishes the session, and for a game with [replays](#replays) **archives the final `sessionState`** as the replay (served by `GET .../replays/{sessionId}` — see [Games API](games.md#replays)).
@@ -314,7 +315,7 @@ onTick(ctx) {
 ```
 
 - Unlocks are **idempotent** — re-asserting a key the player already holds is a no-op, so a script can safely award from a condition it re-evaluates on every tick instead of tracking "already awarded" in its own state.
-- Unknown keys (not in your declaration), users who are not participants of this session, and the AI seat are silently ignored.
+- Unknown keys (neither declared nor created by the game's owner), users who are not participants of this session, and the AI seat are silently ignored.
 - At most **32** keys are accepted per player per invocation; further keys in the same array are dropped.
 - Rows are persisted with the rest of the invocation's writes, so an unlock cannot survive a failed invocation.
 
@@ -362,10 +363,8 @@ onPlayerMessage(ctx) {
 
 ## Where your script runs
 
-Your script runs in an isolated worker process, not inside the platform's API server. A script that
-recurses without limit, exhausts its memory or runs past its CPU budget fails only the invocation that
-did it; the platform replaces the worker and every other game carries on. The command or tick that
-failed receives one of:
+A script that recurses without limit, exhausts its memory, or exceeds its time budget fails the
+invocation. Its failed result is not applied. The command or tick reports one of:
 
 - `Game script error: the script crashed its runtime (for example, by recursing without limit).`
 - `Game script error: the script exceeded its memory budget.`
@@ -378,8 +377,8 @@ failed receives one of:
   than queued: a tick is skipped, a command is answered with "This game is using more than its share
   of the server right now; try again shortly.", and creating a session returns `429`.
 - **Commands.** Each player may send 20 durable commands per second per session (with a short burst
-  allowance); beyond that a command is answered with a `429` error frame, "Too many commands; slow
-  down." Realtime input is limited separately.
+  allowance); beyond that a command is answered with an `error` frame, "Too many commands; slow
+  down." The frame does not include an HTTP status. Realtime input is limited separately.
 - **Results.** The result a session finishes with may be at most 64 KB; a larger one is refused with
   `422`.
 - **Script size.** A `server=` script may be at most 2 MB; a larger one is refused with `422` before
@@ -430,11 +429,14 @@ Everything in `sessionState` is opaque to the platform **except** one field:
 ```js
 sessionState.summary = {
   turnPlayerId: "7c9e6679-...",
-  deadline: "2026-07-21T14:03:11Z",
+  deadline: 1784642591000,
   status: "active",
   moveCount: 41
 };
 ```
+
+`deadline` is an integer Unix timestamp in **milliseconds**, or omitted when there is no deadline.
+An ISO date string is not recognized. `turnPlayerId` is the player UUID.
 
 `GET /api/v1/games/{slug}/sessions/mine` reads `summary` to compute `myTurn` and `deadline` for the caller. Keep it accurate on every state change; keep everything else wherever your script likes.
 
@@ -450,7 +452,7 @@ Session state:
   black: "9b2f8c1a-...",
   aiId: "00000000-0000-4000-8000-00000000a1a1",   // present in AI games
   game: {
-    board: "rnbqkbnrpppppppp................................PPPPPPPPRNBQKBNR", // 64 chars
+    board: "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr", // 64 chars
     turn: "w",
     castling: { K: true, Q: true, k: true, q: true },
     epSquare: null,
@@ -500,3 +502,7 @@ Publishing flows through the GitHub integration — see [GitHub Games](github-ga
 - **Always end games via `result`** so the platform publishes Elo updates and archives the replay when your game has [replays](#replays).
 
 See the [Chess Walkthrough](../tutorials/chess-walkthrough.md) for a line-by-line tour, and [AI Prompts](../tutorials/ai-prompts.md) for help generating your own script.
+
+Shared [API conventions](conventions.md) describe response parsing, timestamps, pagination, and retries.
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

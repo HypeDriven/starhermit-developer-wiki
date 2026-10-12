@@ -2,7 +2,7 @@
 
 StarHermit has **no password authentication**. There are two sign-in flows: public-key authentication (Ed25519, ECDSA-P256, or RSA-PSS, with email-verified registration) and OAuth. All auth routes live under `api/v1/auth` and are anonymous except where noted. This page also covers token lifecycles, game-scoped launch tokens, and WebSocket connection tickets.
 
-Errors are returned as `{"error":"..."}` with standard status codes (400/401/403/404/409/422/429).
+Error bodies vary; see [API conventions](conventions.md#requests-and-responses).
 
 ## Endpoints
 
@@ -36,9 +36,10 @@ and record explicit acceptance with `POST /api/v1/me/terms/accept`. Both OAuth a
 account sessions support this flow. Refreshing credentials does not resolve pending acceptance.
 
 A directly opened browser game can receive a scoped token before the account has accepted.
-If a game call returns `403` with `error: "terms_acceptance_required"`, direct the player to their
-StarHermit account UI to accept and then retry. The game token cannot accept terms, even though
-it can read `GET /api/v1/terms`. Do not treat this response as an expired-token sign-in loop.
+If a game call returns `403` with `error: "terms_acceptance_required"`, fetch `GET /api/v1/terms`,
+display its text, and offer an explicit Accept action. A player launch token can submit the displayed
+hash to `POST /api/v1/me/terms/accept`; retry the original request after acceptance. Do not treat this
+response as an expired-token sign-in loop.
 
 ## Public-key registration
 
@@ -431,6 +432,9 @@ A game-scoped token can only reach:
 
 - its own `/api/v1/games/{scope}` tree,
 - `/ws/v1/games`,
+- [realtime-room](realtime.md) REST routes and `/ws/v1/realtime` for its own game, including connection tickets,
+- `GET /api/v1/time` and `GET /api/v1/terms`,
+- `POST /api/v1/me/terms/accept` for the authenticated player's explicit consent,
 - `GET /api/v1/me/friends`,
 - `GET /api/v1/users/{id}/avatar` and `GET /api/v1/users/{id}/profile`,
 - its game's leaderboard,
@@ -511,3 +515,5 @@ dashboard. Registration is not silent: the player must consent, provide an email
 one-time verification link. A game server token cannot create or impersonate players. See
 [Tutorial: onboard players with a public key](../tutorials/public-key-onboarding.md), and the
 [dedicated-server tutorial](../tutorials/dedicated-server-onboarding.md) for a game that also ships a server.
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

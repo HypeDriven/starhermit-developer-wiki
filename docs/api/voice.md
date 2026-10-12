@@ -1,6 +1,6 @@
 # Voice
 
-StarHermit voice provides per-conversation voice rooms over a REST API (`api/v1/voice`) plus a mixed binary/text WebSocket (`ws/v1/voice`) for audio and WebRTC signaling. All REST endpoints require authentication. Voice availability may vary. Errors are returned as `{"error":"..."}` with standard status codes.
+StarHermit voice provides per-conversation voice rooms over a REST API (`api/v1/voice`) plus a mixed binary/text WebSocket (`ws/v1/voice`) for audio and WebRTC signaling. All REST endpoints require authentication. Voice availability may vary. Error bodies vary; see [API conventions](conventions.md#requests-and-responses).
 
 Rooms anchor to a [chat conversation](chat.md); membership in the conversation gates everything, so chat friendship rules also govern voice (game-session conversations bypass friendship). Limits: 3 active rooms per conversation, max 10 participants per room, codec `"opus"`.
 
@@ -39,7 +39,7 @@ Returns a `VoiceRoomDto`.
   "conversationId": "<guid>",
   "creatorUserId": "<guid>",
   "codec": "opus",
-  "status": "active",
+  "status": "Active",
   "maxParticipants": 10,
   "createdAt": "2026-07-22T07:00:00Z",
   "participants": [
@@ -47,7 +47,6 @@ Returns a `VoiceRoomDto`.
       "userId": "<guid>",
       "username": "alice",
       "isMuted": false,
-      "isServerMuted": false,
       "isConnected": true,
       "joinedAt": "2026-07-22T07:01:00Z"
     }
@@ -99,7 +98,20 @@ The server prefixes the **authenticated** sender id and never trusts a client-su
 { "type": "rtc", "to": "<guid>", "payload": { } }
 ```
 
+```json
+{ "type": "deafen", "deafened": true }
+```
+
 `rtc` payloads are opaque WebRTC signaling, forwarded to the addressed participant.
+`deafen` suppresses incoming relayed binary audio for this socket; it does not automatically mute
+outgoing audio or a separate peer connection. Apply those locally when the player chooses Deafen.
+
+The REST participant shape exposes own mute, not host mute. The initial voice roster and join events
+include `serverMuted`; there is no separate host-mute-changed push event. If your game uses P2P
+audio, its host-mute signaling and enforcement must be part of your own media integration.
+
+When the last voice socket disconnects, voice-room membership ends. Call REST `join` again before
+reconnecting and restore intended mute before sending audio.
 
 ### Server → client events
 
@@ -107,10 +119,11 @@ Envelope: `{ "event": "<name>", "data": { } }`.
 
 | Event | `data` |
 |---|---|
-| `voice.roster` | `{ "roomId", "participants": [{ "userId", "muted" }] }` — sent to the newcomer |
-| `voice.participant_joined` | `{ "roomId", "userId", "muted" }` |
+| `voice.roster` | `{ "roomId", "participants": [{ "userId", "muted", "serverMuted" }] }` — sent to the newcomer |
+| `voice.participant_joined` | `{ "roomId", "userId", "muted", "serverMuted" }` |
 | `voice.participant_left` | `{ "roomId", "userId" }` |
 | `voice.mute_changed` | `{ "roomId", "userId", "muted" }` |
+| `voice.deafened` | `{ "roomId", "userId", "deafened" } |
 | `voice.speaking` | `{ "roomId", "userId", "speaking" }` |
 | `voice.rtc` | `{ "roomId", "from", "payload" }` |
 
@@ -133,3 +146,5 @@ Game-scoped launch tokens **may** use the voice REST and WebSocket for rooms att
 - [Chat](chat.md) — rooms anchor to conversations; game sessions expose `chatConversationId`
 - [Games](games.md) — game sessions and launch tokens
 - [Relay](relay.md) — byte fan-out for game netcode
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

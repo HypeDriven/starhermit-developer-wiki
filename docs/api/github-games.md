@@ -184,8 +184,8 @@ Notes specific to this route:
 - **The game is live as soon as the call returns.** There is no separate hosting or deployment
   step: `deployStatus` is `live` and `deployedCommitSha` is `null`, because there is no commit.
 - **The files cannot be regenerated**, so the platform never redeploys them from anywhere. A game
-  added this way carries `contentSource: upload`, which is what stops the deployment worker from
-  replacing an uploaded build with the contents of a repository. Push a new build with
+  added this way carries `contentSource: upload` and retains its uploaded build until you publish
+  another one. Push a new build with
   [the bundle endpoint](#push-a-game-bundle) or upload the folder again.
 - **No repository means no claiming.** `ownerLogin` is empty, so no GitHub login can ever match it;
   `repoUrl` carries a synthetic `upload:<id>` value rather than a URL.
@@ -344,7 +344,7 @@ and the image was the only thing that could describe it.
 
 **A re-push applies the container knobs its manifest declares, and only those.** Include
 `starhermit.txt` in the bundle with a changed `container.port`, `container.health`,
-`container.memory` or `container.cpu` and the deployment picks it up on restart; leave a knob out and
+`container.memory_mb` or `container.cpu` and the deployment picks it up on restart; leave a knob out and
 it keeps whatever you set last time. Omit the manifest entirely and nothing about the deployment
 changes except the image.
 
@@ -437,7 +437,8 @@ job can then sign `/auth/public-key/challenge`, exchange it at `/auth/public-key
 the returned 15-minute access token on this bundle endpoint.
 
 The deployment key acts as its owning account, so that account must own the target game. It cannot
-add another key or revoke itself: changing the key list remains OAuth-only. Use one key per
+add another key or revoke other keys. It can revoke itself through `/me/public-keys/current`;
+manage enrollment and other keys from an OAuth-authenticated session. Use one key per
 environment so one workflow can be disabled without stopping the others. Archives over roughly
 100 MB must use the WebSocket transport below.
 
@@ -488,9 +489,8 @@ that simply dropped after the last byte would otherwise publish exactly like one
 silently replacing a live game with an abandoned push. Closing the socket without the frame uploads
 nothing.
 
-The silent window between your last byte and the `result` is real and can be long — a server image
-is re-streamed to the daemon and loaded, then client files are copied into the hosting volume. That
-is what the `progress` heartbeats are for; do not treat quiet as failure.
+Publication after your last byte can take time, especially for a server image. Expect `progress`
+heartbeats while it finishes; do not treat a quiet interval as an upload failure.
 
 ### Upload limits
 
@@ -498,7 +498,7 @@ All upload routes — both HTTP endpoints and the WebSocket — share the same r
 
 | Limit | Value |
 |---|---|
-| Disk allowance per game | **2 GB** on starhermit.com (operator-tunable per game; code default 4 GB) |
+| Disk allowance per game | **2 GB** on starhermit.com (allowance may vary by game/deployment) |
 | Hosted files per account | **20 GB** across all of an account's games (operator-tunable per account) |
 | Repository deploy | **50 MB** archive |
 | `starhermit.txt` / `remove.txt` | **256 KB** each; `remove.txt` lists at most 10,000 paths (`422`) |
@@ -691,3 +691,7 @@ For the full client-side contract — how the game reads the launch token and ta
 - [auth.md](auth.md) — JWT and OAuth identity linking
 - [tutorials/chess-walkthrough.md](../tutorials/chess-walkthrough.md) — end-to-end reference implementation
 - [tutorials/claim-existing-game.md](../tutorials/claim-existing-game.md) — take over an existing listing you own
+
+Shared [API conventions](conventions.md) describe response parsing, timestamps, pagination, and retries.
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

@@ -5,8 +5,8 @@ fastest run, longest streak) and **achievements** without a publisher account or
 permission. Owning the game is all it takes.
 
 There is one rule behind everything on this page: **you define them, your game's server writes
-them.** A player's client can never post a score or claim an achievement for these, so a modified
-client cannot reach the top of your board. That is why the game needs an authoritative backend: a
+them.** A player's client can never post a score or claim an achievement for these, and your server must validate the gameplay that earns them. Refusing direct API submissions
+alone does not stop a modified client from inventing game events. That is why the game needs an authoritative backend: a
 `server=` script or a `container.image=` in [`starhermit.txt`](../starhermit-txt.md).
 
 This tutorial builds both for a small arcade game, *Star Collector*: a run ends when the player

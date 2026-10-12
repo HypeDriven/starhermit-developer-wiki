@@ -180,4 +180,6 @@ and works with the game's launch token. Read entries with the standard paged end
 
 Step-by-step: [Tutorial: leaderboards and achievements for your game](../tutorials/game-leaderboards-achievements.md).
 
-Errors are `{"error": "..."}` with standard status codes.
+See [API conventions](conventions.md#requests-and-responses) for error parsing.
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

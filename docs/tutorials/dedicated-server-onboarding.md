@@ -180,7 +180,7 @@ container without proving you own the repository is refused with `403`, and init
 may also fail when container hosting is unavailable or restricted.
 
 The registry-backed image in the manifest is enough to deploy the first version. The next section
-covers the newly released direct-upload path, useful for CI and for builds you do not want the
+covers the direct-upload path, useful for CI and for builds you do not want the
 platform to clone or pull again.
 
 ## Part 3: publish a client and dedicated server bundle
@@ -294,13 +294,6 @@ leaderboards and achievements. There is no separate registration step.
 4. Poll `GET /api/v1/me/github-games/{id}/deployment` until it reads `running`, then start a real
    room or match.
 
-> Until 4 October 2026, doing this in one push left a game with two deployment records that took
-> turns evicting each other's container. It worked straight after the upload and then, once the
-> container idle-stopped, every start answered
-> `503 '<slug>' is failed: The game container returned 401 for GET /describe.`
-> That was a platform defect, not your key handling. It is fixed for new pushes. A game already in
-> that state needs an operator to clear the extra record, so contact support with the game id;
-> pushing again does not repair it.
 
 ## Part 4: renew the container's platform token
 
@@ -359,7 +352,7 @@ in short:
    player confirms, `complete` answers `401 "Public key not registered or revoked."`.
 4. **Keep the session** with `POST /api/v1/auth/refresh`, and sign in with the key again whenever
    refresh fails. Accept the current terms when `GET /api/v1/me` reports `termsAcceptanceRequired`
-   (a public-key session can; a launch token cannot — see
+   (both account sessions and player launch tokens can — see
    [terms acceptance](../api/profile.md#terms-acceptance)). Your container's deployment token is
    exempt from terms; that exemption does not extend to its players.
 
@@ -407,12 +400,15 @@ integrations are finalized; it is not required for dedicated-server play.
 
 ## Part 6: enter the game and use StarHermit services
 
+Replace `{slug}` in the HTTP examples below with `GAME_SLUG`, the game UUID you obtained at
+registration. The repository name `orbit-league` is a display/source name, not the API slug.
+
 ### Mint a least-privilege game token
 
 Use the full access token once to mint a token fenced to your game:
 
 ```http
-POST /api/v1/games/orbit-league/launch-token
+POST /api/v1/games/{slug}/launch-token
 Authorization: Bearer <access-token>
 ```
 
@@ -426,11 +422,11 @@ Keep the full account token out of gameplay code where possible.
 ### Matchmaking
 
 ```http
-POST /api/v1/games/orbit-league/matchmaking
+POST /api/v1/games/{slug}/matchmaking
 Authorization: Bearer <game-token>
 ```
 
-Poll `GET /api/v1/games/orbit-league/matchmaking` until `status` is `matched`, then connect:
+Poll `GET /api/v1/games/{slug}/matchmaking` until `status` is `matched`, then connect:
 
 ```text
 wss://api.starhermit.com/ws/v1/games?sessionId=<sessionId>&access_token=<game-token>
@@ -451,7 +447,7 @@ Every authoritative game receives an Elo leaderboard. Your container sends Elo c
 achievement unlocks over `/control`; clients only read the resulting platform state:
 
 ```text
-GET /api/v1/games/orbit-league/achievements
+GET /api/v1/games/{slug}/achievements
 GET /api/v1/leaderboards/{leaderboardId}/entries
 ```
 
@@ -460,7 +456,7 @@ game-owned achievement.
 
 ### Session chat and voice
 
-`GET /api/v1/games/orbit-league/sessions/{sessionId}` returns `chatConversationId`. Session
+`GET /api/v1/games/{slug}/sessions/{sessionId}` returns `chatConversationId`. Session
 conversations allow participants to chat and use voice even when they are not friends.
 
 Typical voice flow:

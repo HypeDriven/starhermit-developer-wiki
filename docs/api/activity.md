@@ -124,4 +124,6 @@ Activity `type` values: `"download"`, `"launch"`, `"external_launch"`.
 friends, downloads private). An unreadable privacy document is treated as fully private. See
 [profile.md](profile.md).
 
-Errors are `{"error": "..."}` with standard status codes.
+See [API conventions](conventions.md#requests-and-responses) for error parsing.
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

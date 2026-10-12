@@ -6,8 +6,9 @@
 
 The public developer documentation for the StarHermit platform, served at **wiki.starhermit.com**
 (GitHub Pages over this repo; `CNAME` carries the hostname, and Jekyll's default conversion is what
-turns `docs/x.md` into `/docs/x.html`). No build step, no site config, no CI — pushing markdown
-publishes it.
+turns `docs/x.md` into `/docs/x.html`). The site serves Markdown and static assets without an application build. `npm test` validates
+document links, API contracts, helpers and examples; `npm run test:browser` checks the runnable
+quickstart. Pushing the repository publishes it through GitHub Pages.
 
 It documents the *public contract* of `../starhermit`: an integration guide for **any** game or external
 client targeting the platform, not a description of the backend's internals. The reference example used
@@ -17,12 +18,24 @@ patterns, not the subject of the docs.
 ## Structure
 
 - `README.md` — the landing page: what StarHermit is, where to start, and the API-reference index table.
+- `docs/choosing-an-integration.md`, `docs/credentials.md`, `docs/troubleshooting.md`,
+  `docs/session-lifecycle.md`, and `docs/availability.md` — architecture choices, credential/identifier
+  compatibility, symptom-based recovery, session membership and retention (with a static accessible SVG diagram),
+  and service availability/trust.
+- `docs/api/conventions.md` and `docs/api/contracts.md` — shared HTTP, timestamp, pagination, update
+  and retry rules, plus the public machine-readable contract downloads under `docs/contracts/`.
+  The OpenAPI file indexes public developer REST routes, request models and success shapes,
+  keeping reserved generation routes explicitly unavailable. JSON Schema definitions cover socket
+  text frames; binary layouts distinguish participant and user prefixes and container headers.
+- `docs/examples/browser-quickstart/` and its ZIP — complete no-build game with account sign-in,
+  explicit terms consent, validated conditional cloud saves and untracked in-memory single-player play.
+  `scripts/build-quickstart.py` refreshes its vendored helpers and deterministic archive.
 - `docs/starhermit-txt.md` — the manifest every published game needs (including `control.*` declarations), where it must sit in the uploaded
   folder, and why that folder should be the distributable build (everything beside the manifest is
   uploaded and served). It also documents matchmaking start deadlines, AI-seat limits and empty-seat behavior,
   folder cache lifetimes, exact additional CORS origins, and how upload modes replace or preserve hosting policies.
 - `docs/getting-started.md` — base URLs, versioning, the auth model (including WebSocket connection
-  tickets), and the ways to integrate: a platform game published from GitHub or uploaded as a folder,
+  tickets), recommended account/untracked entry options, and the ways to integrate: a platform game published from GitHub or uploaded as a folder,
   with an optional script or container server, or an external client calling the REST/WS API directly.
 - `docs/api/*.md` — one page per area: `auth`, `games`, `game-scripts`, `container-games`, `profile`,
   `friends`, `chat`, `voice`, `catalog`, `activity`, `achievements`, `leaderboards`,
@@ -43,11 +56,10 @@ patterns, not the subject of the docs.
   The authentication page includes direct-browser game sign-in: a provider chooser, return URL
   validation, game-scoped token handling and a copyable Sign in button example.
   The profile page documents current-terms discovery, explicit acceptance, account status fields,
-  REST/WebSocket enforcement and recovery examples. Getting started, authentication and the
+  REST/WebSocket enforcement and recovery examples, including explicit consent through a player launch token. Getting started, authentication and the
   onboarding/CI tutorials explain how acceptance affects their flows. Realtime rooms covers
   human-party matchmaking with deadline starts; matchmaking and container pages state the
-  current container queue limitation, and catalog/publisher pages identify the mock storage and
-  processing pipeline. The walkthrough and AI prompts support direct sign-in, bounded token renewal
+  current container queue limitation, and catalog/publisher pages identify the preview distribution limitations without internal pipeline detail. The walkthrough and AI prompts support direct sign-in, bounded token renewal
   and the current script context contract.
 - `docs/sdk/*.md` — one page per maintained client SDK: `unity` (the `com.starhermit.sdk` Unity package —
   install, client construction, credentials, a map from each API page to its typed service, sockets,
@@ -55,10 +67,15 @@ patterns, not the subject of the docs.
   example using raw JSON with the existing acceptance method), and `javascript` (the single-file browser client
   `docs/sdk/starhermit-sdk.js`, shipped beside its page: loading and `init`, sign-in and identity, cloud saves
   with the load-before-save rule and the failed-read write block, settings and controls, multiplayer/social
-  calls (pointing at the graphics-options tutorial for a Graphics menu), single-player leaderboards through the shipped `docs/sdk/score-script.js` and `submitScores`, reconnecting sockets — renew the launch token before every reconnect, and relaunch once renewal is
+  calls (pointing at the graphics-options tutorial for a Graphics menu), serialized control updates, correctly marked realtime inputs, REST checks before reconnect, stopping
+  on policy closes, and single-player leaderboards through the shipped `docs/sdk/score-script.js` and `submitScores`, reconnecting sockets — renew the launch token before every reconnect, and relaunch once renewal is
   refused — events, and keeping a vendored copy current). These pages describe how to reach
   the documented API from an engine; they do not restate the API itself.
-- `docs/tutorials/*.md` — `chess-walkthrough` (the full lifecycle from launch token to replay viewer),
+- `docs/sdk/cloud-save-store.js` — the standalone raw-JSON save recipe: validates before adoption,
+  conditional writes, read/conflict failure blocks, and ambiguous-write recovery.
+- `docs/tutorials/*.md` — `browser-quickstart` (download, local play, publication, account and untracked
+  entry paths, terms and conflict checks), `cloud-save-sync` (format validation/migration, ETags,
+  conflicts, quotas, checkpoints and page-exit limits), `chess-walkthrough` (the full lifecycle from launch token to replay viewer),
   `ai-prompts` (copy-pasteable prompts for an AI coding assistant, one per feature plus a mega-prompt),
   `dedicated-server-onboarding` (push a container bundle, renew its server token, onboard
   Steam/Epic/GOG/native players via public-key registration without OAuth), `public-key-onboarding`
@@ -90,7 +107,12 @@ patterns, not the subject of the docs.
 
 Conventions the pages share and state: REST under `api/v1/...` at `https://api.starhermit.com`,
 WebSockets under `ws/v1/...`, JWT bearer auth with `?access_token=` allowed on `/ws/**`, camelCase JSON,
-and errors as `{"error":"..."}`.
+and defensive parsing of JSON, plain-text, empty and validation-problem error responses.
+The public pages describe client-visible behavior, limits and recovery actions, not deployment internals.
+
+Maintenance scripts regenerate the distributable example and REST contract from a supplied source
+checkout plus reviewed response overrides. Tests validate contracts, links, example assets, public-key signing bytes and device-key examples,
+  and SDK behavior; source comparison can additionally verify the public operation inventory when available.
 
 ## What this documentation is for
 

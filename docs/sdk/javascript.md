@@ -1,8 +1,8 @@
 # JavaScript SDK (browser games)
 
 [`starhermit-sdk.js`](starhermit-sdk.js) is a single-file, dependency-free client for browser games
-published on StarHermit. It reads the launch token, keeps it renewed, and wraps everything a
-game-scoped launch token can reach: identity, cloud saves, per-player settings and controls,
+published on StarHermit. It reads the launch token, keeps it renewed, and provides helpers for the common
+game-scoped launch-token APIs: identity, cloud saves, per-player settings and controls,
 invites, matchmaking, sessions and the gameplay socket, achievements, leaderboards, replays, chat,
 voice and realtime rooms.
 
@@ -18,9 +18,10 @@ are written only by the game's server (a script result or a container control me
 can never post them, and the SDK only reads them. Everything else stays server-authoritative
 exactly as documented on the [API pages](../../README.md#api-reference).
 
-**Every method is safe standalone.** With no launch token (the game opened from a local file, a
-dev server or any non-StarHermit host) calls resolve to `null` or `[]` without touching the
-network, so a game keeps its local behaviour and makes no requests.
+**Authenticated helpers make no API requests without a launch token.** Reads generally resolve
+to `null`, `[]`, or an empty map; writes may resolve `null`/`false` and debounced saves have no immediate
+return value. A socket stays disconnected. Keep standalone progress in memory if the player chose
+untracked play. Call `signOut()` before switching from account play to that mode so renewal stops.
 
 ## Install
 
@@ -35,9 +36,9 @@ it before your own code:
 ```
 
 Call `init()` once, before any router touches `location.hash`. Options:
-`init({ base, gameId, autoRefresh, launcherUrl })` — `base` points REST calls at another origin during
-local development (platform-hosted games use same-origin), `gameId` is only needed for sign-in when the
-game is not served from `<id>.starhermit.com`, `autoRefresh: false` leaves token renewal to a game that
+`init({ base, gameId, autoRefresh, launcherUrl })` — `base` points REST calls at an authorized origin
+during local development (platform-hosted games use same-origin). `gameId`, if supplied, must match
+the hosted UUID for sign-in; local/external pages are not valid game sign-in return origins. `autoRefresh: false` leaves token renewal to a game that
 runs its own chain, and `launcherUrl` overrides where `relaunch()` sends the player (default
 `https://dashboard.starhermit.com/`).
 
@@ -47,7 +48,7 @@ runs its own chain, and `launcherUrl` overrides where `relaunch()` sends the pla
 |---|---|
 | Is a player signed in? | `StarHermit.signedIn`, `StarHermit.userId`, `StarHermit.slug` |
 | React to sign-in / sign-out / expiry | `StarHermit.on('auth', ({ signedIn, reason }) => …)` |
-| Show a **Sign in** button | only when `StarHermit.canSignIn()` (true on `*.starhermit.com` without a token); on click `StarHermit.signIn()` |
+| Show a **Sign in** button | only when `StarHermit.canSignIn()` (true on a game UUID subdomain without a token); on click `StarHermit.signIn()` |
 | Player name / avatar | `await StarHermit.profile()` → `{ userId, username, nickname, displayName }`; `StarHermit.avatarUrl()` |
 | Friends | `await StarHermit.friends()` |
 
@@ -140,13 +141,14 @@ and a playback cap enforced by your mixer.
 
 ## Multiplayer, invites and social
 
-These need a game with a server (a [script](../api/game-scripts.md) or a
-[container](../api/container-games.md)).
+Session gameplay, matchmaking, game achievements, leaderboards, and replays need a server
+([script](../api/game-scripts.md) or [container](../api/container-games.md)). Realtime rooms and
+friends do not. Session chat and voice need the corresponding conversation membership.
 
 | Area | Calls |
 |---|---|
-| Sessions | `mySessions()`, `getSession(id)`, `startAiSession()`; `StarHermit.launchSessionId` after an invite launch |
-| Gameplay socket | `const conn = connect(sessionId, { onGame, onError, onPresence, onAchievement, onResumed, onAbandoned, onOpen, onClose, onAuthLost })`, then `conn.send(data)`; reconnects with back-off, renewing the token first, and stops on 4403/4404 or when renewal is refused (see [reconnecting](#reconnecting-and-expired-tokens)) |
+| Sessions | `mySessions()`, `getSession(id)`, `sessionRecovery(id)`, `leaveSession(id)`, `startAiSession()`; `StarHermit.launchSessionId` after an invite launch |
+| Gameplay socket | `const conn = connect(sessionId, { onGame, onError, onPresence, onAchievement, onResumed, onAbandoned, onOpen, onClose, onAuthLost })`, then `conn.send(data)`; reconnects with back-off, renewing the token first, and stops on normal/policy/oversize closes (1000/1008/1009), 4403/4404, or when renewal is refused (see [reconnecting](#reconnecting-and-expired-tokens)) |
 | Matchmaking | `queues()`, `joinQueue([keys])`, `matchStatus()`, `cancelMatch()`, `waitForMatch(opts)` |
 | Invites | `sendInvite(toUserId[, sessionId])` (with a `sessionId` the friend joins that running session), `invites()`, `acceptInvite(id)`, `declineInvite(id)`; `inviteLink(query)` for a share link |
 | Post a run to your leaderboards | `submitScores({ boardKey: number })` → accepted keys (see [single-player leaderboards](#single-player-leaderboards)) |
@@ -188,8 +190,10 @@ if (accepted.includes('high-score')) {
 the gameplay socket, and resolves the board keys the script accepted; it also emits `scores` with
 that list. The script drops a score that is not a number of the board's type or falls outside its
 `minScore`/`maxScore`, posts the rest through its `scores` return, and ends the session. The client
-still reports the result, so the range is your guard: set it to what the game can really produce,
-or verify the run in the script (replaying recorded inputs, for instance) when cheating matters.
+still reports the result. An in-range invented score can pass; these boards are suitable for casual
+play. For competition, validate the run in the script or container before awarding it. The acknowledgement
+lists script-accepted keys; it is not proof that every board was active or that a new personal best
+was stored. See [trust and availability](../availability.md#what-makes-a-result-trustworthy).
 
 ## Reconnecting and expired tokens
 
@@ -218,6 +222,13 @@ that way (`StarHermit.launchKind === 'sign-in'`), otherwise to the launcher. Ins
 game frame it navigates the top window, which browsers allow only from a user gesture, so call it
 from a click; it returns `false` when the navigation was refused.
 
+A browser can hide finished-session, terms, membership, or build failures as `1006`. Before an
+automatic retry, `connect()` checks session state through REST and, when `opts.build` is supplied,
+compares it with game info. `onUnavailable(error)` receives a permanent REST failure or ended
+session; `onTermsRequired(body)` requests explicit terms acceptance. Create a new connection after
+resolving these. `onClose(1008)` means the connection was superseded or violated policy; do not
+automatically reopen it.
+
 Sockets your game opens itself (`realtime.socketUrl(roomId)`, `voice.socketUrl(roomId)`) need the
 same rule. Before reopening one, call `renewForReconnect()` and act on its result:
 
@@ -226,11 +237,15 @@ async function reopen() {
   const r = await StarHermit.renewForReconnect();
   if (r === 'renewed') ws = new WebSocket(StarHermit.realtime.socketUrl(roomId)); // fresh token in the URL
   else if (r === 'retry') setTimeout(reopen, backoff());                         // renewal itself failed
+  else if (r === 'terms-required') showTermsPanel();                              // explicit acceptance
   else showReconnectPanel();                                                     // 'relaunch'
 }
 ```
 
-Concurrent renewals share one request, so calling it from several sockets at once is safe.
+Concurrent renewals share one request. `terms-required` preserves the player token and emits
+`termsrequired`; display `getTerms()` and call `acceptTerms(displayed.hash)` only on the player's
+Accept action, then retry. Sockets your game manages also need REST checks for ended resources
+and must stop on policy closes. See [troubleshooting](../troubleshooting.md#websockets).
 
 ## Events
 
@@ -243,6 +258,8 @@ Concurrent renewals share one request, so calling it from several sockets at onc
 | `saveerror` | `{ op: 'load' }` after a failed read; `{ op: 'write', blocked: true }` for a refused write |
 | `achievement` | an unlock pushed on the gameplay socket |
 | `scores` | the board keys accepted by `submitScores` (`[]` when nothing was posted) |
+| `saveconflict` | `{ etag }` when another device changed the save; reload before merging/saving |
+| `termsrequired` | The terms error returned by a launch-token renewal; preserve the token and request consent |
 
 ## Keeping your copy current
 

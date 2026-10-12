@@ -9,7 +9,7 @@ A match runs one of two ways:
 
 Contrast this with the [peer relay](relay.md) (opaque fan-out bound to an existing room/session roster, disabled by default) and plain [scripted games](games.md) (server-authoritative, with session matchmaking and invites but no room lobby). Realtime rooms are **enabled by default**.
 
-All REST endpoints require authentication and work with both a full user token and a game-scoped launch token. Errors are returned as `{"error":"..."}` with standard status codes.
+All REST endpoints require authentication and work with both a full user token and a game-scoped launch token. Error bodies vary; see [API conventions](conventions.md#requests-and-responses).
 
 ## Data model
 
@@ -18,7 +18,7 @@ All REST endpoints require authentication and work with both a full user token a
 ```json
 {
   "id": "<guid>",
-  "gameSlug": "my-game",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "hostUserId": "<guid>",
   "status": "Lobby",
   "gameSessionId": null,
@@ -100,7 +100,7 @@ Base: `https://api.starhermit.com/api/v1/realtime` — so
 ### Create a room — `POST /rooms`
 
 ```json
-{ "gameSlug": "my-game", "teamCount": 2, "seatsPerTeam": 5, "backfillAfterSeconds": 30, "aiPlayers": 0, "backfillAiPlayers": 4, "name": "Friday night", "isVisible": false, "metadata": { "map": "arena" } }
+{ "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "teamCount": 2, "seatsPerTeam": 5, "backfillAfterSeconds": 30, "aiPlayers": 0, "backfillAiPlayers": 4, "name": "Friday night", "isVisible": false, "metadata": { "map": "arena" } }
 ```
 
 - `gameSlug` is required for full user tokens. With a game-scoped launch token the slug is taken from the token's `game_scope` (a mismatching body value is rejected with `403`).
@@ -150,7 +150,7 @@ with an empty seat.
 
 ```http
 POST /api/v1/realtime/rooms
-{ "gameSlug": "chess", "teamCount": 2, "seatsPerTeam": 1, "aiPlayers": 1 }
+{ "gameSlug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94", "teamCount": 2, "seatsPerTeam": 1, "aiPlayers": 1 }
 
 POST /api/v1/realtime/rooms/{id}/start
 ```
@@ -202,13 +202,13 @@ Returns the [matchmaking ticket](games.md#post-apiv1gamesslugmatchmaking), inclu
 returns `409`. This authoritative matchmaking flow is separate from opening a room for quick-join
 and its room-level backfill countdown.
 
-`POST /rooms/quick-join` with `{ "gameSlug": "my-game", "seats": 1 }` places the caller in the **oldest open room with a free seat** for that game slug — AI seats count as taken, so a room whose remaining seats are all AI is skipped. `404` when no room qualifies — the client should then create its own room and open it. Only single-seat quick-join is supported (`seats` must be `1`).
+`POST /rooms/quick-join` with `{ "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "seats": 1 }` places the caller in the **oldest open room with a free seat** for that game slug — AI seats count as taken, so a room whose remaining seats are all AI is skipped. `404` when no room qualifies — the client should then create its own room and open it. Only single-seat quick-join is supported (`seats` must be `1`).
 
 **Filters.** Add any of these to join only a room that fits; every filter given must hold, and
 none given is the behaviour above:
 
 ```json
-{ "gameSlug": "my-game", "seats": 1, "teamCount": 2, "seatsPerTeam": 4, "metadata": { "mode": "ranked", "map": "arena" }, "includeInProgress": true }
+{ "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "seats": 1, "teamCount": 2, "seatsPerTeam": 4, "metadata": { "mode": "ranked", "map": "arena" }, "includeInProgress": true }
 ```
 
 | Filter | Matches a room whose… |
@@ -314,7 +314,9 @@ Binary frames are the gameplay channel for **host-routed** games (room-bound scr
 Small JSON frames (≤ **4 KB**) carry lobby and match events:
 
 ```json
-{ "type": "event" | "chat" | "ready", "...": "..." }
+{ "type": "ready" }
+{ "type": "chat", "text": "Ready to race" }
+{ "type": "event", "kind": "countdown", "goInMs": 3000 }
 ```
 
 - The **host** may send `event`, `chat`, and `ready`; frames are broadcast to every other participant.
@@ -448,7 +450,7 @@ For a game with a server backend — a `server=` script in its manifest, or a [c
 - **Extended script ctx.** Every invocation for a room-bound session (`createSession`, `onPlayerMessage`, `onTick`) additionally receives `ctx.room` (room id, metadata, and the frozen roster — humans *and* AI seats, ordered by team then slot) and `ctx.presence` (`{ "<userId>": { online, left } }` for every user who is or was a human participant). Details in [Game Scripts — Room-bound sessions](game-scripts.md#room-bound-sessions).
 - **Server-authoritative achievements.** Every hook of a bound session can grant achievements by returning `achievements: {userId: [keys]}`, exactly as in any scripted game — including from `createSession`, which fires the moment the room starts. Unlocks are pushed to the earning player over `ws/v1/games` as `{"type":"achievement"}` frames. See [Achievements](achievements.md#server-authoritative-game-achievements).
 - **The script ends the match.** When the script returns `result`, the platform finishes the session, stores the result on the room, and closes the room (final roster push included). `POST /rooms/{id}/result` is not used for room-bound games.
-- **Failure isolation.** A room stays playable if session creation fails — the bridge is best-effort at start and the room falls back to host-routed behavior.
+- **Start failures.** A script-backed room can start without a bound session if its session creation fails; inspect `gameSessionId` before choosing a gameplay transport. A container-backed room stays unstarted when its server cannot create the session. Retry with backoff on a temporary startup error; do not switch it to host simulation.
 - **A host-routed game can bind a session purely for achievements.** The binary gameplay channel is never gated on a bound session, so a game that simulates on the host client can still ship a `server=` script whose only job is authoritative achievement (and elo) grants, while the fast path keeps flowing over `ws/v1/realtime`.
 
 ## How a game uses it
@@ -467,3 +469,5 @@ For a game with a server backend — a `server=` script in its manifest, or a [c
 - [Games](games.md) — server-authoritative scripted games
 - [Authentication](auth.md) — launch tokens and game-scope fencing
 - [Friends](friends.md) — the friend list used by the invite picker
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

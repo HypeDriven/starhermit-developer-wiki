@@ -15,8 +15,8 @@ games that account owns.
 
 Do not save an OAuth access or refresh token in CI. A StarHermit public key is a better machine
 credential because it can be labelled, audited, and revoked independently. A session authenticated
-by that key **cannot add or revoke keys**; those operations require a fresh OAuth-authenticated
-session. If the CI secret leaks, sign in with Google or GitHub and revoke the deployment key.
+by that key **cannot add keys or revoke other keys**; those operations require an OAuth-authenticated
+session. It can revoke itself through `/api/v1/me/public-keys/current`. If the CI secret leaks, sign in with Google or GitHub and revoke the deployment key.
 Revocation also ends refresh sessions created by that key and makes its existing access tokens fail
 on their next API request.
 
@@ -296,7 +296,8 @@ smoke test before promoting the release.
 
 For a suspected broad compromise, `DELETE /api/v1/me/public-keys/all` revokes every active key.
 Both delete operations require an OAuth-authenticated session. A pipeline authenticated by its own
-key cannot revoke itself, add a replacement, change the account email, or remove an OAuth identity.
+key cannot revoke other keys, add a replacement, change the account email, or remove an OAuth identity.
+It can revoke itself with `DELETE /api/v1/me/public-keys/current`; discard its stored tokens afterwards.
 
 ## See also
 

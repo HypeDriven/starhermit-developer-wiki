@@ -2,6 +2,11 @@
 
 [StarHermit](https://starhermit.com) is a game- and software-distribution platform with a built-in social layer, exposed over REST and WebSockets. This page gives you the lay of the land: what the platform does, where it listens, how authentication and versioning work, and the two ways your own game can integrate with it.
 
+For your first browser game, [download and publish the quickstart](tutorials/browser-quickstart.md).
+For another architecture, [choose an integration](choosing-an-integration.md), then check
+[credentials](credentials.md), [API conventions](api/conventions.md), and
+[feature availability](availability.md). Use [troubleshooting](troubleshooting.md) when a call fails.
+
 ## What StarHermit provides
 
 - **Users & authentication** — public-key registration (no passwords) and OAuth sign-in through whichever providers this deployment has credentials for; see [Authentication](api/auth.md).
@@ -47,8 +52,9 @@ A hosted game opened directly in the browser can offer a [Sign in button](api/au
 Before calling protected endpoints or opening sockets, an account must [accept the current terms](api/profile.md#terms-acceptance).
 Use `GET /api/v1/me` to check `termsAcceptanceRequired`, display the document from
 `GET /api/v1/terms`, and submit its hash only after the user accepts. A `403` with
-`error: "terms_acceptance_required"` requires acceptance through an account session; a player launch
-token can read the document but cannot accept it.
+`error: "terms_acceptance_required"` means you must display the current document and offer an explicit
+Accept action. Account sessions and player launch tokens can submit acceptance; server tokens cannot.
+Refreshing a token does not record acceptance.
 
 ## Two ways to integrate your game
 
@@ -80,7 +86,7 @@ folder you upload should be your distributable build rather than your source tre
 - [GitHub Games](api/github-games.md)
 - [Publisher](api/publisher.md)
 
-Client SDKs: [Unity](sdk/unity.md).
+Client SDKs: [JavaScript](sdk/javascript.md), [Unity](sdk/unity.md).
 
 Tutorials: [Integration Walkthrough (chess reference example)](tutorials/chess-walkthrough.md), [Dedicated Server + Embedded Player Onboarding](tutorials/dedicated-server-onboarding.md), [CI/CD Build Upload with an OAuth-enrolled Public Key](tutorials/ci-cd-build-upload.md), [Claim a Game Someone Else Added](tutorials/claim-existing-game.md), and [AI Prompts](tutorials/ai-prompts.md).
 

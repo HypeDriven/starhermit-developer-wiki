@@ -1,9 +1,8 @@
 /* starhermit-sdk.js — canonical StarHermit client for browser games.
- * Canonical copy lives in tools/starhermit-sdk.js; each game ships a copy
- * (same as browser-guard.js). Do not edit a game's copy by hand — update the
- * canonical file and re-copy.
+ * Copy this file into your build unchanged. Replace your vendored copy when
+ * updating from the public developer wiki.
  *
- * Covers everything a game-scoped launch token may reach (wiki, 2026-10):
+ * Helpers for the common game-scoped launch-token APIs:
  *   launch:        #game_token=<jwt>[&session_id=<guid>]  (library / invite launch)
  *                  #access_token=<jwt>[&game_fragment=..]  (direct sign-in return)
  *   renewal:       POST /api/v1/games/{slug}/launch-token  (12 h from the original launch;
@@ -99,7 +98,8 @@
 
     function hostSlug() {
       var h = win && win.location && win.location.hostname || '';
-      return h.slice(-HOST_SUFFIX.length) === HOST_SUFFIX ? h.slice(0, -HOST_SUFFIX.length).split('.').pop() : null;
+      var id = h.slice(-HOST_SUFFIX.length) === HOST_SUFFIX ? h.slice(0, -HOST_SUFFIX.length) : '';
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ? id : null;
     }
 
     function setToken(t) {
@@ -116,6 +116,10 @@
 
     function signOut(reason) {
       if (refreshTimer) { clearT(refreshTimer); refreshTimer = null; }
+      if (saveTimer) { clearT(saveTimer); saveTimer = null; }
+      pending = null;
+      saveLoad = 'unknown';
+      saveETag = null;
       var was = sh.signedIn;
       sh.token = null; sh.claims = null; sh.userId = null; sh.signedIn = false;
       if (was) emit('auth', { signedIn: false, reason: reason || 'signed-out' });
@@ -154,7 +158,8 @@
 
     /**
      * Re-mint the launch token (renewal chain); concurrent callers share one
-     * request. Resolves 'renewed' (a fresh token is in place), 'retry' (network
+     * request. Resolves 'terms-required' when consent is needed, 'renewed'
+     * (a fresh token is in place), 'retry' (network
      * or server error — the token may still be good, try again later) or
      * 'relaunch' (expired, refused, or past the 12 h chain: signed out, and only
      * the launcher or sign-in can mint a new token — see relaunch()).
@@ -163,12 +168,27 @@
       if (renewing) return renewing;
       if (!sh.token || !sh.slug) return Promise.resolve('relaunch');
       var exp = sh.claims && sh.claims.exp ? sh.claims.exp * 1000 : 0;
+      var initiatingToken = sh.token;
       // An expired token cannot authorize its own renewal.
       if (exp && exp <= now()) { signOut('expired'); return Promise.resolve('relaunch'); }
       renewing = raw('POST', gamePath('/launch-token')).then(function (res) {
-        if (res.status === 401 || res.status === 403) { signOut('expired'); return 'relaunch'; }
+        // A response for an earlier account/session cannot sign a player back
+        // in after they chose unsigned play or switched credentials.
+        if (sh.token !== initiatingToken) return sh.token ? 'renewed' : 'relaunch';
+        if (res.status === 403) {
+          return res.json().catch(function () { return {}; }).then(function (body) {
+            if (body.error === 'terms_acceptance_required') {
+              emit('termsrequired', body);
+              return 'terms-required';
+            }
+            signOut('expired');
+            return 'relaunch';
+          });
+        }
+        if (res.status === 401) { signOut('expired'); return 'relaunch'; }
         if (!res.ok) return 'retry';
         return res.json().then(function (j) {
+          if (sh.token !== initiatingToken) return sh.token ? 'renewed' : 'relaunch';
           if (!j || !j.token) return 'retry';
           setToken(j.token);
           return 'renewed';
@@ -219,11 +239,15 @@
     };
 
     /** True when the game can offer a "Sign in with StarHermit" button. */
-    sh.canSignIn = function () { return !sh.signedIn && !!(sh.gameId || hostSlug()); };
+    sh.canSignIn = function () {
+      var hostedId = hostSlug();
+      return !sh.signedIn && !!hostedId && (!sh.gameId || String(sh.gameId).toLowerCase() === hostedId.toLowerCase());
+    };
     /** Redirect through StarHermit sign-in; returns with #access_token. */
     sh.signIn = function () {
-      var id = sh.gameId || hostSlug();
+      var id = hostSlug();
       if (!id || !win) return false;
+      if (sh.gameId && String(sh.gameId).toLowerCase() !== id.toLowerCase()) return false;
       var url = new URL('/api/v1/auth/games/' + encodeURIComponent(id) + '/sign-in', PUBLIC_API);
       url.searchParams.set('returnUrl', win.location.href);
       win.location.assign(url.href);
@@ -232,7 +256,8 @@
 
     /**
      * Read the launch token and start renewal. Options: { base, gameId, autoRefresh, launcherUrl }.
-     * gameId is only needed for sign-in when not served from <id>.starhermit.com.
+     * gameId, if supplied, must match the hosted UUID. External/local return
+     * origins cannot use hosted-game sign-in.
      * autoRefresh:false leaves renewal to a game that runs its own chain.
      */
     sh.init = function (opts) {
@@ -295,6 +320,10 @@
 
     // ---------------- identity ----------------
     sh.getGame = function () { return g('', null); };
+    sh.getTerms = function () { return sh.api('/api/v1/terms'); };
+    /** Call only after the player explicitly accepts this displayed revision. */
+    sh.acceptTerms = function (hash) { return sh.api('/api/v1/me/terms/accept', { method: 'POST', body: { hash: hash } }); };
+    sh.heartbeat = function () { return sh.api('/api/v1/me/heartbeat', { method: 'POST' }); };
 
     /** { userId, username, nickname, displayName } — nickname first (wiki convention). */
     sh.profile = function (userId) {
@@ -443,6 +472,7 @@
       return sh.api(savePath(), { method: 'PUT', body: { dataBase64: b64(data) }, keepalive: opts && opts.keepalive, headers: headers })
         .then(function (res) {
           if (res && res.etag) saveETag = res.etag;
+          if (!res || !res.etag) { emit('saved', false); return false; }
           emit('saved', true);
           return true;
         }, function (err) {
@@ -454,7 +484,14 @@
           return false;
         });
     };
-    sh.loadJSON = function () { return sh.loadSave().then(function (t) { try { return t ? JSON.parse(t) : null; } catch (e) { return null; } }); };
+    sh.loadJSON = function () { return sh.loadSave().then(function (t) {
+      try { return t == null ? null : JSON.parse(t); }
+      catch (e) {
+        saveLoad = 'failed';
+        emit('saveerror', { op: 'load', invalidJSON: true });
+        return null;
+      }
+    }); };
     var saveTimer = null, pending = null;
     /** Debounced JSON save at checkpoints; flushSave() forces it (e.g. on pagehide). */
     sh.saveJSON = function (obj, delayMs) {
@@ -521,12 +558,35 @@
     // ---------------- controls ----------------
     /** [{ action, label, defaultCodes, codes }] or [] (fall back to the game's own defaults). */
     sh.getControls = function () { return g('/controls', null).then(function (j) { return j && (j.actions || j) || []; }); };
+    var controlWrites = Promise.resolve();
+    function controlWrite(fn) {
+      var userId = sh.userId;
+      var result = controlWrites.catch(function () {}).then(function () {
+        return userId === sh.userId ? fn() : null;
+      });
+      controlWrites = result;
+      return result;
+    }
     sh.setControl = function (action, codes) {
-      var b = {}; b[action] = codes;
-      return sh.api(gamePath('/controls'), { method: 'PUT', body: { bindings: b } });
+      return controlWrite(function () {
+        if (!sh.token) return null;
+        var userId = sh.userId;
+        return sh.api(gamePath('/controls')).then(function (current) {
+          if (!sh.token || sh.userId !== userId) return null;
+          if (!current || !Array.isArray(current.actions)) throw { status: 404, message: 'Controls unavailable' };
+          var b = {};
+          current.actions.forEach(function (a) { b[a.action] = a.codes.slice(); });
+          b[action] = codes;
+          return sh.api(gamePath('/controls'), { method: 'PUT', body: { bindings: b } });
+        });
+      });
     };
-    sh.setControls = function (bindings) { return sh.api(gamePath('/controls'), { method: 'PUT', body: { bindings: bindings } }); };
-    sh.resetControls = function () { return soft(sh.api(gamePath('/controls'), { method: 'DELETE' }), null); };
+    sh.setControls = function (bindings) { return controlWrite(function () {
+      return sh.api(gamePath('/controls'), { method: 'PUT', body: { bindings: bindings } });
+    }); };
+    sh.resetControls = function () { return controlWrite(function () {
+      return sh.api(gamePath('/controls'), { method: 'DELETE' });
+    }); };
     /**
      * Resolve the player's bindings: defaults is { action: ['KeyA', ...] }.
      * Returns { action: codes[] } with the platform's overrides applied.
@@ -563,6 +623,8 @@
     // ---------------- sessions, matchmaking, invites, replays ----------------
     sh.mySessions = function () { return g('/sessions/mine', []); };
     sh.getSession = function (id) { return g('/sessions/' + encodeURIComponent(id), null); };
+    sh.sessionRecovery = function (id) { return sh.api(gamePath('/sessions/' + encodeURIComponent(id) + '/recovery')); };
+    sh.leaveSession = function (id) { return sh.api(gamePath('/sessions/' + encodeURIComponent(id) + '/leave'), { method: 'POST' }); };
     /** Practice session vs "The House": { sessionId }. */
     sh.startAiSession = function () { return sh.api(gamePath('/sessions/ai'), { method: 'POST' }); };
     sh.queues = function () { return g('/queues', []); };
@@ -653,7 +715,8 @@
      * impossible the socket stops and onAuthLost() fires — offer relaunch().
      * Handlers: onGame(data), onError(msg), onPresence({userId,online}),
      * onAchievement(data), onResumed(f), onAbandoned(f), onOpen(), onClose(code),
-     * onAuthLost(). Returns { send(data, realtime?), close(), get open() }.
+     * onAuthLost(), onTermsRequired(body?), onUnavailable(error).
+     * Returns { send(data, realtime?), close(), get open() }.
      */
     sh.connect = function (sessionId, handlers, opts) {
       handlers = handlers || {}; opts = opts || {};
@@ -665,8 +728,36 @@
         var renewed = sh.token && sh.token !== usedToken ? Promise.resolve('renewed') : renew();
         renewed.then(function (r) {
           if (closed) return;
-          if (r === 'renewed') open();
+          if (r === 'renewed') {
+            // A browser hides failed-upgrade HTTP status behind 1006. Check the
+            // session through REST before trying another upgrade.
+            sh.api(gamePath('/sessions/' + encodeURIComponent(sessionId))).then(function (session) {
+              if (closed) return;
+              if (!session || session.status !== 'active') {
+                closed = true;
+                handlers.onUnavailable && handlers.onUnavailable({ status: session ? 410 : 404, message: 'Session unavailable' });
+                return;
+              }
+              if (!opts.build) return open();
+              return sh.api(gamePath('')).then(function (game) {
+                if (closed) return;
+                if (game && game.buildId && game.buildId !== opts.build) {
+                  closed = true;
+                  handlers.onUnavailable && handlers.onUnavailable({ status: 409, message: 'build_mismatch', expected: game.buildId });
+                } else open();
+              });
+            }).catch(function (err) {
+              if (closed) return;
+              if (err.status === 401 || err.status === 403 || err.status === 409 || err.status === 410) {
+                closed = true;
+                if (err.body && err.body.error === 'terms_acceptance_required') {
+                  handlers.onTermsRequired && handlers.onTermsRequired(err.body);
+                } else handlers.onUnavailable && handlers.onUnavailable(err);
+              } else later(reconnect);
+            });
+          }
           else if (r === 'retry') later(reconnect);
+          else if (r === 'terms-required') { closed = true; handlers.onTermsRequired && handlers.onTermsRequired(); }
           else { closed = true; handlers.onAuthLost && handlers.onAuthLost(); }
         });
       }
@@ -688,7 +779,11 @@
         };
         ws.onclose = function (ev) {
           handlers.onClose && handlers.onClose(ev.code);
-          if (closed || ev.code === 1000 || ev.code === 4403 || ev.code === 4404) return;
+          if (closed) return;
+          if (ev.code === 1000 || ev.code === 1008 || ev.code === 1009 || ev.code === 4403 || ev.code === 4404) {
+            closed = true;
+            return;
+          }
           later(reconnect);
         };
       }
@@ -696,8 +791,7 @@
       conn = {
         send: function (data, realtime) {
           if (!ws || ws.readyState !== 1) return false;
-          var msg = { type: 'cmd', data: data };
-          if (realtime) msg.realtime = true;
+          var msg = { type: 'cmd', data: realtime ? Object.assign({}, data, { type: 'input', realtime: true }) : data };
           ws.send(JSON.stringify(msg));
           return true;
         },
@@ -740,11 +834,14 @@
     function rt(path, method, body) { return sh.api('/api/v1/realtime' + path, { method: method || 'GET', body: body }); }
     sh.realtime = {
       createRoom: function (body) { return rt('/rooms', 'POST', Object.assign({ gameSlug: sh.slug }, body || {})); },
-      listRooms: function () { return soft(rt('/rooms?gameSlug=' + encodeURIComponent(sh.slug)), []); },
+      listRooms: function (opts) {
+        return soft(rt('/rooms?gameSlug=' + encodeURIComponent(sh.slug) + (opts && opts.includeInProgress ? '&includeInProgress=true' : '')), []);
+      },
       joinByCode: function (code) { return rt('/rooms/join-by-code', 'POST', { joinCode: String(code) }); },
       /** null (404) when no open room qualifies — create and open your own. */
       quickJoin: function (body) { return rt('/rooms/quick-join', 'POST', Object.assign({ gameSlug: sh.slug, seats: 1 }, body || {})); },
       mine: function () { return soft(rt('/rooms/mine'), null); },
+      joined: function () { return rt('/rooms/joined?gameSlug=' + encodeURIComponent(sh.slug)); },
       get: function (roomId) { return rt('/rooms/' + encodeURIComponent(roomId)); },
       update: function (roomId, body) { return rt('/rooms/' + encodeURIComponent(roomId), 'PATCH', body); },
       invite: function (roomId, userId) { return rt('/rooms/' + encodeURIComponent(roomId) + '/invites', 'POST', { toUserId: userId }); },
@@ -753,6 +850,11 @@
       declineInvite: function (inviteId) { return soft(rt('/rooms/invites/' + encodeURIComponent(inviteId) + '/decline', 'POST'), null); },
       open: function (roomId) { return rt('/rooms/' + encodeURIComponent(roomId) + '/open', 'POST'); },
       start: function (roomId) { return rt('/rooms/' + encodeURIComponent(roomId) + '/start', 'POST'); },
+      matchmake: function (roomId, queues) {
+        var q = (queues || []).map(function (k) { return 'queues=' + encodeURIComponent(k); }).join('&');
+        return rt('/rooms/' + encodeURIComponent(roomId) + '/matchmake' + (q ? '?' + q : ''), 'POST');
+      },
+      seats: function (roomId, body) { return rt('/rooms/' + encodeURIComponent(roomId) + '/seats', 'POST', body); },
       leave: function (roomId) { return soft(rt('/rooms/' + encodeURIComponent(roomId) + '/leave', 'POST'), null); },
       /** Host-routed games only: { teamScores:[..], metadata }. */
       result: function (roomId, body) { return rt('/rooms/' + encodeURIComponent(roomId) + '/result', 'POST', body); },

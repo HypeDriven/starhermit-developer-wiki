@@ -24,9 +24,9 @@ players feel 50 ms of steering lag. StarHermit gives you two ways to run it, bot
 | Best for | Casual races with friends, full-fidelity physics | Ranked racing with simple arcade physics |
 
 Start with **A** unless you need ranked play; section 7 shows what changes for **B**. A
-[container server](../api/container-games.md) could simulate at 60 Hz authoritatively, but container
-matchmaking currently only uses the implicit 1v1 queue and room-bound sessions are script-only, so it
-does not fit an eight-kart grid today.
+[container server](../api/container-games.md) can also run an eight-kart **room-bound** race and
+simulate at 60 Hz authoritatively. Its direct Games API matchmaking currently uses an implicit 1v1
+queue, so use a realtime room for the larger grid. The platform does not step the container's loop.
 
 ## 2. Manifest
 

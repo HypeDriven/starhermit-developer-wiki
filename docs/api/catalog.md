@@ -93,9 +93,8 @@ Requires an entitlement (403 otherwise). Returns:
 ```
 
 The URL targets the latest build's first downloadable asset. The call records a download activity.
-The current backend uses a mock file-storage adapter that appends `token=mock-download-token`;
-it does not issue a real expiring signature. A deployment needs a real storage integration for
-production catalog downloads; see [the publisher pipeline limitation](publisher.md#finalize-a-build).
+Catalog binary distribution is currently a preview; returned URLs are not guaranteed production
+downloads. See [feature availability](../availability.md) before relying on this publishing flow.
 
 ## Cloud saves
 
@@ -156,14 +155,24 @@ const key = `game:${gameScope}`;            // e.g. "game:3fa85f64-5717-4562-b3f
 
 // Load on startup — 404 means no save yet.
 const res = await fetch(`/api/v1/me/cloud-saves/${key}`, { headers: { Authorization: `Bearer ${launchToken}` } });
+if (res.status !== 404 && !res.ok) throw new Error(`Save load failed: ${res.status}`);
 const save = res.status === 404 ? null : new Uint8Array(await res.arrayBuffer());
+const etag = res.headers.get("ETag");
+if (save && !etag) throw new Error("Save version unavailable; do not overwrite it.");
+// Validate/decode your own save format before adopting it or enabling uploads.
 
 // Save at checkpoints, not every frame.
-await fetch(`/api/v1/me/cloud-saves/${key}`, {
+const written = await fetch(`/api/v1/me/cloud-saves/${key}`, {
   method: "PUT",
-  headers: { Authorization: `Bearer ${launchToken}`, "Content-Type": "application/json" },
-  body: JSON.stringify({ dataBase64: base64(zipBytes) }),
+  headers: {
+    Authorization: `Bearer ${launchToken}`, "Content-Type": "application/json",
+    ...(etag ? { "If-Match": etag } : { "If-None-Match": "*" }),
+  },
+  body: JSON.stringify({ dataBase64: base64(zipBytes) }), // Your ZIP encoder and bytes.
 });
+if (written.status === 412) throw new Error("Another device saved. Reload before writing again.");
+if (!written.ok) throw new Error(`Save write failed: ${written.status}`);
+const acknowledgement = await written.json(); // Retain acknowledgement.etag for your next write.
 ```
 
 - **Only that exact key.** Any other key — another game's, a store game's, or a different spelling
@@ -172,8 +181,9 @@ await fetch(`/api/v1/me/cloud-saves/${key}`, {
   that sync can never overwrite the save your game writes.
 - **Any format.** The platform never opens the save; store whatever your game can read back (it is
   served as `application/zip` regardless). Up to 10 MB.
-- **Last write wins** and there is no history: two tabs or devices playing at once overwrite each
-  other. Load on start, save at checkpoints and on page hide.
+- **Unconditional writes are last write wins**, with no history. Use conditional writes to detect
+  two tabs/devices saving at once. Load on start and save at foreground checkpoints. Page-exit
+  uploads are best effort and have browser body-size limits; see [the safe saving recipe](../tutorials/cloud-save-sync.md).
 - **Every save has a version.** Its `ETag` is on the download, on `/info` (also as `etag`) and on
   the `PUT` response. Send it back as `If-Match` and the write happens only if nobody has saved
   since; otherwise `412 {"error":"precondition_failed","etag":"<current>"}` tells you the version to
@@ -248,4 +258,6 @@ returns `RatingSummaryDto[]`. `GET /api/v1/ratings/reviews` returns `GameReviewD
 ]
 ```
 
-Errors are `{"error": "..."}` with standard status codes. Related: [achievements.md](achievements.md), [leaderboards.md](leaderboards.md).
+See [API conventions](conventions.md#requests-and-responses) for error parsing. Related: [achievements.md](achievements.md), [leaderboards.md](leaderboards.md).
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

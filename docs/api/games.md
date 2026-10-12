@@ -8,11 +8,6 @@ Player endpoints require authentication and work with both full user tokens and 
 tokens. The two `/server/...` endpoints are container-only: session reconciliation uses a narrow
 server bearer token, while token renewal uses the deployment refresh key.
 
-## Endpoints
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-
 ## What `{slug}` is
 
 A game's slug is its **uid** — the same value as its `<uid>.starhermit.com` address, e.g.
@@ -36,6 +31,10 @@ backend, which is the way to tell the two apart.
 Do not hard-code it. Read it from the launch token's `game_scope` claim, or — for a
 platform-hosted browser game — from `location.hostname`, since the subdomain is the uid.
 
+## Endpoints
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
 | GET | `/api/v1/games/{slug}` | Bearer | Game info + caller's stats |
 | POST | `/api/v1/games/{slug}/launch-token` | Bearer | Mint a game-scoped launch token |
 | GET | `/api/v1/games/{slug}/achievements` | Bearer | The game's achievements + the caller's unlock state |
@@ -52,6 +51,9 @@ platform-hosted browser game — from `location.hostname`, since the subdomain i
 | DELETE | `/api/v1/games/{slug}/settings/{key}` | Bearer | Remove one setting |
 | GET | `/api/v1/games/{slug}/sessions/mine` | Bearer | Caller's active sessions |
 | GET | `/api/v1/games/{slug}/sessions/{sessionId}` | Bearer | Session detail (participants only) |
+| GET | `/api/v1/games/{slug}/sessions/{sessionId}/recovery` | Bearer (participant or owner) | Recovery data, expiry, and effective transport limits |
+| POST | `/api/v1/games/{slug}/sessions/{sessionId}/leave` | Bearer (participant) | Leave a persistent world without a room → `204` |
+| GET | `/api/v1/games/{slug}/leaderboards` | Bearer | Own game's active owner-created boards |
 | POST | `/api/v1/games/{slug}/sessions/ai` | Bearer | Create a practice session vs the platform AI |
 | GET | `/api/v1/games/{slug}/queues` | Bearer | Match shapes this game accepts |
 | POST | `/api/v1/games/{slug}/matchmaking` | Bearer | Enqueue for nearest-elo matchmaking (`?queues=` subset) |
@@ -66,14 +68,14 @@ platform-hosted browser game — from `location.hostname`, since the subdomain i
 | GET | `/api/v1/games/{slug}/invites` | Bearer | Incoming pending + all outgoing invites |
 | POST | `/api/v1/games/{slug}/invites/{inviteId}/accept` | Bearer | Accept an invite (creates the session, or joins the one it names) |
 | POST | `/api/v1/games/{slug}/invites/{inviteId}/decline` | Bearer | Decline an invite |
-| GET | `/api/v1/me/game-invites` | Bearer | All pending invites — every game, both invite systems (max 50) |
+| GET | `/api/v1/me/game-invites` | Account JWT | All pending invites — every game, both invite systems (max 50) |
 | GET | `/api/v1/games/{slug}/replays/mine` | Bearer | Caller's finished sessions (games with replays) |
 | GET | `/api/v1/games/{slug}/replays/{sessionId}` | Bearer | Full replay state (participants only) |
 | WS | `/ws/v1/games?sessionId={guid}` | Bearer | Gameplay WebSocket |
 | GET | `/api/v1/games/{slug}/server/sessions/{sessionId}` | Game-server token | Container backend session reconciliation; not available to player tokens |
 | POST | `/api/v1/games/{slug}/server/token` | Refresh key | Renew a container's expiring server token |
 
-Errors are returned as `{"error":"..."}` with standard status codes.
+Error bodies vary; see [API conventions](conventions.md#requests-and-responses).
 
 ## Game info
 
@@ -84,7 +86,7 @@ or if the game is browser-only (it has a slug but no server backend).
 
 ```json
 {
-  "slug": "chess",
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
   "name": "Chess",
   "enabled": true,
   "leaderboardId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -271,7 +273,8 @@ An empty `settings` object clears the game's settings for the caller. Returns th
 ### `PATCH /api/v1/games/{slug}/settings`
 
 Merges into what is stored, leaving keys it does not mention alone. A `null` value **removes** its
-key ([JSON Merge Patch](https://www.rfc-editor.org/rfc/rfc7396), same semantics). This is what an
+key. This merges top-level setting keys; an object value replaces the whole value at its key,
+including its nested properties. This is what an
 options screen should use — it can save the one slider that moved without first reading and
 rewriting everything else.
 
@@ -334,7 +337,7 @@ The caller's active sessions for this game. `myTurn` and `deadline` are parsed f
     "createdAt": "2026-07-20T14:03:11Z",
     "finishedAt": null,
     "myTurn": true,
-    "deadline": "2026-07-21T14:03:11Z",
+    "deadline": 1784642591000,
     "pausedAt": null
   }
 ]
@@ -358,6 +361,18 @@ Session detail. Participants only — `403` otherwise.
   "result": null
 }
 ```
+
+### Recovery and explicit leaving
+
+`GET /api/v1/games/{slug}/sessions/{sessionId}/recovery` returns effective snapshot, restore,
+retention and transport values. Participants and the game's owner may read it. Time units and all
+response fields are described in [Session lifecycle and recovery](../session-lifecycle.md#read-recovery-information).
+
+`POST /api/v1/games/{slug}/sessions/{sessionId}/leave` gives up membership in a persistent world
+without a realtime room. It takes no body and returns `204`; the final human leaving ends the world.
+`403` means not a member, `404` means no session, `410` means ended, and `409` means a non-persistent
+session or a room-bound session. For a room-bound session use the room's `/leave` endpoint. Closing
+a socket alone preserves membership. See [disconnecting and leaving](../session-lifecycle.md#disconnecting-and-leaving-are-different).
 
 ### `POST /api/v1/games/{slug}/sessions/ai`
 
@@ -423,7 +438,7 @@ Games may opt into [deadline starts in `starhermit.txt`](../starhermit-txt.md#st
 `matchmaking.max_wait_seconds` starts an underfilled match after the wait, and
 `matchmaking.ai_players` limits how many vacant seats become AI. Other seats stay empty. Full human
 matches start early. `maxWaitSeconds` reports that game's setting; these tickets stay `queued`
-until the worker starts them, rather than expiring at the global wait limit.
+until matchmaking starts them, rather than expiring at the global wait limit.
 
 ### `GET /api/v1/games/{slug}/matchmaking`
 
@@ -504,6 +519,8 @@ Returns `204`.
 
 ### `GET /api/v1/me/game-invites`
 
+Requires a full account token; player launch tokens cannot read this account-wide inbox.
+
 Every pending invite addressed to the caller (max 50, newest first) — the poll fallback for the push notification, and the one place to ask "what am I invited to?". It spans **both** invite systems: session invites from this page and [realtime-room invites](realtime.md#invites). Entries are exactly the [`game_invite` payloads](chat.md#game_invite-one-event-for-both-invite-systems), so a client renders push and poll results with the same code.
 
 ```json
@@ -527,8 +544,8 @@ Every pending invite addressed to the caller (max 50, newest first) — the poll
     "roomId": null,
     "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
     "createdAt": "2026-07-20T14:10:00Z",
-    "acceptPath": "/api/v1/games/chess/invites/c4a5b6d7-8e9f-4012-8345-6789abcdef01/accept",
-    "declinePath": "/api/v1/games/chess/invites/c4a5b6d7-8e9f-4012-8345-6789abcdef01/decline"
+    "acceptPath": "/api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/c4a5b6d7-8e9f-4012-8345-6789abcdef01/accept",
+    "declinePath": "/api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/c4a5b6d7-8e9f-4012-8345-6789abcdef01/decline"
   }
 ]
 ```
@@ -675,9 +692,12 @@ For a script runtime, durable commands run through `onPlayerMessage`; explicitly
   The first attach after a handoff is announced once per player.
 - `abandoned` — the platform ended the session without a winner or elo update. Reasons:
   `players_left`, `idle_no_players`, `superseded` (the player asked for a new game of this title),
-  `server_failure`, `restore_failed`, `operator_ended` (the game's owner ended it). Stored as
+  `server_failure`, `restore_failed`, `operator_ended` (the game's owner ended it),
+  `retention_expired` (a paused world's recovery retention elapsed). Stored as
   `{ "kind": "abandoned", "reason": "…" }`. A [persistent](../tutorials/persistent-sessions.md) game's sessions are never
-  ended as `players_left`, `idle_no_players` or `superseded` — they pause instead.
+  ended merely for disconnecting or inactivity — they pause instead. The last human explicitly leaving
+  a standalone world can still end it as `players_left`; configured recovery expiry can end it as
+  `retention_expired`.
 
 ## Limits
 
@@ -692,18 +712,18 @@ an operator can tune them.
 | Frame type | Text only | A binary frame gets an `error` frame; the socket stays open. |
 | Connections | One per player per session | A newer connection closes the older one with `1008`. |
 | Realtime inputs (`{"type":"input","realtime":true,…}`) | **60 per second** per connection, bursts up to 120 | Extra frames are **dropped silently** — no `error` frame. |
-| Durable commands (every other `cmd`) | No per-second cap | Processed one at a time, in order (see below). |
+| Durable commands to scripts (every other `cmd`) | **20 per second** per player per session, with a short burst allowance | Refused with an `error` frame: `"Too many commands; slow down."` |
 
 **Realtime inputs** are sampled, not queued: the platform keeps each player's latest input and hands
 the batch to your script's next `onTick` in `ctx.inputs`. Sending faster than your game's
 [tick rate](game-scripts.md#tick-rate) gains nothing, because inputs between two ticks merge into
 one. Send at your tick rate, or when the input changes.
 
-**Durable commands** have no rate limit because they have natural backpressure: a connection's
-frames are handled strictly one after another, and the next is not read until the previous
-command's script invocation has finished. A client that floods commands only queues behind itself,
-and each invocation is still bounded by the game's [budgets](game-scripts.md#budgets). Your script
-should still reject commands that make no sense (a move out of turn) with an `error`.
+**Durable commands to scripts** are processed in order and limited separately from realtime
+inputs. Send discrete actions when they happen; send continuous movement through the marked realtime
+input path. The command limit may vary by game. Script invocations are also bounded by the game's
+[budgets](game-scripts.md#budgets). The WebSocket error frame carries a message, not an HTTP status.
+Your script should reject commands that make no sense, such as a move out of turn.
 
 For a **container** game, commands are relayed to your container as they arrive, with no platform
 rate limit on them. Your server enforces its own. Realtime-input rate limiting applies to scripted
@@ -743,7 +763,7 @@ Owner-only. A game-scoped launch token cannot reach these.
 
 A snapshot of live sessions (active, finished, live connections), script metering against CPU /
 memory / statement budgets, the matchmaking queue (longest wait and how far it has widened),
-webhook endpoint health, and this process's unflushed write buffer.
+and webhook endpoint health.
 
 ### Webhooks
 
@@ -773,14 +793,14 @@ snapshot policy, not to step the game. See [Game Scripts — Tick rate](game-scr
 ## Lifecycle of a game
 
 1. **Mint a launch token** — `POST /api/v1/games/{slug}/launch-token`. Clients should refresh it before expiry (the chess reference client refreshes every 45 minutes).
-2. **Fetch game state** — `GET /api/v1/games/{slug}` for info + your stats; `GET .../sessions/mine` for games in progress; `GET .../invites` and `GET /api/v1/me/game-invites` for pending invites; `GET .../replays/mine` for history when `replaysEnabled`; `GET .../achievements` for the achievement screen.
+2. **Fetch game state** — `GET /api/v1/games/{slug}` for info + your stats; `GET .../sessions/mine` for games in progress; `GET .../invites` and `GET /api/v1/realtime/rooms/invites` for pending invites; `GET .../replays/mine` for history when `replaysEnabled`; `GET .../achievements` for the achievement screen.
 3. **Find an opponent**, one of three ways:
    - **Matchmaking:** `POST .../matchmaking`, then poll `GET .../matchmaking` every 3 s until `status` is `matched` (the response carries `sessionId`). `DELETE .../matchmaking` to cancel.
    - **Invite flow:** pick a friend from `GET /api/v1/me/friends` (see [Friends](friends.md)), `POST .../invites` with `{ "toUserId": "..." }`; the invitee calls `POST .../invites/{inviteId}/accept`, which creates the session. (If your game seats players in a [realtime room](realtime.md) first, invite them to the room instead — same notification, but accepting puts them at the table you are already in.)
    - **AI practice:** `POST .../sessions/ai`.
 4. **Load the session** — `GET .../sessions/{sessionId}`.
 5. **Connect the WebSocket** — `ws/v1/games?sessionId={guid}` with the launch token, then send whatever initial-sync command the game's backend defines — the chess reference implementation, for example, sends `{"type":"cmd","data":{"type":"sync"}}`.
-6. **Play** — exchange `cmd`/`game` frames as defined by the backend, surface `achievement` frames, and handle the container-only `resumed` frame.
+6. **Play** — exchange `cmd`/`game` frames as defined by the backend, surface `achievement` frames, and handle `resumed` by discarding prediction and requesting a full state.
 7. **Result** — the authoritative backend ends the game; the platform publishes elo updates to the leaderboard and, for a game with [replays](#replays), archives the final state.
 8. **Replay** — `GET .../replays/{sessionId}` for the full final state.
 
@@ -809,12 +829,12 @@ Server messages (delivered as `{"type":"game","data":{...}}`):
   "white": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
   "black": "9b2f8c1a-1111-4222-8333-444455556666",
   "ratings": { "white": 1200, "black": 1187 },
-  "board": "rnbqkbnrpppppppp................................PPPPPPPPRNBQKBNR",
+  "board": "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr",
   "turn": "w",
   "moves": [],
   "status": "active",
   "result": null,
-  "deadline": "2026-07-21T14:03:11Z",
+  "deadline": 1784642591000,
   "drawOfferBy": null,
   "ai": false,
   "aiName": null
@@ -829,3 +849,5 @@ Server messages (delivered as `{"type":"game","data":{...}}`):
 ```
 
 See [Game Scripts](game-scripts.md) for how the script defines these messages, and the [Chess Walkthrough](../tutorials/chess-walkthrough.md) for an end-to-end build.
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

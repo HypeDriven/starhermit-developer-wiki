@@ -2,7 +2,7 @@
 
 The friends API manages friend requests and accepted friendships. All routes are under `api/v1/me` and require authorization. Friendship state gates game invites, and it also controls access to open chat rooms and voice rooms.
 
-Errors are returned as `{"error":"..."}` with standard status codes (400/401/403/404/409/422/429).
+Error bodies vary; see [API conventions](conventions.md#requests-and-responses).
 
 ## Endpoints
 
@@ -79,3 +79,5 @@ Unfriends the user. Returns 204.
 ## Game-scoped launch tokens
 
 A game-scoped launch token may call `GET /api/v1/me/friends`, so a game can offer an invite-a-friend picker inside a session — the chess reference implementation uses it for exactly that. The other friend endpoints return 403 for launch tokens; see the game-scope fencing rules in [Authentication](auth.md).
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

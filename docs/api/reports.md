@@ -96,3 +96,7 @@ StarHermit.captureCrashes({ clientVersion: '1.4.2' });   // opt-in: uncaught err
 ```
 
 See the [JavaScript SDK](../sdk/javascript.md#crash-and-bug-reports).
+
+Shared [API conventions](conventions.md) describe response parsing, timestamps, pagination, and retries.
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

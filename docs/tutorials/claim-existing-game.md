@@ -221,7 +221,7 @@ A successful `200` returns the updated game:
   "repoName": "orbit-league",
   "displayName": "Orbit League",
   "launchPath": "index.html",
-  "gameSlug": "orbit-league",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "isVerifiedOwner": true,
   "metadataSource": "starhermit.txt",
   "hosting": {
@@ -295,9 +295,9 @@ entered by a non-owner; it replaces it with repository-controlled metadata.
 
 ### Claim fails around the slug/backend
 
-The manifest slug may already belong to another verified owner, the server script may be invalid,
-or container provisioning may be unavailable. Correct the manifest or resolve the conflicting slug,
-then call claim again.
+The script may be invalid or container hosting may be unavailable. Check the returned error and
+the backend declaration, then call claim again. The platform assigns the game's UUID as its slug;
+there is no manifest slug to choose or resolve.
 
 ### GitHub was linked but the wrong StarHermit account owns the link
 

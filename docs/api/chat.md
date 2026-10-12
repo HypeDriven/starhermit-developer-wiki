@@ -1,6 +1,6 @@
 # Chat
 
-StarHermit chat covers direct messages, group rooms, and game-session conversations, over a REST API (`api/v1/chat`) plus a server-to-client WebSocket push channel (`ws/v1/chat`). All REST endpoints require authentication. Errors are returned as `{"error":"..."}` with standard status codes.
+StarHermit chat covers direct messages, group rooms, and game-session conversations, over a REST API (`api/v1/chat`) plus a server-to-client WebSocket push channel (`ws/v1/chat`). All REST endpoints require authentication. Error bodies vary; see [API conventions](conventions.md#requests-and-responses).
 
 ## REST endpoints
 
@@ -225,7 +225,7 @@ Anyone can be invited to play in two ways, and this single event carries both �
 }
 ```
 
-`roomId` is `null` for `"session"` invites. A game-scoped launch token cannot open this socket, so game clients poll instead — `GET /api/v1/me/game-invites` returns the same payloads (both kinds), and `GET /api/v1/realtime/rooms/invites` returns the room invites alone.
+`roomId` is `null` for `"session"` invites. A game-scoped launch token cannot open this socket or read the account-wide `/me/game-invites` inbox. Game clients poll `GET /api/v1/games/{slug}/invites` for session invites and `GET /api/v1/realtime/rooms/invites` for their game's room invites. Account clients can read both kinds through `GET /api/v1/me/game-invites`.
 
 ## Chat inside a game session
 
@@ -251,3 +251,5 @@ Content-Type: application/json
 - [Voice](voice.md) — voice rooms anchor to chat conversations
 - [Friends](friends.md) — friendship gates direct chats and room joins
 - [Games](games.md) — game sessions and their `chatConversationId`
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

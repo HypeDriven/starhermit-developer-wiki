@@ -1,7 +1,8 @@
 // score-script.js — StarHermit platform script that posts a single-player game's
-// results to its own leaderboards. Canonical copy: tools/score-script.js; each game
-// ships a copy as score-script.js (declared in starhermit.txt as server=score-script.js)
-// with only the BOARDS block changed.
+// results to its own leaderboards. Copy it into your build as score-script.js,
+// declare server=score-script.js, and configure BOARDS to match your definitions.
+// Client-reported scores are range-checked, not independently verified. Use this
+// for casual boards; validate gameplay before awarding competitive results.
 //
 // Flow (StarHermit.submitScores in starhermit-sdk.js): the client opens a practice
 // session (POST /games/{slug}/sessions/ai), sends {type:'result', scores:{key:n}} on

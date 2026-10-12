@@ -27,13 +27,14 @@ Base URL: `https://api.starhermit.com`. All routes are under `/api/v1/...`.
 | GET | `/api/v1/me/achievements?titleId=` | JWT | The caller's unlocks (all owners, or one title) |
 | POST | `/api/v1/me/achievements/unlock` | JWT | Client-claimed unlock — **catalog titles only** |
 
-Errors are `{"error": "..."}` with standard status codes, except `POST /me/achievements/unlock`, which returns its `400` reason as a plain-text body rather than the JSON error envelope.
+Read errors defensively as described in [API conventions](conventions.md#requests-and-responses).
+`POST /me/achievements/unlock` returns its `400` reason as plain text.
 
 ## Server-authoritative game achievements
 
 This is the mechanism **any** game should use when it has a script or container backend. The
-server runtime is the only writer, so an unlock cannot be forged by a modified client, a replayed
-request, or a hostile peer.
+server runtime is the only writer. It must validate that the player earned each unlock; rejecting
+direct API submissions alone does not validate events reported by a modified client.
 
 ### 1. Declare them in your script
 
@@ -367,3 +368,7 @@ user holds, game-scoped and title-scoped alike**; pass `?titleId=` to narrow it 
 
 For a game's own achievement screen prefer `GET /api/v1/games/{slug}/achievements`, which also
 returns the definitions the player has *not* yet unlocked.
+
+Shared [API conventions](conventions.md) describe response parsing, timestamps, pagination, and retries.
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

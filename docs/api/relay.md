@@ -200,3 +200,7 @@ Confirm relay availability before shipping a feature that depends on it.
 - [Container Game Servers](container-games.md) — authoritative servers in other languages
 - [Game Scripts](game-scripts.md) — sandboxed server logic and requested tick rates
 - [Voice](voice.md) — voice rooms for in-game audio
+
+Shared [API conventions](conventions.md) describe response parsing, timestamps, pagination, and retries.
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

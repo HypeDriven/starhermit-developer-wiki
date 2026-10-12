@@ -2,7 +2,7 @@
 
 The profile API covers the authenticated user's own account (`/api/v1/me/...`), public lookups of other users, public keys, linked identities, privacy settings, entitlements, and the presence heartbeat. Account routes require authorization; the current terms document is public.
 
-Errors are returned as `{"error":"..."}` with standard status codes (400/401/403/404/409/422/429).
+Error bodies vary; see [API conventions](conventions.md#requests-and-responses).
 
 ## Endpoints
 
@@ -11,7 +11,7 @@ Errors are returned as `{"error":"..."}` with standard status codes (400/401/403
 | GET | `/api/v1/me` | JWT (`Permission-user.profile.read`) | Get your own profile |
 | PATCH | `/api/v1/me` | JWT (`Permission-user.profile.update`) | Update username, email, metadata, or nickname |
 | GET | `/api/v1/terms` | Anonymous | Read the current StarHermit terms and their hash |
-| POST | `/api/v1/me/terms/accept` | JWT (`Permission-user.profile.update`) | Accept the current StarHermit terms |
+| POST | `/api/v1/me/terms/accept` | Account JWT or player launch token | Accept the current StarHermit terms |
 | PUT | `/api/v1/me/avatar` | JWT (`Permission-user.profile.update`) | Upload your avatar |
 | GET | `/api/v1/me/avatar` | JWT (`Permission-user.profile.read`) | Get your avatar |
 | GET | `/api/v1/users/{id}/avatar` | JWT | Get any user's avatar |
@@ -113,9 +113,9 @@ Content-Type: application/json
 { "hash": "<hash-returned-with-the-displayed-text>" }
 ```
 
-Returns `200` with `{ "termsAcceptedHash", "termsAcceptedAt" }`. Requires
-`Permission-user.profile.update`; OAuth and public-key account sessions can accept, but a
-**game-scoped launch token cannot**. Acceptance is stored on the account and takes effect on the
+Returns `200` with `{ "termsAcceptedHash", "termsAcceptedAt" }`. OAuth and public-key account sessions
+and **player game-scoped launch tokens** can accept. A container server token cannot act for a player.
+Acceptance is stored on the account and takes effect on the
 next request with the same still-valid token; refreshing the token is unnecessary.
 
 A missing/blank hash or one longer than 64 characters returns `400`. A hash that does not exactly
@@ -142,12 +142,13 @@ revision. Other protected requests with pending acceptance return `403`:
 }
 ```
 
-A hosted game should direct the player to their StarHermit account UI to accept, then retry after
-confirmation. It should not repeatedly sign the player in or refresh tokens to fix this error.
+A hosted game can display the terms and submit the displayed hash with its player launch token
+when the player presses Accept, then retry. It may also send the player to their account UI.
+Repeated sign-in or token refresh does not fix pending acceptance.
 WebSocket upgrades are refused with HTTP `403` before opening; browsers may hide the response body,
 so handle acceptance through REST before connecting.
 
-Example for an account client (call `acceptDisplayedTerms` only from the user's Accept action):
+Example for an account or game client (call `acceptDisplayedTerms` only from the user's Accept action):
 
 ```js
 const api = 'https://api.starhermit.com';
@@ -199,10 +200,10 @@ A registered key is an API credential: its holder can complete the
 [public-key challenge flow](auth.md#public-key-login) and receive an ordinary access/refresh-token
 pair. This makes a separately labelled key suitable for a desktop client or deployment pipeline.
 
-**Only a session created directly by OAuth may change the key list.** A public-key,
-email-verification, game-launch, or game-server session gets `403`, even if it otherwise carries the
-profile-update permission. This prevents one stolen key from enrolling replacements or revoking the
-owner's keys. Listing remains available to any full account session.
+**Adding keys or revoking other keys requires an OAuth-authenticated session.** A public-key
+session may revoke only its own key through `DELETE /api/v1/me/public-keys/current`. It cannot
+enroll replacements or revoke other devices. Listing remains available to any full account session;
+game launch and server tokens cannot manage account keys.
 
 ### `GET /api/v1/me/public-keys`
 
@@ -264,6 +265,14 @@ The compromise-response operation: revoke every active key and end all sessions 
 It has an explicit `/all` path so an accidentally empty key ID cannot become a bulk revocation.
 Returns the same `{ revoked, sessionsEnded }` shape.
 
+### `DELETE /api/v1/me/public-keys/current`
+
+A full account session authenticated with a public key can revoke the key used for that session,
+without naming a key ID. Use this for **Forget this device**. It returns the same
+`{ revoked, sessionsEnded }` shape and invalidates sessions using that key. Discard stored tokens
+and the local private key after success. A session with no public key returns
+`409` with `code: "no_public_key_session"`; game launch tokens are refused.
+
 For a complete machine-deployment example, see
 [Upload builds from CI/CD with an OAuth-enrolled public key](../tutorials/ci-cd-build-upload.md).
 
@@ -287,8 +296,8 @@ For a complete machine-deployment example, see
 
 ```json
 {
-  "provider": "steam",
-  "providerUserId": "76561198000000000",
+  "provider": "epic",
+  "providerUserId": "your-epic-account-id",
   "metadata": null
 }
 ```
@@ -331,10 +340,10 @@ Each field is a `PrivacyLevel` enum: `0` = Private, `1` = FriendsOnly, `2` = Pub
 [
   {
     "id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+    "userId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "softwareTitleId": "6e7f8a9b-0c1d-4e2f-8a3b-4c5d6e7f8a9b",
-    "softwareTitleName": "StarHermit Chess",
     "grantedAt": "2026-07-01T12:00:00Z",
-    "grantedBy": "store",
+    "grantedBy": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
     "isRevoked": false,
     "revokedAt": null,
     "revokedBy": null
@@ -355,9 +364,14 @@ Of the endpoints on this page, a game-scoped launch token may only call:
 - `GET /api/v1/users/{id}/avatar`
 - `GET /api/v1/users/{id}/profile`
 - `GET /api/v1/me/friends` (see [Friends](friends.md))
+- `GET /api/v1/terms`
+- `POST /api/v1/me/terms/accept`
+- `POST /api/v1/me/heartbeat`
 
 Everything else returns 403 under the game-scope fencing described in [Authentication](auth.md).
 
 ## Display-name convention
 
 Game UIs typically display **nicknames** rather than usernames when rendering opponents, falling back to something like `"Player " + id.slice(0,8)` when no nickname is set. The chess reference implementation follows this convention; other game clients should do the same.
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

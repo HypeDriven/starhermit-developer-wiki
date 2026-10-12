@@ -2,7 +2,7 @@
 
 This page walks through the full lifecycle of integrating a game with StarHermit, step by step — publish, launch, menu, matchmaking, play, chat, voice, ratings, replays. Everything shown applies to **any** game: your game substitutes its own slug, its own commands, and its own rules script.
 
-The running example is the open-source chess reference implementation, [starhermit-chess](https://github.com/HypeDriven/starhermit-chess): a correspondence-chess game (24 hours per move, elo-rated) built as a no-build static browser game in vanilla HTML/JS/CSS. For each step the walkthrough shows the exact calls a game client makes and the file in the reference repo that makes them. Wherever chess-specific values appear — the `chess` slug, move commands, the board encoding, the "hal" AI, the 24-hour move deadline — they are example values that your own game defines for itself in its own script.
+The running example is the open-source chess reference implementation, [starhermit-chess](https://github.com/HypeDriven/starhermit-chess): a correspondence-chess game (24 hours per move, elo-rated) built as a no-build static browser game in vanilla HTML/JS/CSS. For each step the walkthrough shows the exact calls a game client makes and the file in the reference repo that makes them. Wherever chess-specific values appear — the reference game's UUID, move commands, the board encoding, the "hal" AI, the 24-hour move deadline — they are example values that your own game defines for itself in its own script.
 
 Read it alongside the API reference pages it links to. The checklist at the end condenses everything into what your own game needs to replicate.
 
@@ -54,7 +54,7 @@ Full flow: [github-games.md](../api/github-games.md) and [publisher.md](../api/p
 
 The chess reference flow receives credentials from the platform launcher:
 
-1. The launcher calls `POST /api/v1/games/chess/launch-token` (shown with the example slug `chess`; your game substitutes its own) with the user's full platform JWT.
+1. The launcher calls `POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/launch-token` (shown with the reference game's UUID; substitute your own) with the user's full platform JWT.
 2. It gets back a short-lived, **game-scoped** token:
 
 ```json
@@ -76,7 +76,8 @@ A game opened directly can instead offer [browser sign-in](../api/auth.md#sign-i
 which returns `#access_token` rather than the launcher's `#game_token`. Handle both entry paths if
 you support both. Renew using the returned lifetime and respect the default 12-hour renewal-chain
 ceiling. A `403 terms_acceptance_required` requires the player to [accept through their account](../api/profile.md#terms-acceptance);
-a game token cannot do this and signing in again does not resolve it.
+or display the terms in-game and accept with the player launch token. Signing in again does not
+record acceptance.
 
 Auth reference: [auth.md](../api/auth.md), [games.md](../api/games.md).
 
@@ -87,12 +88,12 @@ A game's menu typically opens with a small batch of GETs against its own slug. I
 **Game info + my stats:**
 
 ```http
-GET /api/v1/games/chess
+GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94
 ```
 
 ```json
 {
-  "slug": "chess",
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
   "name": "StarHermit Chess",
   "enabled": true,
   "leaderboardId": "<guid>",
@@ -113,7 +114,7 @@ The `me` block is the entire player card — elo, record, and how many of the al
 **My sessions:**
 
 ```http
-GET /api/v1/games/chess/sessions/mine
+GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/mine
 ```
 
 ```json
@@ -125,7 +126,7 @@ GET /api/v1/games/chess/sessions/mine
     "createdAt": "…",
     "finishedAt": null,
     "myTurn": true,
-    "deadline": "…"
+    "deadline": 1784642591000
   }
 ]
 ```
@@ -143,13 +144,13 @@ using the `leaderboardId` from the game-info response.
 **Recent replays:**
 
 ```http
-GET /api/v1/games/chess/replays/mine?limit=10
+GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/mine?limit=10
 ```
 
 **Pending invites:**
 
 ```http
-GET /api/v1/games/chess/invites
+GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites
 ```
 
 References: [games.md](../api/games.md), [leaderboards.md](../api/leaderboards.md).
@@ -163,7 +164,7 @@ This walkthrough uses matchmaking, invite-accept, and AI practice to create sess
 In the reference implementation, `App.startMatchmaking` in `app.js`:
 
 ```http
-POST /api/v1/games/chess/matchmaking
+POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking
 ```
 
 The response is either a ticket:
@@ -178,7 +179,7 @@ or an immediate match:
 { "status": "matched", "sessionId": "<guid>" }
 ```
 
-While queued, clients poll the matchmaking endpoint — the reference implementation polls `GET /api/v1/games/chess/matchmaking` every 3 seconds, and `DELETE /api/v1/games/chess/matchmaking` cancels the ticket. The reference client also makes sure the player is never stuck staring at a spinner: after 30 seconds unmatched, a **"Play against hal"** button appears ("hal" is the chess example's built-in AI opponent — see §12), and `POST /api/v1/games/chess/sessions/ai` returns `{ "sessionId" }`.
+While queued, clients poll the matchmaking endpoint — the reference implementation polls `GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking` every 3 seconds, and `DELETE /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking` cancels the ticket. The reference client also makes sure the player is never stuck staring at a spinner: after 30 seconds unmatched, a **"Play against hal"** button appears ("hal" is the chess example's built-in AI opponent — see §12), and `POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/ai` returns `{ "sessionId" }`.
 
 ### b. Friend invite
 
@@ -191,15 +192,15 @@ GET /api/v1/me/friends
 Then send the invite:
 
 ```http
-POST /api/v1/games/chess/invites
+POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites
 { "toUserId": "<guid>" }
 ```
 
 The recipient accepts (or declines) from their own client:
 
 ```http
-POST /api/v1/games/chess/invites/{id}/accept   → { "sessionId": "<guid>" }
-POST /api/v1/games/chess/invites/{id}/decline  → 204
+POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/{id}/accept   → { "sessionId": "<guid>" }
+POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/{id}/decline  → 204
 ```
 
 Accepting is what creates the session. The `&session_id=` launch-hash deep-link (§3) drops the invited player straight into it.
@@ -214,7 +215,8 @@ to the clipboard. The web dashboard handles everything the recipient needs — s
 
 ### c. The rule
 
-Sessions are created only by matchmaking, invite-accept, or `sessions/ai`. Design your lobby UI around those three doors — don't go looking for a lobby-creation call, because there isn't one.
+Sessions are created by matchmaking, invite-accept, `sessions/ai`, or starting a realtime room with
+a server backend. For a lobby with seats, use the [realtime rooms API](../api/realtime.md).
 
 ## 6. Playing over the gameplay WebSocket
 
@@ -223,7 +225,7 @@ The play loop is the same for every scripted game: fetch the session, open the s
 **Fetch the session:**
 
 ```http
-GET /api/v1/games/chess/sessions/{sessionId}
+GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/{sessionId}
 ```
 
 ```json
@@ -283,11 +285,11 @@ In the chess example, `promo` is only present on promotion moves.
   "black": "<userId>",
   "ratings": { "white": 1420, "black": 1388 },
   "board": "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr",
-  "turn": "white",
+  "turn": "w",
   "moves": [ { "from": "e2", "to": "e4", "promo": null, "san": "e4", "at": "…" } ],
   "status": "active",
   "result": null,
-  "deadline": "…",
+  "deadline": 1784642591000,
   "drawOfferBy": null,
   "ai": false,
   "aiName": null
@@ -358,17 +360,17 @@ Reference: [voice.md](../api/voice.md).
 
 ## 9. Ratings and leaderboard
 
-Game clients never submit a score. When a game ends, the **script** returns `eloUpdates` and the **platform** publishes them to the game's leaderboard. Clients can never write leaderboard entries directly — this is what makes the ratings trustworthy.
+Game clients never submit a score. When a game ends, the **script** returns `eloUpdates` and the **platform** publishes them to the game's leaderboard. Clients can never write leaderboard entries directly ; the server must also validate the gameplay behind its rating updates.
 
 The client side is therefore trivial: read the entries (§4) and render them, as the reference implementation does. See [leaderboards.md](../api/leaderboards.md).
 
 ## 10. Replays
 
-A game that declares `replays: true` in its script has every finished session kept by the platform; clients just fetch and render it. Check `replaysEnabled` on `GET /api/v1/games/chess` before offering the screen — an operator can answer for a game either way, and the endpoints below return `404` when replays are off. In the reference implementation the fetching is `App.loadReplays` / `App.openReplay` in `app.js`:
+A game that declares `replays: true` in its script has every finished session kept by the platform; clients just fetch and render it. Check `replaysEnabled` on `GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94` before offering the screen — an operator can answer for a game either way, and the endpoints below return `404` when replays are off. In the reference implementation the fetching is `App.loadReplays` / `App.openReplay` in `app.js`:
 
 ```http
-GET /api/v1/games/chess/replays/mine?limit=10
-GET /api/v1/games/chess/replays/{sessionId}
+GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/mine?limit=10
+GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/{sessionId}
 ```
 
 A replay payload (shown with the chess example's result shape):
@@ -392,7 +394,7 @@ A replay payload (shown with the chess example's result shape):
 }
 ```
 
-The viewer steps `state.game.moves` through the shared `chessRules` engine locally — the same `server.js` rules file, running in the browser — so replays need no server round-trips and can never drift from the real rules. This is the second payoff of the one-file-two-roles design from §1, a pattern any game can adopt with its own rules file.
+The viewer steps `state.game.moves` through the shared `chessRules` engine locally — the same `server.js` rules file, running in the browser — so replays need no server round-trips ; preserve the rules version used for an archived match when rules change. This is the second payoff of the one-file-two-roles design from §1, a pattern any game can adopt with its own rules file.
 
 ## 11. Player profiles
 
@@ -412,9 +414,10 @@ Reference: [profile.md](../api/profile.md).
 
 ## 12. AI practice opponents
 
-`POST /api/v1/games/chess/sessions/ai` (shown with the example slug) creates a session where the platform flags one seat `ai: true` in `createSession`. The script itself plays that seat — the AI behavior is something your own script defines. In the chess example, the seat is played by "hal", a greedy material-capture engine that replies **within the same invocation** that processes the human's move.
+`POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/ai` (shown with the example slug) creates a session where the platform flags one seat `ai: true` in `createSession`. The script itself plays that seat — the AI behavior is something your own script defines. In the chess example, the seat is played by "hal", a greedy material-capture engine that replies **within the same invocation** that processes the human's move.
 
-AI games are rated normally, and in the reference implementation hal has its own persistent elo, which makes it a genuine ladder opponent rather than a throwaway bot.
+The game's script decides whether practice changes the human player's rating. The AI seat cannot
+receive account player-state, rating, or achievement writes. Keep any AI statistics in session state.
 
 ## 13. What the reference game does NOT use
 
@@ -423,7 +426,7 @@ The chess reference implementation touches none of these, but they are all avail
 - **Achievements** — any game with a `server=` script can declare them (`game.achievements`) and grant them server-authoritatively from any lifecycle hook; chess simply doesn't. Catalog titles have a separate client-claimed path: [achievements.md](../api/achievements.md), [game-scripts.md](../api/game-scripts.md#achievements).
 - **Catalog / entitlements** — for games distributed and sold through the catalog: [catalog.md](../api/catalog.md).
 - **Relay** — the high-frequency relay channel for fast-paced, real-time games where the per-command script round-trip is too slow: [relay.md](../api/relay.md).
-- **External libraries** — script sandbox escapes for heavier logic: [external-libraries.md](../api/external-libraries.md).
+- **External libraries** — linking Steam, Epic, or GOG game libraries: [external-libraries.md](../api/external-libraries.md).
 
 The chess example, a turn-based board game, needs none of them. If your game is real-time, catalog-distributed, or needs binary payloads, those pages are where to look next.
 
@@ -440,4 +443,5 @@ The chess example, a turn-based board game, needs none of them. If your game is 
 - [ ] End games by returning a `result` — that one return value is what powers both replays and elo.
 - [ ] Declare `replays: true` in your script if you want finished sessions kept, and branch the replay UI on `replaysEnabled`.
 
-Get these right and your game has auth, matchmaking, sessions, ratings, and replays with zero backend code of your own. The [getting started guide](../getting-started.md) walks the first deploy end to end.
+The platform supplies authentication, sessions, matchmaking, and storage; your script supplies the
+game rules. Start with [the browser quickstart](browser-quickstart.md) for a complete first upload.

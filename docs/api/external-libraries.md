@@ -73,4 +73,6 @@ Launch response:
 
 Launch URI formats by provider: `steam://run/{id}`, `com.epicgames.launcher://apps/{id}?action=launch`, `goggalaxy://openGameView/{id}`. Launching records an external launch activity — see [activity.md](activity.md). External games use the uniform game key `"provider:externalId"` for ratings and feeds — see [catalog.md](catalog.md).
 
-Errors are `{"error": "..."}` with standard status codes.
+See [API conventions](conventions.md#requests-and-responses) for error parsing.
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

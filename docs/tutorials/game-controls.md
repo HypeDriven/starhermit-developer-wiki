@@ -150,15 +150,19 @@ window.addEventListener("keyup", (e) => {
 The built-in defaults keep the game playable offline, outside StarHermit, or if the controls
 request fails. Keep them in step with your `control.*` lines.
 
-**A rebinding screen.** List `actions` with their `label`. When the player presses a new key, save
-only the actions they changed:
+**A rebinding screen.** List `actions` with their `label`. Keep the complete override map, or
+read and preserve the current effective map before changing one action:
 
 ```js
 async function saveBinding(slug, action, codes) {
+  const current = await fetch(`/api/v1/games/${slug}/controls`, { headers: auth });
+  if (!current.ok) throw new Error(`Controls read failed: ${current.status}`);
+  const bindings = Object.fromEntries((await current.json()).actions.map(a => [a.action, a.codes]));
+  bindings[action] = codes;
   const res = await fetch(`/api/v1/games/${slug}/controls`, {
     method: "PUT",
     headers: { ...auth, "Content-Type": "application/json" },
-    body: JSON.stringify({ bindings: { [action]: codes } }),
+    body: JSON.stringify({ bindings }),
   });
   if (!res.ok) throw new Error((await res.json()).error);   // e.g. a key already in use
   return res.json();                                         // the new effective map
@@ -168,6 +172,10 @@ async function saveBinding(slug, action, codes) {
 `PUT` replaces the player's overrides with the actions you send, so include every action the player
 has changed, not just the latest one. The rest stay on your defaults. `DELETE` on the same path
 resets everything to the defaults.
+
+Serialize changes from your screen; two simultaneous reads/writes can still overwrite each other.
+The browser SDK's `setControl()` serializes its own changes and preserves the current effective map.
+Sending the effective map pins those values as overrides; use `DELETE` to return to manifest defaults.
 
 The platform refuses a save (`400`) that would leave one key on two actions **after** the player's
 changes are merged with your defaults. For example, binding `jump` to `KeyJ` while `fire` still

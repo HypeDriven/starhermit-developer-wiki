@@ -4,16 +4,13 @@ Games check shared text, JSON documents and PNG/JPEG/WebP images before showing 
 players. Only a current `allow` authorizes sharing. `review`, `block`, unknown, pending, failed,
 expired and incompatible-policy results all keep content hidden.
 
-**Production has no configured classifier.** Checks currently return `503 overloaded` with
-`Retry-After: 300`, pending the operator's provider decision. This response is retained by operator
-request; it does not promise that a classifier will be configured after five minutes. Generation
-and its marketplace remain proposed, and their authenticated placeholder routes also return
-`overloaded`. No production model, sponsor, payment processing or staff evidence policy is enabled.
+**Moderation checks are currently unavailable on the public deployment.** Read discovery before
+enabling sharing. Checks return `503 overloaded` with `Retry-After: 300`; this does not promise
+availability after five minutes. Keep content hidden until you receive a current allow decision.
+Generation is also [unavailable](../availability.md#reserved-generation-routes).
 
-The availability read, game-attributed checks, evidence screening and live polling rules below are
-part of the moderation follow-up backend release. A deployment on an earlier backend revision may
-lack discovery and `user-content`; it must be upgraded before relying on these protections. Never
-open legacy unscreened evidence to owners.
+The contract below describes supported moderation calls and their behavior when available. Only
+accessible, screened evidence is returned through the owner review APIs.
 
 ## Callers and routes
 
@@ -57,8 +54,7 @@ only by the game's authorized server identity. Token refresh does not change tha
 
 `limits` contains the effective moderation registry values, beyond the two illustrated. Player
 values include that player's overrides; server discovery reveals game allowances, never another
-player's. A zero game item budget also disables checking (`game_budget_disabled`). Baseline overlap
-and outage grace are disabled until the operator approves them.
+player's. A zero game item budget also disables checking (`game_budget_disabled`). Use the returned policy-overlap and grace values; the defaults provide neither.
 
 ## Check exact content
 
@@ -78,8 +74,7 @@ Content-Type: application/json
 
 Item IDs are unique within a batch and at most 128 characters. Text carries only `text`; images
 carry `contentType` and strict standard padded `dataBase64`, without whitespace. Declared image
-types must match their headers, and bytes and pixels are bounded. Intake checks image headers;
-complete image coverage remains a production-classifier readiness requirement. WAV, Ogg Vorbis,
+types must match their headers, and bytes and pixels are bounded. WAV, Ogg Vorbis,
 glTF models and fonts are unsupported (`415 unsupported_kind`); audio support is deferred.
 
 The hash is `sha256:` followed by 64 lowercase hex digits of SHA-256 over the exact content bytes:
@@ -169,14 +164,14 @@ Owner routes require a full JWT and game ownership, under `/api/v1/me/github-gam
 
 Lists take `status`, `page` and `pageSize` (default 20, maximum 100). Only an owner's stricter policy
 hold that currently passes the platform baseline may be allowed; baseline holds require platform
-staff, whose content-case surface is not implemented. Child-safety cases are never owner-visible.
+review outside the game-owner API. Restricted evidence is never owner-visible.
 A stale revision is `409 revision_conflict`. Deciding a review erases its held content; expiry also
 prevents downloading or approving it. Dismissing a flag does not undo another block, and no owner
 route lifts a human block.
 
 Evidence is an `application/octet-stream` attachment with `nosniff`, sandbox CSP and `no-store`.
 Keep notes/reasons as untrusted text in your review UI. Do not render them as markup or use them as
-attachment URLs. Content and private notes are redacted from backend audit records.
+attachment URLs.
 
 ## Default limits and errors
 
@@ -199,9 +194,8 @@ the actual values in force.
 | Check delivery / allow validity | 1 hour / 1 hour |
 | Ordinary review hold / flag retention | 7 days / 30 days |
 
-Queue/storage exhaustion refuses new evidence rather than evicting active cases. Staff evidence
-is restricted; the production staffing, legal-hold and retention policy remains an operator decision.
-The Development marker classifier is refused outside Development.
+Queue/storage exhaustion refuses new evidence rather than evicting active cases. Respect the
+accessibility and expiry reported by each evidence/review endpoint.
 
 Errors are `{ error, code, retryAfterSeconds? }`. `400` covers malformed content/qualifiers, `401`
 missing authentication, `403` scope/delegation or baseline restrictions, `404` absent/inaccessible
@@ -209,3 +203,7 @@ records, `409` hash/revision/policy conflicts, `410` expired content/checks/curs
 pixel limits, and `415` unsupported kinds/types. `429` covers rates/budgets/queues/storage with
 `Retry-After`. Classifier outages are `503 moderation_unavailable`; the current unconfigured
 placeholder remains `503 overloaded`. No error, retry or payment substitutes for an allow decision.
+
+Shared [API conventions](conventions.md) describe response parsing, timestamps, pagination, and retries.
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

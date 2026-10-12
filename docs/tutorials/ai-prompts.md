@@ -40,9 +40,10 @@ Read docs/api/github-games.md and docs/api/auth.md (pasted below), then:
    - Renews before the returned expiresInSeconds elapses via
      POST /api/v1/games/<slug>/launch-token. Respect the renewal-chain limit
      (default 12 hours); require sign-in when renewal is no longer allowed.
-   - Handles 403 terms_acceptance_required by directing the player to their
-     account UI to accept the current terms, then retrying after confirmation.
-     A launch token cannot accept terms; refreshing cannot fix this error.
+   - Handles 403 terms_acceptance_required by displaying GET /api/v1/terms
+     and offering explicit acceptance. POST the displayed hash to
+     /api/v1/me/terms/accept with the player token, then retry. Never silently
+     accept terms or use token refresh as a substitute for consent.
    - Opens sockets with a fresh one-use ?ticket= obtained from
      POST /api/v1/realtime/connection-tickets, choosing wss over HTTPS.
      ?access_token= remains supported; never log either credential.
@@ -320,8 +321,8 @@ Read docs/api/games.md (pasted below). Build a replay viewer:
    chess reference implementation stores it at state.game.moves; my
    script defines its own shape), applying each to the shared rules
    module from server.js running
-   client-side — the same file the platform executes — so playback can
-   never drift from the real rules. Add first/prev/next/last controls and
+   client-side. Preserve the rules version for old replays when gameplay
+   rules change; current code alone does not guarantee historical playback. Add first/prev/next/last controls and
    auto-play.
 4. Show the result block as a header (outcome, reason, and whatever
    else my script's result object carries — the chess reference
@@ -383,15 +384,17 @@ which runs its own logic client-side:
 
 0. The gameKey is `game:<game_scope>` — my launch token's game_scope
    claim — and the launch token works for it; no other key is allowed.
-1. Save: serialize the save slot, base64-encode it, and
-   PUT /api/v1/me/cloud-saves/{gameKey}. The payload must stay ≤ 10 MB.
-2. Load: GET /api/v1/me/cloud-saves/{gameKey} on startup; 404 means no
-   save yet — start fresh.
-3. There is exactly ONE slot per game and writes are last-write-wins.
-   Debounce saves (e.g. on meaningful progress and on page hide), and on
-   load conflict prefer the remote save unless the user explicitly keeps
-   local.
-4. Surface sync status (saved / saving / failed) in the UI.
+1. Load and validate before any upload. GET the slot on startup; 404 alone
+   means no save. Block writes on other errors or unsupported save formats.
+2. Keep the ETag of the loaded bytes. Serialize/base64-encode the save and
+   PUT with If-Match: <etag>, or If-None-Match: * for a confirmed empty slot.
+   Decoded bytes must fit the effective limit (10 MiB default).
+3. On 412, preserve local progress, load the current version, and offer
+   adopt/merge. Never retry unconditionally. Serialize writes, save at
+   foreground checkpoints, and treat page-exit uploads as best effort.
+4. Surface loading/saving/saved/failed/conflict; never mark saved before
+   acknowledgement. Unsigned single-player play keeps progress in memory
+   and makes no save or platform score requests.
 ```
 
 ## 12. Achievements
@@ -425,8 +428,9 @@ Wire server-authoritative achievements into [my game]:
    the live-unlock signal — show a toast with data.name/description/points.
    Unlocks granted in createSession arrive with no frame, so always do the
    GET on load too.
-5. After changing the declaration, re-add the game from its repo to
-   publish the update, then confirm with the GET that the definitions changed.
+5. After changing the declaration, publish a new build or redeploy the
+   existing game, then confirm with the GET that the definitions changed.
+   Do not register the same repository again.
 ```
 
 ### 12b. Client-claimed achievements (catalog titles only)
@@ -440,9 +444,9 @@ achievements into [my game]:
    success, and queue retries offline if the call fails. This works only
    for achievements owned by a catalog title the player is entitled to —
    the endpoint rejects any achievement owned by a scripted game.
-2. List the player's achievements with
-   GET /api/v1/me/achievements?titleId=<my title id> and render them in
-   [my profile/awards screen], locked vs unlocked.
+2. Read definitions from GET /api/v1/software/<titleId>/achievements and
+   the player's unlocks from GET /api/v1/me/achievements?titleId=<titleId>.
+   Join by achievementDefinitionId to render locked and unlocked entries.
 3. Keep the achievement definitions (ids, names, descriptions) in one
    config module so the unlock call sites stay readable.
 ```
@@ -468,7 +472,8 @@ step before continuing:
    /api/v1/games/<slug> paths, Authorization headers, renewal before expiry
    via POST …/launch-token within the renewal-chain limit, one-use WS tickets.
    Support direct-browser sign-in and #access_token as auth.md describes.
-   Handle terms_acceptance_required through the player's account UI.
+   Handle terms_acceptance_required by displaying the current terms and
+   accepting the displayed hash only on the player's explicit action.
 2. Lobby: GET /api/v1/games/<slug> (leaderboardId + me stats),
    GET …/sessions/mine (render myTurn/deadline), friends leaderboard via
    GET /api/v1/leaderboards/{id}/entries?friendsOnly=true, recent replays

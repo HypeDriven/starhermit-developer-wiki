@@ -75,7 +75,7 @@ using Starhermit;
 var client = StarhermitClient.Create(new StarhermitOptions
 {
     ApiBaseUri = new Uri("https://api.starhermit.com/api/v1/"),
-    GameSlug   = "chess",
+    GameSlug   = "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
     TokenStore = myPlatformSecureStore,
     LogLevel   = StarhermitLogLevel.Warning
 });
@@ -136,7 +136,7 @@ var session = await client.Auth.SignInWithPublicKeyAsync(signer);   // or (), us
 **Game launch token** — minted per game and fenced into that game's surface:
 
 ```csharp
-var chess = client.Games.ForSlug("chess");
+var chess = client.Games.ForSlug("83fd04b1-3cbe-4b09-a251-3733ad4b9d94");
 await chess.AcquireLaunchTokenAsync();
 var fenced = chess.WithLaunchToken();     // subsequent calls authorise with the launch token
 ```
@@ -167,8 +167,7 @@ var displayedHash = terms["hash"].AsStringOrNull();
 
 Do not use a sample revision label such as `terms-2026-08`: only the current hash from the API is
 accepted. On `409`, fetch and display the new text for another acceptance. On
-`403 terms_acceptance_required`, resolve acceptance before retrying; player launch tokens cannot
-accept. See [Profile](../api/profile.md#terms-acceptance) for the complete flow.
+`403 terms_acceptance_required`, resolve acceptance before retrying; player launch tokens can also submit acceptance through the API after explicit consent. See [Profile](../api/profile.md#terms-acceptance) for the complete flow.
 
 ## Where each wiki page lives in the SDK
 
@@ -203,7 +202,7 @@ clients talk to it through the games API above.
 The lifecycle from [the integration walkthrough](../tutorials/chess-walkthrough.md), in C#:
 
 ```csharp
-var chess = client.Games.ForSlug("chess");
+var chess = client.Games.ForSlug("83fd04b1-3cbe-4b09-a251-3733ad4b9d94");
 await chess.AcquireLaunchTokenAsync();
 
 var ticket = await chess.EnqueueMatchmakingAsync();
@@ -213,7 +212,7 @@ while (!ticket.IsMatched)
     ticket = await chess.GetMatchmakingAsync(ct) ?? ticket;
 }
 
-using var game = client.CreateGameConnection(ticket.SessionId!.Value, "chess", useLaunchToken: true);
+using var game = client.CreateGameConnection(ticket.SessionId!.Value, "83fd04b1-3cbe-4b09-a251-3733ad4b9d94", useLaunchToken: true);
 game.FrameReceived       += frame => ApplyServerState(frame);
 game.AchievementUnlocked += unlock => ShowToast(unlock);
 game.PresenceChanged     += (userId, online) => UpdateOpponentDot(userId, online);

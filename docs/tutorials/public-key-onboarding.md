@@ -62,6 +62,7 @@ expects DER, so convert it — the module below does.
 ```js
 // One key per installation. The private key can sign but is never exported.
 export async function createDeviceKey(keyType = 'Ed25519') {
+  if (!['Ed25519', 'ECDSA-P256'].includes(keyType)) throw new Error('This helper supports Ed25519 or ECDSA-P256');
   const algorithm = keyType === 'Ed25519'
     ? { name: 'Ed25519' }
     : { name: 'ECDSA', namedCurve: 'P-256' };
@@ -145,12 +146,12 @@ serialization of `payload`:
 - **PascalCase** member names, in exactly the order `ChallengeId`, `Fingerprint`, `Issuer`,
   `Audience`, `Expiry`, `Nonce`, `ClientTimestamp`;
 - every value copied **exactly as served** — do not parse and reformat the dates;
-- every `+` in the nonce written as `+`. The `+` in the dates stays as it is.
+- every `+` in the nonce written as `\u002B`. The `+` in the dates stays as it is.
 
 For the challenge above, the signed bytes are the UTF-8 encoding of:
 
 ```text
-{"ChallengeId":"4fc4d72b-4c12-41ca-a500-dc13cccc3865","Fingerprint":"9c0b7a…","Issuer":"starhermit","Audience":"starhermit","Expiry":"2026-10-09T14:21:41.9264875+00:00","Nonce":"NmL+tgMum6HXU/pa3T9xjQ==","ClientTimestamp":"2026-10-09T14:16:41.9265739+00:00"}
+{"ChallengeId":"4fc4d72b-4c12-41ca-a500-dc13cccc3865","Fingerprint":"9c0b7a…","Issuer":"starhermit","Audience":"starhermit","Expiry":"2026-10-09T14:21:41.9264875+00:00","Nonce":"NmL\u002BtgMum6HXU/pa3T9xjQ==","ClientTimestamp":"2026-10-09T14:16:41.9265739+00:00"}
 ```
 
 Get any of that wrong and the answer is `401 "Invalid signature."`, which no retry will fix.
@@ -310,11 +311,11 @@ require a session that signed in through a provider such as Google or GitHub:
 
 | Action | Key-only account |
 |---|---|
-| Add or remove a key from a signed-in session (`POST`/`DELETE /me/public-keys`) | `403` — add a key by registering again; remove keys only all at once, as above |
+| Add a key or revoke other devices (`POST /me/public-keys`, `DELETE /me/public-keys/{id}` or `/all`) | `403` — enroll through emailed registration, or use an OAuth-authenticated session |
 | Change the account's email address | `403 oauth_session_required` — not possible until a provider is linked |
-| Remove a single key | Not possible — revoke all, then re-register the devices you keep |
+| Revoke this installation's own key | `DELETE /api/v1/me/public-keys/current`, using its full public-key account session; discard local credentials after success |
 
-The way out of all three is to link a provider. When a key-only account links one, the link is held
+To manage other credentials or change the email, link a provider. When a key-only account links one, the link is held
 until the player confirms it from their email. After that, a provider sign-in can do everything above.
 See [`authorize?link=true`](../api/auth.md#get-apiv1authoauthproviderauthorizelinkclient).
 

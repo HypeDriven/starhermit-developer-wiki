@@ -291,7 +291,7 @@ the settings above start with three humans, two AI players and three empty seats
 match can start before the deadline and gets no AI. Setting AI to `0` allows a human-only match
 with empty seats, including a single human if the game supports that.
 
-The platform checks on enqueue and on the matchmaking worker's sweep (default every **5 seconds**),
+The platform checks on enqueue and during periodic matchmaking checks (default every **5 seconds**),
 so a start may follow the deadline by up to a sweep interval under normal load. Elo compatibility
 and each ticket's allowed queue subset still apply. Parties stay together on one team; at the
 deadline a smaller party or solo player may occupy a larger team, with the remaining seats
@@ -441,7 +441,7 @@ endpoints the clients call.
 
 ## Limits
 
-One game may occupy **2 GB** on starhermit.com (operator-tunable; code default 4 GB), and that is
+One game may occupy **2 GB** on starhermit.com (allowance may vary by deployment), and that is
 also the ceiling on a single replace upload. A [`?mode=merge`](api/github-games.md#partial-updates-modemerge)
 patch is bounded by the resulting tree, so a small upload that would make the live game exceed the
 allowance is refused. Deeply

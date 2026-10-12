@@ -18,6 +18,16 @@ not the subject of the docs.
 
 ## Where to start
 
+- **[Browser quickstart](docs/tutorials/browser-quickstart.md)** — download a complete game with account sign-in, explicit terms acceptance, safe cloud saves, and untracked single-player play.
+- **[Choose an integration](docs/choosing-an-integration.md)** — compare browser-only games, host-routed rooms, scripts, containers, and catalog titles.
+- **[Credentials and identifiers](docs/credentials.md)** — which tokens can call which APIs, and how game, user, session, room, and participant IDs differ.
+- **[API conventions](docs/api/conventions.md)** — response/error parsing, timestamp units, pagination, update semantics, and retries.
+- **[Troubleshooting](docs/troubleshooting.md)** — diagnose sign-in, scope, save conflicts, sockets, uploads, and container startup.
+- **[Session lifecycle and recovery](docs/session-lifecycle.md)** — pause/resume, disconnect versus leave, snapshot limits, and recovery expiry.
+- **[Availability and trust](docs/availability.md)** — available, optional, preview, and reserved APIs; what makes a score trustworthy.
+- **[REST and WebSocket contracts](docs/api/contracts.md)** — downloadable OpenAPI, JSON frame schemas, and binary layouts.
+- **[Safe cloud-save syncing](docs/tutorials/cloud-save-sync.md)** — a complete load/validate/conditional-write helper with conflict handling.
+
 - **[The `starhermit.txt` manifest](docs/starhermit-txt.md)** — the one file every published game
   needs, where it has to sit in the folder you upload, and why that folder should be your
   distributable build: everything next to the manifest is uploaded and served to players. Also covers asset cache lifetimes and additional CORS origins.
@@ -78,11 +88,13 @@ same API, with the token refresh, retry, reconnection and redaction rules alread
 
 Conventions shared by all endpoints: REST under `api/v1/...` at `https://api.starhermit.com`,
 WebSockets under `ws/v1/...`, JWT bearer auth
-(`?access_token=` allowed on `/ws/**`), camelCase JSON, errors as `{"error":"..."}`.
+(`?access_token=` allowed on `/ws/**`), camelCase JSON; [response and error conventions](docs/api/conventions.md).
 
 | Area | Page | What's inside |
 |---|---|---|
-| Content moderation | [moderation.md](docs/api/moderation.md) | Exact hashes, scoped checks/discovery, screened flags, owner review, approval validity and withdrawal recovery; no production classifier |
+| Shared conventions | [conventions.md](docs/api/conventions.md) | Base URLs, body/error parsing, timestamps, paging, updates, retries and concurrency |
+| Machine-readable contracts | [contracts.md](docs/api/contracts.md) | Public REST operations and models, WebSocket frame schemas, and binary layouts |
+| Content moderation | [moderation.md](docs/api/moderation.md) | Exact hashes, scoped checks/discovery, screened flags, owner review, approval validity and withdrawal recovery; current service availability |
 | Auth | [auth.md](docs/api/auth.md) | Public-key registration/login, live OAuth providers (`GET /auth/oauth/providers`), refresh rotation, launch tokens & game-scope fencing, WebSocket connection tickets |
 | Games | [games.md](docs/api/games.md) | Sessions, declared match queues, elo matchmaking, friend invites and share links (with pass-through query strings), per-player controls and settings, AI practice, opt-in replays, owner diagnostics/webhooks, `ws/v1/games` protocol, **limits: message rates and elo per match** |
 | Game scripts | [game-scripts.md](docs/api/game-scripts.md) | Authoring the server-side JS rules file (Jint sandbox contract, budgets, tick rate, elo, achievements, replays, persistent sessions) |
@@ -108,3 +120,14 @@ be accessed through its raw request and JSON support.
 ## Notes
 
 - Availability of relay, voice, and realtime room features may vary.
+
+## Validate changes
+
+The site has no application build. For documentation and example checks, use Node.js 22 or newer,
+Python 3, and `npm ci`, then `npm test`. `npm run test:browser` additionally needs Chrome/Chromium
+(`CHROME_PATH` can select its executable).
+
+After editing a quickstart helper, run `python3 scripts/build-quickstart.py` to refresh the example and
+ZIP. To update the REST operation index from a matching source checkout, run
+`python3 scripts/build-contracts.py /path/to/platform-checkout`, review the contract diff, and rerun
+the tests. Response overrides are maintained in `scripts/rest-contract-overrides.json`.

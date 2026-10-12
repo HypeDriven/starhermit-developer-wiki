@@ -30,10 +30,9 @@ These details about that push are worth knowing before you build a release pipel
   of the bundle changes nothing but the image.
 - **An uploaded image wins over the manifest**, including over a `server=` line, and a manifest
   declaring both `server=` and `container.image=` is refused before anything is loaded.
-- **The name you gave the image is ignored.** The platform strips every tag from `image.tar` before
-  loading it — the Docker daemon is shared, and a load would otherwise move that name off whatever
-  image held it — and pins your deployment to the loaded image's content id. Tag it however you like
-  locally; nothing on the platform refers to it by that name.
+- **Your local image tag does not select the deployed version.** An uploaded image is pinned by its
+  content digest. You may tag it locally however you like; verify the uploaded digest and deployment
+  status after publication.
 - **`?mode=merge` patches client files only.** A `server/image.tar` in a merge is loaded exactly as
   on a replace — an image cannot be half-updated. See
   [partial updates](github-games.md#partial-updates-modemerge).
@@ -119,7 +118,7 @@ new state. Declare the rate your loop actually runs at. Fractional rates are acc
 tick every two seconds), and a rate that slow does stretch the interval between snapshot requests —
 which is how much play a crash costs. A container that declares nothing leaves the checkpoint
 cadence to snapshot cost alone. Achievement entries use the same fields and limits as
-[script-declared achievements](game-scripts.md#declare); only declared keys can later be granted.
+[script-declared achievements](game-scripts.md#declare). Declared and owner-created keys can later be granted.
 
 `replays` asks the platform to keep each finished session's last state as a **replay**, served by
 `GET /api/v1/games/{slug}/replays/{sessionId}` (see [Games API — Replays](games.md#replays)). It must
@@ -288,8 +287,10 @@ than relying only on periodic checkpoints.
 | `STARHERMIT_SERVER_TOKEN_EXPIRES_IN` | Lifetime of the injected server token, in seconds |
 | `PORT` | Port on which the container must listen |
 
-A server token has no player identity and cannot call player endpoints. It is fenced to
-`GET /api/v1/time` and this game's `/api/v1/games/{slug}/server/...` prefix.
+A server token has no player identity and cannot use account or player actions. It can read
+`GET /api/v1/time`, reconcile its own sessions, and call the server-supported
+[moderation routes](moderation.md#callers-and-routes) for its own game. Generation routes are
+[reserved and unavailable](../availability.md#reserved-generation-routes).
 
 ### Renew the server token
 
@@ -317,9 +318,8 @@ restarted. Each start is a new container with new keys and a new token, so read 
 environment of the running process. Never bake them into the image, a config file or a snapshot.
 
 If a start fails with `The game container returned 401 for GET /describe`, the platform's key and
-your process's key disagree. When your server reads `STARHERMIT_INVOKE_KEY` at startup and compares
-it unmodified, that mismatch is on the platform side. Report it with the game id rather than
-loosening the check.
+your process's key disagree. Read `STARHERMIT_INVOKE_KEY` at startup and compare it unmodified. If validation still fails,
+report the game id and sanitized startup logs; do not loosen the check.
 
 ### Reconcile a session
 
@@ -375,8 +375,7 @@ restarted too often. The platform finishes it without a winner or elo change and
 into the replacement (or abandons those too stale). A start that fails — the pull timed out, the
 container exited, or it never answered its health check in time — is retried with a backoff, like a
 crash. Three failed attempts inside ten minutes (operator-tunable) disable the deployment (`failed`),
-and it is **not** woken by player demand. A platform-side hiccup, such as the runner restarting, is
-waited out without counting against you.
+and it is **not** woken by player demand. Temporary hosting interruptions may be retried without spending the game's failure allowance.
 
 A deployment with no live sessions is stopped after 15 minutes of idle (the operator can set your game a different window).
 Paused [persistent](#get-describe) sessions are parked out of the container and do not keep it up.
@@ -419,3 +418,7 @@ Operators can change each of those limits, per game.
 - [Games API](games.md) — unchanged player-facing REST and WebSocket surface
 - [Game Scripts](game-scripts.md) — the alternative JavaScript runtime and shared context/result shapes
 - [Achievements](achievements.md) — player-facing achievement reads and notifications
+
+Shared [API conventions](conventions.md) describe response parsing, timestamps, pagination, and retries.
+
+See [credential compatibility](../credentials.md) and [machine-readable contracts](contracts.md).

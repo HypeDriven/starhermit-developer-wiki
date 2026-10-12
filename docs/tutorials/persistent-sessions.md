@@ -2,18 +2,18 @@
 
 Normally the platform ends a match nobody is playing: once every player has disconnected and nobody
 has come back within five minutes, the session finishes as `abandoned` with reason `players_left`
-(see [Games API — Gameplay WebSocket](../api/games.md#server-to-client)). That is right for a chess
+(see [Games API — Gameplay WebSocket](../api/games.md#server--client)). That is right for a chess
 game or a race, and wrong for a farm, a city builder, a shared dungeon or any world a group of
 players returns to over days.
 
-A game can ask for **persistent sessions** instead. A persistent session is never ended for being
-empty:
+A game can ask for **persistent sessions** instead. A persistent session pauses when its players disconnect:
 
 1. The last player leaves.
 2. After about 15 seconds with nobody connected, the platform **pauses** the session. Nothing runs:
    a script game gets no `onTick` calls, and a container game's session is removed from the
    container.
-3. The session stays paused for as long as nobody is there — hours, weeks.
+3. The session stays paused within its recovery retention policy. Read `/sessions/{id}/recovery`
+   for any expiry rather than assuming it is kept forever.
 4. The first player to connect on `ws/v1/games` **resumes** it, before their first command is
    handled. Play carries on from where it stopped.
 
@@ -122,10 +122,15 @@ A paused session is still an active session, so the client flow is the one you a
 
 ## 4. Ending a persistent session
 
-Because emptiness no longer ends it, a persistent session finishes only when:
+A persistent session finishes when:
 
 - **your game reports a `result`** (script return value or container control message), or
-- the game's owner ends it (`DELETE /api/v1/me/github-games/{id}/sessions/{sessionId}`).
+- the game's owner ends it (`DELETE /api/v1/me/github-games/{id}/sessions/{sessionId}`),
+- the last member explicitly leaves a world without a room through `/sessions/{id}/leave`, or
+- its paused recovery data expires under the deployment's retention policy.
+
+Disconnecting leaves membership intact; explicitly leaving gives up membership. See
+[Session lifecycle and recovery](../session-lifecycle.md) for both flows.
 
 Asking for a new game does **not** retire the player's paused ones, and paused sessions still count
 against the concurrent-session cap per player (20 by default). **Give players a way to finish or
