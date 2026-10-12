@@ -9,14 +9,15 @@ handles the bookkeeping:
 - **Auto** picks one of four presets (Low, Balanced, High, Ultra) from the GPU, memory, CPU cores and
   device type, and steps down for the session if frames stay slow.
 - Players can override each effect (shadows, ambient occlusion, bloom, anti-aliasing, or your own),
-  set a 50–200% render scale, and toggle adaptive resolution and a frame-rate readout.
+  set a 50–200% render scale, choose a manual maximum FPS instead of automatic display refresh,
+  and toggle adaptive resolution and a frame-rate readout.
 - Settings are saved to `localStorage` so they apply before the first frame, and to the player's
   [per-game settings](../api/games.md#per-player-game-settings) so they follow the player to their
   other machines.
 - It includes a ready-made options panel built from the same quality table.
 
 It imports no engine. Your renderer listens for changes and applies the tiers. This page wires it to
-three.js. Other engines use the same five calls (see [Other engines](#other-engines)).
+three.js. Other engines use the same hooks (see [Other engines](#other-engines)).
 
 1. [Add the files](#1-add-the-files)
 2. [Create the store and the panel](#2-create-the-store-and-the-panel)
@@ -74,6 +75,22 @@ floor and frames still average over 26 ms for three more 90-frame windows, Auto 
 for the rest of the session. Choosing **Auto** in the panel again re-detects. A preset the player
 picked by hand never changes on its own.
 
+### Maximum frame rate
+
+**Maximum frame rate** defaults to **Auto (refresh rate)**: the browser schedules rendering
+with the display's refresh rate. Choose **Custom** and enter an integer from **1 to 1000 FPS** to
+override it. The limit applies immediately, is saved locally and to the same cloud profile as the
+other graphics settings, and survives quality-preset changes. Return to **Auto** to remove the limit.
+This choice is independent of the **Auto** quality preset.
+
+The renderer must call `gfx.shouldRender(now)` in its animation loop, as shown below. A limit is a
+ceiling, not a promised frame rate: rendering still cannot exceed the browser's animation callbacks
+or the machine's performance. Setting 144 FPS on a 60 Hz display therefore still renders at most 60 FPS.
+
+For a custom menu, use `gfx.set({ maxFps: 45 })` and `gfx.set({ maxFps: null })` to restore Auto.
+Resolved `gfx.settings.maxFps` is `0` for Auto. Invalid saved values fall back to Auto; positive
+numbers are rounded and clamped to 1–1000.
+
 ### Where the settings live
 
 | Store | Key | Why |
@@ -103,6 +120,7 @@ Three hooks connect the store to a three.js renderer:
 - `gfx.on('change', fn)` for shadows and effect toggles.
 - A post-processing chain rebuilt from the current tiers.
 - `gfx.frame(ms)` and `gfx.pixelRatio()` in the render loop, which drive adaptive resolution.
+- `gfx.shouldRender(now)` before drawing, which enforces the manual FPS limit.
 
 Create the renderer with `antialias: false`. MSAA then comes from the post chain's render target, so
 every anti-aliasing tier can be switched without recreating the WebGL context.
@@ -171,7 +189,10 @@ function buildPost(s, w, h, ratio) {
 
 let last = performance.now();
 renderer.setAnimationLoop((now) => {
-  gfx.frame(now - last); // adaptive resolution + Auto step-down
+  // Update your simulation here using its own elapsed time or fixed timestep.
+  // Keep simulation/input independent of skipped render ticks.
+  if (!gfx.shouldRender(now)) return;
+  gfx.frame(now - last); // elapsed time between rendered frames, including the FPS limit
   last = now;
   const w = canvas.clientWidth, h = canvas.clientHeight, ratio = gfx.pixelRatio();
   if (w !== size.w || h !== size.h || ratio !== size.ratio) {
@@ -205,17 +226,23 @@ Notes:
   Ultra.
 - Adaptive resolution averages 90 frames. Above 26 ms it lowers the scale by 0.1 (down to 0.6). Below
   14 ms it raises the scale by 0.05 (up to 1). Frames longer than 1 s (paused or background tabs) are
-  ignored, and a single slow frame counts as at most 250 ms so one hitch cannot lower the scale.
+  ignored, and a single slow frame counts as at most 250 ms for adaptation so one hitch cannot lower
+  the scale. The FPS readout uses the actual elapsed times.
+  With a manual limit, the slow threshold is at least 115% of the target frame interval and the
+  fast threshold is at least 85%, so a deliberate 30 FPS limit does not lower quality on its own.
+  For very low limits, both the pause cutoff and hitch cutoff are at least two target intervals.
+  Feed `gfx.frame` only rendered frames; retain the last rendered timestamp when a tick is skipped.
 
 ### Other engines
 
-Whatever draws your frames, the integration is the same five calls:
+Whatever draws your frames, the integration uses the same hooks:
 
 | Call | Use |
 |---|---|
 | `gfx.on('change', (settings, reason) => …)` | Apply tiers. Runs once immediately (`'init'`), then on `'settings'`, `'cloud'` and `'auto'`. Returns an unsubscribe function. |
-| `gfx.settings` | `{ preset, auto, scale, dprCap, adaptive, showFps, <category>: <tier> }` |
-| `gfx.frame(ms)` | Every frame. Returns `true` when the pixel ratio or the Auto preset changed. |
+| `gfx.settings` | `{ preset, auto, scale, dprCap, adaptive, showFps, maxFps, <category>: <tier> }`; `maxFps: 0` means automatic display refresh. |
+| `gfx.shouldRender(now)` | Every animation callback, with its timestamp in milliseconds. Skip drawing if it returns `false`. Keep simulation/input updates independent. |
+| `gfx.frame(ms)` | Every rendered frame, with time since the previous rendered frame. Returns `true` when the pixel ratio or the Auto preset changed. |
 | `gfx.pixelRatio()` | The ratio to render at |
 | `gfx.report({ pixels, postFailed })` | Tells the panel the output size, or that effects are unavailable |
 
@@ -253,6 +280,8 @@ mountGraphicsPanel(el, gfx, {
   strings: {
     quality: 'Qualität', auto: 'Automatisch ({tier})', fromPreset: 'Laut Voreinstellung ({tier})',
     renderScale: 'Renderskalierung', adaptive: 'Adaptive Auflösung', showFps: 'Bildrate anzeigen',
+    maxFps: 'Maximale Bildrate', autoFps: 'Automatisch (Bildschirmfrequenz)',
+    customFps: 'Benutzerdefiniert', fpsLimit: 'Maximale FPS (1–1000)',
     categories: { shadows: 'Schatten', ao: 'Umgebungsverdeckung', particles: 'Partikel' },
     tiers: { low: 'Niedrig', balanced: 'Ausgewogen', high: 'Hoch', off: 'Aus', on: 'An' },
   },
@@ -271,7 +300,7 @@ inside the safe area, and does not capture clicks.
 
 - Headless browsers render with a software GPU, so Auto resolves to **Low** and tests stay fast.
 - Drive the real panel. Every control has a `data-gfx` attribute (`preset`, `renderScale`,
-  `adaptive`, `showFps`, or the category name):
+  `adaptive`, `frameRate`, `maxFps`, `showFps`, or the category name):
 
 ```js
 const preset = () => page.evaluate(() => document.documentElement.dataset.gfxPreset);
@@ -279,8 +308,16 @@ await page.locator('select[data-gfx=preset]').selectOption('high');
 assert.equal(await preset(), 'high');
 await page.reload();
 assert.equal(await preset(), 'high'); // persisted
+await page.locator('select[data-gfx=frameRate]').selectOption('custom');
+await page.locator('input[data-gfx=maxFps]').fill('45');
+await page.locator('input[data-gfx=maxFps]').press('Tab');
+await page.reload();
+assert.equal(await page.locator('input[data-gfx=maxFps]').inputValue(), '45');
+await page.locator('select[data-gfx=frameRate]').selectOption('auto');
 ```
 
 - The pure functions `detectPreset(system)`, `resolve(saved, detected)` and `withPreset(saved, preset)`
   run under Node for unit tests. `createGraphics({ sdk, storage, system })` also accepts fakes for all
   three.
+- `node --test tests/graphics-options.test.mjs` verifies validation, persistence, frame pacing on
+  different display refresh rates, live switching, and adaptive quality with a deliberate FPS limit.

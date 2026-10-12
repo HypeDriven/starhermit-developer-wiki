@@ -33,6 +33,10 @@ export const STRINGS = {
   fromPreset: 'From preset ({tier})',
   renderScale: 'Render scale',
   adaptive: 'Adaptive resolution',
+  maxFps: 'Maximum frame rate',
+  autoFps: 'Auto (refresh rate)',
+  customFps: 'Custom',
+  fpsLimit: 'Maximum FPS (1–1000)',
   showFps: 'Show frame rate',
   unknownGpu: 'Unknown GPU',
   postFailed: 'Post-processing is unavailable on this device, so those effects are off.',
@@ -92,7 +96,8 @@ export function detectPreset(system) {
 
 /**
  * Resolve saved settings into concrete tiers.
- * `saved`: { preset?: 'auto'|<preset>, renderScale?: 0.5–2, adaptive?: bool, showFps?: bool, <category>?: <tier> }.
+ * `saved`: { preset?: 'auto'|<preset>, renderScale?: 0.5–2, adaptive?: bool, showFps?: bool,
+ *            maxFps?: 1–1000 (integer; absent = display refresh rate), <category>?: <tier> }.
  */
 export function resolve(saved, detected, { table = TABLE, categories = CATEGORIES } = {}) {
   const s = saved || {};
@@ -107,6 +112,7 @@ export function resolve(saved, detected, { table = TABLE, categories = CATEGORIE
     dprCap: row.dprCap || 2,
     adaptive: s.adaptive !== false,
     showFps: !!s.showFps,
+    maxFps: fpsLimit(s.maxFps),
   };
   for (const [cat, tiers] of Object.entries(categories)) out[cat] = tiers.includes(s[cat]) ? s[cat] : row[cat];
   return out;
@@ -119,6 +125,7 @@ export function withPreset(saved, preset) {
   if (s.renderScale != null) out.renderScale = s.renderScale;
   if (s.adaptive === false) out.adaptive = false;
   if (s.showFps) out.showFps = true;
+  if (fpsLimit(s.maxFps)) out.maxFps = fpsLimit(s.maxFps);
   return out;
 }
 
@@ -147,6 +154,8 @@ export function createGraphics(opts = {}) {
   let pushTimer = 0;
   let frames = [];
   let slowWindows = 0;
+  let nextRender = null;
+  let lastTick = null;
 
   const gfx = {
     system,
@@ -189,22 +198,46 @@ export function createGraphics(opts = {}) {
       return clamp(Math.round(Math.min(dpr, s.dprCap) * s.scale * gfx.adaptiveScale * 100) / 100, 0.25, 3);
     },
 
+    /** Call on each animation callback with its timestamp (ms); false skips rendering this tick. */
+    shouldRender(now) {
+      if (!Number.isFinite(now)) return false;
+      const limit = gfx.settings.maxFps;
+      if (!limit) return true; // requestAnimationFrame already follows the display's refresh rate
+      const interval = 1000 / limit;
+      if (lastTick != null && (now < lastTick || now - lastTick > 1000)) nextRender = null;
+      lastTick = now;
+      if (nextRender == null) {
+        nextRender = now + interval;
+        return true;
+      }
+      if (now + 1e-6 < nextRender) return false;
+      // Keep the fractional remainder: e.g. 60 FPS on a 144 Hz display must not fall to 48 FPS.
+      nextRender += (Math.floor((now - nextRender + 1e-6) / interval) + 1) * interval;
+      return true;
+    },
+
     /** Feed every frame's duration (ms). Returns true when the pixel ratio or the Auto preset changed. */
     frame(ms) {
-      if (!(ms > 0) || ms > 1000) return false; // pauses and tab switches are not slow frames
-      frames.push(Math.min(ms, 250)); // one hitch (a shader compile) must not sink the average
+      const s = gfx.settings;
+      const budget = s.maxFps ? 1000 / s.maxFps : 0;
+      if (!Number.isFinite(ms) || !(ms > 0) || ms > Math.max(1000, budget * 2)) return false;
+      frames.push(ms);
       if (frames.length < 90) return false;
       const avg = frames.reduce((a, b) => a + b, 0) / frames.length;
+      // Clip isolated hitches for adaptation, but report the real FPS, including intentional waits.
+      const timing = frames.reduce((a, b) => a + Math.min(b, Math.max(250, budget * 2)), 0) / frames.length;
       frames = [];
       gfx.fps = Math.round(1000 / avg);
-      const s = gfx.settings;
+      // Deliberate waiting for a manual limit is not evidence that the GPU is struggling.
+      const slow = Math.max(26, budget * 1.15);
+      const fast = Math.max(14, budget * 0.85);
       const before = gfx.adaptiveScale;
       if (s.adaptive) {
-        if (avg > 26) gfx.adaptiveScale = Math.max(0.6, round2(before - 0.1));
-        else if (avg < 14) gfx.adaptiveScale = Math.min(1, round2(before + 0.05));
+        if (timing > slow) gfx.adaptiveScale = Math.max(0.6, round2(before - 0.1));
+        else if (timing < fast) gfx.adaptiveScale = Math.min(1, round2(before + 0.05));
       }
       // Auto only: still slow at the lowest adaptive scale for three windows → one preset lower.
-      slowWindows = s.adaptive && s.auto && avg > 26 && before === 0.6 ? slowWindows + 1 : 0;
+      slowWindows = s.adaptive && s.auto && timing > slow && before === 0.6 ? slowWindows + 1 : 0;
       if (slowWindows >= 3 && presets.indexOf(autoTier) > 0) {
         autoTier = presets[presets.indexOf(autoTier) - 1];
         apply('auto');
@@ -245,7 +278,9 @@ export function createGraphics(opts = {}) {
   }
 
   function apply(reason) {
+    const previousLimit = gfx.settings?.maxFps;
     gfx.settings = resolve(stored.saved, autoTier, { table, categories });
+    if (previousLimit !== gfx.settings.maxFps) { nextRender = null; lastTick = null; }
     gfx.adaptiveScale = 1;
     frames = [];
     slowWindows = 0;
@@ -357,6 +392,12 @@ export function mountGraphicsPanel(container, gfx, opts = {}) {
   adaptive.dataset.gfx = 'adaptive';
   const showFps = el('input', { type: 'checkbox' });
   showFps.dataset.gfx = 'showFps';
+  const fpsMode = select('frameRate', ['auto', 'custom']);
+  fpsMode.options[0].textContent = t.autoFps;
+  fpsMode.options[1].textContent = t.customFps;
+  const maxFps = el('input', { type: 'number', min: 1, max: 1000, step: 1, value: 60 });
+  maxFps.dataset.gfx = 'maxFps';
+  const fpsRow = row(t.fpsLimit, maxFps);
   const summary = el('p', { className: 'gfx-summary' });
   summary.setAttribute('aria-live', 'polite');
   const note = el('p', { className: 'gfx-note', textContent: t.postFailed, hidden: true });
@@ -366,6 +407,8 @@ export function mountGraphicsPanel(container, gfx, opts = {}) {
     row(t.renderScale, scale, scaleOut),
     ...cats.map(([cat, s]) => row(t.categories[cat] || cat, s)),
     row(t.adaptive, adaptive),
+    row(t.maxFps, fpsMode),
+    fpsRow,
     row(t.showFps, showFps),
     summary,
     note);
@@ -377,6 +420,11 @@ export function mountGraphicsPanel(container, gfx, opts = {}) {
   for (const [cat, s] of cats) s.addEventListener('change', () => gfx.set({ [cat]: s.value }));
   adaptive.addEventListener('change', () => gfx.set({ adaptive: adaptive.checked ? null : false }));
   showFps.addEventListener('change', () => gfx.set({ showFps: showFps.checked || null }));
+  fpsMode.addEventListener('change', () => gfx.set({ maxFps: fpsMode.value === 'auto' ? null : fpsLimit(Number(maxFps.value)) || 60 }));
+  maxFps.addEventListener('change', () => {
+    if (maxFps.value !== '' && maxFps.checkValidity()) gfx.set({ maxFps: Number(maxFps.value) });
+    else maxFps.value = gfx.settings.maxFps || 60;
+  });
 
   const render = () => {
     const r = gfx.settings;
@@ -394,6 +442,10 @@ export function mountGraphicsPanel(container, gfx, opts = {}) {
     }
     adaptive.checked = r.adaptive;
     showFps.checked = r.showFps;
+    fpsMode.value = r.maxFps ? 'custom' : 'auto';
+    fpsRow.hidden = !r.maxFps;
+    maxFps.disabled = !r.maxFps;
+    if (r.maxFps) maxFps.value = r.maxFps;
     const px = gfx.info.pixels;
     summary.textContent = [gfx.system.gpu || t.unknownGpu, tier(r.preset), px && `${px[0]}×${px[1]} px`].filter(Boolean).join(' · ');
     note.hidden = !gfx.info.postFailed;
@@ -411,8 +463,10 @@ function addPanelStyle(doc) {
   style.textContent = `
 :where(.gfx-panel) { display: grid; gap: .5rem; }
 :where(.gfx-row) { display: flex; align-items: center; gap: .75rem; min-height: 44px; }
+:where(.gfx-row[hidden]) { display: none; }
 :where(.gfx-row) > span { flex: 1; }
-:where(.gfx-row) > select, :where(.gfx-row) > input[type=range] { max-width: 60%; }
+:where(.gfx-row) > select, :where(.gfx-row) > input[type=range], :where(.gfx-row) > input[type=number] { max-width: 60%; min-width: 0; }
+:where(.gfx-row) > input[type=number] { width: 6em; }
 :where(.gfx-row) > output { min-width: 3.5em; text-align: end; }
 :where(.gfx-summary, .gfx-note) { margin: 0; font-size: .85em; opacity: .8; overflow-wrap: anywhere; }`;
   doc.head.append(style);
@@ -428,4 +482,8 @@ function clamp(v, a, b) {
 
 function round2(v) {
   return Math.round(v * 100) / 100;
+}
+
+function fpsLimit(v) {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? clamp(Math.round(v), 1, 1000) : 0;
 }

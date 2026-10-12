@@ -79,7 +79,8 @@ patterns, not the subject of the docs.
   `control.*` actions, publishing them on each publish path, verifying, a client input map and
   rebinding screen, and a troubleshooting table for the controls API's 404/400s), `graphics-options` (the shipped
   `docs/sdk/graphics-options.js` module: hardware-detected Auto preset with a runtime step-down, per-effect
-  overrides, adaptive resolution, a ready-made panel, `localStorage` plus per-player-settings persistence keyed
+  overrides, adaptive resolution, automatic display-refresh rendering or a persistent manual maximum FPS
+  with a render-loop pacing hook, a ready-made panel, `localStorage` plus per-player-settings persistence keyed
   by device kind and detected preset, and a three.js renderer wiring example), and `claim-existing-game` (prove repository control and take over
   an existing listing).
 
