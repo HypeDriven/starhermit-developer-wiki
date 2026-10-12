@@ -81,7 +81,8 @@ patterns, not the subject of the docs.
   `docs/sdk/graphics-options.js` module: hardware-detected Auto preset with a runtime step-down, per-effect
   overrides, adaptive resolution, automatic display-refresh rendering or a persistent manual maximum FPS
   with a render-loop pacing hook, a ready-made panel, `localStorage` plus per-player-settings persistence keyed
-  by device kind and detected preset, and a three.js renderer wiring example), and `claim-existing-game` (prove repository control and take over
+  by GPU identity, restoring that GPU's choices on return and using defaults for an unseen GPU,
+  and a three.js renderer wiring example), and `claim-existing-game` (prove repository control and take over
   an existing listing).
 
 Conventions the pages share and state: REST under `api/v1/...` at `https://api.starhermit.com`,

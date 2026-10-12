@@ -2,7 +2,7 @@
 //
 // Picks a starting preset from the player's hardware, resolves presets and per-effect overrides into
 // concrete tiers, keeps the choice in localStorage (ready before the first frame) and in the player's
-// StarHermit settings (follows them to their other machines), runs adaptive resolution from your
+// StarHermit settings (a separate profile per reported GPU), runs adaptive resolution from your
 // frame times, and builds an options panel. It imports no engine: your renderer listens for changes
 // and applies the tiers. Guide: https://wiki.starhermit.com/docs/tutorials/graphics-options.html
 //
@@ -131,7 +131,7 @@ export function withPreset(saved, preset) {
 
 /**
  * The live settings store. Call StarHermit.init() first so a launch token is already read.
- * Options: storageKey (localStorage key, default 'graphics'), cloudKey (StarHermit settings key
+ * Options: storageKey (localStorage key prefix, default 'graphics'), cloudKey (StarHermit settings key
  * prefix, default 'graphics'), table, categories, sdk (default window.StarHermit; null for none),
  * storage (default localStorage; null for none), system (default detectSystem()).
  */
@@ -141,11 +141,12 @@ export function createGraphics(opts = {}) {
   const presets = Object.keys(table);
   const sdk = opts.sdk === undefined ? globalThis.StarHermit : opts.sdk;
   const storage = opts.storage === undefined ? localStorageOrNull() : opts.storage;
-  const storageKey = opts.storageKey || 'graphics';
   const system = opts.system || detectSystem();
   const detected = detectPreset(system);
-  // One cloud slot per kind of machine, so a phone never inherits the desktop's Ultra.
-  const cloudSlot = `${opts.cloudKey || 'graphics'}.${system.mobile ? 'mobile' : 'desktop'}.${detected}`;
+  // Preserve each GPU's choices independently, even when two GPUs resolve to the same quality tier.
+  const gpuProfile = graphicsGpuProfile(system.gpu);
+  const storageKey = gpuProfile ? `${opts.storageKey || 'graphics'}.gpu.${gpuProfile}` : null;
+  const cloudSlot = gpuProfile ? `${opts.cloudKey || 'graphics'}.gpu.${gpuProfile}` : null;
   const handlers = { change: new Set(), info: new Set() };
 
   let stored = readLocal(); // { saved, at }: `at` (ms) orders this device's copy against the cloud's
@@ -160,6 +161,8 @@ export function createGraphics(opts = {}) {
   const gfx = {
     system,
     detected,
+    gpuProfile,
+    storageKey,
     cloudSlot,
     table,
     categories,
@@ -295,7 +298,7 @@ export function createGraphics(opts = {}) {
 
   // Load before save: never write the cloud copy until a read has shown ours is newer.
   async function pull() {
-    if (!sdk?.signedIn || !sdk.slug || typeof sdk.api !== 'function') return;
+    if (!cloudSlot || !sdk?.signedIn || !sdk.slug || typeof sdk.api !== 'function') return;
     cloud = 'loading';
     let remote;
     try {
@@ -322,6 +325,7 @@ export function createGraphics(opts = {}) {
   }
 
   function readLocal() {
+    if (!storageKey) return { saved: {}, at: 0 };
     try {
       const v = JSON.parse(storage?.getItem(storageKey) || 'null');
       if (v && typeof v.saved === 'object' && v.saved && Number.isFinite(v.at)) return v;
@@ -330,6 +334,7 @@ export function createGraphics(opts = {}) {
   }
 
   function writeLocal() {
+    if (!storageKey) return;
     try { storage?.setItem(storageKey, JSON.stringify(stored)); } catch { /* storage off: session only */ }
   }
 
@@ -486,4 +491,16 @@ function round2(v) {
 
 function fpsLimit(v) {
   return typeof v === 'number' && Number.isFinite(v) && v > 0 ? clamp(Math.round(v), 1, 1000) : 0;
+}
+
+// A bounded settings-key suffix; normalize harmless differences in browser-reported GPU names.
+function graphicsGpuProfile(gpu) {
+  const name = String(gpu || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  if (!name) return null; // cannot safely assign saved choices to an unidentified GPU
+  let hash = 0xcbf29ce484222325n;
+  for (const char of name) {
+    hash ^= BigInt(char.codePointAt(0));
+    hash = BigInt.asUintN(64, hash * 0x100000001b3n);
+  }
+  return hash.toString(16).padStart(16, '0');
 }

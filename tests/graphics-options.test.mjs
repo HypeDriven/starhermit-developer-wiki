@@ -4,6 +4,10 @@ import { createGraphics, resolve, withPreset } from '../docs/sdk/graphics-option
 
 const system = { gpu: 'NVIDIA RTX', webgl: true, webgl2: true, cores: 8, memoryGb: 8 };
 const create = (opts = {}) => createGraphics({ sdk: null, storage: null, system, ...opts });
+const memoryStorage = () => {
+  const values = new Map();
+  return { values, getItem: key => values.get(key) || null, setItem: (key, value) => values.set(key, value) };
+};
 const sample = (gfx, hz, seconds = 10) => {
   const rendered = [];
   for (let tick = 0; tick < hz * seconds; tick++) {
@@ -64,8 +68,7 @@ test('live changes, Auto, pauses and backward timestamps reset pacing', () => {
 });
 
 test('manual limits persist before the first frame after reload', () => {
-  let value = null;
-  const storage = { getItem: () => value, setItem: (_key, next) => { value = next; } };
+  const storage = memoryStorage();
   const gfx = create({ storage });
   gfx.set({ maxFps: 45 });
   assert.equal(create({ storage }).settings.maxFps, 45);
@@ -75,12 +78,14 @@ test('manual limits persist before the first frame after reload', () => {
 
 test('a newer cloud limit applies and resets an existing pacing schedule', async () => {
   let remote;
+  let slot;
   const sdk = {
     signedIn: true, slug: 'game',
-    api: async () => ({ settings: { 'graphics.desktop.high': remote } }),
+    api: async () => ({ settings: { [slot]: remote } }),
   };
   const gfx = create({ sdk });
   await gfx.ready;
+  slot = gfx.cloudSlot;
   remote = { saved: { maxFps: 30 }, at: 1 };
   await gfx.sync();
   assert.equal(gfx.settings.maxFps, 30);
@@ -117,4 +122,100 @@ test('sustained frames slower than the manual target still lower adaptive qualit
   const automatic = create();
   for (let i = 0; i < 90; i++) automatic.frame(30);
   assert.equal(automatic.adaptiveScale, 0.9);
+});
+
+test('switching GPUs uses defaults and returning restores each GPU independently', () => {
+  const storage = memoryStorage();
+  const gpuB = { ...system, gpu: 'AMD Radeon RX 7900' };
+  const a = create({ storage });
+  a.setPreset('ultra');
+  a.set({ maxFps: 90, renderScale: 1.5, adaptive: false, showFps: true, shadows: 'off' });
+  const b = create({ storage, system: gpuB });
+  assert.equal(a.detected, b.detected); // a shared quality tier must not merge GPU profiles
+  assert.notEqual(a.storageKey, b.storageKey);
+  assert.notEqual(a.cloudSlot, b.cloudSlot);
+  assert.deepEqual(b.saved, {});
+  assert.deepEqual(b.settings, resolve({}, b.detected));
+  b.setPreset('low');
+  b.set({ maxFps: 45, bloom: 'off' });
+  assert.deepEqual(create({ storage }).saved, a.saved);
+  assert.deepEqual(create({ storage }).settings, a.settings);
+  assert.deepEqual(create({ storage, system: gpuB }).settings, b.settings);
+  assert.equal(storage.values.size, 2);
+});
+
+test('GPU profiles normalize names and survive hardware-tier changes', () => {
+  const storage = memoryStorage();
+  const a = create({ storage });
+  a.setPreset('ultra');
+  a.set({ maxFps: 90 });
+  const same = create({ storage, system: { ...system, gpu: '  nvidia   RTX  ', cores: 2 } });
+  assert.equal(same.detected, 'low');
+  assert.equal(same.gpuProfile, a.gpuProfile);
+  assert.equal(same.settings.preset, 'ultra');
+  assert.equal(same.settings.maxFps, 90);
+  assert.match(a.gpuProfile, /^[a-f0-9]{16}$/);
+  const ownPrefix = create({ storage, storageKey: 'other.game', cloudKey: 'otherGraphics' });
+  assert.equal(ownPrefix.storageKey, `other.game.gpu.${a.gpuProfile}`);
+  assert.equal(ownPrefix.cloudSlot, `otherGraphics.gpu.${a.gpuProfile}`);
+  assert.deepEqual(ownPrefix.saved, {});
+});
+
+test('cloud settings follow the GPU across devices without importing another GPU', async () => {
+  const settings = {};
+  const writes = [];
+  const sdk = {
+    signedIn: true, slug: 'game',
+    api: async () => ({ settings: structuredClone(settings) }),
+    setSetting: (key, value) => { settings[key] = structuredClone(value); writes.push(key); },
+  };
+  const a = create({ sdk, storage: memoryStorage() });
+  await a.ready;
+  a.setPreset('ultra');
+  a.set({ maxFps: 90, shadows: 'off' });
+  await new Promise(resolve => setTimeout(resolve, 850));
+  const bSystem = { ...system, gpu: 'AMD Radeon RX 7900' };
+  const b = create({ sdk, storage: memoryStorage(), system: bSystem });
+  await b.ready;
+  assert.deepEqual(b.saved, {});
+  assert.equal(b.settings.auto, true);
+  assert.equal(b.settings.maxFps, 0);
+  b.set({ maxFps: 45 });
+  await new Promise(resolve => setTimeout(resolve, 850));
+  const returning = create({ sdk, storage: memoryStorage() });
+  await returning.ready;
+  assert.deepEqual(returning.saved, a.saved);
+  const returningB = create({ sdk, storage: memoryStorage(), system: bSystem });
+  await returningB.ready;
+  assert.equal(returningB.settings.maxFps, 45);
+  assert.deepEqual(writes, [a.cloudSlot, b.cloudSlot]);
+});
+
+test('unscoped legacy settings cannot leak into an unrelated GPU profile', async () => {
+  const storage = memoryStorage();
+  const legacy = { saved: { preset: 'ultra', maxFps: 90 }, at: Date.now() + 1000 };
+  storage.setItem('graphics', JSON.stringify(legacy));
+  const sdk = {
+    signedIn: true, slug: 'game',
+    api: async () => ({ settings: { 'graphics.desktop.high': legacy } }),
+    setSetting: () => assert.fail('must not upload legacy settings'),
+  };
+  const gfx = create({ storage, sdk });
+  await gfx.ready;
+  assert.deepEqual(gfx.saved, {});
+  assert.equal(gfx.settings.maxFps, 0);
+  assert.equal(storage.getItem('graphics'), JSON.stringify(legacy));
+});
+
+test('unidentified GPUs keep session choices without sharing a persistence profile', async () => {
+  const storage = memoryStorage();
+  const unknown = { ...system, gpu: '' };
+  const sdk = { signedIn: true, slug: 'game', api: () => assert.fail('unknown GPU must not read shared settings') };
+  const gfx = create({ storage, sdk, system: unknown });
+  await gfx.ready;
+  gfx.set({ maxFps: 90 });
+  assert.equal(gfx.settings.maxFps, 90);
+  assert.equal(gfx.gpuProfile, null);
+  assert.equal(storage.values.size, 0);
+  assert.equal(create({ storage, system: unknown }).settings.maxFps, 0);
 });

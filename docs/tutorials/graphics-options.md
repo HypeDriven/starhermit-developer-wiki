@@ -95,12 +95,26 @@ numbers are rounded and clamped to 1–1000.
 
 | Store | Key | Why |
 |---|---|---|
-| `localStorage` | your `storageKey` | Read synchronously, so the first frame already uses the player's settings |
-| [Per-player settings](../api/games.md#per-player-game-settings) | `graphics.desktop.<detected preset>` or `graphics.mobile.<detected preset>` | Follows the player to another machine of the same kind |
+| `localStorage` | `<storageKey>.gpu.<GPU profile>` | Read synchronously, so the first frame already uses this GPU's settings |
+| [Per-player settings](../api/games.md#per-player-game-settings) | `graphics.gpu.<GPU profile>` | Follows the player to another machine reporting the same GPU |
 
-The cloud key includes the device type and the detected preset, so choosing Ultra on a desktop with
-a discrete GPU never pushes Ultra onto the same player's phone or an integrated-GPU laptop. Each value
-is `{ "saved": {…}, "at": <ms timestamp> }`. The two copies are reconciled the same way as
+Each GPU gets an independent profile, covering every graphics choice including the maximum FPS.
+For example, set Ultra and 90 FPS on GPU A, then launch on GPU B: B starts with hardware-detected
+defaults unless you previously saved choices for B. Returning to A restores Ultra and 90 FPS.
+Two GPUs that both detect as High still have separate profiles. A change to the detected quality
+tier on the same GPU does not discard its saved choices.
+
+The profile is a stable 16-character hash of the browser-reported GPU name, normalized for case
+and whitespace. `storageKey` and `cloudKey` supply prefixes; `gfx.storageKey`, `gfx.cloudSlot`, and
+`gfx.gpuProfile` expose the active keys and profile. GPU detection happens when the store is created;
+create a fresh store on the next game launch to select another GPU's profile.
+
+If no GPU name is available, choices apply for the session without local or cloud persistence.
+If the browser masks multiple GPUs with the same name, they share a profile because it cannot
+distinguish them. Older unscoped local settings and device-class cloud settings are left untouched
+and are not imported, since they do not identify which GPU the choices belong to.
+
+Each value is `{ "saved": {…}, "at": <ms timestamp> }`. The two copies are reconciled the same way as
 [cloud saves](../sdk/javascript.md#cloud-saves):
 
 - **Read before writing.** At start-up (and when a different player signs in), the store reads
@@ -115,7 +129,7 @@ is `{ "saved": {…}, "at": <ms timestamp> }`. The two copies are reconciled the
 
 ## 3. Apply the settings to your renderer
 
-Three hooks connect the store to a three.js renderer:
+Four hooks connect the store to a three.js renderer:
 
 - `gfx.on('change', fn)` for shadows and effect toggles.
 - A post-processing chain rebuilt from the current tiers.
@@ -319,5 +333,5 @@ await page.locator('select[data-gfx=frameRate]').selectOption('auto');
 - The pure functions `detectPreset(system)`, `resolve(saved, detected)` and `withPreset(saved, preset)`
   run under Node for unit tests. `createGraphics({ sdk, storage, system })` also accepts fakes for all
   three.
-- `node --test tests/graphics-options.test.mjs` verifies validation, persistence, frame pacing on
-  different display refresh rates, live switching, and adaptive quality with a deliberate FPS limit.
+- `node --test tests/graphics-options.test.mjs` verifies validation, per-GPU persistence and restoration,
+  frame pacing on different display refresh rates, live switching, and adaptive quality with an FPS limit.
