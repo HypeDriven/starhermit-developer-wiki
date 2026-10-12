@@ -55,6 +55,9 @@ not the subject of the docs.
   drop in [`graphics-options.js`](docs/sdk/graphics-options.js): quality presets picked from the
   player's hardware, per-effect overrides, adaptive resolution, a manual maximum FPS option, an options panel, and settings that
   follow the player per GPU through StarHermit; wired to a three.js renderer.
+- **[Tutorial: audio options with an auto-detected sound limit](docs/tutorials/audio-options.md)** —
+  baseline volume and voice-chat controls, a CPU-aware Auto concurrency recommendation, and a bounded
+  playback policy; includes the dependency-free [`audio-options.js`](docs/sdk/audio-options.js) helper.
 - **[Tutorial: add controls to your game](docs/tutorials/game-controls.md)** — declare rebindable
   keyboard actions in `starhermit.txt`, publish them, read the player's bindings with the launch token,
   build a rebinding screen, and fix `"This game declares no controls."`.

@@ -134,6 +134,10 @@ it auto-detects a quality preset, keeps the player's choice in `localStorage` an
 settings, and ships a ready-made panel. See
 [graphics options with auto-detected quality](../tutorials/graphics-options.md).
 
+For an Audio section, see [audio options with an auto-detected sound limit](../tutorials/audio-options.md):
+recommended volume and voice controls, the pure [`audio-options.js`](audio-options.js) helpers,
+and a playback cap enforced by your mixer.
+
 ## Multiplayer, invites and social
 
 These need a game with a server (a [script](../api/game-scripts.md) or a

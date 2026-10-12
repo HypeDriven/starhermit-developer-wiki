@@ -128,6 +128,8 @@ Game-scoped launch tokens **may** use the voice REST and WebSocket for rooms att
 
 ## See also
 
+- [Audio options](../tutorials/audio-options.md) — baseline volume, microphone and push-to-talk controls,
+  with an auto-detected playback cap
 - [Chat](chat.md) — rooms anchor to conversations; game sessions expose `chatConversationId`
 - [Games](games.md) — game sessions and launch tokens
 - [Relay](relay.md) — byte fan-out for game netcode
