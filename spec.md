@@ -79,8 +79,13 @@ patterns, not the subject of the docs.
   `control.*` actions, publishing them on each publish path, verifying, a client input map and
   rebinding screen, and a troubleshooting table for the controls API's 404/400s), `graphics-options` (the shipped
   `docs/sdk/graphics-options.js` module: hardware-detected Auto preset with a runtime step-down, per-effect
-  overrides, adaptive resolution, a ready-made panel, `localStorage` plus per-player-settings persistence keyed
-  by device kind and detected preset, and a three.js renderer wiring example), and `claim-existing-game` (prove repository control and take over
+  overrides, adaptive resolution, automatic display-refresh rendering or a persistent manual maximum FPS
+  with a render-loop pacing hook, a ready-made panel, `localStorage` plus per-player-settings persistence keyed
+  by GPU identity, restoring that GPU's choices on return and using defaults for an unseen GPU,
+  and a three.js renderer wiring example), `audio-options` (baseline volume and opt-in voice controls,
+  CPU/memory-aware Auto concurrent-sound recommendations, bounded playback across all buses,
+  microphone lifecycle and settings persistence; ships pure `docs/sdk/audio-options.js` helpers with
+  validation/detection tests), and `claim-existing-game` (prove repository control and take over
   an existing listing).
 
 Conventions the pages share and state: REST under `api/v1/...` at `https://api.starhermit.com`,
