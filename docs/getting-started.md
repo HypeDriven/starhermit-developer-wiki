@@ -27,6 +27,15 @@
 
 All REST routes are versioned: `api/v1/...`. WebSocket routes live under `ws/v1/...` and are version-neutral.
 
+## Recommended ways to enter a hosted game
+
+Games hosted on StarHermit are recommended to offer two clear options on their start screen:
+
+1. **Sign in with an existing StarHermit account** — let players use their account for saved progress and supported platform features, such as achievements and leaderboards. Use the [hosted-game sign-in flow](api/auth.md#sign-in-from-a-directly-opened-browser-game) when there is no valid launch token; players arriving with a valid token can continue directly.
+2. **Play single player without signing in** — offer a standalone single-player version that requires no account and does not track or save progress. Keep progress in memory for the current play session, without writing cloud saves, persistent local saves, achievements, or leaderboard scores.
+
+Label the second option clearly, for example **Play single player (progress isn't saved)**, so players understand what to expect before starting. This mode should run without authenticated StarHermit API calls or sockets.
+
 ## Authentication model (overview)
 
 - Access tokens are JWTs with a 15-minute lifetime; refresh tokens rotate and last 7 days. See [Authentication](api/auth.md) for the token format and the refresh/logout endpoints.
