@@ -31,6 +31,8 @@ A handful of names are always skipped, because they are never part of a publishe
 `README.md`, `.env` files, `*.psd` sources and `*.map` files. If you would not hand it to a player,
 do not leave it next to the manifest.
 
+![Build a distributable client folder with starhermit.txt at its root, publish it, and serve its contents at the game subdomain.](images/publish-build.svg)
+
 ## Where it goes
 
 ### A game client

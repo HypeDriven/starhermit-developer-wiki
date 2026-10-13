@@ -5,8 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 The **public developer documentation for the StarHermit platform**, served at wiki.starhermit.com by GitHub
-Pages over this repo (`CNAME`; Jekyll's default conversion is what makes `docs/x.md` reachable as
-`/docs/x.html`). No build step, no site config, no CI — pushing markdown publishes it.
+Pages over this repo (`CNAME`; Jekyll converts `docs/x.md` to `/docs/x.html`). `_config.yml`
+applies the shared granite layout in `_layouts/wiki.html`, with CSS/JS under `assets/`.
+No application build or CI — pushing the repository publishes it.
 
 It documents the *public contract* of `../starhermit` as an integration guide for any game or external
 client. `../starhermit-chess` is the reference example used throughout; it is an illustration, not the

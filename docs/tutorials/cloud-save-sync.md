@@ -8,6 +8,8 @@ A launch token can access exactly `game:<gameId>`, where `gameId` is its `game_s
 stores opaque bytes, with one save per slot. Validate the format your game expects. See
 [Cloud saves](../api/catalog.md#cloud-saves) for quotas and conditional headers.
 
+![Load and validate before writing. Failed reads block uploads; conditional writes preserve newer saves and surface conflicts.](../images/cloud-save-flow.svg)
+
 ## A small complete JSON recipe
 
 Copy [`cloud-save-store.js`](../sdk/cloud-save-store.js) into your build. This example stores raw

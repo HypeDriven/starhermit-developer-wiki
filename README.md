@@ -1,3 +1,9 @@
+---
+layout: wiki
+title: StarHermit Developer Wiki
+permalink: /
+---
+
 # StarHermit Developer Wiki
 
 Documentation for the public API of **[StarHermit](https://starhermit.com)** — a game/software

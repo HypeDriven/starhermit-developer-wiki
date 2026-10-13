@@ -6,7 +6,12 @@
 
 The public developer documentation for the StarHermit platform, served at **wiki.starhermit.com**
 (GitHub Pages over this repo; `CNAME` carries the hostname, and Jekyll's default conversion is what
-turns `docs/x.md` into `/docs/x.html`). The site serves Markdown and static assets without an application build. `npm test` validates
+turns `docs/x.md` into `/docs/x.html`). The site serves Markdown and static assets without an application build. `_config.yml` applies the
+shared `_layouts/wiki.html` layout with a dark-by-default granite palette, an optional persisted light
+mode, responsive navigation, and a generated page outline. CSS and JavaScript live under `assets/`;
+relative Markdown links are converted by `jekyll-relative-links`. Static accessible SVG diagrams in
+`docs/images/` illustrate integration choices, hosted-game sign-in, cloud-save concurrency, multiplayer
+routing, client publication, and session lifecycle, and remain viewable in source Markdown. `npm test` validates
 document links, API contracts, helpers and examples; `npm run test:browser` checks the runnable
 quickstart. Pushing the repository publishes it through GitHub Pages.
 

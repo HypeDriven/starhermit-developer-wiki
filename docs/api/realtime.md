@@ -11,6 +11,8 @@ Contrast this with the [peer relay](relay.md) (opaque fan-out bound to an existi
 
 All REST endpoints require authentication and work with both a full user token and a game-scoped launch token. Error bodies vary; see [API conventions](conventions.md#requests-and-responses).
 
+![Host-routed rooms send inputs to the host and return snapshots. Server-authoritative rooms create a separate gameplay session using the games socket.](../images/multiplayer-routing.svg)
+
 ## Data model
 
 **Room** lifecycle: `Lobby` → `Open` (matchmaking) → `Playing` (roster frozen, empty seats backfilled with AI up to the room's allowance) → `Closed`. A room created with [`joinInProgress`](#join-in-progress) keeps taking players while `Playing`.

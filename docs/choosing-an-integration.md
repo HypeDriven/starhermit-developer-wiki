@@ -12,6 +12,8 @@ server backend to use sign-in, cloud saves, settings, controls, or realtime room
 | Authoritative container | Your game server | Same session API; realtime rooms support larger grids | Complete snapshots and per-player state | Server writes Elo, scores, and achievements |
 | Catalog title, such as a native executable | Your chosen client/server architecture | Use the same APIs with account or launch tokens | Cloud-save slot selected by the account client | Catalog boards and achievements have separate publisher and client-claim APIs |
 
+![Choose browser-only play for local progress, host-routed rooms for casual multiplayer, or a script/container for validated gameplay.](images/integration-choice.svg)
+
 ## Three common starting points
 
 **A single-player browser game:** follow [the browser quickstart](tutorials/browser-quickstart.md).
