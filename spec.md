@@ -17,8 +17,10 @@ quickstart. Pushing the repository publishes it through GitHub Pages.
 
 The header language dropdown covers English plus Simplified Chinese (Mandarin), Hindi, Spanish,
 Modern Standard Arabic, French, Bengali, Portuguese, Indonesian, and Urdu, selected by total first-
-and second-language speakers in the Ethnologue 2026 ranking. Small country flags accompany the
-native language labels in the dropdown and no-JavaScript language links. English remains at its existing URLs;
+and second-language speakers in the Ethnologue 2026 ranking. Local SVG country flags under
+`assets/flags/` accompany native language labels in a keyboard-accessible disclosure dropdown,
+which also works without JavaScript. Flags render as images rather than relying on emoji fonts.
+English remains at its existing URLs;
 the nine other locales have static pages at `/<language>/` and `/<language>/docs/...html`, generated
 under `l10n/`. All 45 public documents, navigation labels, accessibility labels, and six SVG diagrams
 are translated. Arabic and Urdu use right-to-left layouts; code remains left-to-right. Heading IDs,

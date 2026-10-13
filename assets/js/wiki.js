@@ -1,20 +1,31 @@
 const root = document.documentElement;
 const ui = JSON.parse(document.querySelector('#wiki-ui')?.textContent || '{}');
-const languageSelect = document.querySelector('#language-select');
-languageSelect?.addEventListener('change', () => {
-  const option = languageSelect.selectedOptions[0];
+const languagePicker = document.querySelector('#language-picker');
+const languageOptions = [...document.querySelectorAll('.language-option')];
+languageOptions.forEach(option => option.addEventListener('click', event => {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
   try { localStorage.setItem('wiki-language', option.dataset.language); } catch (_) {}
-  location.assign(option.value + location.search + location.hash);
+  location.assign(option.getAttribute('href') + location.search + location.hash);
+}));
+document.addEventListener('click', event => {
+  if (languagePicker && !languagePicker.contains(event.target)) languagePicker.open = false;
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && languagePicker?.open) {
+    languagePicker.open = false;
+    languagePicker.querySelector('summary').focus();
+  }
 });
 document.querySelector('.english-original')?.addEventListener('click', () => {
   try { localStorage.setItem('wiki-language', 'en'); } catch (_) {}
 });
 // Respect a saved preference on the English landing page; deep links keep their explicit locale.
-if (languageSelect && root.lang === 'en' && document.body.dataset.sourceUrl === '/') {
+if (languagePicker && root.lang === 'en' && document.body.dataset.sourceUrl === '/') {
   try {
     const saved = localStorage.getItem('wiki-language');
-    const option = [...languageSelect.options].find(option => option.dataset.language === saved);
-    if (option && saved !== 'en') location.replace(option.value + location.search + location.hash);
+    const option = languageOptions.find(option => option.dataset.language === saved);
+    if (option && saved !== 'en') location.replace(option.getAttribute('href') + location.search + location.hash);
   } catch (_) {}
 }
 const toggle = document.querySelector('#theme-toggle');

@@ -48,8 +48,10 @@ try{
    assert.equal(await page.locator('html').getAttribute('lang'),locale.code);
    assert.equal(await page.locator('html').getAttribute('dir'),locale.dir);
    assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
-   assert.equal(await page.locator('#language-select option').count(),10);
-   assert.equal(await page.locator('#language-select').inputValue(),locale.prefix+'/docs/choosing-an-integration.html');
+   assert.equal(await page.locator('.language-option').count(),10);
+   assert.equal(await page.locator('.language-option[aria-current]').getAttribute('href'),locale.prefix+'/docs/choosing-an-integration.html');
+   assert.equal(await page.locator('#language-picker summary img').getAttribute('src'),locale.flag);
+   assert.deepEqual(await page.locator('#language-picker summary img').evaluate(e=>({width:e.getBoundingClientRect().width,height:e.getBoundingClientRect().height})),{width:21,height:14});
    assert.equal(await page.locator('#theme-toggle').textContent(),locale.light_mode);
    assert.equal(await page.locator('.sidebar a').nth(3).textContent(),locale.integration);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${locale.code} ${width} overflow`);
@@ -59,8 +61,19 @@ try{
    for(const img of await page.locator('.document img').all()) assert.equal(await img.evaluate(e=>e.complete&&e.naturalWidth>0),true);
    if(['ar','zh-CN'].includes(locale.code)) await page.screenshot({path:`/tmp/wiki-${locale.code}-${width}.png`,fullPage:true});
   }
+  await page.locator('#language-picker summary').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#language-picker').getAttribute('open'),'');
+  for(const flag of await page.locator('.language-option img').all()) assert.equal(await flag.evaluate(e=>e.complete&&e.naturalWidth>0),true);
+  await page.screenshot({path:`/tmp/wiki-flag-menu-${width}.png`});
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#language-picker').getAttribute('open'),null);
+  await page.locator('#language-picker summary').click();
+  await page.mouse.click(5,5);
+  assert.equal(await page.locator('#language-picker').getAttribute('open'),null);
   await page.goto(base+'/docs/tutorials/cloud-save-sync.html?example=1#conditions-and-conflicts');
-  await page.selectOption('#language-select','/ar/docs/tutorials/cloud-save-sync.html');
+  await page.locator('#language-picker summary').click();
+  await page.locator('.language-option[data-language="ar"]').click();
   await page.waitForURL('**/ar/docs/tutorials/cloud-save-sync.html?example=1#conditions-and-conflicts');
   assert.ok(await page.locator('#conditions-and-conflicts').count());
   assert.equal(await page.locator('pre').first().evaluate(e=>getComputedStyle(e).direction),'ltr');
@@ -78,7 +91,10 @@ try{
  }
  const noJS=await browser.newContext({javaScriptEnabled:false});
  const page=await noJS.newPage();await page.goto(base+'/ar/');
- assert.equal(await page.locator('.language-links a').count(),10);
+ await page.locator('#language-picker summary').click();
+ assert.equal(await page.locator('.language-option:visible').count(),10);
+ await page.locator('.language-option[data-language="fr"]').click();
+ await page.waitForURL('**/fr/');
  await noJS.close();assert.deepEqual(errors,[]);
  console.log('Wiki browser checks passed: all ten locales, desktop/mobile, RTL, images, anchors, theme, preference, English original, and no-JS navigation.');
 }finally{await browser.close();await new Promise(r=>server.close(r));}
