@@ -9,16 +9,16 @@ import { parseHTML } from 'linkedom';
 
 export const root = resolve(import.meta.dirname, '..');
 export const languages = [
-  { code: 'en', name: 'English', dir: 'ltr' },
-  { code: 'zh-CN', name: '简体中文', dir: 'ltr' },
-  { code: 'hi', name: 'हिन्दी', dir: 'ltr' },
-  { code: 'es', name: 'Español', dir: 'ltr' },
-  { code: 'ar', name: 'العربية', dir: 'rtl' },
-  { code: 'fr', name: 'Français', dir: 'ltr' },
-  { code: 'bn', name: 'বাংলা', dir: 'ltr' },
-  { code: 'pt', name: 'Português', dir: 'ltr' },
-  { code: 'id', name: 'Bahasa Indonesia', dir: 'ltr' },
-  { code: 'ur', name: 'اردو', dir: 'rtl' },
+  { code: 'en', name: 'English', flag: '🇬🇧', dir: 'ltr' },
+  { code: 'zh-CN', name: '简体中文', flag: '🇨🇳', dir: 'ltr' },
+  { code: 'hi', name: 'हिन्दी', flag: '🇮🇳', dir: 'ltr' },
+  { code: 'es', name: 'Español', flag: '🇪🇸', dir: 'ltr' },
+  { code: 'ar', name: 'العربية', flag: '🇸🇦', dir: 'rtl' },
+  { code: 'fr', name: 'Français', flag: '🇫🇷', dir: 'ltr' },
+  { code: 'bn', name: 'বাংলা', flag: '🇧🇩', dir: 'ltr' },
+  { code: 'pt', name: 'Português', flag: '🇧🇷', dir: 'ltr' },
+  { code: 'id', name: 'Bahasa Indonesia', flag: '🇮🇩', dir: 'ltr' },
+  { code: 'ur', name: 'اردو', flag: '🇵🇰', dir: 'rtl' },
 ];
 export const ui = {
   language: 'Language', skip: 'Skip to content', brand: 'Developer wiki', platform: 'Platform',
