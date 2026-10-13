@@ -1,0 +1,433 @@
+---
+layout: "wiki"
+lang: "hi"
+title: "कंटेनर-होस्टेड गेम सर्वर"
+source_url: "/docs/api/container-games.html"
+source_path: "docs/api/container-games.md"
+source_hash: "1236c6a7fd9205e65079aaa8684a472e45c363e0314f51528484e44c183f19c1"
+translation: "machine"
+permalink: "/hi/docs/api/container-games.html"
+---
+{% raw %}
+<h1 id="container-hosted-game-servers">कंटेनर-होस्टेड गेम सर्वर</h1>
+<p>एक StarHermit गेम अपने आधिकारिक सर्वर तर्क को इसके बजाय एक कंटेनर छवि के रूप में भेज सकता है
+सैंडबॉक्स वाली जावास्क्रिप्ट फ़ाइल। यह सर्वर को रस्ट, गो, सी++, या किसी अन्य रनटाइम का उपयोग करने देता है
+HTTP और WebSockets परोसें। ब्राउज़र-सामना <a href="/hi/docs/api/games.html">गेम्स एपीआई</a> वही रहता है: ग्राहक अभी भी
+गेम-स्कोप्ड लॉन्च टोकन, REST सत्र और का उपयोग करें <code>ws/v1/games</code> JSON फ़्रेम.</p>
+<p>कंटेनर होस्टिंग Starhermit.com पर साइन-इन किए गए किसी भी उपयोगकर्ता के लिए खुली है। एक स्व-होस्टेड परिनियोजन हो सकता है
+इसे एक ऑपरेटर अनुमति सूची तक सीमित रखें; वहां एक अव्यवस्थित अनुमति सूची हर किसी के बजाय किसी को भी प्रवेश नहीं देती है।
+यह रजिस्ट्री छवि और अपलोड की गई छवि पर समान रूप से लागू होता है <code>server/image.tar</code>, इसलिए कोई भी मार्ग नहीं है
+चुपचाप दूसरे की तुलना में अधिक अनुमोदक।</p>
+<p>प्रारंभिक गेम पंजीकरण के बाद, डेवलपर्स एक बिल्ट को भी आगे बढ़ा सकते हैं <code>.tar.gz</code> युक्त
+<code>server/image.tar</code> (<code>docker save</code> आउटपुट) के माध्यम से
+<code>POST /api/v1/me/github-games/{id}/bundle</code>. प्लेटफ़ॉर्म छवि और कतारों को लोड और डाइजेस्ट-पिन करता है
+एक परिनियोजन पुनरारंभ. देखना <a href="/hi/docs/api/github-games.html#push-a-game-bundle">GitHub गेम्स - एक गेम बंडल पुश करें</a>
+और यह <a href="/hi/docs/tutorials/dedicated-server-onboarding.html">समर्पित-सर्वर ट्यूटोरियल</a>.</p>
+<p>इससे पहले कि आप इसके चारों ओर एक रिलीज़ पाइपलाइन बनाएं, उस पुश के बारे में ये विवरण जानने योग्य हैं:</p>
+<ul>
+<li><strong>एक बड़ा <code>docker save</code> सीडीएन की ~100 एमबी अनुरोध-बॉडी कैप को पार कर सकता है</strong>, जो a के साथ उत्तर देता है <code>413</code>
+मंच कभी नहीं देखता - नहीं <code>limitBytes</code>, किसी भी लॉग में ऐसा कुछ भी नहीं जिसे आप पढ़ सकें। पुरालेख को ऊपर धकेलें
+<a href="/hi/docs/api/github-games.html#upload-over-a-websocket"><code>ws/v1/game-upload</code></a> बजाय; वही पुरालेख, वही
+भत्ता, वही उत्तर।</li>
+<li><strong>आपके द्वारा अपलोड की गई छवि स्वयं ही घोषणा है।</strong> एक गेम जिसका अभी तक कोई बैकएंड नहीं है - एक से एक जोड़ा गया
+अपलोड किया गया फ़ोल्डर जो कोई नहीं घोषित करता है - उसकी कंटेनर परिभाषा डाइजेस्ट से प्रावधानित हो जाती है
+अभी लोड किया गया. आपको इसकी आवश्यकता नहीं है <code>container.image=</code> पहले प्रकट रूप में.</li>
+<li><strong>एक पुन: धक्का उन घुंडियों को लागू करता है जो इसकी स्पष्ट घोषणा करता है और जिन्हें यह छोड़ देता है उन्हें रखता है।</strong> बदलना
+<code>container.port</code> और अब पुनः अपलोड करने से परिनियोजन उस पोर्ट पर चला जाता है; मैनिफ़ेस्ट को बाहर छोड़ना
+बंडल की छवि के अलावा कुछ भी नहीं बदलता है।</li>
+<li><strong>एक अपलोड की गई छवि मैनिफ़ेस्ट पर विजय प्राप्त करती है</strong>, एक से अधिक सहित <code>server=</code> लाइन, और एक मैनिफ़ेस्ट
+दोनों की घोषणा <code>server=</code> और <code>container.image=</code> कुछ भी लोड करने से पहले मना कर दिया जाता है।</li>
+<li><strong>आपका स्थानीय छवि टैग परिनियोजित संस्करण का चयन नहीं करता है.</strong> अपलोड की गई छवि को इसके द्वारा पिन किया गया है
+सामग्री पचाना. आप इसे अपनी इच्छानुसार स्थानीय स्तर पर टैग कर सकते हैं; अपलोड किए गए डाइजेस्ट और परिनियोजन को सत्यापित करें
+प्रकाशन के बाद की स्थिति.</li>
+<li><strong><code>?mode=merge</code> केवल क्लाइंट फ़ाइलों को पैच करता है।</strong> A <code>server/image.tar</code> मर्ज में बिल्कुल वैसे ही लोड किया जाता है
+प्रतिस्थापन पर - एक छवि को आधा-अद्यतन नहीं किया जा सकता है। देखना
+<a href="/hi/docs/api/github-games.html#partial-updates-modemerge">आंशिक अद्यतन</a>.</li>
+</ul>
+<h2 id="manifest">घोषणापत्र</h2>
+<p>रिपॉजिटरी में छवि घोषित करें <code>starhermit.txt</code>:</p>
+<pre><code class="language-ini">name=Void Marshals
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+
+container.image=ghcr.io/octocat/vm-server@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+container.port=8080
+container.health=/health
+container.memory_mb=1024
+container.cpu=1.0
+container.env.LOG_LEVEL=info
+</code></pre>
+<p>केवल <code>container.image</code> आवश्यक है। पोर्ट और स्वास्थ्य पथ डिफ़ॉल्ट हैं <code>8080</code> और <code>/health</code>.
+मेमोरी और सीपीयू अनुरोध हैं, गारंटी नहीं; प्लेटफ़ॉर्म उन्हें ऑपरेटर की सीमा में जकड़ देता है।</p>
+<p>आपकी छवि की आकार सीमा है: 2 GiB असम्पीडित, जब तक कि ऑपरेटर ने आपके गेम को दूसरा सेट न किया हो, और
+एक रजिस्ट्री पुल में पाँच मिनट होते हैं। एक खिंचाव जो छत से आगे बढ़ता है उसे आंशिक रूप से छोड़ दिया जाता है, एक अपलोड किया जाता है
+<code>image.tar</code> इस पर मना कर दिया गया है <code>413</code>, और एक छवि जो असम्पीडित होने पर बड़ी हो जाती है
+पुनः हटा दिया गया.
+<code>container.env.*</code> केवल गैर-गुप्त कॉन्फ़िगरेशन के लिए है।</p>
+<p>एक सबमिशन तब तक अस्वीकार कर दिया जाता है जब तक:</p>
+<ul>
+<li>छवि को डाइजेस्ट-पिन किया गया है <code>name@sha256:&lt;64 lowercase hex&gt;</code>. परिवर्तनीय टैग स्वीकार नहीं किए जाते हैं.</li>
+<li>रजिस्ट्री को अनुमति दी गई है और छवि सत्यापित रिपोजिटरी स्वामी के नामस्थान के अंतर्गत है;
+वर्तमान में इसका मतलब है <code>ghcr.io/&lt;github-owner&gt;/...</code>.</li>
+<li>मेनिफेस्ट बिल्कुल एक सर्वर रनटाइम घोषित करता है। <code>server=</code> और <code>container.image=</code> परस्पर हैं
+विशेष.</li>
+<li>पर्यावरण के नाम मान्य हैं और आरक्षित से शुरू नहीं होते हैं <code>STARHERMIT_</code> उपसर्ग.</li>
+</ul>
+<p>कभी भी क्रेडेंशियल न डालें <code>starhermit.txt</code>; यह एक सार्वजनिक रिपॉजिटरी फ़ाइल है।</p>
+<h2 id="protocol-v1">प्रोटोकॉल v1</h2>
+<p>कंटेनर HTTP/1.1 चालू करता है <code>container.port</code>. प्रत्येक प्लेटफ़ॉर्म HTTP अनुरोध और WebSocket अपग्रेड शामिल है <code>X-Starhermit-Invoke-Key</code>, जिसका मूल्य
+इंजेक्शन से मेल खाता है <code>STARHERMIT_INVOKE_KEY</code>; किसी अनुरोध के अनुपस्थित या ग़लत होने पर उसे अस्वीकार करें।</p>
+<table>
+<thead>
+<tr>
+<th>endpoint</th>
+<th>उद्देश्य</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET &lt;container.health&gt;</code></td>
+<td>वापस करना <code>200</code> जब सर्वर तैयार हो जाए</td>
+</tr>
+<tr>
+<td><code>GET /describe</code></td>
+<td>प्रोटोकॉल संस्करण, टिक दर, क्षमता और उपलब्धियों की घोषणा करें</td>
+</tr>
+<tr>
+<td><code>POST /sessions</code></td>
+<td>एक सत्र प्रारंभ करें, या जब इसे पुनर्स्थापित करें <code>snapshot</code> मौजूद है</td>
+</tr>
+<tr>
+<td><code>GET /sessions/{sessionId}/snapshot</code></td>
+<td>वर्तमान टिकाऊ स्थिति लौटाएँ</td>
+</tr>
+<tr>
+<td><code>DELETE /sessions/{sessionId}</code></td>
+<td>एक सत्र को नष्ट करो</td>
+</tr>
+<tr>
+<td><code>POST /sessions/{sessionId}/members</code></td>
+<td><em>वैकल्पिक:</em> एक खिलाड़ी चल रहे सत्र में शामिल हो रहा है या छोड़ रहा है</td>
+</tr>
+<tr>
+<td><code>WS /control</code></td>
+<td>परिनियोजन-व्यापी आउटबाउंड नियंत्रण चैनल</td>
+</tr>
+<tr>
+<td><code>WS /stream</code></td>
+<td>गेमप्ले दोनों दिशाओं में फ्रेम करता है</td>
+</tr>
+</tbody>
+</table>
+<p>एक कंटेनर एक गेम के सभी लाइव सत्रों की मेजबानी करता है। सत्र स्थिति को कुंजीबद्ध रखें <code>sessionId</code> और करो
+यह मत मानिए कि यह प्रक्रिया मैच के जीवनकाल तक जीवित रहेगी।</p>
+<h3 id="get-describe"><code>GET /describe</code></h3>
+<pre><code class="language-json">{
+  "protocol": 1,
+  "tickRateHz": 20,
+  "maxSessions": 48,
+  "replays": true,
+  "persistent": false,
+  "achievements": [
+    { "key": "first-blood", "name": "First Blood", "description": "Score first.", "points": 10 }
+  ]
+}
+</code></pre>
+<p><code>protocol</code> होना ही चाहिए <code>1</code>. <code>tickRateHz</code> और <code>maxSessions</code> अनुरोध हैं और उन पर लगाम लगाई जा सकती है। मंच
+कंटेनर के लूप को कभी भी स्टेप न करें, इसलिए <code>tickRateHz</code> यह बताता है कि आपका गेम कितना तेज़ है <em>चाल</em> बजाय इसके कि कैसे
+इसे चलाने के लिए तेज़: यह वह है जो प्लेटफ़ॉर्म को आपके गेम की तुलना में तेज़ी से स्नैपशॉट मांगने से रोकता है
+नया राज्य. उस दर की घोषणा करें जिस पर आपका लूप वास्तव में चलता है। आंशिक दरें स्वीकार की जाती हैं (<code>0.5</code> एक है
+हर दो सेकंड में टिक करें), और एक धीमी दर स्नैपशॉट अनुरोधों के बीच के अंतराल को बढ़ाती है -
+जो कि एक क्रैश को खेलने की लागत के बराबर है। एक कंटेनर जो कुछ भी नहीं घोषित करता है वह चेकपॉइंट छोड़ देता है
+अकेले स्नैपशॉट लागत के लिए ताल। उपलब्धि प्रविष्टियाँ समान फ़ील्ड और सीमाओं का उपयोग करती हैं
+<a href="/hi/docs/api/game-scripts.html#declare">स्क्रिप्ट-घोषित उपलब्धियाँ</a>. घोषित और मालिक द्वारा बनाई गई चाबियाँ बाद में दी जा सकती हैं।</p>
+<p><code>replays</code> मंच से प्रत्येक समाप्त सत्र की अंतिम स्थिति को एक के रूप में रखने के लिए कहता है <strong>REPLAY</strong>, द्वारा सेवा
+<code>GET /api/v1/games/{slug}/replays/{sessionId}</code> (देखना <a href="/hi/docs/api/games.html#replays">गेम्स एपीआई - रिप्ले</a>). यह अवश्य होना चाहिए
+शाब्दिक हो <code>true</code> या <code>false</code>; एक गेम जो कुछ भी नहीं घोषित करता है, उसका कोई रिप्ले नहीं होता है, और उसके रिप्ले का अंतिम बिंदु होता है
+उत्तर <code>404</code>. टिक रेट की तरह यह एक अनुरोध है - एक ऑपरेटर किसी विशेष गेम के लिए उत्तर दे सकता है
+किसी भी तरह - इसलिए अपने ग्राहक को आगे बढ़ाएं <code>replaysEnabled</code> से <code>GET /api/v1/games/{slug}</code> के बजाय पर
+आपने क्या घोषणा की. स्नैपशॉट किसी भी तरह से अप्रभावित रहते हैं: लाइव सत्र को पुनर्स्थापना बिंदु की आवश्यकता होती है या नहीं
+या नहीं इसका आखिरी रखा गया है.</p>
+<p><code>persistent</code> (शाब्दिक <code>true</code>/<code>false</code>) वह सत्र मांगता है <strong>समाप्त होने के बजाय रुकें</strong> जब हर
+खिलाड़ी चला गया है. एक विराम सत्र को पार्क करता है: प्लेटफ़ॉर्म एक अंतिम स्नैपशॉट लेता है, उसे संग्रहीत करता है, और
+कॉल <code>DELETE /sessions/{id}</code>; शामिल होने वाला अगला खिलाड़ी इसे वापस लाता है <code>POST /sessions</code> उस के साथ <code>snapshot</code>, बिल्कुल क्रैश रिस्टोर की तरह लेकिन रीस्टार्ट बजट खर्च किए बिना या भेजे बिना
+<code>resumed</code>. बहाल लगातार सत्र भी चलते हैं <code>pausedMs</code>, व्यतीत किया गया कुल समय रुका हुआ है। देखें
+<a href="/hi/docs/tutorials/persistent-sessions.html">लगातार सत्र ट्यूटोरियल</a>.</p>
+<p><code>linkedAchievements</code> (8 अन्य खेलों के स्लग तक की एक श्रृंखला) उनमें खिलाड़ियों के अनलॉक डालती है
+के ctx में खेल <code>POST /sessions</code>, बनाने और पुनर्स्थापित करने पर। देखना
+<a href="/hi/docs/api/achievements.html#achievements-from-other-games">अन्य खेलों से उपलब्धियां</a>.</p>
+<p>द करेंट <code>/describe</code> पाठक एक आयात नहीं करता है <code>queues</code> संपत्ति। इसलिए कंटेनर गेम का उपयोग करें
+अन्तर्निहित <code>default</code> 1v1 मंगनी कतार; यहां आकृतियाँ जोड़ने से बड़े मिलान सक्षम नहीं होते हैं।
+जाँच करना <code>GET /api/v1/games/{slug}/queues</code> प्रभावी आकार के लिए. प्रकट समय सीमा शुरू होती है और एआई-सीट
+उस आकार के भीतर सीमाएँ अभी भी लागू होती हैं; देखना <a href="/hi/docs/api/games.html#matchmaking">मंगनी करना</a>.</p>
+<h3 id="post-sessions"><code>POST /sessions</code></h3>
+<p>अनुरोध वही संदर्भ आकार है जो जावास्क्रिप्ट गेम को प्राप्त होता है:</p>
+<pre><code class="language-json">{
+  "now": 1769500000000,
+  "random": 0.418,
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [
+    { "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "name": "alice" }
+  ],
+  "sessionState": null,
+  "playerStates": {
+    "7c9e6679-7425-40de-944b-e07fc1f90ae7": null
+  }
+}
+</code></pre>
+<p>फ़ील्ड शब्दार्थ से मेल खाता है <a href="/hi/docs/api/game-scripts.html#context-object">स्क्रिप्ट संदर्भ</a>, शामिल
+<a href="/hi/docs/api/game-scripts.html#matchmaking-seat-layout">मैचमेकिंग सीटें, एआई झंडे और खाली सीटें</a> खेलों के लिए
+जो एक प्रारंभ समय सीमा को कॉन्फ़िगर करता है <code>starhermit.txt</code>. के साथ उत्तर दें
+मानक परिणाम लिफाफा, उदाहरण के लिए:</p>
+<pre><code class="language-json">{ "ok": true, "sessionState": { "round": 1 } }
+</code></pre>
+<p>पुनर्प्राप्ति पर अनुरोध भी शामिल है <code>snapshot</code>, प्लेटफ़ॉर्म द्वारा जारी अंतिम स्थिति को पकड़कर,
+और <code>restoredFrom</code>, एक यूनिक्स-मिलीसेकंड टाइमस्टैम्प। स्नैपशॉट से खेलने योग्य सत्र का पुनर्निर्माण करें।
+जब कोई खिलाड़ी रुके हुए सत्र में फिर से शामिल होता है, तो लगातार खेल उसी तरह से बहाल हो जाते हैं <code>pausedMs</code>
+शरीर में.</p>
+<h3 id="get-sessionssessionidsnapshot"><code>GET /sessions/{sessionId}/snapshot</code></h3>
+<p>मानक लिफाफा पूरा भरकर लौटा दें <code>sessionState</code> बहाल बिंदु:</p>
+<pre><code class="language-json">{ "ok": true, "sessionState": { "round": 3, "scores": [2, 1] } }
+</code></pre>
+<p>प्लेटफ़ॉर्म चौकियाँ समय-समय पर सक्रिय सत्रों की जाँच करती हैं। एक स्नैपशॉट प्रतिक्रिया भी शामिल हो सकती है
+<code>playerStates</code>, <code>eloUpdates</code>, <code>achievements</code>, <code>scores</code>, या <code>result</code>; वे एक ही सत्यापन से गुजरते हैं और
+स्क्रिप्ट परिणाम के रूप में दृढ़ता नियम। के साथ एक खेल के लिए <a href="#get-describe">रिप्ले</a>, अंतिम अवस्था ए
+समाप्त सत्र पहुंच गया है जिसे प्लेटफ़ॉर्म अपने रीप्ले के रूप में रखता है - इसलिए वह स्थिति बनाएं
+पुनर्निर्माण योग्य, केवल पुनः आरंभ करने योग्य नहीं।</p>
+<h3 id="post-sessionssessionidmembers"><code>POST /sessions/{sessionId}/members</code></h3>
+<p>वैकल्पिक। खिलाड़ी कर सकते हैं <strong>चल रहे सत्र में शामिल हों</strong>, किसी के जरिए <a href="/hi/docs/api/realtime.html">वास्तविक समय कक्ष</a> जो अनुमति देता है
+यह या किसी मित्र का स्वीकार करके <a href="/hi/docs/api/games.html#inviting-a-friend-into-a-game-in-progress">जिस सत्र में वे खेल रहे हैं उसमें उन्हें आमंत्रित करें</a>,
+और कमरों में एक खिलाड़ी को एआई के बिना अपनी सीट छोड़ने की अनुमति होती है। प्लेटफ़ॉर्म आपके कंटेनर से पूछता है
+परिवर्तन अंतिम होने से पहले. शरीर साधारण सीटीएक्स है, साथ <code>players</code> पहले से ही प्रतिबिंबित कर रहा है
+परिवर्तन, प्लस <code>membership</code>:</p>
+<pre><code class="language-json">{
+  "now": 1769500000000,
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [
+    { "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "name": "alice" },
+    { "id": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol" }
+  ],
+  "membership": { "change": "joined", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol", "team": 0, "slot": 1 }
+}
+</code></pre>
+<p><code>change</code> है <code>joined</code> या <code>left</code>. मानक लिफाफे के साथ उत्तर दें:</p>
+<ul>
+<li><strong>शामिल होने से इनकार किया जा सकता है.</strong> <code>{"ok": false, "error": "This world is full."}</code> खिलाड़ी को दूर कर देता है,
+सीट वापस दे दी गई और कुछ भी दर्ज नहीं किया गया; एक आमंत्रण उत्तर स्वीकार करें <code>409</code> और निमंत्रण बना रहता है
+लंबित. यदि आप समापन बिंदु लागू नहीं करते हैं, तो प्रत्येक जुड़ाव अस्वीकार कर दिया जाता है: <code>404</code>, <code>405</code> और <code>501</code> अर्थ
+"यह गेम खिलाड़ियों को मैच के बीच में नहीं लेता है", इसलिए एक निश्चित रोस्टर के लिए लिखे गए गेम में कभी भी कोई नहीं होता है
+अजनबी उसमें गिर गया.</li>
+<li><strong>एक छुट्टी अंतिम है</strong> आप जो भी उत्तर दें.</li>
+<li>उत्तर ले जा सकता है <code>achievements</code> और <code>scores</code>. A <code>sessionState</code> अनदेखा किया जाता है: a भेजें <code>snapshot</code>
+ऊपर <a href="#control-channel"><code>/control</code></a> यदि परिवर्तन चेकपॉइंट के लायक है।</li>
+</ul>
+<p>जुड़ने के बाद, नए खिलाड़ी के आदेश आने शुरू हो जाते हैं <code>/stream</code> और वे अंदर हैं <code>players</code> हर पर
+बाद में पुनर्स्थापित करें. छुट्टी के बाद, उनके फ्रेम बंद हो जाते हैं और उनका सॉकेट बंद हो जाता है। प्रत्येक जुड़ा हुआ ग्राहक
+एक प्राप्त करता है <a href="/hi/docs/api/games.html#server--client"><code>membership</code> चौखटा</a> किसी भी तरह से, और सत्र चैट को लाभ या हानि होती है
+सदस्य.</p>
+<p>A <a href="/hi/docs/tutorials/persistent-sessions.html">लगातार सत्र रोका गया</a> नहीं पूछा गया है, क्योंकि यह चल नहीं रहा है. उसे पुनर्स्थापित करें
+बायोडाटा यह वर्तमान को वहन करता है <code>players</code>, इसलिए उस खिलाड़ी के साथ ऐसा व्यवहार करें जिसे आपने पहले किसी रीस्टोर में नहीं देखा है
+सम्मिलित हुए।</p>
+<h2 id="gameplay-stream">गेमप्ले स्ट्रीम</h2>
+<p><code>WS /stream</code> दोनों दिशाओं में बाइनरी संदेशों का उपयोग करता है:</p>
+<pre><code class="language-text">[1 byte type][16 byte sessionId][16 byte userId][payload...]
+</code></pre>
+<p>GUID अपने 16-बाइट .NET वायर प्रतिनिधित्व का उपयोग करते हैं।</p>
+<ul>
+<li><strong>टाइप 1, प्लेटफ़ॉर्म → कंटेनर:</strong> खिलाड़ी का आदेश. प्लेटफ़ॉर्म प्रमाणित उपयोगकर्ता आईडी पर मुहर लगाता है;
+पेलोड क्लाइंट का JSON मान है <code>cmd.data</code>.</li>
+<li><strong>टाइप 2, कंटेनर → प्लेटफ़ॉर्म:</strong> गेम पेलोड. एक प्रतिभागी को उनकी यूजर आईडी से संबोधित करें, या उपयोग करें
+प्रसारण के लिए एक सर्व-शून्य उपयोगकर्ता आईडी। पेलोड वैध JSON होना चाहिए; ग्राहक इसे अंदर प्राप्त करते हैं
+<code>{"type":"game","data":...}</code>.</li>
+</ul>
+<p>ऑर्डर को संरक्षित करने के लिए सत्रों को स्ट्रीम कनेक्शन पर पिन किया गया है। प्लेयर को कभी भी स्वीकार या प्राप्त न करें
+कमांड JSON से पहचान—प्रमाणित हेडर आधिकारिक है।</p>
+<h2 id="control-channel">नियंत्रण चैनल</h2>
+<p>JSON टेक्स्ट संदेश भेजें <code>WS /control</code> टिकाऊ प्रभावों के लिए:</p>
+<pre><code class="language-json">{ "type": "snapshot",     "sessionId": "...", "state": { "round": 3 } }
+{ "type": "achievements", "sessionId": "...", "unlocks": { "&lt;userId&gt;": ["first-blood"] } }
+{ "type": "elo",          "sessionId": "...", "updates": { "&lt;userId&gt;": 1312 } }   // absolute ratings, not deltas — see games.md#elo-per-match
+{ "type": "scores",       "sessionId": "...", "scores": { "&lt;boardKey&gt;": { "&lt;userId&gt;": 4200 } } }
+{ "type": "result",       "sessionId": "...", "result": { "kind": "win", "winner": "..." } }
+{ "type": "backpressure", "load": 0.75 }
+</code></pre>
+<p>प्लेटफ़ॉर्म केवल इस परिनियोजन पर रूट किए गए सत्रों के लिए प्रभाव स्वीकार करता है, प्राप्तकर्ताओं को फ़िल्टर करता है
+सत्र प्रतिभागियों, उपलब्धि कुंजियों को खेल की उपलब्धियों (घोषित, या निर्मित) तक सीमित करता है
+इसका स्वामी), सीमाएँ <code>scores</code> खेल के अपने लिए
+<a href="/hi/docs/api/leaderboards.html#your-games-own-leaderboards">स्वामी द्वारा निर्मित लीडरबोर्ड</a> - प्रत्येक खिलाड़ी अपना रखता है
+सर्वोत्तम - और राज्य के बजट को लागू करता है।
+<code>result</code> सत्र समाप्त होता है; उस सत्र के बाद के प्रभावों को नजरअंदाज कर दिया जाता है। <code>backpressure.load</code> है
+जकड़ लिया <code>0..1</code> और वर्तमान परिनियोजन लोड के लिए प्लेटफ़ॉर्म खाते में सहायता करता है।</p>
+<p>शब्दार्थ की दृष्टि से महत्वपूर्ण घटनाओं, जैसे कि लक्ष्य या राउंड ट्रांज़िशन, के बाद एक स्नैपशॉट पुश करें
+केवल आवधिक चौकियों पर निर्भर रहने के बजाय।</p>
+<h2 id="container-environment-and-server-api">कंटेनर वातावरण और सर्वर एपीआई</h2>
+<table>
+<thead>
+<tr>
+<th>चर</th>
+<th>अर्थ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>STARHERMIT_PROTOCOL</code></td>
+<td>प्रोटोकॉल संस्करण (<code>1</code>)</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_GAME_SLUG</code></td>
+<td>इस गेम का स्लग</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_INVOKE_KEY</code></td>
+<td>में रहस्य अपेक्षित है <code>X-Starhermit-Invoke-Key</code>; आपके कंटेनर के लिए प्लेटफ़ॉर्म को प्रमाणित करता है</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_REFRESH_KEY</code></td>
+<td>अलग रहस्य का उपयोग केवल सर्वर टोकन को नवीनीकृत करने के लिए किया जाता है</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_API_BASE</code></td>
+<td>प्लेटफ़ॉर्म एपीआई बेस यूआरएल पृथक नेटवर्क से पहुंच योग्य है</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_SERVER_TOKEN</code></td>
+<td>संकीर्ण सर्वर-टू-सर्वर एपीआई के लिए समाप्ति धारक टोकन</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_SERVER_TOKEN_EXPIRES_IN</code></td>
+<td>इंजेक्टेड सर्वर टोकन का जीवनकाल, सेकंड में</td>
+</tr>
+<tr>
+<td><code>PORT</code></td>
+<td>पोर्ट जिस पर कंटेनर को सुनना चाहिए</td>
+</tr>
+</tbody>
+</table>
+<p>सर्वर टोकन की कोई खिलाड़ी पहचान नहीं होती है और वह खाता या खिलाड़ी क्रियाओं का उपयोग नहीं कर सकता है। यह पढ़ सकता है
+<code>GET /api/v1/time</code>, अपने स्वयं के सत्रों का समाधान करें, और सर्वर-समर्थित को कॉल करें
+<a href="/hi/docs/api/moderation.html#callers-and-routes">संयम मार्ग</a> अपने खेल के लिए. जनरेशन रूट हैं
+<a href="/hi/docs/availability.html#reserved-generation-routes">आरक्षित और अनुपलब्ध</a>.</p>
+<h3 id="renew-the-server-token">सर्वर टोकन नवीनीकृत करें</h3>
+<p>इंजेक्ट किया गया सर्वर टोकन समाप्त हो जाता है (डिफ़ॉल्ट रूप से 24 घंटे)। इसे पहले अच्छे से रिफ्रेश कर लें
+<code>STARHERMIT_SERVER_TOKEN_EXPIRES_IN</code> बीत जाता है:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/server/token
+X-Starhermit-Refresh-Key: &lt;STARHERMIT_REFRESH_KEY&gt;
+</code></pre>
+<pre><code class="language-json">{ "token": "eyJhbGciOi...", "expiresInSeconds": 86400 }
+</code></pre>
+<p>इस समापन बिंदु को जानबूझकर समाप्त हो चुके बियरर टोकन के बिना बुलाया जाता है। समर्पित ताज़ा कुंजी
+इसकी तुलना लाइव परिनियोजन से की जाती है और पुराना टोकन समाप्त होने के बाद भी काम करता है। यह अलग है
+से <code>STARHERMIT_INVOKE_KEY</code>: इनवोक कुंजी आपकी प्रक्रिया के लिए प्लेटफ़ॉर्म कॉल को प्रमाणित करती है, जबकि
+रिफ्रेश कुंजी आपकी प्रक्रिया को प्लेटफ़ॉर्म पर प्रमाणित करती है। जब भी कंटेनर शुरू होता है तो दोनों घूमते हैं।
+रिपोर्ट किए गए जीवनकाल के लगभग आधे हिस्से पर नवीनीकरण शेड्यूल करें और टोकन को परमाणु रूप से बदलें।</p>
+<p>"जब भी कंटेनर शुरू होता है" एक से अधिक तैनाती शामिल है। एक के बाद एक निष्क्रिय तैनाती रोक दी जाती है
+बिना किसी सत्र के शांत स्पैल (डिफ़ॉल्ट रूप से 15 मिनट) और अगले खिलाड़ी द्वारा फिर से शुरू किया गया। एक दुर्घटनाग्रस्त कंटेनर है
+पुनः प्रारंभ. प्रत्येक शुरुआत नई कुंजियों और नए टोकन के साथ एक नया कंटेनर है, इसलिए तीनों को पढ़ें
+चल रही प्रक्रिया का वातावरण. उन्हें कभी भी छवि, कॉन्फ़िगरेशन फ़ाइल या स्नैपशॉट में बेक न करें।</p>
+<p>यदि कोई शुरुआत विफल हो जाती है <code>The game container returned 401 for GET /describe</code>, प्लेटफ़ॉर्म की कुंजी और
+आपकी प्रक्रिया की कुंजी असहमत है। पढ़ना <code>STARHERMIT_INVOKE_KEY</code> स्टार्टअप पर और इसकी असंशोधित तुलना करें। यदि सत्यापन अभी भी विफल रहता है,
+गेम आईडी और स्वच्छ स्टार्टअप लॉग की रिपोर्ट करें; चेक को ढीला न करें.</p>
+<h3 id="reconcile-a-session">एक सत्र का समाधान करें</h3>
+<p><code>GET /api/v1/games/{slug}/server/sessions/{sessionId}</code> साथ
+<code>Authorization: Bearer &lt;STARHERMIT_SERVER_TOKEN&gt;</code> प्लेटफ़ॉर्म का वर्तमान सत्र दृश्य लौटाता है:</p>
+<pre><code class="language-json">{
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "status": "active",
+  "players": [
+    { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" }
+  ],
+  "createdAt": "2026-07-27T16:00:00Z",
+  "finishedAt": null,
+  "chatConversationId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+  "result": null
+}
+</code></pre>
+<p>पुनर्स्थापना के बाद इसका उपयोग करें जब कंटेनर को यह पुष्टि करने की आवश्यकता हो कि प्लेटफ़ॉर्म अभी भी विचार करता है या नहीं
+एक सत्र सक्रिय. किसी अन्य गेम के लिए टोकन, या खिलाड़ी लॉन्च टोकन, निषिद्ध है।</p>
+<h2 id="isolation">एकांत</h2>
+<p>गेम कंटेनर में इंटरनेट की सुविधा नहीं है। यह केवल StarHermit API के माध्यम से ही पहुंच सकता है
+<code>STARHERMIT_API_BASE</code>; यह अन्य गेम, प्लेटफ़ॉर्म सेवाओं या होस्ट तक नहीं पहुँच सकता। विक्रेता सभी
+छवि में रनटाइम निर्भरताएँ।</p>
+<p>एक छोटे को छोड़कर, रूट फ़ाइल सिस्टम केवल-पढ़ने के लिए है <code>/tmp</code>; यह प्रक्रिया एक मजबूर गैर-रूट के रूप में चलती है
+उपयोगकर्ता के पास कोई लिनक्स क्षमता नहीं है, कोई वॉल्यूम नहीं है, और सीपीयू, मेमोरी और प्रक्रिया सीमा नहीं है। इंस्टॉल न करें
+स्टार्टअप या निरंतरता पर पैकेज केवल स्थानीय डिस्क से मेल खाते हैं।</p>
+<h2 id="failure-and-recovery">विफलता और पुनर्प्राप्ति</h2>
+<p>यदि प्रक्रिया समाप्त हो जाती है, तो प्लेटफ़ॉर्म परिनियोजन को पुनरारंभ करता है और उनके लाइव सत्रों को फिर से बनाता है
+अंतिम स्नैपशॉट. कनेक्टेड खिलाड़ियों को एक प्लेटफ़ॉर्म फ़्रेम प्राप्त होता है:</p>
+<pre><code class="language-json">{ "type": "resumed", "sessionId": "...", "lostMs": 750 }
+</code></pre>
+<p>ग्राहकों को स्थानीय भविष्यवाणी को त्याग देना चाहिए और गेम के सामान्य पूर्ण-राज्य पेलोड की प्रतीक्षा करनी चाहिए। एक सत्र
+जब कोई उपयोग योग्य स्नैपशॉट मौजूद नहीं होता है, यह बहुत पुराना है, या सत्र समाप्त हो चुका है, तो पुनर्स्थापित करने के बजाय छोड़ दिया जाता है
+बहुत बार पुनः प्रारंभ किया गया. प्लेटफ़ॉर्म इसे विजेता या एलो परिवर्तन के बिना पूरा करता है और भेजता है:</p>
+<pre><code class="language-json">{ "type": "abandoned", "sessionId": "...", "reason": "server_failure" }
+</code></pre>
+<p><code>reason</code> है <code>server_failure</code> जब पुनर्प्राप्ति असुरक्षित हो या प्रतिस्थापन कभी प्रारंभ न हो, और
+<code>restore_failed</code> जब पुन: निर्माण होता है तो सत्र विफल हो जाता है। एक नई छवि प्रकाशित करने से लाइव सत्र बहाल हो जाते हैं
+प्रतिस्थापन में (या उन बहुत बासी को त्याग देता है)। एक शुरुआत जो विफल हो जाती है - पुल का समय समाप्त हो गया
+कंटेनर बाहर निकल गया, या उसने कभी भी समय पर अपने स्वास्थ्य जांच का उत्तर नहीं दिया - जैसे कि बैकऑफ़ के साथ पुनः प्रयास किया जाता है
+दुर्घटना. दस मिनट के भीतर तीन असफल प्रयास (ऑपरेटर-ट्यून करने योग्य) तैनाती को अक्षम करते हैं (<code>failed</code>),
+और यह है <strong>नहीं</strong> खिलाड़ी की मांग से जागा। खेल के विफलता भत्ते को खर्च किए बिना अस्थायी होस्टिंग रुकावटों का पुनः प्रयास किया जा सकता है।</p>
+<p>बिना लाइव सत्र वाला परिनियोजन 15 मिनट की निष्क्रियता के बाद रोक दिया जाता है (ऑपरेटर आपके गेम को एक अलग विंडो सेट कर सकता है)।
+रुका हुआ <a href="#get-describe">ज़िद्दी</a> सत्रों को कंटेनर से बाहर पार्क किया जाता है और इसे ऊपर नहीं रखा जाता है।
+ए के विरुद्ध अगले सत्र का अनुरोध <code>stopped</code> परिनियोजन इसे जगाता है (<code>pending</code> → स्वास्थ्य द्वार →
+<code>running</code>); वह दौड़ हारना है <code>503</code> कह रहे हैं खेल शुरू हो रहा है. केवल <code>stopped</code> यह जाग गया है
+रास्ता - कभी नहीं <code>failed</code>.</p>
+<p>डिज़ाइन <code>POST /sessions</code> खेल प्रोटोकॉल के भाग के रूप में पुनर्स्थापना और स्नैपशॉट ताल, एक के रूप में नहीं
+वैकल्पिक अनुकूलन.</p>
+<p>गेम का मालिक फंसे हुए सत्रों को सूचीबद्ध और समाप्त कर सकता है:
+<code>GET</code>/<code>DELETE /api/v1/me/github-games/{id}/sessions[/{sessionId}]</code>.</p>
+<h2 id="your-servers-output-and-crash-reports">आपके सर्वर का आउटपुट और क्रैश रिपोर्ट</h2>
+<p>गेम के स्वामी के रूप में आप पढ़ सकते हैं कि आपके सर्वर ने क्या प्रिंट किया, और जब यह डाउन हुआ तो क्या हुआ:</p>
+<table>
+<thead>
+<tr>
+<th>तरीका</th>
+<th>पथ</th>
+<th>विवरण</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/me/github-games/{id}/container/logs?tail=N</code></td>
+<td>हालिया आउटपुट: <code>{ source, deploymentStatus, capturedAt, truncated, logs }</code></td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/me/github-games/{id}/container/crashes?page=&amp;pageSize=</code></td>
+<td>क्रैश रिकॉर्ड, नवीनतम सबसे पहले</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/me/github-games/{id}/container/crashes/{crashId}</code></td>
+<td>कैप्चर किए गए आउटपुट के साथ एक क्रैश रिकॉर्ड</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>लॉग्स</strong> चल रहे सर्वर से लाइव आएं (<code>source: "live"</code>), नवीनतम रखा गया, 500 लाइनों तक और
+डिफ़ॉल्ट रूप से 256 KiB. जब कुछ भी नहीं चल रहा हो तो आपको अंतिम क्रैश पर कैप्चर किया गया आउटपुट मिलता है
+(<code>source: "last_crash"</code>). एक गेम जिसका बैकएंड एक स्क्रिप्ट है, या जिसमें कोई स्क्रिप्ट नहीं है, उसे मिलता है <code>409</code>.</li>
+<li><strong>एक क्रैश रिकॉर्ड</strong> यह तब लिखा जाता है जब आपका सर्वर क्रैश हो जाता है, उत्तर देना बंद कर देता है, समय समाप्त हो जाता है
+कंटेनर हटाए जाने से पहले स्टार्टअप या प्रारंभ करने में विफल रहता है। इसमें प्रकार, निकास कोड,
+इमेज डाइजेस्ट, पुनरारंभ गिनती, प्रभावित सत्र, और आपके सर्वर का अंतिम 64 KiB आउटपुट। द
+50 सबसे हाल के, 30 दिनों के लिए रखे गए हैं।</li>
+<li><strong>रहस्यों को पुनः प्रकाशित किया जाता है।</strong> आपके सर्वर की इनवोक कुंजी, रिफ्रेश कुंजी और कोई भी सर्वर टोकन इस रूप में दिखाई देते हैं
+<code>[redacted]</code>. अपनी खुद की <code>container.env.*</code> मान मुद्रित रूप में दिखाई देते हैं - जो आप लॉग नहीं करना चाहते उसे लॉग न करें
+संग्रहित करना चाहते हैं.</li>
+</ul>
+<p>ऑपरेटर प्रत्येक गेम के अनुसार इनमें से प्रत्येक सीमा को बदल सकते हैं।</p>
+<h2 id="see-also">यह भी देखें</h2>
+<ul>
+<li><a href="/hi/docs/api/github-games.html">गिटहब गेम्स</a> - रिपॉजिटरी पंजीकरण और तैनाती</li>
+<li><a href="/hi/docs/api/games.html">गेम्स एपीआई</a> - अपरिवर्तित खिलाड़ी-सामना करने वाली REST और WebSocket सतह</li>
+<li><a href="/hi/docs/api/game-scripts.html">गेम स्क्रिप्ट</a> - वैकल्पिक जावास्क्रिप्ट रनटाइम और साझा संदर्भ/परिणाम आकार</li>
+<li><a href="/hi/docs/api/achievements.html">उपलब्धियों</a> - खिलाड़ी-सामना उपलब्धि पढ़ता है और सूचनाएं</li>
+</ul>
+<p>साझा <a href="/hi/docs/api/conventions.html">एपीआई कन्वेंशन</a> प्रतिक्रिया पार्सिंग, टाइमस्टैम्प, पेजिनेशन और पुनः प्रयास का वर्णन करें।</p>
+<p>देखना <a href="/hi/docs/credentials.html">क्रेडेंशियल अनुकूलता</a> और <a href="/hi/docs/api/contracts.html">मशीन-पठनीय अनुबंध</a>.</p>
+
+{% endraw %}

@@ -1,0 +1,158 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Tutorial: sessões persistentes — jogos que pausam quando todos saem"
+source_url: "/docs/tutorials/persistent-sessions.html"
+source_path: "docs/tutorials/persistent-sessions.md"
+source_hash: "35977b60ae64d913cbd390339f114d1c67a92c310166173d669571a677e377fa"
+translation: "machine"
+permalink: "/pt/docs/tutorials/persistent-sessions.html"
+---
+{% raw %}
+<h1 id="tutorial-persistent-sessions--games-that-pause-when-everyone-leaves">Tutorial: sessões persistentes — jogos que pausam quando todos saem</h1>
+<p>Normalmente a plataforma termina uma partida que ninguém está jogando: uma vez que todos os jogadores se desconectaram e ninguém
+voltou em cinco minutos, a sessão termina como <code>abandoned</code> com razão <code>players_left</code>
+(ver <a href="/pt/docs/api/games.html#server--client">API de jogos – WebSocket de jogabilidade</a>). Isso é certo para um xadrez
+jogo ou corrida, e errado para uma fazenda, um construtor de cidade, uma masmorra compartilhada ou qualquer mundo, um grupo de
+os jogadores retornam ao longo de dias.</p>
+<p>Um jogo pode pedir <strong>sessões persistentes</strong> em vez de. Uma sessão persistente é pausada quando seus jogadores se desconectam:</p>
+<ol>
+<li>O último jogador sai.</li>
+<li>Após cerca de 15 segundos sem ninguém conectado, a plataforma <strong>pausas</strong> a sessão. Nada funciona:
+um jogo de script não ganha <code>onTick</code> chamadas e a sessão de um jogo contêiner é removida do
+recipiente.</li>
+<li>A sessão permanece pausada dentro da sua política de retenção de recuperação. Ler <code>/sessions/{id}/recovery</code>
+para qualquer expiração, em vez de presumir que será mantido para sempre.</li>
+<li>O primeiro jogador a se conectar <code>ws/v1/games</code> <strong>currículos</strong> isso, antes que seu primeiro comando seja
+manipulado. O jogo continua de onde parou.</li>
+</ol>
+<p>Esta página mostra como ativá-lo, como evitar que os relógios do jogo entrem em pausa e
+o que seu cliente precisa fazer.</p>
+<h2 id="1-opt-in">1. Ative</h2>
+<p>Persistência é uma declaração por jogo, lida quando seu jogo é publicado ou atualizado — publique uma
+atualizar depois de alterá-lo. Deve ser literal <code>true</code> ou <code>false</code>; qualquer outra coisa conta como não
+declaração, e um jogo que não declara nada se comporta como antes.</p>
+<p><strong>Jogo de roteiro</strong> - uma estática <code>persistent</code> no <code>game</code> objeto (ver
+<a href="/pt/docs/api/game-scripts.html#persistent-sessions">Scripts de jogos</a>):</p>
+<pre><code class="language-js">globalThis.game = {
+  persistent: true,
+  tickRateHz: 1,
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<p><strong>Jogo de contêiner</strong> — <code>persistent</code> em seu <code>GET /describe</code> resposta (veja
+<a href="/pt/docs/api/container-games.html#get-describe">Servidores de jogos em contêiner</a>):</p>
+<pre><code class="language-json">{ "protocol": 1, "tickRateHz": 20, "maxSessions": 48, "persistent": true }
+</code></pre>
+<p>Nada muda na forma como as sessões são criadas: matchmaking, convites, endpoint de IA e tempo real
+todas as salas produzem sessões persistentes para um jogo persistente.</p>
+<h2 id="2-keep-game-time-still-while-paused">2. Mantenha o tempo do jogo parado durante a pausa</h2>
+<p>A plataforma não reescreve <code>ctx.now</code> - ele continua sendo o verdadeiro relógio de parede, então a qualquer hora que você
+mostrar aos jogadores (um prazo, um "colheita pronta em") continua significando o que diz. Em vez disso, persistente
+sessões recebem um campo de contexto extra:</p>
+<pre><code class="language-js">ctx.pausedMs   // total milliseconds this session has spent paused, so far
+</code></pre>
+<p>Ele só cresce, e apenas em sessões persistentes (outros jogos nunca entram em campo). Subtraia e você
+tenha um <strong>relógio de jogo</strong> que para enquanto ninguém está lá:</p>
+<pre><code class="language-js">function gameTime(ctx) {
+  return ctx.now - (ctx.pausedMs || 0);
+}
+
+globalThis.game = {
+  persistent: true,
+  tickRateHz: 1,
+
+  createSession(ctx) {
+    return { ok: true, sessionState: { lastTick: gameTime(ctx), crops: [] } };
+  },
+
+  onTick(ctx) {
+    var state = ctx.sessionState;
+    var t = gameTime(ctx);
+    var dt = t - state.lastTick;      // never includes the time the world was paused
+    state.crops.forEach(function (crop) { crop.growth += dt; });
+    state.lastTick = t;
+    return { ok: true, sessionState: state };
+  },
+
+  onPlayerMessage(ctx) { /* ... */ }
+};
+</code></pre>
+<p>Armazene seus próprios carimbos de data/hora no tempo do jogo (<code>gameTime(ctx)</code>), não em <code>ctx.now</code>, e compare-os apenas
+contra o tempo de jogo. Se você <em>querer</em> o mundo siga em frente enquanto ninguém está olhando - colheitas que crescem
+durante a noite - use <code>ctx.now</code> em vez disso, acompanhe o primeiro tick após um currículo. De qualquer forma, é seu
+escolha; a plataforma apenas informa o que aconteceu.</p>
+<p>Dois detalhes do momento:</p>
+<ul>
+<li>Durante os aproximadamente 15 segundos entre a saída do último jogador e a pausa, a sessão ainda está
+marcou normalmente. Um jogador cuja conexão cai e volta direto não causa pausa.</li>
+<li>Depois de um currículo, o próximo <code>onTick</code> vem um intervalo de tick depois. O tempo pausado não é reproduzido
+como um acúmulo de ticks perdidos.</li>
+</ul>
+<p>Um contêiner recebe <code>pausedMs</code> no mesmo lugar: no <code>POST /sessions</code> corpo ele é enviado quando
+a sessão é restaurada após uma pausa.</p>
+<h2 id="3-your-client">3. Seu cliente</h2>
+<p>Uma sessão pausada ainda é uma sessão ativa, portanto o fluxo do cliente é aquele que você já possui:</p>
+<ul>
+<li><strong>Listar mundos para voltar</strong> com <code>GET /api/v1/games/{slug}/sessions/mine</code>. Cada entrada tem um
+<code>pausedAt</code> carimbo de data/hora enquanto está pausado e <code>null</code> enquanto alguém está nele, para que você possa mostrar "pausado
+desde…" ou "2 amigos jogando agora" (ver <a href="/pt/docs/api/games.html#get-apiv1gamesslugsessionsmine">API de jogos – Sessões</a>).</li>
+<li><strong>Junte-se novamente</strong> abrindo <code>ws/v1/games?sessionId=…</code> exatamente como antes. O currículo acontece durante o
+conectar. Não há nenhum especial "retomado" quadro para isso - o jogo simplesmente está rodando quando seu primeiro
+chega o comando - então solicite ou aguarde a mensagem normal de estado completo do seu jogo, como faria em
+qualquer reconectar.</li>
+<li><strong>Lidar com um currículo com falha.</strong> Se a plataforma não puder retomar a sessão — provavelmente um contêiner
+jogo cujo servidor ainda está iniciando — você recebe <code>{"type":"error","error":"…"}</code> e a tomada
+está fechado com código <code>1001</code>. A sessão permanece pausada e nada é perdido. Reconecte após um breve
+espera (alguns segundos, crescente) e mostrar "começando o mundo…" em vez de um erro.</li>
+<li><code>presence</code> os frames funcionam normalmente, para que os outros jogadores vejam quem está no mundo agora.</li>
+</ul>
+<h2 id="4-ending-a-persistent-session">4. Encerrando uma sessão persistente</h2>
+<p>Uma sessão persistente termina quando:</p>
+<ul>
+<li><strong>seu jogo relata um <code>result</code></strong> (valor de retorno do script ou mensagem de controle do contêiner), ou</li>
+<li>o dono do jogo termina (<code>DELETE /api/v1/me/github-games/{id}/sessions/{sessionId}</code>),</li>
+<li>o último membro deixa explicitamente um mundo sem espaço através <code>/sessions/{id}/leave</code>, ou</li>
+<li>seus dados de recuperação pausados ​​expiram de acordo com a política de retenção da implantação.</li>
+</ul>
+<p>A desconexão deixa a associação intacta; sair explicitamente desiste de ser membro. Ver
+<a href="/pt/docs/session-lifecycle.html">Ciclo de vida e recuperação da sessão</a> para ambos os fluxos.</p>
+<p>Pedir um novo jogo faz <strong>não</strong> retirar as pausadas do jogador, e as sessões pausadas ainda contam
+contra o limite de sessões simultâneas por jogador (20 por padrão). <strong>Dê aos jogadores uma maneira de terminar ou
+deixe um mundo</strong> - um "abandonar o mundo" comande suas respostas de script com um <code>result</code>, por exemplo.
+Caso contrário, um jogador que tenha preenchido o seu limite não poderá começar nada novo.</p>
+<pre><code class="language-js">onPlayerMessage(ctx) {
+  var msg = ctx.message.data;
+  if (msg.type === "close-world" &amp;&amp; ctx.message.from === ctx.sessionState.ownerId) {
+    return { ok: true, sessionState: ctx.sessionState, result: { kind: "closed" } };
+  }
+  /* ... */
+}
+</code></pre>
+<h2 id="5-container-games-parking">5. Jogos de contêineres: estacionamento</h2>
+<p>Para um jogo de contêiner, uma pausa é um <strong>parque</strong>:</p>
+<ol>
+<li>A plataforma pede um instantâneo final (<code>GET /sessions/{id}/snapshot</code>) e armazena-o de forma durável.</li>
+<li>Isso destrói a sessão (<code>DELETE /sessions/{id}</code>). Seu contêiner para de simulá-lo e se
+se não tiver outras sessões, a implantação poderá ser interrompida após o período ocioso.</li>
+<li>Na próxima junção, ele recria a sessão com <code>POST /sessions</code>, carregando o armazenado <code>snapshot</code>
+e o atualizado <code>pausedMs</code> — a mesma solicitação de uma restauração de falha — ativando uma implantação interrompida
+primeiro, se necessário.</li>
+</ol>
+<p>Portanto, o instantâneo que você retorna deve ser suficiente para reconstruir o mundo inteiro, não apenas para retomar alguns
+segundos de jogo. Se esse snapshot final falhar, a sessão será estacionada desde seu último snapshot periódico.
+ponto de verificação. Ao contrário de uma falha, um estacionamento e restauração não é contabilizado no seu orçamento de reinicialização e
+os jogadores não recebem <code>resumed</code> frame: ninguém estava lá para ver o estado retroceder.</p>
+<h2 id="checklist">Lista de verificação</h2>
+<ul>
+<li>[ ] <code>persistent: true</code> declarado (script) ou retornado de <code>/describe</code> (contêiner) e uma atualização publicada.</li>
+<li>[] Uso de cronômetros de jogo <code>ctx.now - ctx.pausedMs</code>, ou usar deliberadamente <code>ctx.now</code> e recuperar o atraso.</li>
+<li>[ ] As listas de clientes <code>sessions/mine</code>, mostra <code>pausedAt</code>, e se junta novamente <code>ws/v1/games</code>.</li>
+<li>[] O cliente tenta novamente com espera após um <code>error</code> seguido pelo código de fechamento <code>1001</code> ao conectar.</li>
+<li>[] Os jogadores têm uma maneira de acabar com um mundo, para que nunca fiquem presos no limite da sessão.</li>
+<li>[ ] (Container) snapshots reconstroem o mundo inteiro.</li>
+</ul>
+
+{% endraw %}

@@ -1,0 +1,284 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Cargue compilaciones desde CI/CD con una clave pública inscrita en OAuth"
+source_url: "/docs/tutorials/ci-cd-build-upload.html"
+source_path: "docs/tutorials/ci-cd-build-upload.md"
+source_hash: "0f3e9f3e48bf88125b2110acdd92ab62aeb0840f0bbc758e7c52b911a434e718"
+translation: "machine"
+permalink: "/es/docs/tutorials/ci-cd-build-upload.html"
+---
+{% raw %}
+<h1 id="upload-builds-from-cicd-with-an-oauth-enrolled-public-key">Cargue compilaciones desde CI/CD con una clave pública inscrita en OAuth</h1>
+<p>Este tutorial proporciona a un canal de implementación su propia credencial StarHermit sin almacenar su Google
+o tokens GitHub OAuth en CI. La configuración única es interactiva:</p>
+<ol>
+<li>Inicie sesión a través de OAuth y acepte los términos actuales de StarHermit.</li>
+<li>Agregue una clave pública dedicada a su cuenta StarHermit.</li>
+<li>Coloque solo la mitad privada de esa clave en el almacén secreto de CI.</li>
+</ol>
+<p>Luego, cada recorrido del oleoducto firma un desafío StarHermit de corta duración, recibe un tiempo normal de 15 minutos.
+token de acceso y carga la nueva compilación. La clave de canalización actúa como su cuenta y solo puede actualizarse
+juegos que posee la cuenta.</p>
+<h2 id="why-use-a-separate-deployment-key">¿Por qué utilizar una clave de implementación independiente?</h2>
+<p>No guarde un token de actualización o acceso de OAuth en CI. Una clave pública de StarHermit es una máquina mejor
+credencial porque puede etiquetarse, auditarse y revocarse de forma independiente. Una sesión autenticada
+por esa llave <strong>No se pueden agregar claves ni revocar otras claves.</strong>; esas operaciones requieren una autenticación OAuth
+sesión. Puede revocarse mediante <code>/api/v1/me/public-keys/current</code>. Si se filtra el secreto de CI, inicie sesión con Google o GitHub y revoque la clave de implementación.
+La revocación también finaliza las sesiones de actualización creadas por esa clave y hace que sus tokens de acceso existentes fallen.
+en su próxima solicitud de API.</p>
+<p>Utilice una clave por repositorio/entorno, por ejemplo <code>orbit-league-production</code>, en lugar de compartir
+una clave privada entre cada flujo de trabajo.</p>
+<h2 id="prerequisites">Requisitos previos</h2>
+<ul>
+<li>Una cuenta de StarHermit iniciada a través de Google o GitHub OAuth.</li>
+<li>Un juego existente propiedad de esa cuenta. guardar su <code>id</code> como <code>GAME_ID</code>; el punto final del paquete actualiza un
+juego pero no crea uno.</li>
+<li>Una compilación de cliente distribuible y/o compatible con Docker <code>docker save</code> imagen. Ver
+<a href="/es/docs/api/github-games.html#push-a-game-bundle">Juegos de GitHub</a> para el diseño del archivo.</li>
+<li>Python 3 para los comandos de configuración y el flujo de trabajo de ejemplo; <code>curl</code> y <code>jq</code> para el ejemplo de inscripción.</li>
+</ul>
+<p>Una canalización puede iniciar sesión correctamente y seguir recibiendo <code>403 terms_acceptance_required</code> cuando
+carga o abre un socket de carga. Haga que el propietario de la cuenta revise y <a href="/es/docs/api/profile.html#terms-acceptance">aceptar los términos actuales</a>
+interactivamente y luego vuelva a ejecutar el trabajo. Esto puede repetirse cuando cambian los términos; no aceptar automáticamente
+términos de CI.</p>
+<h2 id="one-time-setup">Configuración única</h2>
+<h3 id="1-generate-a-deployment-key-locally">1. Genere una clave de implementación localmente</h3>
+<p>El ejemplo utiliza Ed25519. Ejecute esto en una estación de trabajo confiable, no en el trabajo de CI:</p>
+<pre><code class="language-bash">python -m pip install cryptography
+python - &lt;&lt;'PY'
+import base64
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat, PublicFormat
+
+key = Ed25519PrivateKey.generate()
+private = key.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())
+public = key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+print("STARHERMIT_PRIVATE_KEY=" + base64.b64encode(private).decode())
+print("STARHERMIT_PUBLIC_KEY=" + base64.b64encode(public).decode())
+PY
+</code></pre>
+<p>El valor privado es la semilla de 32 bytes y se muestra una vez en esta terminal local confiable. nunca te comprometas
+imprimirlo, imprimirlo en registros de CI, colocarlo en un artefacto o enviarlo a StarHermit. Mantener el valor público para
+el siguiente paso y para la variable de flujo de trabajo.</p>
+<h3 id="2-sign-in-with-oauth-and-add-the-public-key">2. Inicie sesión con OAuth y agregue la clave pública.</h3>
+<p>Abra una de estas URL en un navegador:</p>
+<pre><code class="language-text">https://api.starhermit.com/api/v1/auth/oauth/github/authorize
+https://api.starhermit.com/api/v1/auth/oauth/google/authorize
+</code></pre>
+<p>Después de la devolución de llamada, utilice inmediatamente el token de acceso autenticado por OAuth devuelto. ponlo en un local
+variable de entorno en lugar de en el historial del shell:</p>
+<pre><code class="language-bash">read -rsp 'OAuth access token: ' OAUTH_ACCESS_TOKEN; echo
+read -rp  'Public key: ' STARHERMIT_PUBLIC_KEY
+
+curl -sS -X POST https://api.starhermit.com/api/v1/me/public-keys \
+  -H "Authorization: Bearer $OAUTH_ACCESS_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data "$(jq -n \
+    --arg keyData "$STARHERMIT_PUBLIC_KEY" \
+    --arg label 'orbit-league-production' \
+    '{keyType:"Ed25519", keyData:$keyData, label:$label}')"
+</code></pre>
+<p>La llamada regresa <code>201</code> y el registro clave. A <code>403</code> significa que este token no proviene de OAuth
+sesión (una verificación por correo electrónico, una clave pública o un token de inicio de juego no es suficiente). A <code>409</code> significa el
+La clave ya está activa o la cuenta ha alcanzado su límite de claves activas.</p>
+<p>Comprueba el resultado con <code>GET /api/v1/me/public-keys</code>. La lista incluye etiquetas, huellas dactilares, último uso.
+veces y claves revocadas, por lo que también es el registro de auditoría de credenciales.</p>
+<h3 id="3-configure-the-repository">3. Configurar el repositorio</h3>
+<p>En GitHub, agregue:</p>
+<ul>
+<li>Acciones secretas <code>STARHERMIT_PRIVATE_KEY</code>: la semilla privada Base64.</li>
+<li>Variables de acciones <code>STARHERMIT_PUBLIC_KEY</code>: la clave pública sin formato Base64.</li>
+<li>Variables de acciones <code>STARHERMIT_GAME_ID</code>: ID del juego de propiedad.</li>
+</ul>
+<p>Proteja la producción con un entorno GitHub si se requiere aprobación. Los valores equivalentes pueden ser
+almacenado en variables protegidas de GitLab, Azure Key Vault o cualquier otro almacén secreto de CI.</p>
+<h2 id="add-the-authenticationupload-helper">Agregar el asistente de autenticación/carga</h2>
+<p>cometa lo siguiente como <code>ci/starhermit_upload.py</code>. Reconstruye el desafío JSON exacto que
+StarHermit firma internamente, se autentica con Ed25519 y elige HTTP para archivos pequeños o el
+suba WebSocket para archivos de más de 90 MB. WebSocket evita el cuerpo HTTP de aproximadamente 100 MB de la CDN
+límite.</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+import argparse, asyncio, base64, json, os
+from pathlib import Path
+from urllib.parse import quote, urlparse, urlunparse
+
+import requests
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+
+def authenticate(api, public_key, private_key):
+    challenge = requests.post(
+        f"{api}/api/v1/auth/public-key/challenge",
+        json={"keyType": "Ed25519", "keyData": public_key}, timeout=30)
+    challenge.raise_for_status()
+    body = challenge.json()
+    p = body["payload"]
+
+    # Public JSON is camelCase; the server verifies its ChallengePayload serialization, whose
+    # property names and order are the PascalCase sequence below.
+    payload = {
+        "ChallengeId": p["challengeId"],
+        "Fingerprint": p["fingerprint"],
+        "Issuer": p["issuer"],
+        "Audience": p["audience"],
+        "Expiry": p["expiry"],
+        "Nonce": p["nonce"],
+        "ClientTimestamp": p["clientTimestamp"],
+    }
+    # System.Text.Json escapes '+' in string fields (the Base64 nonce) as \u002B.
+    # DateTimeOffset fields keep literal '+' in their offsets: do not replace globally.
+    fields = []
+    for name, value in payload.items():
+        encoded = json.dumps(value)
+        if name == "Nonce":
+            encoded = encoded.replace("+", r"\u002B")
+        fields.append(json.dumps(name) + ":" + encoded)
+    signed_payload = ("{" + ",".join(fields) + "}").encode("utf-8")
+
+    seed = base64.b64decode(private_key, validate=True)
+    signature = Ed25519PrivateKey.from_private_bytes(seed).sign(signed_payload)
+    complete = requests.post(
+        f"{api}/api/v1/auth/public-key/complete",
+        json={"challengeId": body["challengeId"],
+              "signature": base64.b64encode(signature).decode(),
+              "keyType": "Ed25519", "keyData": public_key}, timeout=30)
+    complete.raise_for_status()
+    return complete.json()["accessToken"]
+
+
+def upload_http(api, game_id, token, archive, mode):
+    with archive.open("rb") as stream:
+        response = requests.post(
+            f"{api}/api/v1/me/github-games/{game_id}/bundle",
+            params={"mode": mode} if mode != "replace" else None,
+            headers={"Authorization": f"Bearer {token}",
+                     "Content-Type": "application/gzip"},
+            data=stream, timeout=1800)
+    response.raise_for_status()
+    print(json.dumps(response.json()))
+
+
+async def upload_websocket(api, game_id, token, archive, mode):
+    import websockets
+    parsed = urlparse(api)
+    query = f"gameId={quote(game_id)}&amp;access_token={quote(token)}"
+    if mode != "replace":
+        query += f"&amp;mode={quote(mode)}"
+    uri = urlunparse(("wss" if parsed.scheme == "https" else "ws", parsed.netloc,
+                      "/ws/v1/game-upload", "", query, ""))
+    async with websockets.connect(uri, max_size=None, ping_interval=20) as ws:
+        ready = json.loads(await ws.recv())
+        if ready.get("type") != "ready":
+            raise RuntimeError(ready)
+        with archive.open("rb") as stream:
+            while chunk := stream.read(512 * 1024):
+                await ws.send(chunk)
+        await ws.send(json.dumps({"type": "complete"}))
+        while True:
+            message = json.loads(await ws.recv())
+            if message.get("type") == "result":
+                print(json.dumps(message))
+                return
+            if message.get("type") == "error":
+                raise RuntimeError(message)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("archive", type=Path)
+    parser.add_argument("--api", default="https://api.starhermit.com")
+    parser.add_argument("--mode", choices=("replace", "merge"), default="replace",
+                        help="replace the live client files (default) or patch them")
+    args = parser.parse_args()
+    game_id = os.environ["STARHERMIT_GAME_ID"]
+    token = authenticate(args.api.rstrip("/"), os.environ["STARHERMIT_PUBLIC_KEY"],
+                         os.environ["STARHERMIT_PRIVATE_KEY"])
+    if args.archive.stat().st_size &lt; 90 * 1024 * 1024:
+        upload_http(args.api.rstrip("/"), game_id, token, args.archive, args.mode)
+    else:
+        asyncio.run(upload_websocket(args.api.rstrip("/"), game_id, token, args.archive, args.mode))
+
+
+if __name__ == "__main__":
+    main()
+</code></pre>
+<p>Trate una salida distinta de cero como una implementación fallida. No registre el token de acceso ni el cuerpo completo de la solicitud.
+El token de acceso dura 15 minutos, así que autentíquese inmediatamente antes de cargarlo; el WebSocket
+lo verifica durante el protocolo de enlace y puede finalizar después de que caduque el token.</p>
+<h2 id="github-actions-example">Ejemplo de acciones de GitHub</h2>
+<p>Este ejemplo publica el contenido de <code>dist/</code> en cada empujón hacia <code>main</code>:</p>
+<p>{% crudo %}</p>
+<pre><code class="language-yaml">name: Deploy to StarHermit
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Package StarHermit bundle
+        run: |
+          mkdir -p bundle/client
+          cp -R dist/. bundle/client/
+          cp starhermit.txt bundle/starhermit.txt
+          tar -C bundle -czf game-bundle.tar.gz .
+
+      - name: Install uploader dependencies
+        run: python -m pip install 'cryptography&gt;=42,&lt;45' 'requests&gt;=2.31,&lt;3' 'websockets&gt;=12,&lt;13'
+
+      - name: Upload build
+        env:
+          STARHERMIT_PRIVATE_KEY: ${{ secrets.STARHERMIT_PRIVATE_KEY }}
+          STARHERMIT_PUBLIC_KEY: ${{ vars.STARHERMIT_PUBLIC_KEY }}
+          STARHERMIT_GAME_ID: ${{ vars.STARHERMIT_GAME_ID }}
+        run: python ci/starhermit_upload.py game-bundle.tar.gz
+</code></pre>
+<p>{% dibujar %}</p>
+<p>Para un servidor dedicado, agregue <code>docker build</code>, guarde la imagen en <code>bundle/server/image.tar</code>y retener
+<code>starhermit.txt</code> en la raíz del paquete:</p>
+<pre><code class="language-bash">docker build -t my-game-server:${GITHUB_SHA} -f Dockerfile.server .
+mkdir -p bundle/server
+docker save my-game-server:${GITHUB_SHA} -o bundle/server/image.tar
+tar -C bundle -czf game-bundle.tar.gz .
+</code></pre>
+<p>Una carga exitosa del paquete significa que StarHermit aceptó y publicó atómicamente el paquete; lo hace
+no significa que un nuevo contenedor haya pasado los controles sanitarios. Encuesta
+<code>GET /api/v1/me/github-games/{id}/deployment</code> con el mismo token recién autenticado y ejecute un
+prueba de humo antes de promover el lanzamiento.</p>
+<h2 id="rotation-and-incident-response">Rotación y respuesta a incidentes.</h2>
+<ol>
+<li>Inicie sesión a través de OAuth y acepte los términos actuales de StarHermit.</li>
+<li>Agregue una clave recién generada y claramente etiquetada.</li>
+<li>Reemplace la variable y el secreto de CI y luego ejecute una implementación.</li>
+<li>Revocar la antigua clave con <code>DELETE /api/v1/me/public-keys/{keyId}</code>.</li>
+</ol>
+<p>Para un supuesto compromiso amplio, <code>DELETE /api/v1/me/public-keys/all</code> revoca cada clave activa.
+Ambas operaciones de eliminación requieren una sesión autenticada por OAuth. Un oleoducto autenticado por su propia
+La clave no puede revocar otras claves, agregar una de reemplazo, cambiar el correo electrónico de la cuenta ni eliminar una identidad de OAuth.
+Puede revocarse con <code>DELETE /api/v1/me/public-keys/current</code>; descarta sus tokens almacenados después.</p>
+<h2 id="see-also">Ver también</h2>
+<ul>
+<li><a href="/es/docs/api/profile.html#public-keys">Perfil: gestión de claves públicas</a></li>
+<li><a href="/es/docs/api/auth.html#public-key-login">Autenticación: inicio de sesión con clave pública</a></li>
+<li><a href="/es/docs/api/github-games.html#push-a-game-bundle">Juegos de GitHub: envía un paquete de juegos</a></li>
+<li><a href="/es/docs/api/github-games.html#upload-over-a-websocket">Juegos de GitHub: cargar a través de un WebSocket</a></li>
+</ul>
+
+{% endraw %}

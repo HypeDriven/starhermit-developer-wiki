@@ -1,0 +1,550 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "Authentification"
+source_url: "/docs/api/auth.html"
+source_path: "docs/api/auth.md"
+source_hash: "7c5d28fbaf648ef5811fa8660eb49076563e9f4b439f256cf9632e72ae1130ed"
+translation: "machine"
+permalink: "/fr/docs/api/auth.html"
+---
+{% raw %}
+<h1 id="authentication">Authentification</h1>
+<p>StarHermit a <strong>pas d'authentification par mot de passe</strong>. Il existe deux flux de connexion&#160;: l'authentification par clé publique (Ed25519, ECDSA-P256 ou RSA-PSS, avec enregistrement vérifié par e-mail) et OAuth. Toutes les routes d'authentification se trouvent sous <code>api/v1/auth</code> et sont anonymes, sauf indication contraire. Cette page couvre également les cycles de vie des jetons, les jetons de lancement à l'échelle du jeu et les tickets de connexion WebSocket.</p>
+<p>Les corps d’erreur varient&#160;; voir <a href="/fr/docs/api/conventions.html#requests-and-responses">Conventions API</a>.</p>
+<h2 id="endpoints">Points de terminaison</h2>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Chemin</th>
+<th>Authentification</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/auth/public-key/register</code></td>
+<td>Anonyme</td>
+<td>Commencez l'enregistrement de la clé publique&#160;; envoie un e-mail de vérification</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/auth/public-key/verify</code></td>
+<td>Jeton unique envoyé par e-mail</td>
+<td>La page ouverte par l'e-mail de vérification&#160;; ne change rien</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/auth/public-key/verify</code></td>
+<td>Jeton unique envoyé par e-mail</td>
+<td>Inscription complète</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/auth/public-key/challenge</code></td>
+<td>Anonyme</td>
+<td>Demander un défi de connexion pour signer</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/auth/public-key/complete</code></td>
+<td>Anonyme</td>
+<td>Soumettez un défi signé pour vous connecter</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/auth/refresh</code></td>
+<td>Anonyme</td>
+<td>Faites pivoter un jeton d'actualisation pour une nouvelle paire de jetons</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/auth/logout</code></td>
+<td>Anonyme</td>
+<td>Révoquer un jeton d'actualisation</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/auth/public-key/revoke-request</code></td>
+<td>Anonyme</td>
+<td>Envoyez par e-mail un lien qui révoque chaque clé active sur le compte correspondant</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/auth/public-key/revoke/confirm</code></td>
+<td>Jeton unique envoyé par e-mail</td>
+<td>La page ouverte par l'e-mail de révocation&#160;; ne change rien</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/auth/public-key/revoke/confirm</code></td>
+<td>Jeton unique envoyé par e-mail</td>
+<td>Confirmer cette révocation&#160;; n'émet aucune session</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/auth/games/{gameId}/sign-in</code></td>
+<td>Anonyme</td>
+<td>Connectez-vous ou créez un compte, puis revenez directement à un jeu hébergé</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/auth/oauth/providers</code></td>
+<td>Anonyme</td>
+<td>Les fournisseurs OAuth en direct avec lesquels ce déploiement peut réellement connecter des personnes</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/auth/oauth/{provider}/authorize</code></td>
+<td>Anonyme</td>
+<td>Redirection vers le fournisseur OAuth</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/auth/oauth/{provider}/callback</code></td>
+<td>Anonyme</td>
+<td>Rappel OAuth&#160;; redirige vers le frontend avec des jetons</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/auth/oauth/link/confirm</code></td>
+<td>Jeton unique envoyé par e-mail</td>
+<td>La page ouverte par l'e-mail du lien d'identité&#160;; ne change rien</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/auth/oauth/link/confirm</code></td>
+<td>Jeton unique envoyé par e-mail</td>
+<td>Confirmer un lien d'identité détenu pour approbation du propriétaire du compte</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/games/{slug}/launch-token</code></td>
+<td>JWT</td>
+<td>Créez un jeton de lancement à l'échelle du jeu (voir ci-dessous)</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/realtime/connection-tickets</code></td>
+<td>JWT</td>
+<td>Billet unique pour l'ouverture d'un <code>/ws/**</code> douille</td>
+</tr>
+</tbody>
+</table>
+<h2 id="after-sign-in-current-terms">Après la connexion&#160;: conditions actuelles</h2>
+<p>Une connexion réussie n’implique pas l’autorisation d’utiliser les API protégées. Les titulaires de compte doivent
+<a href="/fr/docs/api/profile.html#terms-acceptance">accepter les conditions actuelles de StarHermit</a> avant les appels REST protégés ou
+Les mises à niveau de WebSocket réussissent. Les clients du compte peuvent vérifier <code>GET /api/v1/me</code>, aller chercher <code>GET /api/v1/terms</code>,
+et enregistrer l'acceptation explicite avec <code>POST /api/v1/me/terms/accept</code>. OAuth et clé publique
+les sessions de compte prennent en charge ce flux. L’actualisation des informations d’identification ne résout pas l’acceptation en attente.</p>
+<p>Un jeu par navigateur ouvert directement peut recevoir un jeton étendu avant que le compte n'ait accepté.
+Si un appel de jeu revient <code>403</code> avec <code>error: "terms_acceptance_required"</code>, aller chercher <code>GET /api/v1/terms</code>,
+afficher son texte et proposer une action Accepter explicite. Un jeton de lancement de joueur peut soumettre le message affiché
+hacher pour <code>POST /api/v1/me/terms/accept</code>; réessayez la demande initiale après acceptation. Ne traite pas ça
+réponse sous forme de boucle de connexion avec jeton expiré.</p>
+<h2 id="public-key-registration">Enregistrement de clé publique</h2>
+<p>Étape par étape, avec du code client testé&#160;: <a href="/fr/docs/tutorials/public-key-onboarding.html">Tutoriel&#160;: intégrer des joueurs avec une clé publique</a>.</p>
+<table>
+<thead>
+<tr>
+<th><code>keyType</code></th>
+<th><code>keyData</code> (norme Base64)</th>
+<th>Signature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Ed25519</code></td>
+<td>Clé publique brute de 32 octets</td>
+<td>Signature Ed25519 brute de 64 octets</td>
+</tr>
+<tr>
+<td><code>ECDSA-P256</code></td>
+<td>Point public, 65 octets non compressés ou 33 octets compressés</td>
+<td>ECDSA-SHA256, ASN.1 DER (non brut <code>r‖s</code>)</td>
+</tr>
+<tr>
+<td><code>RSA-PSS</code></td>
+<td><code>SubjectPublicKeyInfo</code> DER, 2 048 à 8 192 bits, exposant ≤ 32 bits</td>
+<td>RSASSA-PSS, SHA-256, MGF1-SHA-256, sel de 32 octets</td>
+</tr>
+</tbody>
+</table>
+<h3 id="post-apiv1authpublic-keyregister"><code>POST /api/v1/auth/public-key/register</code></h3>
+<p>Commence l’enregistrement de la clé publique et envoie un e-mail de vérification. Le dossier d'enregistrement en attente expire après 4 heures. Si <code>userId</code> est défini, l'e-mail doit correspondre à ce compte. Limitation à 1 e-mail par adresse et par IP toutes les 24 heures&#160;–&#160;en cas de limitation, la réponse est 429 avec un <code>Retry-After</code> en-tête.</p>
+<p>Quand <code>userId</code> est défini et la paire ne vérifie pas, la réponse est <code>403</code> avec un seul message
+indépendamment de <em>pourquoi</em>: un compte inconnu et une mauvaise adresse répondent de manière identique. Ce point final prend
+pas d'informations d'identification - c'est obligatoire, car c'est ainsi qu'une nouvelle clé est attachée - donc les distinguer serait
+faites-en un oracle pour lequel les identifiants des utilisateurs existent, puis pour leurs adresses. Un appelant qui possède le
+compte sait déjà lequel des deux ils se sont trompés.</p>
+<p>Demande:</p>
+<pre><code class="language-json">{
+  "email": "dev@example.com",
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;",
+  "userId": null
+}
+</code></pre>
+<p>Réponse — 202&#160;:</p>
+<pre><code class="language-json">{
+  "registrationId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "email": "dev@example.com",
+  "emailSent": true,
+  "deferralReason": null,
+  "message": "A verification email has been sent. The key will be attached once you confirm."
+}
+</code></pre>
+<p><code>emailSent: false</code> signifie que l'e-mail est en file d'attente pour une nouvelle tentative (<code>deferralReason</code> dit pourquoi); l'inscription
+est toujours accepté. Un e-mail ou un élément clé invalide est <code>400</code>.</p>
+<h3 id="get--post-apiv1authpublic-keyverifytoken"><code>GET</code> / <code>POST /api/v1/auth/public-key/verify?token=</code></h3>
+<p><strong>L'ouverture du lien envoyé par email ne change rien.</strong> <code>GET</code> affiche une page indiquant ce que ferait la confirmation -
+créer un compte, ou <strong>ajouter une clé au compte existant</strong> qui utilise déjà l'adresse - avec un
+Bouton Confirmer. Les scanners de courrier récupèrent les liens pour les prévisualiser, donc un lien envoyé par courrier électronique qui a agi sur <code>GET</code>
+serait racheté par celui qui l'aurait scanné. La même chose s'applique à la
+<a href="#emailed-key-revocation">révocation</a> et <a href="#get-apiv1authoauthproviderauthorizelinkclient">lien d'identité</a>
+confirmations ci-dessous.</p>
+<p><code>POST</code> à la même URL le rachète&#160;: attache la clé, créant l'utilisateur (nom d'utilisateur <code>pk-&lt;hex12&gt;</code>, rôle
+<code>User</code>), sauf si un compte utilise déjà cette adresse e-mail, auquel cas la clé rejoint ce compte.
+L'e-mail est marqué comme vérifié. Le lien est à usage unique et expire au bout de 4 heures ; un inconnu, utilisé ou
+le jeton expiré est <code>400</code>, tout comme un lien dont l'adresse n'est plus celle du compte — cela prouve
+contrôle de la boîte de réception à laquelle il a été envoyé, et seulement tant que cette adresse est toujours celle du compte.</p>
+<p>Lorsque le joueur appuie sur Confirmer sur la page et que le déploiement est défini
+<code>PublicKeyAuth:VerificationSuccessRedirectUri</code> — starhermit.com le fait, sur le tableau de bord — ils sont
+envoyé là-bas avec les jetons dans le fragment
+(<code>#access_token=…&amp;refresh_token=…&amp;token_type=Bearer&amp;expires_in=900</code>), connecté au tableau de bord. Un
+le client natif ne reçoit donc pas ces tokens ; il se connecte avec sa clé une fois que le joueur a
+confirmé. Un client API qui <code>POST</code>s l'URL elle-même obtient JSON&#160;:</p>
+<pre><code class="language-json">{
+  "userId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "keyId": "9b2f5c74-1d2e-4a6b-8c0d-1e2f3a4b5c6d",
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "dGhpcyBpcyBh..."
+}
+</code></pre>
+<h2 id="public-key-login">Connexion par clé publique</h2>
+<h3 id="post-apiv1authpublic-keychallenge"><code>POST /api/v1/auth/public-key/challenge</code></h3>
+<p>Lance un défi de connexion, valable 5 minutes et à usage unique.</p>
+<p><strong>La signature couvre la propre sérialisation du serveur <code>payload</code>, pas le JSON que vous avez reçu&#160;:</strong>
+compact, noms PascalCase dans l'ordre <code>ChallengeId</code>, <code>Fingerprint</code>, <code>Issuer</code>, <code>Audience</code>, <code>Expiry</code>,
+<code>Nonce</code>, <code>ClientTimestamp</code>, les valeurs copiées exactement telles qu'elles sont servies, et chaque <code>+</code> dans le nonce écrit comme
+<code>\u002B</code> (les dates gardent leur <code>+</code>). Voir le
+<a href="/fr/docs/tutorials/public-key-onboarding.html#3-sign-in-with-the-key">exemple travaillé</a>.</p>
+<p>Demande:</p>
+<pre><code class="language-json">{
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;"
+}
+</code></pre>
+<p>Réponse:</p>
+<pre><code class="language-json">{
+  "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "payload": {
+    "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "fingerprint": "4d9f3c...",
+    "issuer": "starhermit",
+    "audience": "starhermit",
+    "expiry": "2026-07-22T07:24:44.1234567+00:00",
+    "nonce": "NmL+tgMum6HXU/pa3T9xjQ==",
+    "clientTimestamp": "2026-07-22T07:19:44.1235521+00:00"
+  },
+  "expiresIn": 300
+}
+</code></pre>
+<h3 id="post-apiv1authpublic-keycomplete"><code>POST /api/v1/auth/public-key/complete</code></h3>
+<p>Vérifie la signature par rapport à une clé enregistrée et non révoquée et renvoie une paire de jetons. Un échec est
+<code>401</code>: <code>"Public key not registered or revoked."</code> (y compris une clé dont le lien envoyé par email n'a pas été
+encore ouvert), <code>"Invalid signature."</code>, ou <code>"Challenge not found or expired."</code>. Défiez et terminez
+partager une limite de 60 requêtes par minute par IP (<code>429</code>).</p>
+<p>Demande:</p>
+<pre><code class="language-json">{
+  "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "signature": "base64-signature...",
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;"
+}
+</code></pre>
+<p>Réponse:</p>
+<pre><code class="language-json">{
+  "userId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "dGhpcyBpcyBh..."
+}
+</code></pre>
+<h2 id="token-lifecycle">Cycle de vie du jeton</h2>
+<h3 id="post-apiv1authrefresh"><code>POST /api/v1/auth/refresh</code></h3>
+<p>Actualisation rotative&#160;: l'ancien token est révoqué et remplacé. La réutilisation d’un jeton d’actualisation révoqué révoque toute la famille de jetons.</p>
+<p>Demande:</p>
+<pre><code class="language-json">{ "refreshToken": "dGhpcyBpcyBh..." }
+</code></pre>
+<p>Réponse:</p>
+<pre><code class="language-json">{
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "bmV3IHJlZnJlc2g..."
+}
+</code></pre>
+<h4 id="when-refresh-stops-working">Lorsque l'actualisation cesse de fonctionner</h4>
+<p>Un jeton d'actualisation enregistre l'état du compte sous lequel il a été émis et l'actualisation le vérifie. Deux réponses
+votre client doit gérer plutôt que réessayer&#160;:</p>
+<table>
+<thead>
+<tr>
+<th>Statut</th>
+<th>Signification</th>
+<th>Ce que le client doit faire</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>401</code></td>
+<td>La session a été révoquée côté plateforme – un "déconnectez-vous partout", ou une réponse de compromis. Toute la famille des jetons est brûlée, y compris le jeton qui vient d'être présenté.</td>
+<td>Jetez les deux jetons et démarrez une nouvelle connexion.</td>
+</tr>
+<tr>
+<td><code>403</code></td>
+<td>Le compte est <strong>suspendu</strong>.</td>
+<td>Arrêt. Se reconnecter ne servira à rien ; le même <code>403</code> revient à chaque itinéraire de connexion jusqu'à ce que la suspension soit levée.</td>
+</tr>
+</tbody>
+</table>
+<p>Le <code>403</code> est délibérément distinct de <code>401</code>, parce que les deux nécessitent des réactions opposées : l'un signifie
+"s'authentifier à nouveau", les autres moyens "s'authentifier à nouveau ne sert à rien". Un compte suspendu est
+refusé par <em>chaque</em> itinéraire de création d'informations d'identification - actualisation, achèvement de la clé publique, rappel OAuth,
+et les jetons de lancement de jeu – pas seulement par actualisation.</p>
+<h3 id="post-apiv1authlogout"><code>POST /api/v1/auth/logout</code></h3>
+<p>Révoque le jeton d'actualisation donné. Renvoie 200.</p>
+<pre><code class="language-json">{ "refreshToken": "dGhpcyBpcyBh..." }
+</code></pre>
+<h2 id="oauth">OAuth</h2>
+<p>La plateforme propose sept fournisseurs&#160;: <code>google</code>, <code>github</code>, <code>discord</code>, <code>twitch</code>, <code>gitlab</code>, <code>linkedin</code>,
+<code>bitbucket</code>. <strong>Seuls les fournisseurs pour lesquels ce déploiement dispose d’informations d’identification sont en ligne.</strong> Un client ne doit pas
+coder en dur la liste.</p>
+<h3 id="get-apiv1authoauthproviders"><code>GET /api/v1/auth/oauth/providers</code></h3>
+<p>Anonyme. Renvoie les fournisseurs en direct dans l'ordre dans lequel ils doivent être proposés&#160;:</p>
+<pre><code class="language-json">{
+  "providers": [
+    {
+      "provider": "google",
+      "displayName": "Google",
+      "authorizeUrl": "/api/v1/auth/oauth/google/authorize",
+      "linksExistingAccountsByEmail": true
+    }
+  ]
+}
+</code></pre>
+<p><code>linksExistingAccountsByEmail</code> est de savoir si une connexion auprès de ce fournisseur peut trouver un compte pour la personne
+possède déjà (le paramètre de confiance de l'opérateur pour ce fournisseur). Demander d'autoriser un nom qui ne l'est pas
+vivre est <code>404</code>, pas une redirection vers la propre page d'erreur du fournisseur.</p>
+<h3 id="get-apiv1authoauthproviderauthorizelinkclient"><code>GET /api/v1/auth/oauth/{provider}/authorize?link=&amp;client=</code></h3>
+<p>Renvoie une redirection 302 au fournisseur et définit un <code>oauth_state</code> cookie (HttpOnly, SameSite=Lax, 10
+minutes). <code>link=true</code> commence à lier l'identité à l'utilisateur actuellement connecté&#160;; la liaison nécessite
+authentification récente (dans les 5 minutes). <code>client</code> sélectionne une redirection client prise en charge. Pour un
+Jeu directement ouvert, utilisez <code>gameId</code> et en option <code>returnUrl</code> plutôt; voir
+<a href="#sign-in-from-a-directly-opened-browser-game">Connectez-vous à partir d'un jeu par navigateur directement ouvert</a>.</p>
+<h3 id="get-apiv1authoauthprovidercallbackcodestate"><code>GET /api/v1/auth/oauth/{provider}/callback?code=&amp;state=</code></h3>
+<p>Pour une connexion au compte ordinaire, renvoie une redirection 302 vers l'URL du frontend avec les jetons dans le
+fragment (la connexion au jeu renvoie à la place un jeton étendu directement au jeu, comme décrit ci-dessous)&#160;:</p>
+<pre><code>#access_token=…&amp;refresh_token=…&amp;token_type=Bearer&amp;expires_in=900
+</code></pre>
+<p>Si le fournisseur refuse l'échange de jetons, le rappel répond <code>409</code> nommer l'erreur du fournisseur
+<strong>code</strong> (la description reste dans le journal du serveur).</p>
+<p>Une connexion normale recherche ou crée l'utilisateur (nom d'utilisateur <code>oauth-{provider}-{guid}</code>, rôle <code>User</code>) et le
+nouveaux enregistrements de session <code>auth_method=oauth</code>. Une connexion dont <code>(provider, providerUserId)</code> est inconnu est
+<strong>adopté sur un compte existant</strong> seulement lorsque l'affirmation du fournisseur est fiable, exactement un
+le compte contient déjà cette adresse e-mail vérifiée et ce compte n'a pas encore d'identité de ce fournisseur.
+Tout le reste prévoit un compte séparé. L'adoption envoie un e-mail au compte nommant le fournisseur.</p>
+<p>Ceci est important car seule une session authentifiée par OAuth
+peut effectuer des modifications d’informations d’identification à fort impact&#160;:</p>
+<ul>
+<li>ajouter ou révoquer des clés publiques de compte&#160;;</li>
+<li>modifier l'e-mail du compte&#160;;</li>
+<li>supprimer une identité gérée par OAuth.</li>
+</ul>
+<p>Les jetons à l'échelle du jeu ne peuvent jamais effectuer ces opérations. Un jeton d'actualisation conserve l'original
+méthode d'authentification de la session, donc l'actualisation d'une session OAuth ne supprime pas cette fonctionnalité et
+l'actualisation d'une session de clé publique ne l'ajoute pas.</p>
+<p>Quand <code>link=true</code>, le rappel ne promeut pas automatiquement la session simplement parce qu'elle a visité
+un fournisseur OAuth. Un lien démarré à partir d’une session OAuth est immédiatement joint. Un lien démarré à partir de
+une session de clé publique, de vérification de courrier électronique ou héritée est maintenue jusqu'à ce que le propriétaire du compte ouvre le
+confirmation envoyée à l'adresse e-mail vérifiée du compte&#160;; les rapports de fragment de redirection
+<code>link=pending_email_confirmation</code>. L'e-mail unique s'ouvre <code>GET /api/v1/auth/oauth/link/confirm?token=…</code>,
+une page nommant le compte fournisseur qui ne change rien ; son bouton Confirmer <code>POST</code>c'est la même URL,
+qui crée l'identité (<code>{ "provider", "linked": true }</code> à un client API). Un lien dont l'adresse
+n'est plus celui du compte est refusé. Cela empêche qu'une clé publique volée relie le
+compte du fournisseur de l'attaquant et en le transformant en une connexion OAuth permanente.</p>
+<p>Magasins de métadonnées d'identité GitHub <code>{"login":"…"}</code> — ceci est utilisé pour les contrôles de propriété du référentiel dans
+<a href="/fr/docs/api/github-games.html">Jeux GitHub</a>.</p>
+<h3 id="oauth-enrolled-public-keys-for-automation">Clés publiques inscrites par OAuth pour l'automatisation</h3>
+<p>Une session OAuth peut appeler <code>POST /api/v1/me/public-keys</code> pour attacher immédiatement une clé de machine étiquetée.
+Plus tard, CI signe le défi normal de clé publique et utilise son jeton d'accès de courte durée pour télécharger un
+lot de jeux possédés&#160;; la clé privée ne quitte jamais le magasin secret CI. Voir
+<a href="/fr/docs/tutorials/ci-cd-build-upload.html">le tutoriel de téléchargement de build CI/CD</a> pour la configuration, un assistant de signature et
+un flux de travail GitHub Actions.</p>
+<h2 id="tokens">Jetons</h2>
+<ul>
+<li><strong>Jeton d'accès</strong> — JWT, durée de vie de 15 minutes (<code>expires_in=900</code>). Les réclamations incluent <code>sub</code> (l'identifiant de l'utilisateur) plus <code>permission</code> et les revendications de rôle. La révocation prend effet immédiatement.</li>
+<li><strong>Jeton d'actualisation</strong> — Un jeton rotatif opaque d'une durée de vie de 7 jours. Chaque actualisation émet un nouveau jeton d'actualisation et révoque l'ancien&#160;; la réutilisation d'un jeton révoqué révoque toute la famille de jetons.</li>
+</ul>
+<h2 id="sign-in-from-a-directly-opened-browser-game">Connectez-vous à partir d'un jeu par navigateur directement ouvert</h2>
+<p>Un jeu hébergé ouvert en dehors du tableau de bord peut afficher un <strong>Se connecter</strong> bouton reliant à&#160;:</p>
+<pre><code class="language-text">https://api.starhermit.com/api/v1/auth/games/{gameId}/sign-in
+</code></pre>
+<p><code>gameId</code> est l'UUID immuable du jeu (le sous-domaine dans <code>{gameId}.starhermit.com</code>). Ermite des étoiles
+affiche ses fournisseurs de connexion activés. Continuer à signer dans un joueur existant ou créer un nouveau
+compte en utilisant les règles normales de correspondance de compte OAuth, puis redirige <strong>retour direct au
+jeu</strong>, sans visiter le tableau de bord.</p>
+<p>L'optionnel <code>returnUrl</code> préserve une page de jeu spécifique, une chaîne de requête ou une route de hachage. Ça doit être
+une URL HTTPS absolue sur exactement l'origine hébergée de ce jeu&#160;; d'autres jeux, des hôtes externes,
+les informations d'identification dans l'URL et les ports alternatifs sont rejetés avec <code>400</code>. Omettez-le pour revenir au
+fichier de lancement publié. Retour des jeux inconnus, supprimés, non hébergés ou jamais publiés <code>404</code>. Les deux
+les déploiements de référentiels et les jeux téléchargés sont pris en charge&#160;; les URL externes/locales arbitraires ne le sont pas.</p>
+<p>Naviguez dans le navigateur jusqu'au <strong>origine de l'API publique</strong> ci-dessus, plutôt que de récupérer la page ou de démarrer
+à travers le jeu <code>/api</code> procuration. Le cookie d'état OAuth et le rappel du fournisseur doivent utiliser le même
+Hôte API. Utilisez ce flux lorsque le jeu ne dispose pas de jeton valide fourni par le lanceur ou obtenu précédemment.</p>
+<h3 id="button-and-return-token-example">Exemple de bouton et de jeton de retour</h3>
+<pre><code class="language-html">&lt;button id="starhermit-sign-in"&gt;Sign in&lt;/button&gt;
+&lt;script type="module"&gt;
+const api = 'https://api.starhermit.com';
+const gameId = 'YOUR_GAME_UID';
+const signIn = document.querySelector('#starhermit-sign-in');
+let gameToken = null; // Or your existing launcher-provided game token.
+
+// Read this before your game router or third-party scripts consume the fragment.
+const auth = new URLSearchParams(location.hash.slice(1));
+if (auth.has('access_token')) {
+  gameToken = auth.get('access_token');
+  const originalHash = auth.get('game_fragment');
+  history.replaceState(null, '', location.pathname + location.search +
+    (originalHash ? '#' + originalHash : ''));
+}
+signIn.hidden = Boolean(gameToken);
+signIn.addEventListener('click', () =&gt; {
+  const url = new URL(`/api/v1/auth/games/${gameId}/sign-in`, api);
+  url.searchParams.set('returnUrl', location.href);
+  location.assign(url.href);
+});
+
+// Pass gameToken to your game's API client as Authorization: Bearer &lt;gameToken&gt;.
+// This example keeps it in memory; a reload can require sign-in again.
+&lt;/script&gt;
+</code></pre>
+<p>Le fragment de retour est&#160;:</p>
+<pre><code class="language-text">#access_token=…&amp;token_type=Bearer&amp;expires_in=3600
+</code></pre>
+<p><code>access_token</code> est un <strong>jeton de lancement à l'échelle du jeu</strong>, et non un jeton d'accès à l'échelle du compte. Pas de jeton d'actualisation
+est délivré. <code>expires_in</code> utilise la durée de vie du jeton de lancement configurée pour le déploiement (3 600 par défaut)
+secondes). Un fragment d'URL de retour d'origine est codé dans le format facultatif <code>game_fragment</code> champ;
+restaurez-le après avoir capturé le jeton et supprimé les données d'authentification de l'historique du navigateur.
+Ne connectez pas et ne transférez pas le jeton.</p>
+<p>Renouveler avant expiration en utilisant <code>POST /api/v1/games/{gameId}/launch-token</code> avec le jeton actuel comme
+Autorisation au porteur, puis remplacez-la par celle restituée <code>token</code>. Le plafond habituel de la chaîne de renouvellement
+s'applique (12 heures par défaut). Si le token expire ou si le renouvellement est refusé, effacez-le et affichez Se connecter
+encore une fois. Voir <a href="#game-launch-tokens">Jetons de lancement de jeu</a>.</p>
+<h3 id="choosing-a-provider-yourself">Choisir soi-même un prestataire</h3>
+<p>Les jeux peuvent plutôt lire <code>GET /api/v1/auth/oauth/providers</code> et accédez à une offre <code>authorizeUrl</code>
+sur l'origine de l'API publique, en ajoutant <code>gameId</code> et éventuellement <code>returnUrl</code>. L'étape d'autorisation
+valide et stocke la cible dans l'état OAuth existant de dix minutes&#160;; paramètres de requête de rappel
+je ne peux pas le changer. Le cookie du navigateur initiateur est toujours requis et le jeu est à nouveau vérifié
+avant d'émettre un jeton. Les comptes suspendus ne peuvent pas recevoir de jeton.</p>
+<p>Ne combinez pas la connexion au jeu avec <code>client</code> ou <code>link</code> (<code>400</code>). A <code>returnUrl</code> sans <code>gameId</code> est aussi
+<code>400</code>. La connexion normale au tableau de bord et au bureau continue d'utiliser leurs destinations frontales configurées
+et des paires de jetons de compte ordinaires.</p>
+<h2 id="game-launch-tokens">Jetons de lancement de jeu</h2>
+<p><code>POST /api/v1/games/{slug}/launch-token</code> (JWT) crée un JWT à l'échelle du jeu&#160;:</p>
+<pre><code class="language-json">{
+  "token": "eyJhbGciOi...",
+  "expiresInSeconds": 3600
+}
+</code></pre>
+<p>Le jeton porte un <code>game_scope</code> réclamation et par défaut à une durée de vie de 60 minutes. Le renouvellement copie un
+<code>launch_chain</code> heure de début en avant&#160;; le renouvellement des 12 dernières heures (par défaut) est <code>403</code> et le titulaire doit partir
+revenir à une session de compte complète. Tous les détails sont dans <a href="/fr/docs/api/games.html">Jeux</a>.</p>
+<p><strong>Reconnexion des prises.</strong> Un socket ouvert avec un jeton de lancement (<code>?access_token=</code> sur <code>ws/v1/games</code>,
+<code>ws/v1/realtime</code>, <code>ws/v1/voice</code>) porte ce jeton dans son URL et une poignée de main avec un jeton expiré
+est refusé avec <code>401</code> avant la mise à niveau&#160;: le navigateur ne signale que le code de fermeture <code>1006</code>, la même chose qu'un
+chute de réseau. Traitez un échec de reconnexion comme un échec d'authentification&#160;: avant de rouvrir, renouvelez via
+<code>POST /api/v1/games/{slug}/launch-token</code> (possible uniquement tant que le token actuel est encore valide et
+dans les 12 heures suivant le lancement d'origine) et créez l'URL avec le nouveau jeton. Une fois le renouvellement effectué
+refusé, renvoyer le joueur vers le lanceur, ou via
+<a href="#sign-in-from-a-directly-opened-browser-game">connexion au jeu</a> si c'est ainsi que le jeu a été ouvert.
+Réessayer la même URL ne pourra jamais être récupéré.</p>
+<h3 id="game-scope-fencing">Clôture de jeu</h3>
+<p>Un jeton à l'échelle du jeu ne peut atteindre que&#160;:</p>
+<ul>
+<li>le sien <code>/api/v1/games/{scope}</code> arbre,</li>
+<li><code>/ws/v1/games</code>,</li>
+<li><a href="/fr/docs/api/realtime.html">salle en temps réel</a> Itinéraires REST et <code>/ws/v1/realtime</code> pour son propre jeu, y compris les tickets de connexion,</li>
+<li><code>GET /api/v1/time</code> et <code>GET /api/v1/terms</code>,</li>
+<li><code>POST /api/v1/me/terms/accept</code> pour le consentement explicite du joueur authentifié,</li>
+<li><code>GET /api/v1/me/friends</code>,</li>
+<li><code>GET /api/v1/users/{id}/avatar</code> et <code>GET /api/v1/users/{id}/profile</code>,</li>
+<li>le classement de son jeu,</li>
+<li>celui du joueur <a href="/fr/docs/api/catalog.html#saving-from-inside-a-game-launch-token">sauvegarde dans le cloud</a> pour son propre jeu (<code>/api/v1/me/cloud-saves/game:&lt;scope&gt;</code> et son <code>/info</code>) — pas d'autre clé,</li>
+<li>les points de terminaison chat/voix REST et WebSocket attachés à ses propres sessions de jeu,</li>
+<li><code>GET /api/v1/github-games/{id}/icon</code> et <code>/cover</code> pour n'importe quel jeu (les deux sont publics de toute façon),</li>
+<li><code>POST /api/v1/me/heartbeat</code>, qui marque uniquement le joueur en ligne,</li>
+<li><code>GET /api/v1/github-games/{id}/release-notes</code> pour son propre jeu,</li>
+<li><a href="/fr/docs/api/relay.html">relais</a> itinéraires, pour les relais liés à l'une de ses propres sessions ou salles de jeu.</li>
+</ul>
+<p><code>/ws/v1/chat</code> est bloqué pour les jetons de lancement. Tout le reste renvoie 403.</p>
+<h2 id="typical-login-flow-curl">Flux de connexion typique (curl)</h2>
+<p>Connexion par clé publique, du défi à l'appel authentifié&#160;:</p>
+<pre><code class="language-bash"># 1. Request a challenge
+curl -s -X POST https://api.starhermit.com/api/v1/auth/public-key/challenge \
+  -H "Content-Type: application/json" \
+  -d '{"keyType":"Ed25519","keyData":"&lt;base64-raw-32-byte-public-key&gt;"}'
+# → { "challengeId": "...", "payload": { ... }, "expiresIn": 300 }
+
+# 2. Sign the serialized payload JSON with your private key, then complete
+curl -s -X POST https://api.starhermit.com/api/v1/auth/public-key/complete \
+  -H "Content-Type: application/json" \
+  -d '{"challengeId":"...","signature":"base64-signature...","keyType":"Ed25519","keyData":"&lt;base64-raw-32-byte-public-key&gt;"}'
+# → { "userId": "...", "accessToken": "...", "refreshToken": "..." }
+
+# 3. Call the API with the access token
+curl -s https://api.starhermit.com/api/v1/me \
+  -H "Authorization: Bearer eyJhbGciOi..."
+
+# 4. When the access token expires (after 15 min), rotate the refresh token
+curl -s -X POST https://api.starhermit.com/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"dGhpcyBpcyBh..."}'
+
+# 5. On logout, revoke the refresh token
+curl -s -X POST https://api.starhermit.com/api/v1/auth/logout \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"dGhpcyBpcyBh..."}'
+</code></pre>
+<p>La connexion OAuth est pilotée par le navigateur&#160;: lire <code>GET /api/v1/auth/oauth/providers</code>, ouvrez un fournisseur en direct
+<code>authorizeUrl</code>, consentement complet, et le rappel amène l'utilisateur sur le frontend avec
+<code>#access_token=…&amp;refresh_token=…</code> dans le fragment d'URL.</p>
+<h2 id="emailed-key-revocation">Révocation de clé par e-mail</h2>
+<p>Pour un propriétaire qui ne peut pas joindre <code>DELETE /me/public-keys</code> (pas de session OAuth, ou verrouillé par un vol
+clé). <code>POST /api/v1/auth/public-key/revoke-request</code> avec <code>{ "email": "…" }</code> détient une demande et
+envoie un lien par e-mail. L'ouvrir (<code>GET /api/v1/auth/public-key/revoke/confirm?token=…</code>) affiche une page qui
+ne change rien ; son bouton Confirmer <code>POST</code>c'est la même URL, qui révoque <strong>chaque</strong> clé active là-dessus
+compte et met fin aux sessions qu'ils ont authentifiées. Les deux ne sont pas authentifiés et <strong>numéro de problème
+séance</strong>. La demande répond toujours <code>202</code> avec le même corps, quoi qu'il trouve ; une demande par
+compte toutes les 15 minutes et le lien expire après 4 heures. La confirmation <code>POST</code> réponses <code>200</code>
+<code>{ "revoked": &lt;count&gt;, "sessionsEnded": &lt;count&gt; }</code> à un client API, ou <code>400</code> pour un inconnu, utilisé ou
+un jeton expiré ou dont l'adresse n'est plus celle du compte.</p>
+<h2 id="websocket-connection-tickets">Tickets de connexion WebSocket</h2>
+<p><code>POST /api/v1/realtime/connection-tickets</code> échange le jeton au porteur de l'appelant contre un ticket unique
+valable environ 30 secondes. Passez-le comme <code>?ticket=</code> sur n'importe quel <code>/ws/v1/*</code> poignée de main. Il porte le nom de l'appelant
+revendications textuelles (y compris <code>game_scope</code> et <code>pk</code>), est refusé sur REST et est dépensé à la première utilisation.
+Tout appelant authentifié peut demander, y compris un jeton de lancement lié au jeu. <code>?access_token=</code> fonctionne toujours
+jusqu'à ce que les clients aient déménagé.</p>
+<p><strong>Un socket ouvert se termine lorsque ses informations d'identification sont révoquées.</strong> La révocation de la clé publique qui l'a ouvert se termine
+immédiatement&#160;; une suspension ou une déconnexion partout y met fin en 30 secondes environ. Expiration du jeton
+ne termine pas un socket ouvert - actualisez avant de vous reconnecter.</p>
+<h2 id="embedded-onboarding-for-nativestorefront-games">Intégration intégrée pour les jeux natifs/en vitrine</h2>
+<p>Un client Steam, Epic, GOG ou autonome peut générer une clé sur l'appareil du joueur et présenter le
+flux d'enregistrement de clé publique dans sa propre interface utilisateur, évitant OAuth et une visite sur StarHermit
+tableau de bord. L'inscription n'est pas silencieuse : le joueur doit consentir, fournir un email et suivre les
+lien de vérification unique. Un jeton de serveur de jeu ne peut pas créer ou usurper l'identité de joueurs. Voir
+<a href="/fr/docs/tutorials/public-key-onboarding.html">Tutoriel&#160;: intégrer des joueurs avec une clé publique</a>, et le
+<a href="/fr/docs/tutorials/dedicated-server-onboarding.html">tutoriel sur le serveur dédié</a> pour un jeu qui embarque également un serveur.</p>
+<p>Voir <a href="/fr/docs/credentials.html">compatibilité des informations d'identification</a> et <a href="/fr/docs/api/contracts.html">contrats lisibles par machine</a>.</p>
+
+{% endraw %}

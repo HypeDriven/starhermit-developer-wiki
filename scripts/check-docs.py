@@ -24,7 +24,7 @@ def anchors(text):
 
 errors = []
 import xml.etree.ElementTree as ET
-for image in (ROOT / 'docs/images').glob('*.svg'):
+for image in (ROOT / 'docs/images').rglob('*.svg'):
     ET.parse(image)
 for file in files:
     text = file.read_text()

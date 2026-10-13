@@ -1,0 +1,449 @@
+---
+layout: "wiki"
+lang: "id"
+title: "SDK Persatuan"
+source_url: "/docs/sdk/unity.html"
+source_path: "docs/sdk/unity.md"
+source_hash: "49c40f7a86e1b1c9d76eecec12b5c49c0ad2c5b566298738cdb8050cf2dd4b86"
+translation: "machine"
+permalink: "/id/docs/sdk/unity.html"
+---
+{% raw %}
+<h1 id="unity-sdk">SDK Persatuan</h1>
+<p>Itu <strong>SDK Persatuan Pertapa Bintang</strong> (<a href="https://github.com/HypeDriven/starhermit-unity-sdk">HypeDriven/starhermit-unity-sdk</a>)
+adalah paket Unity Package Manager dengan klien C# asinkron yang diketik untuk platform. Ini menangani
+Permintaan HTTP, penguraian JSON, penyegaran token, dan koneksi ulang WebSocket.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Kemasan</td>
+<td><code>com.starhermit.sdk</code>, versi 0.1.0</td>
+</tr>
+<tr>
+<td>Ruang nama</td>
+<td><code>Starhermit</code></td>
+</tr>
+<tr>
+<td>Garis dasar API</td>
+<td>REST v1 dan WebSocket v1</td>
+</tr>
+<tr>
+<td>Fitur REST yang lebih baru</td>
+<td>Menggunakan <code>client.Raw</code> dan model <code>RawJson</code> ketika versi SDK ini tidak memiliki anggota yang diketik</td>
+</tr>
+<tr>
+<td>Protokol WebSocket</td>
+<td>semuanya 6, masing-masing satu kelas koneksi</td>
+</tr>
+<tr>
+<td>Lisensi</td>
+<td>MIT</td>
+</tr>
+</tbody>
+</table>
+<p>SDK adalah klien, bukan implementasi kedua dari platform. Otorisasi, persahabatan,
+hak, keanggotaan kamar, validasi skor, hasil permainan, dan anggaran penyimpanan tetap
+otoritatif server persis seperti yang didokumentasikan pada halaman di bawah ini — SDK menampilkan jawaban server
+dan batasan yang dipublikasikan daripada memutuskan atau menyimpannya dalam cache.</p>
+<p>Halaman ini adalah panduan integrasi. Dokumentasi paket lengkap ada di repositori di bawah
+<code>Packages/com.starhermit.sdk/Documentation~</code>.</p>
+<h2 id="requirements">Persyaratan</h2>
+<ul>
+<li>Unity 2021.3 LTS atau lebih baru, tingkat kompatibilitas API <strong>Standar .NET 2.1</strong>, C# 9.</li>
+<li>Mono dan IL2CPP, dengan pengupasan terkelola dari Dinonaktifkan hingga <strong>Tinggi</strong> (paket dikirimkan sendiri
+<code>Runtime/link.xml</code>).</li>
+<li>Tidak ada refleksi, tidak ada pembuatan kode dinamis, tidak ada plugin asli wajib.</li>
+</ul>
+<p>Setiap modul dikompilasi untuk setiap target pembangunan. Jika target benar-benar tidak memiliki kemampuan – tidak
+mikrofon di server tanpa kepala, tidak ada header jabat tangan di browser — panggilan muncul
+<code>StarhermitFeatureUnavailableException</code> dengan kandang <code>Reason</code>, daripada gagal dalam build atau
+menonaktifkan fitur yang tidak terkait.</p>
+<table>
+<thead>
+<tr>
+<th>Kemampuan</th>
+<th>Desktop / seluler / konsol</th>
+<th>WebGL</th>
+<th>Server tanpa kepala</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ISTIRAHAT</td>
+<td><code>UnityWebRequestTransport</code></td>
+<td><code>UnityWebRequestTransport</code></td>
+<td><code>HttpClientTransport</code></td>
+</tr>
+<tr>
+<td>Soket Web</td>
+<td><code>ClientWebSocketAdapter</code></td>
+<td><code>WebGLSocketFactory</code> + dibundel <code>.jslib</code> menjembatani</td>
+<td><code>ClientWebSocketAdapter</code></td>
+</tr>
+<tr>
+<td>OAuth</td>
+<td>disuntikkan <code>IStarhermitOAuthBrowser</code></td>
+<td>adaptor browser yang disuntikkan</td>
+<td>Penyerahan URL dari host</td>
+</tr>
+<tr>
+<td>Penyimpanan token</td>
+<td>toko yang disuntikkan; <code>EncryptedFileTokenStore</code> ikut serta</td>
+<td>penyimpanan browser yang disuntikkan</td>
+<td>penyimpanan atau memori yang disuntikkan</td>
+</tr>
+<tr>
+<td>Pemindahan berkas</td>
+<td><code>SystemFileStore</code></td>
+<td>wastafel yang disuntikkan</td>
+<td><code>SystemFileStore</code></td>
+</tr>
+<tr>
+<td>Pengambilan/pemutaran suara</td>
+<td><code>UnityMicrophoneCapture</code> / <code>UnityAudioPlayback</code></td>
+<td>adaptor media browser yang disuntikkan</td>
+<td>tidak tersedia kecuali disuntikkan</td>
+</tr>
+<tr>
+<td>Penandatanganan kunci publik</td>
+<td>disuntikkan <code>IStarhermitSigner</code></td>
+<td>menyuntikkan penanda tangan atau kripto browser</td>
+<td>penandatangan yang disuntikkan</td>
+</tr>
+</tbody>
+</table>
+<h2 id="install">Memasang</h2>
+<p>Manajer Paket → <strong>Tambahkan paket dari URL git</strong>, atau entri masuk <code>Packages/manifest.json</code>. Paketnya
+berada di subfolder repositori, jadi dibutuhkan URL <code>path=</code>:</p>
+<pre><code class="language-json">{
+  "dependencies": {
+    "com.starhermit.sdk": "https://github.com/HypeDriven/starhermit-unity-sdk.git?path=/Packages/com.starhermit.sdk"
+  }
+}
+</code></pre>
+<p>Sematkan rilis dengan menambahkan <code>#&lt;tag-or-commit&gt;</code>:</p>
+<pre><code class="language-text">https://github.com/HypeDriven/starhermit-unity-sdk.git?path=/Packages/com.starhermit.sdk#v0.1.0
+</code></pre>
+<p>Unity berusaha keras <code>git</code>, jadi repositori pribadi hanya terselesaikan jika git editor dapat mengautentikasi
+non-interaktif — kunci SSH (<code>git@github.com:HypeDriven/starhermit-unity-sdk.git?path=/Packages/com.starhermit.sdk</code>) atau a
+pembantu kredensial yang dikonfigurasi. Jalur lokal atau registri tercakup bekerja dengan cara yang sama. Impor memodifikasi no
+pengaturan proyek dan tidak melakukan akses jaringan.</p>
+<h2 id="create-a-client">Buat klien</h2>
+<pre><code class="language-csharp">using Starhermit;
+
+var client = StarhermitClient.Create(new StarhermitOptions
+{
+    ApiBaseUri = new Uri("https://api.starhermit.com/api/v1/"),
+    GameSlug   = "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+    TokenStore = myPlatformSecureStore,
+    LogLevel   = StarhermitLogLevel.Warning
+});
+
+await client.InitializeAsync();               // loads a stored session, refreshes it if expired
+var me = await client.Me.GetProfileAsync();
+</code></pre>
+<p><code>Create</code> tidak melakukan I/O. Tidak ada yang menyentuh jaringan sampai Anda menginisialisasi, memanggil layanan atau membuka a
+koneksi. Basis WebSocket berasal dari <code>ApiBaseUri</code> (<code>wss://&lt;host&gt;/ws/v1/</code>) kecuali Anda menyetelnya
+<code>WebSocketBaseUri</code> dirimu sendiri.</p>
+<p><code>StarhermitClient</code> adalah <code>IDisposable</code>: pembuangan membatalkan permintaan dalam penerbangan, menutup setiap koneksi itu
+dibagikan, menghentikan detak jantung dan melepaskan audio. Tidak ada keadaan statis yang bisa berubah dalam paket, jadi
+dua klien dapat berjalan berdampingan melawan lingkungan yang berbeda, dan satu klien bertahan dalam banyak adegan.</p>
+<p><strong>Sebuah game yang diterbitkan di platform</strong> dilayani dari <code>https://&lt;slug&gt;.starhermit.com</code> dengan <code>/api</code> Dan
+<code>/ws</code> diproksi dengan asal yang sama (lihat <a href="/id/docs/api/github-games.html">Permainan GitHub</a>). Build WebGL memublikasikannya
+cara harus menunjuk ke asalnya sendiri sehingga browser membuat panggilan dengan asal yang sama:</p>
+<pre><code class="language-csharp">ApiBaseUri = new Uri("https://83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com/api/v1/") // your game's uid
+</code></pre>
+<p>Untuk backend lokal, <code>AllowInsecureTransport = true</code> izin <code>http</code>/<code>ws</code>. Konstruksi klien menolak a
+alamat non-HTTPS tanpanya, dan validasi build editor akan menggagalkan build pemain non-pengembangan
+itu masih disetel. Itu tidak pernah menonaktifkan validasi sertifikat.</p>
+<h2 id="signing-in">Masuk</h2>
+<p>Tiga jenis kredensial yang dijelaskan dalam <a href="/id/docs/api/auth.html">Otentikasi</a> adalah tipe terpisah secara terpisah
+disimpan di SDK; tidak ada yang bisa menggantikan yang lain.</p>
+<p><strong>OAuth</strong> — SDK membuka URL otorisasi melalui injeksi <code>IStarhermitOAuthBrowser</code> dan selesai
+pertukaran:</p>
+<pre><code class="language-csharp">var session = await client.Auth.SignInWithOAuthAsync("google");
+</code></pre>
+<p>Menggunakan <code>BuildAuthorizeUri(provider)</code> plus <code>CompleteOAuthAsync(...)</code> alih-alih ketika platform Anda menyerahkannya
+mengalihkan kembali melalui tautan dalam atau pipa browser tertanamnya.</p>
+<p><strong>Kunci publik</strong> — aliran tanpa kata sandi untuk pemutar tertanam, konsol, dan server khusus
+(lihat <a href="/id/docs/tutorials/dedicated-server-onboarding.html">Server Khusus + Orientasi Pemain Tertanam</a>).
+Jenis kunci yang didukung adalah <code>Ed25519</code>, <code>ECDSA-P256</code> Dan <code>RSA-PSS</code>; SDK tidak pernah membuat atau menyimpan a
+kunci pribadi, itu memanggil suntikan <code>IStarhermitSigner</code>:</p>
+<pre><code class="language-csharp">var session = await client.Auth.SignInWithPublicKeyAsync(signer);   // or (), using Options.Signer
+</code></pre>
+<blockquote>
+<p><strong>Detail kontrak perlu diketahui.</strong> Penyebaran ini memverifikasi tanda tangan tantangan terhadap miliknya sendiri
+Serialisasi tantangan PascalCase, sedangkan JSON yang Anda terima adalah camelCase - serialisasi ulang
+tanggapannya tidak akan pernah terverifikasi. <code>StarhermitChallenge.CanonicalPayload</code> mereproduksi byte yang tepat untuk
+tanda tangan, jadi tanda tangan linting tangan harus melakukan hal yang sama.</p>
+</blockquote>
+<p><strong>Token peluncuran permainan</strong> — dicetak per game dan dipagari ke permukaan game itu:</p>
+<pre><code class="language-csharp">var chess = client.Games.ForSlug("83fd04b1-3cbe-4b09-a251-3733ad4b9d94");
+await chess.AcquireLaunchTokenAsync();
+var fenced = chess.WithLaunchToken();     // subsequent calls authorise with the launch token
+</code></pre>
+<p>Mencetak token peluncuran tidak pernah menggantikan sesi akun. Kredensial mana yang dibawa oleh permintaan
+ditentukan oleh jalur permintaan, bukan oleh layanan yang Anda hubungi.</p>
+<p>Penyegaran token akses dikoordinasikan: a <code>401</code> membeli paling banyak satu penyegaran dan satu pemutaran ulang, dan secara bersamaan
+penelepon menunggu penyegaran yang sama daripada memulai beberapa kali — dengan token penyegaran yang berputar, sedetik
+pertukaran akan mencabut keluarga dan mengeluarkan pemain tersebut. Penolakan yang pasti muncul <code>SessionExpired</code>
+sekali; kegagalan transportasi membuat sesi tetap utuh.</p>
+<h3 id="accepting-the-current-terms">Menerima persyaratan saat ini</h3>
+<p>Periksa penerimaan sebelum memulai detak jantung, permintaan permainan, atau soket. Versi 0.1.0 memiliki
+<code>AcceptTermsAsync</code>, tetapi bidang profil dan penemuan istilah yang lebih baru menggunakan dukungan JSON mentahnya:</p>
+<pre><code class="language-csharp">var profile = await client.Me.GetProfileAsync(ct);
+var needsAcceptance = profile.RawJson["termsAcceptanceRequired"].AsBooleanOrDefault();
+var terms = await client.Raw.SendForJsonAsync(new StarhermitRequest("GET", "terms"), ct);
+var textToDisplay = terms["text"].AsStringOrNull();
+var displayedHash = terms["hash"].AsStringOrNull();
+// Display textToDisplay. Retain displayedHash for this displayed revision.
+// Only in the user's Accept handler, using an account session:
+// await client.Me.AcceptTermsAsync(displayedHash, ct);
+</code></pre>
+<p>Jangan gunakan label revisi sampel seperti <code>terms-2026-08</code>: hanya hash saat ini dari API saja
+diterima. Pada <code>409</code>, ambil dan tampilkan teks baru untuk penerimaan lainnya. Pada
+<code>403 terms_acceptance_required</code>, selesaikan penerimaan sebelum mencoba lagi; token peluncuran pemain juga dapat mengirimkan penerimaan melalui API setelah persetujuan eksplisit. Melihat <a href="/id/docs/api/profile.html#terms-acceptance">Profil</a> untuk aliran lengkap.</p>
+<h2 id="where-each-wiki-page-lives-in-the-sdk">Tempat setiap halaman wiki berada di SDK</h2>
+<p>Setiap area REST yang didokumentasikan di sini memiliki layanan pada klien, dan setiap protokol WebSocket memiliki a
+kelas koneksi.</p>
+<table>
+<thead>
+<tr>
+<th>halaman Wiki</th>
+<th>SDK</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="/id/docs/api/auth.html">Otentikasi</a></td>
+<td><code>client.Auth</code> (pendaftaran dan pencabutan kunci juga aktif <code>client.Me</code>)</td>
+</tr>
+<tr>
+<td><a href="/id/docs/api/profile.html">Profil</a></td>
+<td><code>client.Me</code>, <code>client.Entitlements</code>, <code>StarhermitPresenceHeartbeat</code></td>
+</tr>
+<tr>
+<td><a href="/id/docs/api/friends.html">Teman-teman</a></td>
+<td><code>client.Friends</code></td>
+</tr>
+<tr>
+<td><a href="/id/docs/api/chat.html">Mengobrol</a></td>
+<td><code>client.Chat</code> + <code>StarhermitChatConnection</code></td>
+</tr>
+<tr>
+<td><a href="/id/docs/api/voice.html">Suara</a></td>
+<td><code>client.Voice</code> + <code>StarhermitVoiceConnection</code></td>
+</tr>
+<tr>
+<td><a href="/id/docs/api/catalog.html">Katalog</a></td>
+<td><code>client.Software</code>, <code>client.CloudSaves</code>, <code>client.Ratings</code>, <code>client.Wishlist</code></td>
+</tr>
+<tr>
+<td><a href="/id/docs/api/activity.html">Aktivitas</a></td>
+<td><code>client.Activity</code></td>
+</tr>
+<tr>
+<td><a href="/id/docs/api/external-libraries.html">Perpustakaan Eksternal</a></td>
+<td><code>client.Activity</code> (tautan, batalkan tautan, perangkat lunak yang dimiliki, peluncuran eksternal)</td>
+</tr>
+<tr>
+<td><a href="/id/docs/api/achievements.html">Prestasi</a></td>
+<td><code>client.Achievements</code>, <code>client.Games.ForSlug(slug).GetAchievementsAsync()</code></td>
+</tr>
+<tr>
+<td><a href="/id/docs/api/leaderboards.html">Papan peringkat</a></td>
+<td><code>client.Leaderboards</code></td>
+</tr>
+<tr>
+<td><a href="/id/docs/api/games.html">Pertandingan</a></td>
+<td><code>client.Games.ForSlug(slug)</code> + <code>StarhermitGameConnection</code></td>
+</tr>
+<tr>
+<td><a href="/id/docs/api/realtime.html">Ruangan Waktu Nyata</a></td>
+<td><code>client.RealtimeRooms</code> + <code>StarhermitRealtimeConnection</code></td>
+</tr>
+<tr>
+<td><a href="/id/docs/api/relay.html">Menyampaikan</a></td>
+<td><code>client.Relay</code> + <code>StarhermitRelayConnection</code></td>
+</tr>
+<tr>
+<td><a href="/id/docs/api/container-games.html">Server Game Kontainer</a></td>
+<td><code>client.GameServer</code> (pertukaran token server dan pencarian sesi)</td>
+</tr>
+<tr>
+<td><a href="/id/docs/api/github-games.html">Permainan GitHub</a></td>
+<td><code>client.BrowserGames</code> + <code>StarhermitGameUploadConnection</code></td>
+</tr>
+<tr>
+<td><a href="/id/docs/api/publisher.html">Penerbit</a></td>
+<td><code>client.Publishers</code>, <code>StarhermitBuildPublisher</code></td>
+</tr>
+<tr>
+<td><a href="/id/docs/getting-started.html#server-clock--get-apiv1time">Jam pelayan</a></td>
+<td><code>client.Time</code>, <code>client.ServerClock</code></td>
+</tr>
+</tbody>
+</table>
+<p><a href="/id/docs/api/game-scripts.html">Skrip Permainan</a> tidak memiliki layanan SDK: skrip berjalan di platform, dan skripnya
+klien berbicara dengannya melalui API game di atas.</p>
+<h2 id="a-session-end-to-end">Sesi ujung ke ujung</h2>
+<p>Siklus hidup dari <a href="/id/docs/tutorials/chess-walkthrough.html">panduan integrasi</a>, di C#:</p>
+<pre><code class="language-csharp">var chess = client.Games.ForSlug("83fd04b1-3cbe-4b09-a251-3733ad4b9d94");
+await chess.AcquireLaunchTokenAsync();
+
+var ticket = await chess.EnqueueMatchmakingAsync();
+while (!ticket.IsMatched)
+{
+    await Task.Delay(TimeSpan.FromSeconds(2), ct);
+    ticket = await chess.GetMatchmakingAsync(ct) ?? ticket;
+}
+
+using var game = client.CreateGameConnection(ticket.SessionId!.Value, "83fd04b1-3cbe-4b09-a251-3733ad4b9d94", useLaunchToken: true);
+game.FrameReceived       += frame =&gt; ApplyServerState(frame);
+game.AchievementUnlocked += unlock =&gt; ShowToast(unlock);
+game.PresenceChanged     += (userId, online) =&gt; UpdateOpponentDot(userId, online);
+game.ErrorReceived       += message =&gt; ShowError(message);
+
+await game.ConnectAsync(ct);
+await game.SendCommandAsync(writer =&gt;
+{
+    writer.Write("type", "move");
+    writer.Write("from", "e2");
+    writer.Write("to",   "e4");
+}, ct);
+</code></pre>
+<p><code>SendCommandAsync</code> membungkus muatan sebagai <code>{"type":"cmd","data":…}</code>; <code>SendRealtimeInputAsync</code> adalah
+jalur dengan kecepatan terbatas untuk input berkelanjutan. Koneksi tidak mencentang logika permainan, memprediksi secara otoritatif
+nyatakan, mengarang hasil, atau mengirim ulang perintah yang mungkin non-idempoten setelah ambigu
+putuskan sambungan — server tetap menjadi satu-satunya otoritas atas apa yang terjadi.</p>
+<p>Setiap koneksi berbagi satu mesin status: <code>Disconnected</code>, <code>Connecting</code>, <code>Connected</code>, <code>Reconnecting</code>,
+<code>Closing</code>, <code>Faulted</code>, dengan <code>StateChanged</code>, <code>Closed</code> Dan <code>Faulted</code> acara, antrian keluar yang dibatasi dengan
+tekanan balik yang eksplisit, dan pengiriman yang dipesan. Penyambungan kembali menggunakan backoff yang terputus-putus, memperoleh kembali arus
+token sebelum setiap upaya, dan <strong>berhenti untuk selamanya pada otorisasi atau penutupan kebijakan</strong> daripada
+menggedor pintu hingga platform tertutup. Tidak pernah diasumsikan bahwa keanggotaan dapat bertahan dari kesenjangan: masing-masing protokol
+mengambil kembali atau bergabung kembali saat menyambung kembali.</p>
+<p>Kredensial naik <code>Authorization</code> header di mana platform mengizinkannya dan <code>?access_token=</code> pada
+<code>/ws/**</code> jika tidak, karena browser tidak dapat menyetel header jabat tangan. Token kueri dihapus dari
+setiap log.</p>
+<h2 id="async-threading-and-unity">Async, threading, dan Persatuan</h2>
+<p>Setiap operasi I/O kembali <code>Task</code> dan mengambil jejak <code>CancellationToken</code>. Tidak ada <code>async void</code>
+metode dan tidak ada metode publik yang memblokir thread panggilan.</p>
+<p>Callback peristiwa dan kemajuan diposting ke konteks sinkronisasi tempat klien dibuat — jadi
+jika Anda membuatnya di thread utama Unity, seorang penangan mungkin akan menyentuhnya <code>GameObject</code>s secara langsung. Server tanpa kepala
+dapat melewati hop dengan <code>options.CallbackDispatcher = ImmediateCallbackDispatcher.Instance</code>. Panggilan balik adalah
+dipesan per koneksi, dan penangan yang melakukan pelemparan dilaporkan ke diagnostik tanpa menghentikan
+menerima lingkaran.</p>
+<p><code>StarhermitLifecycle.Attach(client)</code> menjembatani peristiwa aplikasi Unity: kehadiran detak jantung dijeda
+dalam penangguhan dan segera mengirimkan resume, dan klien dibuang saat berhenti tanpa sinkron
+kerja jaringan.</p>
+<p>Model tidak pernah merujuk <code>GameObject</code>, <code>MonoBehaviour</code> atau sebuah adegan. <code>StarhermitTextures</code> mengkonversi avatar dan
+byte cover-art menjadi a <code>Texture2D</code> di thread utama — penelepon memiliki hasilnya dan harus menghancurkannya.</p>
+<h2 id="errors-retries-and-pagination">Kesalahan, percobaan ulang, dan penomoran halaman</h2>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Pengecualian</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>400 / 422</td>
+<td><code>StarhermitBadRequestException</code>, <code>StarhermitValidationException</code> (kesalahan bidang dikunci berdasarkan nama kabel)</td>
+</tr>
+<tr>
+<td>401</td>
+<td><code>StarhermitAuthenticationException</code></td>
+</tr>
+<tr>
+<td>402</td>
+<td><code>StarhermitEntitlementException</code></td>
+</tr>
+<tr>
+<td>403</td>
+<td><code>StarhermitAuthorizationException</code></td>
+</tr>
+<tr>
+<td>404</td>
+<td><code>StarhermitNotFoundException</code></td>
+</tr>
+<tr>
+<td>409</td>
+<td><code>StarhermitConflictException</code></td>
+</tr>
+<tr>
+<td>429</td>
+<td><code>StarhermitRateLimitException</code> (membawa <code>RetryAfter</code>)</td>
+</tr>
+<tr>
+<td>5xx</td>
+<td><code>StarhermitServerException</code></td>
+</tr>
+</tbody>
+</table>
+<p>Masing-masing membawa status, milik server <code>{"error":"..."}</code> pesan, kode apa pun yang dapat dibaca mesin, permintaan
+identitas, <code>Retry-After</code>, header yang disunting, dan badan yang disunting dengan batasan ukuran. Permintaan yang tidak pernah sampai
+API meningkat <code>StarhermitTransportException</code> atau <code>StarhermitTimeoutException</code> — kegagalan transportasi tidak pernah terjadi
+didandani sebagai respons API. Pembatalan selalu muncul sebagai <code>OperationCanceledException</code>.</p>
+<p>Percobaan ulang dibatasi, gelisah, terhormat <code>Retry-After</code> hingga batas tertentu, dan terbatas pada kegagalan sedetik
+upaya dapat bertahan: kesalahan koneksi, batas waktu habis, <code>408</code>, <code>429</code> dan sementara <code>5xx</code>. <code>403</code>, <code>404</code>, <code>409</code>
+dan kegagalan validasi tidak pernah dicoba ulang, dan POST hanya dicoba ulang jika ikut serta
+<code>AsIdempotent</code>. Anggaran percobaan ulang di seluruh proses menghentikan beberapa klien mengubah satu pemadaman menjadi badai.</p>
+<p>Daftar titik akhir kembali <code>StarhermitPage&lt;T&gt;</code> membawa metadata paging milik server sendiri, plus malas
+enumerasi yang mengambil halaman hanya saat halaman tersebut digunakan:</p>
+<pre><code class="language-csharp">await foreach (var title in client.Software.EnumerateTitlesAsync(query, cancellationToken: ct)) { … }
+</code></pre>
+<p>Unduhan mengalir ke an <code>IStarhermitFileStore</code> melalui file sementara, verifikasi SHA-256 yang disediakan dan
+dipromosikan secara atom; <code>OpenDownloadAsync</code> laporan <code>IsResumed</code> hanya untuk yang nyata <code>206</code>, karena
+menambahkan seluruh file ke sebagian akan merusaknya sambil tetap melewati pemeriksaan panjangnya.</p>
+<h2 id="storing-credentials">Menyimpan kredensial</h2>
+<p>Paketnya <strong>tidak mengirimkan toko yang mengklaim aman.</strong> Standarnya adalah di dalam memori; keikutsertaan
+<code>EncryptedFileTokenStore</code> (AES-CBC dengan HMAC-SHA256 melalui kunci yang disediakan aplikasi Anda) didokumentasikan
+sebagai kebingungan saat istirahat, bukan gantungan kunci. Kabel <code>IStarhermitTokenStore</code> ke keamanan platform itu sendiri
+penyimpanan — Gantungan Kunci, Keystore, penyimpanan pengguna SDK konsol. <code>PlayerPrefs</code> tidak pernah disajikan sebagai
+aman.</p>
+<p>Token, token penyegaran, kunci pribadi, rahasia klien, dan kunci pemanggilan tidak pernah diserialkan menjadi a
+<code>ScriptableObject</code>, sebuah adegan, <code>Resources</code>, log, pesan pengecualian, peristiwa telemetri, atau build
+artefak. <code>StarhermitSettings</code> hanya menyimpan default proyek non-rahasia: alamat, slug, level log,
+batas waktu dan bendera pengembangan.</p>
+<p>Redaksi bersifat struktural — berdasarkan header, parameter kueri, dan nama anggota JSON, pada setiap kedalaman — jadi a
+kredensial yang belum pernah didengar oleh versi SDK ini masih dihilangkan dari log, pengecualian, dan telemetri.
+Fragmen URL dihilangkan seluruhnya. Tidak ada telemetri yang dikumpulkan secara default; wastafel yang disuntikkan menerima
+nama acara, id operasi, durasi, kelompok status, jumlah percobaan ulang, id permintaan dan hasil, tidak pernah URL,
+badan atau konten pemutar.</p>
+<h2 id="when-the-platform-ships-something-new">Saat platform mengirimkan sesuatu yang baru</h2>
+<p>Model tidak dapat diubah dan tetap menggunakan JSON tempat model tersebut diurai, sehingga bidang ditambahkan ke penerapan setelahnya
+Versi SDK ini masih dapat dibaca, dan titik akhir yang tidak diketik oleh versi ini masih dapat dipanggil
+kredensial, percobaan ulang, dan redaksi yang sama seperti panggilan yang diketik:</p>
+<pre><code class="language-csharp">var value = profile.RawJson["shippedAfterThisSdk"].AsStringOrNull();
+
+var json  = await client.Raw.SendForJsonAsync(
+    new StarhermitRequest("GET", "some/new/route").WithQuery("page", 1), ct);
+</code></pre>
+<p>Bingkai soket dikirimkan berdasarkan diskriminator tipenya dengan fallback bingkai tidak diketahui yang mempertahankan
+payload, string enum yang tidak diketahui disimpan sebagai string, bukan dipaksa, dan tingkat privasi yang tidak diketahui
+dibaca sebagai <strong>paling</strong> interpretasi pribadi. <code>Optional&lt;T&gt;</code> membedakan dihilangkan, eksplisit null dan
+nilai, yang merupakan apa yang dibutuhkan oleh tubuh PATCH.</p>
+<p><code>client.GetDiagnostics()</code> mengembalikan status koneksi, kedalaman antrian, jumlah koneksi kembali, masa berlaku token, jam
+kesegaran, permintaan dalam penerbangan, percobaan ulang yang dilakukan, dan kesalahan terakhir yang disunting — cuplikan untuk dilampirkan ke a
+laporan bug.</p>
+<h2 id="samples">Sampel</h2>
+<p>Delapan sampel dikirimkan bersama paket dan dikompilasi di CI, sehingga tidak dapat menyimpang dari API mereka
+demonstrasikan: Otentikasi dan Profil, Teman dan Obrolan, Game Menjodohkan, Waktu Nyata dan Relai, Suara,
+Layanan Katalog, Alat Penerbit, dan Server Khusus.</p>
+<h2 id="verification-status">Status verifikasi</h2>
+<p>Rangkaian SDK sendiri (144 pengujian kedap udara di bawah <code>dotnet test</code>, file yang sama berjalan sebagai Unity EditMode
+pengujian) dan manifes cakupan yang dihasilkan yang gagal dalam pembangunan ketika operasi API tidak memiliki pemetaan SDK
+berjalan pada setiap perubahan; lima tes lebih lanjut membaca penerapan langsung ketika diarahkan ke salah satunya, dan dilewati
+sebaliknya. Matriks editor dan IL2CPP
+build pemain untuk Linux, Android, dan WebGL ditentukan di CI tetapi memerlukan build farm berlisensi, jadi
+tabel platform di atas menyatakan dukungan yang dimaksudkan — perlakukan target sebagai memenuhi syarat hanya setelah Anda membangunnya
+itu sendiri.</p>
+
+{% endraw %}

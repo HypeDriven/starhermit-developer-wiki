@@ -1,0 +1,284 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Upload Build dari CI/CD dengan Kunci Publik yang terdaftar di OAuth"
+source_url: "/docs/tutorials/ci-cd-build-upload.html"
+source_path: "docs/tutorials/ci-cd-build-upload.md"
+source_hash: "0f3e9f3e48bf88125b2110acdd92ab62aeb0840f0bbc758e7c52b911a434e718"
+translation: "machine"
+permalink: "/id/docs/tutorials/ci-cd-build-upload.html"
+---
+{% raw %}
+<h1 id="upload-builds-from-cicd-with-an-oauth-enrolled-public-key">Upload Build dari CI/CD dengan Kunci Publik yang terdaftar di OAuth</h1>
+<p>Tutorial ini memberikan kredensial StarHermitnya sendiri pada pipeline penerapan tanpa menyimpan Google Anda
+atau token GitHub OAuth di CI. Penyiapan satu kali bersifat interaktif:</p>
+<ol>
+<li>Masuk melalui OAuth dan terima persyaratan StarHermit saat ini.</li>
+<li>Tambahkan kunci publik khusus ke akun StarHermit Anda.</li>
+<li>Letakkan hanya bagian pribadi kunci itu di penyimpanan rahasia CI.</li>
+</ol>
+<p>Setiap proses pipeline kemudian menandatangani tantangan StarHermit yang berumur pendek, dan biasanya menerima waktu 15 menit
+token akses, dan unggah versi baru. Kunci saluran bertindak sebagai akun Anda dan hanya dapat diperbarui
+game yang dimiliki akun.</p>
+<h2 id="why-use-a-separate-deployment-key">Mengapa menggunakan kunci penerapan terpisah?</h2>
+<p>Jangan simpan akses OAuth atau segarkan token di CI. Kunci publik StarHermit adalah mesin yang lebih baik
+kredensial karena dapat diberi label, diaudit, dan dicabut secara independen. Sesi diautentikasi
+dengan kunci itu <strong>tidak dapat menambahkan kunci atau mencabut kunci lainnya</strong>; operasi tersebut memerlukan autentikasi OAuth
+sesi. Ia dapat mencabut dirinya sendiri melalui <code>/api/v1/me/public-keys/current</code>. Jika rahasia CI bocor, masuk dengan Google atau GitHub dan cabut kunci penerapan.
+Pencabutan juga mengakhiri sesi penyegaran yang dibuat oleh kunci tersebut dan membuat token akses yang ada gagal
+pada permintaan API berikutnya.</p>
+<p>Gunakan satu kunci per repositori/lingkungan, misalnya <code>orbit-league-production</code>, daripada berbagi
+satu kunci pribadi di antara setiap alur kerja.</p>
+<h2 id="prerequisites">Prasyarat</h2>
+<ul>
+<li>Akun StarHermit masuk melalui Google atau GitHub OAuth.</li>
+<li>Game yang sudah ada yang dimiliki oleh akun itu. Simpan itu <code>id</code> sebagai <code>GAME_ID</code>; pembaruan titik akhir bundel a
+permainan tetapi tidak membuatnya.</li>
+<li>Build klien yang dapat didistribusikan dan/atau kompatibel dengan Docker <code>docker save</code> gambar. Melihat
+<a href="/id/docs/api/github-games.html#push-a-game-bundle">Permainan GitHub</a> untuk tata letak arsip.</li>
+<li>Python 3 untuk perintah pengaturan dan contoh alur kerja; <code>curl</code> Dan <code>jq</code> untuk contoh pendaftaran.</li>
+</ul>
+<p>Saluran pipa dapat berhasil masuk dan tetap menerima <code>403 terms_acceptance_required</code> kapan itu
+mengunggah atau membuka soket unggah. Mintalah pemilik akun meninjau dan <a href="/id/docs/api/profile.html#terms-acceptance">menerima persyaratan saat ini</a>
+secara interaktif, lalu jalankan kembali pekerjaan tersebut. Hal ini dapat terulang kembali ketika ketentuan berubah; tidak secara otomatis menerima
+ketentuan dari CI.</p>
+<h2 id="one-time-setup">Pengaturan satu kali</h2>
+<h3 id="1-generate-a-deployment-key-locally">1. Hasilkan kunci penerapan secara lokal</h3>
+<p>Contohnya menggunakan Ed25519. Jalankan ini di stasiun kerja tepercaya, bukan di pekerjaan CI:</p>
+<pre><code class="language-bash">python -m pip install cryptography
+python - &lt;&lt;'PY'
+import base64
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat, PublicFormat
+
+key = Ed25519PrivateKey.generate()
+private = key.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())
+public = key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+print("STARHERMIT_PRIVATE_KEY=" + base64.b64encode(private).decode())
+print("STARHERMIT_PUBLIC_KEY=" + base64.b64encode(public).decode())
+PY
+</code></pre>
+<p>Nilai pribadinya adalah benih 32-byte dan ditampilkan satu kali di terminal lokal tepercaya ini. Jangan pernah berkomitmen
+itu, cetak di log CI, masukkan ke dalam artefak, atau kirimkan ke StarHermit. Jaga nilai publik
+langkah selanjutnya dan untuk variabel alur kerja.</p>
+<h3 id="2-sign-in-with-oauth-and-add-the-public-key">2. Masuk dengan OAuth dan tambahkan kunci publik</h3>
+<p>Buka salah satu URL berikut di browser:</p>
+<pre><code class="language-text">https://api.starhermit.com/api/v1/auth/oauth/github/authorize
+https://api.starhermit.com/api/v1/auth/oauth/google/authorize
+</code></pre>
+<p>Setelah panggilan balik, segera gunakan token akses terautentikasi OAuth yang dikembalikan. Taruh di lokal
+variabel lingkungan daripada dalam riwayat shell:</p>
+<pre><code class="language-bash">read -rsp 'OAuth access token: ' OAUTH_ACCESS_TOKEN; echo
+read -rp  'Public key: ' STARHERMIT_PUBLIC_KEY
+
+curl -sS -X POST https://api.starhermit.com/api/v1/me/public-keys \
+  -H "Authorization: Bearer $OAUTH_ACCESS_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data "$(jq -n \
+    --arg keyData "$STARHERMIT_PUBLIC_KEY" \
+    --arg label 'orbit-league-production' \
+    '{keyType:"Ed25519", keyData:$keyData, label:$label}')"
+</code></pre>
+<p>Panggilan itu kembali <code>201</code> dan catatan kuncinya. A <code>403</code> berarti token ini tidak berasal dari OAuth
+sesi (verifikasi email, kunci publik, atau token peluncuran game saja tidak cukup). A <code>409</code> berarti
+kunci sudah aktif atau akun telah mencapai batas kunci aktifnya.</p>
+<p>Periksa hasilnya dengan <code>GET /api/v1/me/public-keys</code>. Daftar tersebut mencakup label, sidik jari, penggunaan terakhir
+kali, dan kunci yang dicabut, jadi ini juga merupakan jejak audit kredensial.</p>
+<h3 id="3-configure-the-repository">3. Konfigurasikan repositori</h3>
+<p>Di GitHub, tambahkan:</p>
+<ul>
+<li>Rahasia tindakan <code>STARHERMIT_PRIVATE_KEY</code>: benih pribadi Base64.</li>
+<li>Variabel tindakan <code>STARHERMIT_PUBLIC_KEY</code>: kunci publik mentah Base64.</li>
+<li>Variabel tindakan <code>STARHERMIT_GAME_ID</code>: ID game yang dimiliki.</li>
+</ul>
+<p>Lindungi produksi dengan Lingkungan GitHub jika diperlukan persetujuan. Nilai yang setara bisa saja
+disimpan dalam variabel yang dilindungi GitLab, Azure Key Vault, atau penyimpanan rahasia CI lainnya.</p>
+<h2 id="add-the-authenticationupload-helper">Tambahkan pembantu autentikasi/unggah</h2>
+<p>Lakukan hal berikut sebagai <code>ci/starhermit_upload.py</code>. Ini merekonstruksi tantangan persis JSON itu
+StarHermit menandatangani secara internal, mengautentikasi dengan Ed25519, dan memilih HTTP untuk arsip kecil atau
+unggah WebSocket untuk arsip lebih dari 90 MB. WebSocket menghindari badan HTTP CDN yang berukuran sekitar 100 MB
+batas.</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+import argparse, asyncio, base64, json, os
+from pathlib import Path
+from urllib.parse import quote, urlparse, urlunparse
+
+import requests
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+
+def authenticate(api, public_key, private_key):
+    challenge = requests.post(
+        f"{api}/api/v1/auth/public-key/challenge",
+        json={"keyType": "Ed25519", "keyData": public_key}, timeout=30)
+    challenge.raise_for_status()
+    body = challenge.json()
+    p = body["payload"]
+
+    # Public JSON is camelCase; the server verifies its ChallengePayload serialization, whose
+    # property names and order are the PascalCase sequence below.
+    payload = {
+        "ChallengeId": p["challengeId"],
+        "Fingerprint": p["fingerprint"],
+        "Issuer": p["issuer"],
+        "Audience": p["audience"],
+        "Expiry": p["expiry"],
+        "Nonce": p["nonce"],
+        "ClientTimestamp": p["clientTimestamp"],
+    }
+    # System.Text.Json escapes '+' in string fields (the Base64 nonce) as \u002B.
+    # DateTimeOffset fields keep literal '+' in their offsets: do not replace globally.
+    fields = []
+    for name, value in payload.items():
+        encoded = json.dumps(value)
+        if name == "Nonce":
+            encoded = encoded.replace("+", r"\u002B")
+        fields.append(json.dumps(name) + ":" + encoded)
+    signed_payload = ("{" + ",".join(fields) + "}").encode("utf-8")
+
+    seed = base64.b64decode(private_key, validate=True)
+    signature = Ed25519PrivateKey.from_private_bytes(seed).sign(signed_payload)
+    complete = requests.post(
+        f"{api}/api/v1/auth/public-key/complete",
+        json={"challengeId": body["challengeId"],
+              "signature": base64.b64encode(signature).decode(),
+              "keyType": "Ed25519", "keyData": public_key}, timeout=30)
+    complete.raise_for_status()
+    return complete.json()["accessToken"]
+
+
+def upload_http(api, game_id, token, archive, mode):
+    with archive.open("rb") as stream:
+        response = requests.post(
+            f"{api}/api/v1/me/github-games/{game_id}/bundle",
+            params={"mode": mode} if mode != "replace" else None,
+            headers={"Authorization": f"Bearer {token}",
+                     "Content-Type": "application/gzip"},
+            data=stream, timeout=1800)
+    response.raise_for_status()
+    print(json.dumps(response.json()))
+
+
+async def upload_websocket(api, game_id, token, archive, mode):
+    import websockets
+    parsed = urlparse(api)
+    query = f"gameId={quote(game_id)}&amp;access_token={quote(token)}"
+    if mode != "replace":
+        query += f"&amp;mode={quote(mode)}"
+    uri = urlunparse(("wss" if parsed.scheme == "https" else "ws", parsed.netloc,
+                      "/ws/v1/game-upload", "", query, ""))
+    async with websockets.connect(uri, max_size=None, ping_interval=20) as ws:
+        ready = json.loads(await ws.recv())
+        if ready.get("type") != "ready":
+            raise RuntimeError(ready)
+        with archive.open("rb") as stream:
+            while chunk := stream.read(512 * 1024):
+                await ws.send(chunk)
+        await ws.send(json.dumps({"type": "complete"}))
+        while True:
+            message = json.loads(await ws.recv())
+            if message.get("type") == "result":
+                print(json.dumps(message))
+                return
+            if message.get("type") == "error":
+                raise RuntimeError(message)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("archive", type=Path)
+    parser.add_argument("--api", default="https://api.starhermit.com")
+    parser.add_argument("--mode", choices=("replace", "merge"), default="replace",
+                        help="replace the live client files (default) or patch them")
+    args = parser.parse_args()
+    game_id = os.environ["STARHERMIT_GAME_ID"]
+    token = authenticate(args.api.rstrip("/"), os.environ["STARHERMIT_PUBLIC_KEY"],
+                         os.environ["STARHERMIT_PRIVATE_KEY"])
+    if args.archive.stat().st_size &lt; 90 * 1024 * 1024:
+        upload_http(args.api.rstrip("/"), game_id, token, args.archive, args.mode)
+    else:
+        asyncio.run(upload_websocket(args.api.rstrip("/"), game_id, token, args.archive, args.mode))
+
+
+if __name__ == "__main__":
+    main()
+</code></pre>
+<p>Perlakukan pintu keluar yang bukan nol sebagai penerapan yang gagal. Jangan mencatat token akses atau melengkapi isi permintaan.
+Token akses berlaku selama 15 menit, jadi autentikasi segera sebelum mengunggah; WebSocket
+memeriksanya selama jabat tangan dan mungkin selesai setelah token kedaluwarsa.</p>
+<h2 id="github-actions-example">Contoh Tindakan GitHub</h2>
+<p>Contoh ini menerbitkan konten <code>dist/</code> pada setiap dorongan ke <code>main</code>:</p>
+<p>{% mentah %}</p>
+<pre><code class="language-yaml">name: Deploy to StarHermit
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Package StarHermit bundle
+        run: |
+          mkdir -p bundle/client
+          cp -R dist/. bundle/client/
+          cp starhermit.txt bundle/starhermit.txt
+          tar -C bundle -czf game-bundle.tar.gz .
+
+      - name: Install uploader dependencies
+        run: python -m pip install 'cryptography&gt;=42,&lt;45' 'requests&gt;=2.31,&lt;3' 'websockets&gt;=12,&lt;13'
+
+      - name: Upload build
+        env:
+          STARHERMIT_PRIVATE_KEY: ${{ secrets.STARHERMIT_PRIVATE_KEY }}
+          STARHERMIT_PUBLIC_KEY: ${{ vars.STARHERMIT_PUBLIC_KEY }}
+          STARHERMIT_GAME_ID: ${{ vars.STARHERMIT_GAME_ID }}
+        run: python ci/starhermit_upload.py game-bundle.tar.gz
+</code></pre>
+<p>{% menggambar %}</p>
+<p>Untuk server khusus, tambahkan <code>docker build</code>, simpan gambar ke <code>bundle/server/image.tar</code>, dan pertahankan
+<code>starhermit.txt</code> di akar bundel:</p>
+<pre><code class="language-bash">docker build -t my-game-server:${GITHUB_SHA} -f Dockerfile.server .
+mkdir -p bundle/server
+docker save my-game-server:${GITHUB_SHA} -o bundle/server/image.tar
+tar -C bundle -czf game-bundle.tar.gz .
+</code></pre>
+<p>Pengunggahan bundel yang berhasil berarti StarHermit menerima dan menerbitkan bundel secara atom; memang demikian
+bukan berarti kontainer baru telah lolos pemeriksaan kesehatan. Pemilihan
+<code>GET /api/v1/me/github-games/{id}/deployment</code> dengan token yang baru diautentikasi dan menjalankan a
+tes asap sebelum mempromosikan rilis.</p>
+<h2 id="rotation-and-incident-response">Rotasi dan respons insiden</h2>
+<ol>
+<li>Masuk melalui OAuth dan terima persyaratan StarHermit saat ini.</li>
+<li>Tambahkan kunci yang baru dibuat dan diberi label jelas.</li>
+<li>Ganti rahasia dan variabel CI, lalu jalankan penerapan.</li>
+<li>Cabut kunci lama dengan <code>DELETE /api/v1/me/public-keys/{keyId}</code>.</li>
+</ol>
+<p>Untuk dugaan kompromi luas, <code>DELETE /api/v1/me/public-keys/all</code> mencabut setiap kunci aktif.
+Kedua operasi penghapusan memerlukan sesi yang diautentikasi OAuth. Sebuah pipeline diautentikasi dengan miliknya sendiri
+kunci tidak dapat mencabut kunci lain, menambahkan pengganti, mengubah email akun, atau menghapus identitas OAuth.
+Ia dapat mencabut dirinya sendiri dengan <code>DELETE /api/v1/me/public-keys/current</code>; buang token yang disimpannya setelahnya.</p>
+<h2 id="see-also">Lihat juga</h2>
+<ul>
+<li><a href="/id/docs/api/profile.html#public-keys">Profil: manajemen kunci publik</a></li>
+<li><a href="/id/docs/api/auth.html#public-key-login">Otentikasi: login kunci publik</a></li>
+<li><a href="/id/docs/api/github-games.html#push-a-game-bundle">GitHub Games: dorong bundel game</a></li>
+<li><a href="/id/docs/api/github-games.html#upload-over-a-websocket">GitHub Games: unggah melalui WebSocket</a></li>
+</ul>
+
+{% endraw %}

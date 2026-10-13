@@ -1,0 +1,125 @@
+---
+layout: "wiki"
+lang: "hi"
+title: "प्रगति को सुरक्षित रूप से लोड करें और सहेजें"
+source_url: "/docs/tutorials/cloud-save-sync.html"
+source_path: "docs/tutorials/cloud-save-sync.md"
+source_hash: "3d1bef0f13bb54f639d96ca6ff1c5607c172a4d25d7707062b404cba46d5de83"
+translation: "machine"
+permalink: "/hi/docs/tutorials/cloud-save-sync.html"
+---
+{% raw %}
+<h1 id="load-and-save-progress-safely">प्रगति को सुरक्षित रूप से लोड करें और सहेजें</h1>
+<p>साइन-इन किए गए प्लेयर की क्लाइंट-स्वामित्व वाली प्रगति के लिए क्लाउड सेव का उपयोग करें। अहस्ताक्षरित एकल-खिलाड़ी विकल्प
+मेमोरी में प्रगति रखता है और अकाउंट सेव को पढ़ता या लिखता नहीं है। प्राथमिकताएं शामिल हैं
+<a href="/hi/docs/api/games.html#per-player-game-settings">खेल सेटिंग्स</a>, प्रगति दस्तावेज़ नहीं.</p>
+<p>एक लॉन्च टोकन सटीक रूप से पहुंच सकता है <code>game:&lt;gameId&gt;</code>, कहाँ <code>gameId</code> इसका है <code>game_scope</code>. मंच
+प्रति स्लॉट एक सेव के साथ, अपारदर्शी बाइट्स संग्रहीत करता है। आपके गेम द्वारा अपेक्षित प्रारूप को सत्यापित करें। देखना
+<a href="/hi/docs/api/catalog.html#cloud-saves">क्लाउड सेव</a> कोटा और सशर्त शीर्षलेखों के लिए।</p>
+<p><img src="/docs/images/hi/cloud-save-flow.svg" alt="लिखने से पहले लोड करें और सत्यापित करें। असफल पठन ब्लॉक अपलोड; सशर्त लेखन नई बचत और सतही संघर्षों को संरक्षित करता है।"></p>
+<h2 id="a-small-complete-json-recipe">एक छोटी संपूर्ण JSON रेसिपी</h2>
+<p>प्रतिलिपि <a href="/docs/sdk/cloud-save-store.js"><code>cloud-save-store.js</code></a> आपके निर्माण में. यह उदाहरण कच्चा संग्रहीत करता है
+UTF-8 JSON बाइट्स; मंच उनकी सेवा करता है <code>application/zip</code> लेकिन ज़िप प्रारूप की आवश्यकता नहीं है.
+ज़िप सेव के लिए एक अलग रीडर का उपयोग करें, जिसमें शामिल है <a href="/hi/docs/sdk/javascript.html#cloud-saves">ब्राउज़र SDK का ज़िप सहेजता है</a>.
+मौजूदा खिलाड़ियों के लिए माइग्रेशन योजना के बिना प्रारूप न बदलें।</p>
+<pre><code class="language-js">import { CloudSaveStore } from './cloud-save-store.js';
+
+const store = new CloudSaveStore({
+  gameId: StarHermit.slug,
+  token: () =&gt; StarHermit.token, // Always obtain the current renewed token.
+});
+const valid = value =&gt; value?.version === 1 &amp;&amp; Number.isSafeInteger(value.points) &amp;&amp; value.points &gt;= 0;
+let progress = { version: 1, points: 0 };
+let saving = false;
+
+async function startAccountGame() {
+  // Keep gameplay/saving disabled until this resolves.
+  const remote = await store.load(valid);
+  progress = remote ?? { version: 1, points: 0 };
+  render(progress);
+}
+
+async function saveCheckpoint() {
+  if (saving) return; // Coalesce checkpoints; do not issue overlapping writes.
+  saving = true;
+  showSync('Saving…');
+  try {
+    await store.save(progress);
+    showSync('Saved');
+  } catch (error) {
+    if (error.status === 412) {
+      // Keep local progress in memory. Offer Reload cloud or an explicit merge.
+      showConflict(() =&gt; startAccountGame());
+    } else showSync('Save failed; retry after resolving the error');
+  } finally {
+    saving = false;
+  }
+}
+</code></pre>
+<p><code>render</code>, <code>showSync</code>, और <code>showConflict</code> आपका यूआई है. का इंतजार <code>startAccountGame()</code> सक्षम करने से पहले
+खेलें या सहेजें. लोड विफलता पर, खिलाड़ी की वर्तमान स्थानीय स्थिति को बनाए रखें, विफलता प्रदर्शित करें,
+और अपलोड को अवरुद्ध रखें। ए <code>404</code> खाली-स्लॉट मामला है; <code>401</code>, <code>403</code>, <code>5xx</code>, विकृत JSON,
+या असमर्थित सेव संस्करण खाली स्लॉट नहीं हैं।</p>
+<p>नुस्खा क्रेडेंशियल्स को नवीनीकृत नहीं करता है. ब्राउज़र SDK लॉन्च टोकन के बने रहने पर उन्हें नवीनीकृत करता है
+वैध. पढ़ने का पुनः प्रयास करने से पहले लंबित शर्तों को हल करें या खेल के प्रवेश प्रवाह के माध्यम से पुनः प्रमाणित करें।</p>
+<h2 id="conditions-and-conflicts">स्थितियाँ और संघर्ष</h2>
+<table>
+<thead>
+<tr>
+<th>क्या लोड किया गया था</th>
+<th>अगले लिखने पर हेडर</th>
+<th>यदि कोई अन्य डिवाइस लिखता है</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ETag के साथ मौजूदा बचत</td>
+<td><code>If-Match: &lt;etag&gt;</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>कोई सेव नहीं (<code>404</code>)</td>
+<td><code>If-None-Match: *</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>कुछ भी सफलतापूर्वक लोड नहीं हुआ</td>
+<td>नहीं लिखना</td>
+<td>पढ़ने का पुनः प्रयास करते रहें या खिलाड़ी को अनट्रैक प्ले में ही रहने दें</td>
+</tr>
+</tbody>
+</table>
+<p>से संस्करण का उपयोग करें <strong>आपके द्वारा लोड किया गया डेटा</strong>, बाद में मेटाडेटा जाँच नहीं। लौटाए गए नए ईटैग को अपने पास रखें
+प्रत्येक सफल लेखन द्वारा. ए <code>412</code> जब तक गेम वर्तमान संस्करण को लोड नहीं करता तब तक ब्लॉक और सेव हो जाता है
+खिलाड़ी इसे अपनाता है या विलय करता है। शर्त को चुपचाप हटाकर किसी अन्य डिवाइस पर अधिलेखित न करें।
+एपीआई उस ओवरराइट को पूर्ववत करने के लिए कोई सेव हिस्ट्री प्रदान नहीं करता है।</p>
+<p>यदि दो डिवाइसों को स्वतंत्र रूप से काउंटरों या इन्वेंट्री को अपडेट करना होगा, तो एक अंतिम-लेखन दस्तावेज़ जीतता है
+खेल में फिट नहीं हो सकता. सर्वर-आधिकारिक स्थिति का उपयोग करें और इसके बजाय मान्य गेम कमांड को परिभाषित करें।</p>
+<h2 id="save-format-and-migration">प्रारूप और माइग्रेशन सहेजें</h2>
+<p>रिमोट अपनाने से पहले एक प्रारूप संस्करण शामिल करें और प्रकार, श्रेणियां और आवश्यक फ़ील्ड मान्य करें
+प्रगति. समर्थित पुराने संस्करणों के लिए माइग्रेशन लिखें। एक नया अज्ञात संस्करण बरकरार रखें;
+इसे डिफ़ॉल्ट पर रीसेट न करें और इस पर अपलोड करें। क्लाउड डेटा क्लाइंट-नियंत्रित है, इसलिए इसे कभी भी ट्रीट न करें
+प्रतिस्पर्धी स्कोर या भुगतान पात्रता के प्रमाण के रूप में।</p>
+<p>डिफ़ॉल्ट डिकोडेड-सेव सीमा 10 MiB है। बेस64 अनुरोध निकाय में लगभग एक तिहाई जोड़ता है।
+<code>413 cloud_save_too_large</code>, <code>409 cloud_save_slots_exhausted</code>, और <code>507 cloud_save_quota_exceeded</code>
+विभिन्न क्षमता विफलताएँ हैं; निरीक्षण करें <code>code</code> और <code>limit</code>. सम्मान <code>Retry-After</code> पर <code>429</code>.</p>
+<h2 id="checkpoints-and-page-exit">चेकप्वाइंट और पेज निकास</h2>
+<p>सार्थक चौकियों पर बचत करें और दृश्यमान सहेजें कार्रवाई की पेशकश करें। तेजी से बदलावों की निंदा करें और क्रमबद्ध करें
+लिखता है इसलिए प्रत्येक व्यक्ति अंतिम स्वीकृत संस्करण का उपयोग करता है। स्वीकृत होने तक गंदा संकेतक रखें।
+एक असफल अनुरोध एक पुष्ट बचत नहीं है; एक अस्पष्ट लेखन के बाद, दूसरे लेखन से पहले पुनः लोड करें।</p>
+<p>पेज-एग्जिट अपलोड सर्वोत्तम प्रयास है। ब्राउज़र <code>fetch(..., { keepalive: true })</code> एक छोटी सी उड़ान साझा करता है
+शारीरिक भत्ता, सामान्यतः 64 KiB; 10 MiB सेव इस पर भरोसा नहीं कर सकता। किसी अनुरोध से पहले कोई टैब बंद हो सकता है
+ख़त्म. स्थायित्व के लिए सामान्य अग्रभूमि बचत का उपयोग करें, और अस्वीकृत प्रगति को लेबल न करें
+बचाया. क्विकस्टार्ट प्रत्येक बिंदु संग्रह पर अपने छोटे दस्तावेज़ को सहेजता है।</p>
+<h2 id="verify-in-your-game">अपने गेम में सत्यापित करें</h2>
+<ol>
+<li>एक खाली स्लॉट से शुरू करें; प्रगति एकत्रित करें, सहेजें, पुनः लोड करें और उसके वापस आने की पुष्टि करें।</li>
+<li>नेटवर्क त्रुटि के साथ पढ़ने से इंकार करें, <code>403</code>, या अमान्य डेटा; पुष्टि करें कि कोई अपलोड नहीं हो रहा है।</li>
+<li>एक संस्करण पर दो टैब खोलें. ए में सहेजें, फिर बी: बी को एक संघर्ष सामने लाना होगा और अपनी स्थानीय स्थिति को संरक्षित करना होगा।</li>
+<li>अज्ञात डेटा को अधिलेखित किए बिना पुराने/नए प्रारूप और गुम पावती का परीक्षण करें।</li>
+<li>अनट्रैक्ड सिंगल-प्लेयर मोड दर्ज करें और सत्यापित करें कि प्ले कोई क्लाउड-सेव अनुरोध नहीं करता है।</li>
+</ol>
+<p>देखना <a href="/hi/docs/tutorials/browser-quickstart.html">चलाने योग्य त्वरित प्रारंभ</a>, <a href="/hi/docs/api/conventions.html">एपीआई कन्वेंशन</a>, और
+<a href="/hi/docs/troubleshooting.html#game-setup-and-storage">समस्या निवारण</a>.</p>
+
+{% endraw %}

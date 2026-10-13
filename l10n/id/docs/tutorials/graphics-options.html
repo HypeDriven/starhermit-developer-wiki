@@ -1,0 +1,373 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Tutorial: pilihan grafis dengan kualitas terdeteksi otomatis"
+source_url: "/docs/tutorials/graphics-options.html"
+source_path: "docs/tutorials/graphics-options.md"
+source_hash: "cd4437482fbf097933897dbbeaf9e978a67574c0fe1ff696ace01bf8e9239bf5"
+translation: "machine"
+permalink: "/id/docs/tutorials/graphics-options.html"
+---
+{% raw %}
+<h1 id="tutorial-graphics-options-with-auto-detected-quality">Tutorial: pilihan grafis dengan kualitas terdeteksi otomatis</h1>
+<p>Berikan permainan browser Anda a <strong>Grafik</strong> menu yang memilih tingkat kualitas yang masuk akal untuk mesin pemain
+pada peluncuran pertama, biarkan mereka menggantinya, dan mengingat pilihan mereka di seluruh perangkat melalui StarHermit.</p>
+<p>Untuk bagian Audio terkait, lihat <a href="/id/docs/tutorials/audio-options.html">opsi audio dengan batas suara yang terdeteksi secara otomatis</a>.</p>
+<p><a href="/docs/sdk/graphics-options.js"><code>graphics-options.js</code></a> adalah modul ES tunggal, tanpa ketergantungan, itu
+menangani pembukuan:</p>
+<ul>
+<li><strong>Mobil</strong> memilih salah satu dari empat preset (Rendah, Seimbang, Tinggi, Ultra) dari GPU, memori, inti CPU, dan
+jenis perangkat, dan mundur untuk sesi tersebut jika frame tetap lambat.</li>
+<li>Pemain dapat mengganti setiap efek (bayangan, oklusi sekitar, mekar, anti-aliasing, atau milik Anda sendiri),
+atur skala render 50–200%, pilih FPS maksimum manual daripada penyegaran tampilan otomatis,
+dan mengaktifkan resolusi adaptif dan pembacaan kecepatan bingkai.</li>
+<li>Pengaturan disimpan ke <code>localStorage</code> jadi mereka berlaku sebelum frame pertama, dan ke frame pemain
+<a href="/id/docs/api/games.html#per-player-game-settings">pengaturan per game</a> jadi mereka mengikuti pemain itu ke mereka
+mesin lainnya.</li>
+<li>Ini mencakup panel opsi siap pakai yang dibuat dari tabel kualitas yang sama.</li>
+</ul>
+<p>Itu tidak mengimpor mesin. Perender Anda mendengarkan perubahan dan menerapkan tingkatannya. Halaman ini menghubungkannya
+tiga.js. Mesin lain menggunakan kait yang sama (lihat <a href="#other-engines">Mesin lainnya</a>).</p>
+<ol>
+<li><a href="#1-add-the-files">Tambahkan file</a></li>
+<li><a href="#2-create-the-store-and-the-panel">Buat toko dan panel</a></li>
+<li><a href="#3-apply-the-settings-to-your-renderer">Terapkan pengaturan ke penyaji Anda</a></li>
+<li><a href="#4-fit-it-to-your-game">Sesuaikan dengan permainan Anda</a></li>
+<li><a href="#5-test-it">Ujilah</a></li>
+</ol>
+<h2 id="1-add-the-files">1. Tambahkan file</h2>
+<p>Menyalin <a href="/docs/sdk/starhermit-sdk.js"><code>starhermit-sdk.js</code></a> Dan
+<a href="/docs/sdk/graphics-options.js"><code>graphics-options.js</code></a> di samping skrip game Anda, tidak berubah. Panggilan
+<code>StarHermit.init()</code> <strong>sebelum</strong> modul Anda berjalan, sehingga token peluncuran telah dibaca pada saat itu
+toko grafis memeriksa apakah pemain sudah masuk:</p>
+<pre><code class="language-html">&lt;script src="starhermit-sdk.js"&gt;&lt;/script&gt;
+&lt;script&gt;StarHermit.init();&lt;/script&gt;
+&lt;script type="module" src="main.js"&gt;&lt;/script&gt;
+</code></pre>
+<p>Tanpa token peluncuran (pengembangan lokal, host lainnya), toko menyimpan semuanya
+<code>localStorage</code> dan tidak membuat permintaan.</p>
+<h2 id="2-create-the-store-and-the-panel">2. Buat toko dan panel</h2>
+<pre><code class="language-js">import { createGraphics, mountGraphicsPanel } from './graphics-options.js';
+
+const gfx = createGraphics({ storageKey: 'mygame.graphics' });
+mountGraphicsPanel(document.getElementById('graphics-options'), gfx);
+</code></pre>
+<p><code>mountGraphicsPanel</code> mengisi elemen dengan kontrol. Dialog pengaturan Anda menyediakan bingkai, itu
+judul dan tombol Tutup. Setiap perubahan berlaku segera dan disimpan.</p>
+<h3 id="how-auto-picks-a-preset">Bagaimana Otomatis memilih preset</h3>
+<p>Saat pembuatan, toko menyelidiki konteks WebGL sekali pakai (<code>gfx.system</code>) dan memetakannya ke preset
+(<code>gfx.detected</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Sinyal</th>
+<th>Prasetel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tanpa WebGL, atau penyaji perangkat lunak (SwiftShader, llvmpipe, Microsoft Basic Render)</td>
+<td>Rendah</td>
+</tr>
+<tr>
+<td>Tidak ada WebGL2, 2 inti CPU atau kurang, atau memori 2 GB atau kurang</td>
+<td>Rendah</td>
+</tr>
+<tr>
+<td>GPU diskrit (NVIDIA, AMD Radeon RX/Pro, Apple M-series)</td>
+<td>Tinggi</td>
+</tr>
+<tr>
+<td>Yang lainnya (Intel/AMD terintegrasi, GPU seluler, Safari bertopeng "GPU Apple")</td>
+<td>Seimbang</td>
+</tr>
+<tr>
+<td>Ponsel atau tablet (penunjuk kasar), atau memori 4 GB atau kurang</td>
+<td>paling banyak Seimbang</td>
+</tr>
+</tbody>
+</table>
+<p>Otomatis tidak pernah memilih Ultra; pemain memilih ikut serta. Nama GPU berasal dari <code>RENDERER</code>, dan itu
+<code>WEBGL_debug_renderer_info</code> ekstensi hanya diminta jika Chromium menutupi namanya. Firefox mencatat a
+peringatan konsol ketika ekstensi itu diminta, dan sudah melaporkan nama aslinya.</p>
+<p>Saat permainan berjalan, Otomatis juga melihat waktu frame. Jika resolusi adaptif sudah turun ke levelnya
+lantai dan bingkai masih rata-rata di atas 26 ms untuk tiga jendela 90 bingkai lagi, Otomatis menurunkan satu preset
+untuk sisa sesi. Memilih <strong>Mobil</strong> di panel lagi mendeteksi ulang. Prasetel pemutar
+dipetik dengan tangan tidak pernah berubah dengan sendirinya.</p>
+<h3 id="maximum-frame-rate">Kecepatan bingkai maksimum</h3>
+<p><strong>Kecepatan bingkai maksimum</strong> defaultnya adalah <strong>Otomatis (kecepatan penyegaran)</strong>: browser menjadwalkan rendering
+dengan kecepatan refresh layar. Memilih <strong>Kebiasaan</strong> dan masukkan bilangan bulat dari <strong>1 hingga 1000FPS</strong> untuk
+menimpanya. Batasan tersebut langsung berlaku, disimpan secara lokal dan ke profil cloud yang sama dengan
+pengaturan grafis lainnya, dan bertahan dari perubahan preset kualitas. Kembali ke <strong>Mobil</strong> untuk menghapus batas.
+Pilihan ini tidak bergantung pada <strong>Mobil</strong> kualitas yang telah ditetapkan.</p>
+<p>Penyaji harus menelepon <code>gfx.shouldRender(now)</code> dalam loop animasinya, seperti yang ditunjukkan di bawah ini. Batas adalah a
+batas atas, bukan kecepatan bingkai yang dijanjikan: rendering masih tidak dapat melebihi panggilan balik animasi browser
+atau kinerja mesin. Oleh karena itu, menyetel 144 FPS pada tampilan 60 Hz masih menghasilkan maksimal 60 FPS.</p>
+<p>Untuk menu khusus, gunakan <code>gfx.set({ maxFps: 45 })</code> Dan <code>gfx.set({ maxFps: null })</code> untuk memulihkan Otomatis.
+Terselesaikan <code>gfx.settings.maxFps</code> adalah <code>0</code> untuk Otomatis. Nilai tersimpan yang tidak valid akan dikembalikan ke Otomatis; positif
+angka dibulatkan dan dijepit menjadi 1–1000.</p>
+<h3 id="where-the-settings-live">Di mana pengaturannya berada</h3>
+<table>
+<thead>
+<tr>
+<th>Toko</th>
+<th>Kunci</th>
+<th>Mengapa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>localStorage</code></td>
+<td><code>&lt;storageKey&gt;.gpu.&lt;GPU profile&gt;</code></td>
+<td>Dibaca secara sinkron, sehingga frame pertama sudah menggunakan pengaturan GPU ini</td>
+</tr>
+<tr>
+<td><a href="/id/docs/api/games.html#per-player-game-settings">Pengaturan per pemain</a></td>
+<td><code>graphics.gpu.&lt;GPU profile&gt;</code></td>
+<td>Mengikuti pemain ke komputer lain yang melaporkan GPU yang sama</td>
+</tr>
+</tbody>
+</table>
+<p>Setiap GPU mendapat profil independen, mencakup setiap pilihan grafis termasuk FPS maksimum.
+Misalnya, atur Ultra dan 90 FPS pada GPU A, lalu peluncuran pada GPU B: B dimulai dengan terdeteksi perangkat keras
+default kecuali Anda sebelumnya menyimpan pilihan untuk B. Kembali ke A memulihkan Ultra dan 90 FPS.
+Dua GPU yang sama-sama terdeteksi High masih memiliki profil terpisah. Perubahan pada kualitas yang terdeteksi
+tingkat pada GPU yang sama tidak membuang pilihan tersimpannya.</p>
+<p>Profil tersebut adalah hash 16 karakter stabil dari nama GPU yang dilaporkan browser, yang dinormalisasi untuk kasus tertentu
+dan spasi. <code>storageKey</code> Dan <code>cloudKey</code> awalan pasokan; <code>gfx.storageKey</code>, <code>gfx.cloudSlot</code>, Dan
+<code>gfx.gpuProfile</code> mengekspos kunci dan profil aktif. Deteksi GPU terjadi saat penyimpanan dibuat;
+buat toko baru pada peluncuran game berikutnya untuk memilih profil GPU lain.</p>
+<p>Jika tidak ada nama GPU yang tersedia, pilihan berlaku untuk sesi tanpa persistensi lokal atau cloud.
+Jika browser menutupi beberapa GPU dengan nama yang sama, mereka akan berbagi profil karena tidak bisa
+membedakannya. Pengaturan lokal lama yang tidak tercakup dan pengaturan cloud kelas perangkat tidak tersentuh
+dan tidak diimpor, karena tidak mengidentifikasi GPU mana yang menjadi pilihannya.</p>
+<p>Setiap nilai adalah <code>{ "saved": {…}, "at": &lt;ms timestamp&gt; }</code>. Kedua salinan tersebut direkonsiliasi dengan cara yang sama
+<a href="/id/docs/sdk/javascript.html#cloud-saves">penyimpanan awan</a>:</p>
+<ul>
+<li><strong>Baca sebelum menulis.</strong> Saat permulaan (dan ketika pemain lain masuk), toko membaca
+<code>GET /api/v1/games/{slug}/settings</code>. Salinan dengan yang lebih baru <code>at</code> menang. Jika salinan cloud menang,
+toko mengadopsinya dan menembakkan a <code>change</code> dengan alasan <code>'cloud'</code>. Jika salinan lokal lebih baru, toko
+mendorongnya.</li>
+<li><strong>Blok baca yang gagal menulis.</strong> Salinan lokal tetap berfungsi. Perubahan selanjutnya yang dilakukan pemain
+mencoba ulang pembacaan sebelum sesuatu ditulis, sehingga perangkat yang sudah usang tidak dapat menimpa pilihan yang lebih baru
+tidak bisa melihat.</li>
+<li>Perubahan didorong dengan <code>setSetting</code> setelah 800 ms tanpa perubahan lebih lanjut. Pembaruan token (yang
+juga jalankan SDK <code>auth</code> acara) tidak memicu pembacaan lainnya.</li>
+</ul>
+<h2 id="3-apply-the-settings-to-your-renderer">3. Terapkan pengaturan ke penyaji Anda</h2>
+<p>Empat kait menghubungkan toko ke penyaji three.js:</p>
+<ul>
+<li><code>gfx.on('change', fn)</code> untuk bayangan dan efek matikan.</li>
+<li>Rantai pasca-pemrosesan dibangun kembali dari tingkatan saat ini.</li>
+<li><code>gfx.frame(ms)</code> Dan <code>gfx.pixelRatio()</code> di loop render, yang mendorong resolusi adaptif.</li>
+<li><code>gfx.shouldRender(now)</code> sebelum menggambar, yang menerapkan batas FPS manual.</li>
+</ul>
+<p>Buat penyaji dengan <code>antialias: false</code>. MSAA kemudian berasal dari target render rantai pos, jadi
+setiap tingkat anti-aliasing dapat dialihkan tanpa membuat ulang konteks WebGL.</p>
+<pre><code class="language-js">import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+
+// canvas, scene, camera and a shadow-casting DirectionalLight `sun` are your game's own.
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
+const SHADOW_MAP = { off: 0, low: 1024, medium: 2048, high: 4096 };
+let composer = null;
+let size = {};
+
+gfx.on('change', (s) =&gt; {
+  const mapSize = SHADOW_MAP[s.shadows];
+  renderer.shadowMap.enabled = mapSize &gt; 0;
+  sun.castShadow = mapSize &gt; 0;
+  if (mapSize &amp;&amp; sun.shadow.mapSize.x !== mapSize) {
+    sun.shadow.mapSize.set(mapSize, mapSize);
+    sun.shadow.map?.dispose();
+    sun.shadow.map = null;
+  }
+  scene.traverse((o) =&gt; [].concat(o.material || []).forEach((m) =&gt; { m.needsUpdate = true; })); // shadow on/off recompiles
+  size = {}; // resize and rebuild the post chain on the next frame
+});
+
+function buildPost(s, w, h, ratio) {
+  composer?.dispose();
+  composer = null;
+  if (gfx.info.postFailed || (s.ao === 'off' &amp;&amp; s.bloom === 'off' &amp;&amp; s.antialias === 'off')) return;
+  try {
+    const pw = Math.round(w * ratio), ph = Math.round(h * ratio);
+    const target = new THREE.WebGLRenderTarget(pw, ph, { type: THREE.HalfFloatType, samples: s.antialias === 'msaa' ? 4 : 0 });
+    const c = new EffectComposer(renderer, target);
+    c.setPixelRatio(ratio);
+    c.setSize(w, h);
+    c.addPass(new RenderPass(scene, camera));
+    if (s.ao !== 'off') {
+      const ao = new GTAOPass(scene, camera, pw, ph);
+      ao.updateGtaoMaterial({ samples: s.ao === 'high' ? 16 : 8 });
+      c.addPass(ao);
+    }
+    if (s.bloom === 'on') c.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.5, 0.4, 0.9));
+    c.addPass(new OutputPass());
+    if (s.antialias === 'smaa') c.addPass(new SMAAPass());
+    if (s.antialias === 'fxaa') {
+      const fxaa = new ShaderPass(FXAAShader);
+      fxaa.material.uniforms.resolution.value.set(1 / pw, 1 / ph);
+      c.addPass(fxaa);
+    }
+    composer = c;
+  } catch {
+    gfx.report({ postFailed: true }); // the panel shows a note; don't console.warn
+  }
+}
+
+let last = performance.now();
+renderer.setAnimationLoop((now) =&gt; {
+  // Update your simulation here using its own elapsed time or fixed timestep.
+  // Keep simulation/input independent of skipped render ticks.
+  if (!gfx.shouldRender(now)) return;
+  gfx.frame(now - last); // elapsed time between rendered frames, including the FPS limit
+  last = now;
+  const w = canvas.clientWidth, h = canvas.clientHeight, ratio = gfx.pixelRatio();
+  if (w !== size.w || h !== size.h || ratio !== size.ratio) {
+    size = { w, h, ratio };
+    renderer.setPixelRatio(ratio);
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    buildPost(gfx.settings, w, h, ratio);
+    gfx.report({ pixels: [Math.round(w * ratio), Math.round(h * ratio)] });
+  }
+  try {
+    if (composer) composer.render();
+    else renderer.render(scene, camera);
+  } catch {
+    composer = null;
+    gfx.report({ postFailed: true });
+  }
+});
+</code></pre>
+<p>Catatan:</p>
+<ul>
+<li>Itu <code>three/addons/</code> file harus berasal dari <strong>rilis three.js yang sama</strong> sebagai <code>three</code> diri. Pencampuran
+rilis memutus rantai pos. Kode di atas menargetkan rilis saat ini. Pada yang lebih tua, <code>SMAAPass</code>
+dibutuhkan <code>(width, height)</code>.</li>
+<li>Rendah mematikan setiap efek pasca-pemrosesan, sehingga game dirender langsung ke kanvas pada a
+rasio piksel perangkat paling banyak 1. Itu membuat Low semurah game sebelum semua ini.</li>
+<li><code>gfx.pixelRatio()</code> kembali <code>min(devicePixelRatio, preset cap) × preset scale × render scale × adaptive scale</code>, dijepit ke 0,25–3. Batasnya adalah 1 untuk Rendah, 1,5 untuk Seimbang, dan 2 untuk Tinggi dan
+Sangat.</li>
+<li>Resolusi adaptif rata-rata 90 frame. Di atas 26 ms, skalanya diturunkan sebesar 0,1 (turun menjadi 0,6). Di bawah
+14 ms itu menaikkan skala sebesar 0,05 (hingga 1). Bingkai yang berdurasi lebih dari 1 detik (tab dijeda atau di latar belakang).
+diabaikan, dan satu frame lambat dihitung paling lama 250 ms untuk adaptasi sehingga satu halangan tidak dapat diturunkan
+skala. Pembacaan FPS menggunakan waktu yang sebenarnya telah berlalu.
+Dengan batasan manual, ambang batas lambat minimal 115% dari interval frame target dan
+ambang batas cepat setidaknya 85%, jadi batas 30 FPS yang disengaja tidak akan menurunkan kualitas dengan sendirinya.
+Untuk batas yang sangat rendah, batas jeda dan batas halangan setidaknya merupakan dua interval target.
+Memberi makan <code>gfx.frame</code> hanya bingkai yang dirender; pertahankan stempel waktu terakhir yang diberikan saat tanda centang dilewati.</li>
+</ul>
+<h3 id="other-engines">Mesin lainnya</h3>
+<p>Apa pun yang menarik bingkai Anda, integrasinya menggunakan kaitan yang sama:</p>
+<table>
+<thead>
+<tr>
+<th>Panggilan</th>
+<th>Menggunakan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gfx.on('change', (settings, reason) =&gt; …)</code></td>
+<td>Terapkan tingkatan. Berjalan sekali dengan segera (<code>'init'</code>), lalu aktif <code>'settings'</code>, <code>'cloud'</code> Dan <code>'auto'</code>. Mengembalikan fungsi berhenti berlangganan.</td>
+</tr>
+<tr>
+<td><code>gfx.settings</code></td>
+<td><code>{ preset, auto, scale, dprCap, adaptive, showFps, maxFps, &lt;category&gt;: &lt;tier&gt; }</code>; <code>maxFps: 0</code> berarti penyegaran tampilan otomatis.</td>
+</tr>
+<tr>
+<td><code>gfx.shouldRender(now)</code></td>
+<td>Setiap panggilan balik animasi, dengan stempel waktunya dalam milidetik. Lewati menggambar jika kembali <code>false</code>. Jaga agar pembaruan simulasi/input tetap independen.</td>
+</tr>
+<tr>
+<td><code>gfx.frame(ms)</code></td>
+<td>Setiap frame yang dirender, dengan waktu sejak frame yang dirender sebelumnya. Kembali <code>true</code> ketika rasio piksel atau preset Otomatis berubah.</td>
+</tr>
+<tr>
+<td><code>gfx.pixelRatio()</code></td>
+<td>Rasio untuk dirender pada</td>
+</tr>
+<tr>
+<td><code>gfx.report({ pixels, postFailed })</code></td>
+<td>Memberi tahu panel ukuran keluaran, atau bahwa efek tidak tersedia</td>
+</tr>
+</tbody>
+</table>
+<p>Untuk permainan kanvas 2D, kalikan ukuran alas kanvas dengan <code>gfx.pixelRatio()</code>, dan petakan milik Anda sendiri
+efek (partikel, cahaya, lapisan paralaks) ke kategori seperti dijelaskan di bawah.</p>
+<h2 id="4-fit-it-to-your-game">4. Sesuaikan dengan permainan Anda</h2>
+<p><strong>Efek Anda sendiri.</strong> Lewati tabel berkualitas yang hanya mencantumkan apa yang sebenarnya digambar oleh permainan Anda. Setiap preset
+baris membutuhkan tingkatan untuk setiap kategori, plus <code>scale</code> Dan <code>dprCap</code>:</p>
+<pre><code class="language-js">import { createGraphics, CATEGORIES, TABLE } from './graphics-options.js';
+
+const gfx = createGraphics({
+  storageKey: 'mygame.graphics',
+  categories: { ...CATEGORIES, particles: ['off', 'low', 'high'] },
+  table: {
+    low: { ...TABLE.low, particles: 'off' },
+    balanced: { ...TABLE.balanced, particles: 'low' },
+    high: { ...TABLE.high, particles: 'high' },
+    ultra: { ...TABLE.ultra, particles: 'high' },
+  },
+});
+</code></pre>
+<p>Panel membuat satu pilihan per kategori, sehingga kategori baru muncul secara otomatis. Beri nama dengan
+<code>strings.categories.particles</code>.</p>
+<p><strong>Terjemahan.</strong> String bahasa Inggris panel diekspor sebagai <code>STRINGS</code>. Berikan milik Anda sendiri dengan hal yang sama
+bentuk. Hanya kunci yang Anda berikan yang diganti:</p>
+<pre><code class="language-js">mountGraphicsPanel(el, gfx, {
+  strings: {
+    quality: 'Qualität', auto: 'Automatisch ({tier})', fromPreset: 'Laut Voreinstellung ({tier})',
+    renderScale: 'Renderskalierung', adaptive: 'Adaptive Auflösung', showFps: 'Bildrate anzeigen',
+    maxFps: 'Maximale Bildrate', autoFps: 'Automatisch (Bildschirmfrequenz)',
+    customFps: 'Benutzerdefiniert', fpsLimit: 'Maximale FPS (1–1000)',
+    categories: { shadows: 'Schatten', ao: 'Umgebungsverdeckung', particles: 'Partikel' },
+    tiers: { low: 'Niedrig', balanced: 'Ausgewogen', high: 'Hoch', off: 'Aus', on: 'An' },
+  },
+});
+</code></pre>
+<p><strong>Penataan gaya.</strong> Panel menggunakan kelas <code>.gfx-panel</code>, <code>.gfx-row</code>, <code>.gfx-summary</code> Dan <code>.gfx-note</code>. Ini
+aturan bawaan disertakan <code>:where()</code>, jadi aturan apa pun di stylesheet Anda akan menimpanya. Baris adalah
+setidaknya tinggi 44 px untuk disentuh. Pembacaan kecepatan bingkai (<code>#gfx-fps</code>) berada di pojok kiri bawah,
+di dalam area aman, dan tidak menangkap klik.</p>
+<p><strong>Membaca hasilnya di tempat lain.</strong> <code>&lt;html&gt;</code> membawa <code>data-gfx-preset</code> (preset aktif) dan
+<code>data-gfx-auto</code> (<code>1</code> atau <code>0</code>), yang dapat dimatikan oleh CSS dan pengujian.</p>
+<h2 id="5-test-it">5. Ujilah</h2>
+<ul>
+<li>Browser tanpa kepala dirender dengan GPU perangkat lunak, jadi Otomatis memutuskannya <strong>Rendah</strong> dan tes tetap cepat.</li>
+<li>Kendarai panel sebenarnya. Setiap kendali mempunyai a <code>data-gfx</code> atribut (<code>preset</code>, <code>renderScale</code>,
+<code>adaptive</code>, <code>frameRate</code>, <code>maxFps</code>, <code>showFps</code>, atau nama kategori):</li>
+</ul>
+<pre><code class="language-js">const preset = () =&gt; page.evaluate(() =&gt; document.documentElement.dataset.gfxPreset);
+await page.locator('select[data-gfx=preset]').selectOption('high');
+assert.equal(await preset(), 'high');
+await page.reload();
+assert.equal(await preset(), 'high'); // persisted
+await page.locator('select[data-gfx=frameRate]').selectOption('custom');
+await page.locator('input[data-gfx=maxFps]').fill('45');
+await page.locator('input[data-gfx=maxFps]').press('Tab');
+await page.reload();
+assert.equal(await page.locator('input[data-gfx=maxFps]').inputValue(), '45');
+await page.locator('select[data-gfx=frameRate]').selectOption('auto');
+</code></pre>
+<ul>
+<li>Fungsi murni <code>detectPreset(system)</code>, <code>resolve(saved, detected)</code> Dan <code>withPreset(saved, preset)</code>
+dijalankan di bawah Node untuk pengujian unit. <code>createGraphics({ sdk, storage, system })</code> juga menerima yang palsu untuk semua
+tiga.</li>
+<li><code>node --test tests/graphics-options.test.mjs</code> memverifikasi validasi, persistensi dan restorasi per GPU,
+kecepatan bingkai pada kecepatan refresh tampilan yang berbeda, peralihan langsung, dan kualitas adaptif dengan batas FPS.</li>
+</ul>
+
+{% endraw %}

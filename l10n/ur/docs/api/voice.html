@@ -1,0 +1,194 @@
+---
+layout: "wiki"
+lang: "ur"
+title: "آواز"
+source_url: "/docs/api/voice.html"
+source_path: "docs/api/voice.md"
+source_hash: "b854ce844a33279125a6c44c43b800b3efef80cbcf31d1f74a9f17192fab0aef"
+translation: "machine"
+permalink: "/ur/docs/api/voice.html"
+---
+{% raw %}
+<h1 id="voice">آواز</h1>
+<p>StarHermit آواز ایک REST API (<code>api/v1/voice</code>) کے علاوہ ایک مخلوط بائنری/ٹیکسٹ ویب ساکٹ (<code>ws/v1/voice</code>) آڈیو اور WebRTC سگنلنگ کے لیے۔ تمام REST اینڈ پوائنٹس کو توثیق کی ضرورت ہوتی ہے۔ آواز کی دستیابی مختلف ہو سکتی ہے۔ خرابی کی لاشیں مختلف ہوتی ہیں؛ دیکھیں <a href="/ur/docs/api/conventions.html#requests-and-responses">API کنونشنز</a>.</p>
+<p>کمروں کا لنگر a <a href="/ur/docs/api/chat.html">بات چیت بات چیت</a>; گفتگو میں رکنیت ہر چیز کو روکتی ہے، اس لیے چیٹ دوستی کے قوانین آواز پر بھی حکومت کرتے ہیں (گیم سیشن کی گفتگو دوستی کو نظرانداز کرتی ہے)۔ حدود: 3 فعال کمرے فی گفتگو، زیادہ سے زیادہ 10 شرکاء فی کمرہ، کوڈیک <code>"opus"</code>.</p>
+<h2 id="rest-endpoints">ریسٹ اینڈ پوائنٹس</h2>
+<p>بنیاد: <code>https://api.starhermit.com/api/v1/voice</code>.</p>
+<table>
+<thead>
+<tr>
+<th>طریقہ</th>
+<th>راستہ</th>
+<th>تصنیف</th>
+<th>تفصیل</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>بات چیت کے لیے آواز کا کمرہ بنائیں</td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/rooms?conversationId=</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>گفتگو کے لیے کمروں کی فہرست بنائیں</td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/rooms/{roomId}</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>ایک کمرہ لے لو</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms/{roomId}/join</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>ایک کمرے میں شامل ہوں (WS سے پہلے ضروری ہے)</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms/{roomId}/leave</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>ایک کمرہ چھوڑ دو</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms/{roomId}/mute</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>اپنی خاموش حالت خود سیٹ کریں۔</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms/{roomId}/participants/{userId}/server-mute</code></td>
+<td>JWT (تخلیق کار)</td>
+<td>میزبان کو خاموش کر دیں شرکت کنندہ اٹھا نہیں سکتا</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms/{roomId}/close</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>کمرہ بند کریں (صرف تخلیق کار)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-room">ایک کمرہ بنائیں</h3>
+<p><code>POST /rooms</code></p>
+<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 10 }
+</code></pre>
+<p>واپسی a <code>VoiceRoomDto</code>.</p>
+<h3 id="room-shape">کمرے کی شکل</h3>
+<p><code>GET /rooms?conversationId=&lt;guid&gt;</code> → <code>VoiceRoomDto[]</code>; <code>GET /rooms/{roomId}</code> → <code>VoiceRoomDto</code>:</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "conversationId": "&lt;guid&gt;",
+  "creatorUserId": "&lt;guid&gt;",
+  "codec": "opus",
+  "status": "Active",
+  "maxParticipants": 10,
+  "createdAt": "2026-07-22T07:00:00Z",
+  "participants": [
+    {
+      "userId": "&lt;guid&gt;",
+      "username": "alice",
+      "isMuted": false,
+      "isConnected": true,
+      "joinedAt": "2026-07-22T07:01:00Z"
+    }
+  ]
+}
+</code></pre>
+<h3 id="join-leave-mute-close">شامل ہونا، چھوڑنا، خاموش کرنا، بند کرنا</h3>
+<p><code>POST /rooms/{roomId}/join</code> → <code>VoiceRoomDto</code>. یہ REST جوائن ہے۔ <strong>مطلوبہ</strong> WebSocket کھولنے سے پہلے؛ اس کے بغیر جڑنا واپس آتا ہے۔ <code>403</code>. دوبارہ شامل ہونے سے شرکت کنندہ کو صاف ہو جاتا ہے۔ <strong>اپنے</strong> خاموش (<code>isMuted</code>); ایک میزبان کا <code>isServerMuted</code> چھوڑ کر دوبارہ جڑنے سے بچ جاتا ہے۔</p>
+<p><code>POST /rooms/{roomId}/leave</code> → <code>204</code>.</p>
+<p><code>POST /rooms/{roomId}/mute</code> کے ساتھ <code>{ "muted": true }</code> → <code>204</code>. یہ شرکت کنندہ کا اپنا خاموش ہے اور میزبان خاموش کو صاف نہیں کر سکتا۔</p>
+<p><code>POST /rooms/{roomId}/participants/{userId}/server-mute</code> کے ساتھ <code>{ "muted": true }</code> → <code>204</code> (صرف تخلیق کار)۔ اگر دونوں میں سے ایک خاموش سیٹ ہو تو آڈیو چھوڑ دیا جاتا ہے۔</p>
+<p><code>POST /rooms/{roomId}/close</code> → <code>204</code> (صرف تخلیق کار)۔</p>
+<p>قطار کو جو کچھ بھی یاد ہے اسے وراثت میں لینے کے بجائے کنیکٹ پر اپنے خاموش کو بیان کریں۔</p>
+<h2 id="websocket-wsv1voice">ویب ساکٹ: <code>ws/v1/voice</code></h2>
+<p>سے جڑیں۔ <code>wss://api.starhermit.com/ws/v1/voice?roomId=&lt;guid&gt;</code> کے ذریعے JWT کے ساتھ <code>Authorization</code> ہیڈر <code>?ticket=</code>، یا <code>?access_token=</code>. ایک پیشگی آرام <code>join</code> کی ضرورت ہے.</p>
+<p>پروٹوکول ملا ہوا ہے:</p>
+<h3 id="binary-frames--audio">بائنری فریم - آڈیو</h3>
+<p>بائنری فریم آڈیو لے جاتے ہیں (جیسے Opus)۔ سرور ہر فریم کو دوسرے شرکاء کو اس طرح ریلے کرتا ہے:</p>
+<pre><code>[16-byte senderUserId][audio…]
+</code></pre>
+<p>سرور کا سابقہ ​​ہے۔ <strong>تصدیق شدہ</strong> بھیجنے والے کی شناخت اور کبھی بھی کلائنٹ کے فراہم کردہ بھیجنے والے پر بھروسہ نہیں کرتا ہے۔ خاموش صارفین کی آڈیو کو چھوڑ دیا گیا ہے۔ حدود: 100 پیکٹ/سیکنڈ فی صارف، زیادہ سے زیادہ فریم 4000 بائٹس۔</p>
+<h3 id="text-frames--client--server-control">ٹیکسٹ فریمز — کلائنٹ → سرور کنٹرول</h3>
+<pre><code class="language-json">{ "type": "mute", "muted": true }
+</code></pre>
+<pre><code class="language-json">{ "type": "speaking", "speaking": true }
+</code></pre>
+<pre><code class="language-json">{ "type": "rtc", "to": "&lt;guid&gt;", "payload": { } }
+</code></pre>
+<pre><code class="language-json">{ "type": "deafen", "deafened": true }
+</code></pre>
+<p><code>rtc</code> پے لوڈز مبہم WebRTC سگنلنگ ہیں، جو مخاطب شریک کو بھیجے جاتے ہیں۔
+<code>deafen</code> اس ساکٹ کے لیے آنے والی ریلے بائنری آڈیو کو دباتا ہے۔ یہ خود بخود خاموش نہیں ہوتا ہے۔
+آؤٹ گوئنگ آڈیو یا علیحدہ ہم مرتبہ کنکشن۔ جب کھلاڑی ڈیفین کا انتخاب کرتا ہے تو انہیں مقامی طور پر لگائیں۔</p>
+<p>REST شرکت کنندہ کی شکل اپنے گونگا کو ظاہر کرتی ہے، میزبان خاموش نہیں۔ ابتدائی صوتی فہرست اور ایونٹس میں شمولیت
+شامل <code>serverMuted</code>; کوئی الگ میزبان-خاموش تبدیل شدہ پش ایونٹ نہیں ہے۔ اگر آپ کا گیم P2P استعمال کرتا ہے۔
+آڈیو، اس کی میزبان خاموش سگنلنگ اور نفاذ آپ کے اپنے میڈیا انضمام کا حصہ ہونا چاہیے۔</p>
+<p>جب آخری صوتی ساکٹ منقطع ہو جاتا ہے، تو وائس روم کی رکنیت ختم ہو جاتی ہے۔ REST کو کال کریں۔ <code>join</code> دوبارہ پہلے
+آڈیو بھیجنے سے پہلے مطلوبہ خاموش کو دوبارہ جوڑنا اور بحال کرنا۔</p>
+<h3 id="server--client-events">سرور → کلائنٹ کے واقعات</h3>
+<p>لفافہ: <code>{ "event": "&lt;name&gt;", "data": { } }</code>.</p>
+<table>
+<thead>
+<tr>
+<th>واقعہ</th>
+<th><code>data</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>voice.roster</code></td>
+<td><code>{ "roomId", "participants": [{ "userId", "muted", "serverMuted" }] }</code> - نئے آنے والے کو بھیجا گیا۔</td>
+</tr>
+<tr>
+<td><code>voice.participant_joined</code></td>
+<td><code>{ "roomId", "userId", "muted", "serverMuted" }</code></td>
+</tr>
+<tr>
+<td><code>voice.participant_left</code></td>
+<td><code>{ "roomId", "userId" }</code></td>
+</tr>
+<tr>
+<td><code>voice.mute_changed</code></td>
+<td><code>{ "roomId", "userId", "muted" }</code></td>
+</tr>
+<tr>
+<td><code>voice.deafened</code></td>
+<td>`{ "کمرے کی شناخت", "صارف کی شناخت", "بہرا" }</td>
+</tr>
+<tr>
+<td><code>voice.speaking</code></td>
+<td><code>{ "roomId", "userId", "speaking" }</code></td>
+</tr>
+<tr>
+<td><code>voice.rtc</code></td>
+<td><code>{ "roomId", "from", "payload" }</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="example-integration-pattern-from-the-chess-reference-implementation">مثال کے انضمام کا نمونہ (شطرنج کے حوالہ کے نفاذ سے)</h2>
+<p>آواز فی گیم سیشن آپٹ ان ہے۔ ایک عام کلائنٹ <code>enable()</code> بہاؤ:</p>
+<ol>
+<li><code>GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;</code> ایک موجودہ کمرہ تلاش کرنے کے لیے، اور <code>POST /api/v1/voice/rooms</code> ایک بنانے کے لئے.</li>
+<li><code>POST /api/v1/voice/rooms/{roomId}/join</code>.</li>
+<li>کھولیں۔ <code>ws/v1/voice?roomId=&lt;guid&gt;</code>.</li>
+</ol>
+<p>میں <a href="/ur/docs/tutorials/chess-walkthrough.html">شطرنج کے حوالہ کا نفاذ</a>، آڈیو کامل گفت و شنید کے ساتھ WebRTC P2P پر چلتا ہے۔ کے ذریعے سگنلنگ کا تبادلہ کیا جاتا ہے۔ <code>rtc</code> کنٹرول پیغامات (<code>{ "sdp": … }</code> / <code>{ "ice": … }</code> payloads)، فال بیک کے طور پر سرور سے چلنے والے Opus بائنری پاتھ کے ساتھ۔</p>
+<p>گیم اسکوپڈ لانچ ٹوکنز <strong>ہو سکتا ہے</strong> ان کے اپنے گیم سیشنز سے منسلک کمروں کے لیے وائس REST اور WebSocket استعمال کریں۔</p>
+<h2 id="see-also">یہ بھی دیکھیں</h2>
+<ul>
+<li><a href="/ur/docs/tutorials/audio-options.html">آڈیو کے اختیارات</a> - بیس لائن والیوم، مائیکروفون اور پش ٹو ٹاک کنٹرولز،
+خود کار طریقے سے پتہ چلنے والی پلے بیک کیپ کے ساتھ</li>
+<li><a href="/ur/docs/api/chat.html">گپ شپ</a> - کمرے بات چیت کے لیے اینکر؛ گیم سیشن بے نقاب <code>chatConversationId</code></li>
+<li><a href="/ur/docs/api/games.html">گیمز</a> - گیم سیشنز اور لانچ ٹوکنز</li>
+<li><a href="/ur/docs/api/relay.html">ریلے</a> - گیم نیٹ کوڈ کے لیے بائٹ فین آؤٹ</li>
+</ul>
+<p>دیکھیں <a href="/ur/docs/credentials.html">اسناد کی مطابقت</a> اور <a href="/ur/docs/api/contracts.html">مشین پڑھنے کے قابل معاہدے</a>.</p>
+
+{% endraw %}

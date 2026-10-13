@@ -1,0 +1,512 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "البرنامج التعليمي: إنشاء متسابق كارت متعدد اللاعبين"
+source_url: "/docs/tutorials/kart-racer.html"
+source_path: "docs/tutorials/kart-racer.md"
+source_hash: "d1191e3e810a9f7c888152161e331f2cebb8c39f3e6d39661e4cde37fd39c340"
+translation: "machine"
+permalink: "/ar/docs/tutorials/kart-racer.html"
+---
+{% raw %}
+<h1 id="tutorial-build-a-multiplayer-kart-racer">البرنامج التعليمي: إنشاء متسابق كارت متعدد اللاعبين</h1>
+<p>يبني هذا البرنامج التعليمي طبقة متعددة اللاعبين لمتسابق الكارت آركيد - ما يصل إلى ثماني عربات خاصة
+جماعات الضغط مع الأصدقاء، والانضمام السريع مع الغرباء، وبرامج تشغيل وحدة المعالجة المركزية التي تملأ فتحات الشبكة الفارغة، والعد التنازلي،
+اللفات والترتيب النهائي والإنجازات - على StarHermit API. ويغطي عقد netcode
+وتنادي المنصة؛ المحرك الخاص بك وفن المسار ونموذج المناولة هو ملكك.</p>
+<p>كل شيء خاص باللعبة هنا - <code>grand-prix</code> قائمة الانتظار، تخطيط الإطار الثنائي، زر العنصر،
+ثوابت الفيزياء - هي قيمة المثال. فقط نقاط النهاية، ومظاريف الإطار والحدود هي
+سلوك النظام الأساسي، وكل منها يرتبط بالصفحة المرجعية الخاصة به.</p>
+<h2 id="1-pick-an-architecture">1. اختر الهندسة المعمارية</h2>
+<p>المتسابق هو أصعب شكل من أشكال اللعبة بالنسبة لميزانية علامة الخادم: تتحرك العربات بسرعة، وتتصادم، و
+يشعر اللاعبون بـ 50 مللي ثانية من تأخر التوجيه. يمنحك StarHermit طريقتين لتشغيله، كلاهما يبدأ من ملف
+<a href="/ar/docs/api/realtime.html">غرفة الوقت الحقيقي</a>:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><strong>أ. توجيه المضيف</strong></th>
+<th><strong>ب. البرنامج النصي المعتمد للخادم</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>من يحاكي</td>
+<td>عميل مضيف الغرفة بأي حال يريده (60 هرتز+)</td>
+<td>لك <code>server=</code> السيناريو على الأكثر <strong>30 هرتز</strong></td>
+</tr>
+<tr>
+<td>ينقل</td>
+<td>الإطارات الثنائية قيد التشغيل <code>ws/v1/realtime</code></td>
+<td>JSON <code>cmd</code>/<code>game</code> إطارات على <code>ws/v1/games</code></td>
+</tr>
+<tr>
+<td>الغش</td>
+<td>المضيف موثوق به</td>
+<td>العملاء ليس لديهم أي سلطة</td>
+</tr>
+<tr>
+<td>إيلو، إنجازات السيناريو</td>
+<td>لا (ينشر المضيف نتيجة مثبتة)</td>
+<td>نعم - <code>eloUpdates</code>, <code>achievements</code>، الإعادة</td>
+</tr>
+<tr>
+<td>الأفضل ل</td>
+<td>سباقات غير رسمية مع الأصدقاء، وفيزياء كاملة الإخلاص</td>
+<td>سباق مُصنف باستخدام فيزياء الممرات البسيطة</td>
+</tr>
+</tbody>
+</table>
+<p>ابدأ بـ <strong>A</strong> إلا إذا كنت بحاجة إلى اللعب المصنف؛ ويبين القسم 7 ما هي التغييرات ل <strong>B</strong>. A
+<a href="/ar/docs/api/container-games.html">خادم الحاويات</a> يمكنه أيضًا تشغيل عربة ذات ثمانية عربات <strong>مقيدة بالغرفة</strong> العرق و
+محاكاة عند 60 هرتز بشكل رسمي. تستخدم واجهة برمجة تطبيقات الألعاب المباشرة الخاصة بها حاليًا صيغة 1v1 ضمنية
+قائمة الانتظار، لذا استخدم غرفة حقيقية للشبكة الأكبر. المنصة لا تخطو حلقة الحاوية.</p>
+<h2 id="2-manifest">2. البيان</h2>
+<p>انشر مجلد البناء القابل للتوزيع باستخدام هذا <code>starhermit.txt</code> في جذره (انظر
+<a href="/ar/docs/starhermit-txt.html">البيان</a>). ال <code>control.*</code> تمنح الخطوط اللاعبين واجهة مستخدم قابلة لإعادة الربط و
+العميل أ <a href="/ar/docs/api/games.html#per-player-control-bindings">الضوابط API</a> لقراءة الارتباطات من:</p>
+<pre><code class="language-ini">name=Turbo Hermits
+launch=index.html
+cover=art/cover.png
+control.accelerate=KeyW+ArrowUp | Accelerate
+control.brake=KeyS+ArrowDown | Brake / reverse
+control.left=KeyA+ArrowLeft | Steer left
+control.right=KeyD+ArrowRight | Steer right
+control.drift=ShiftLeft+ShiftRight | Drift
+control.item=Space | Use item
+</code></pre>
+<p>المسار أ لديه <strong>لا</strong> <code>server=</code> خط. إذا كانت اللعبة تشحن برنامجًا نصيًا، فإن بدء الغرفة يؤدي إلى إنشاء جلسة مقيدة
+والنص فقط هو الذي يمكنه إنهاء المباراة - المضيف <code>POST .../result</code> توقف عن كونه الطريقة التي تنتهي بها السباقات
+(القسم 7).</p>
+<h2 id="3-sign-in-and-read-the-basics">3. قم بتسجيل الدخول وقراءة الأساسيات</h2>
+<p>يتم فتح لعبة مستضافة على النظام الأساسي باستخدام <code>#game_token=&lt;jwt&gt;</code> في عنوان URL - اقرأه مرة واحدة، ثم قم بإزالته
+<code>history.replaceState</code>، وقم بتحديثه قبل انتهاء صلاحيته لمدة 60 دقيقة (التفاصيل في
+<a href="/ar/docs/tutorials/chess-walkthrough.html#3-launch-and-authentication">تجول الشطرنج</a> و
+<a href="/ar/docs/api/auth.html">مصادقة</a>). سبيكة الخاص بك هو الرمز المميز <code>game_scope</code> المطالبة (أو <code>location.hostname</code>'s
+التسمية الأولى)؛ لا تقم أبدًا بتشفيرها.</p>
+<p>عند التحميل، قم بإحضار ما تحتاجه القائمة:</p>
+<pre><code class="language-http">GET /api/v1/games/{slug}/controls     # effective key bindings (manifest defaults + overrides)
+GET /api/v1/games/{slug}/settings     # camera, volume, last chosen kart — your own keys
+GET /api/v1/realtime/rooms/mine       # 200 → the player is still in a race; rejoin it
+</code></pre>
+<p>حفظ اختيارات القائمة باستخدام <code>PATCH /api/v1/games/{slug}/settings</code> (<code>{"settings":{"kart":"hermit-crab"}}</code>).
+تتبع الإعدادات اللاعب عبر الأجهزة ولا تحتاج إلى إعلان.</p>
+<h2 id="4-the-lobby">4. اللوبي</h2>
+<p>سباق الجائزة الكبرى مجاني للجميع، وبالتالي فإن الغرفة بها فريق واحد من ثمانية مقاعد. المسار وعدد اللفات والمحرك
+الطبقة تذهب في مبهمة <code>metadata</code>:</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms
+Authorization: Bearer &lt;launch token&gt;
+
+{ "teamCount": 1, "seatsPerTeam": 8, "backfillAfterSeconds": 45,
+  "aiPlayers": 0, "name": "Friday cup", "isVisible": true,
+  "metadata": { "track": "coral-loop", "laps": 3, "cc": 150 } }
+</code></pre>
+<p>مع رمز الإطلاق، تأتي لعبة الغرفة من الرمز المميز، لذا <code>gameSlug</code> يمكن حذفها. الخالق
+هو المضيف في المقعد <code>(0, 0)</code>. من هنا يكون اللوبي تدفقًا عاديًا للغرفة:</p>
+<ul>
+<li><strong>أصدقاء</strong> — <code>POST /rooms/{id}/invites</code> مع <code>{"toUserId": ...}</code>. تقوم المنصة بإخطارهم؛
+قبول مقاعد لهم. إظهار الشخصية الستة <code>joinCode</code> حتى يتمكن الأصدقاء أيضًا من كتابتها
+<code>POST /rooms/join-by-code</code>.</li>
+<li><strong>الغرباء</strong> — المضيف يدعو <code>POST /rooms/{id}/open</code>. اللاعبون الذين ليس لديهم مكالمة للغرفة
+<code>POST /rooms/quick-join</code> مع <code>{"seats": 1}</code> وعلى <code>404</code>وإنشاء وفتح خاصة بهم.</li>
+<li><strong>تتبع التصويت / تغيير رأي المضيف</strong> — <code>PATCH /rooms/{id}</code> مع الجديد <code>metadata</code> والغرفة
+<code>revision</code> مثل <code>expectedRevision</code>.</li>
+<li><strong>منفردا ضد وحدات المعالجة المركزية</strong> - إنشاء مع <code>"aiPlayers": 7</code>، ثم <code>POST /rooms/{id}/start</code>.</li>
+</ul>
+<p>تبدأ الغرفة المفتوحة من تلقاء نفسها عندما تمتلئ جميع المقاعد الثمانية أو <code>backfillAfterSeconds</code> يمر؛ المضيف
+يمكن أيضا <code>POST /rooms/{id}/start</code>. كل مقعد لا يزال فارغًا يصبح مشاركًا في الذكاء الاصطناعي - هذا هو مقعدك
+برامج تشغيل وحدة المعالجة المركزية.</p>
+<h2 id="5-the-race-socket-host-routed">5. مقبس السباق (توجيه المضيف)</h2>
+<h3 id="connect">يتصل</h3>
+<p>يفتح كل مشارك مأخذ التوصيل الفعلي بتذكرة تستخدم لمرة واحدة:</p>
+<pre><code class="language-js">const { ticket } = await api.post("/api/v1/realtime/connection-tickets"); // { ticket, expiresIn }
+const ws = new WebSocket(
+  `wss://api.starhermit.com/ws/v1/realtime?roomId=${roomId}&amp;ticket=${encodeURIComponent(ticket)}`);
+ws.binaryType = "arraybuffer";
+</code></pre>
+<p>إطارات النص هي دفعات JSON وإطارات التحكم؛ الإطارات الثنائية هي طريقة اللعب. ال <code>roster</code> الدفع هو
+شبكتك: بعد البدء يتم تجميدها، بما في ذلك مقاعد الذكاء الاصطناعي. مع فريق واحد، تكون فتحة شبكة الكارت هي المكان المناسب له
+المشارك <code>slot</code>.</p>
+<pre><code class="language-js">ws.onmessage = (e) =&gt; {
+  if (typeof e.data === "string") return onControl(JSON.parse(e.data)); // roster, presence, event, ready, chat, result
+  const bytes = new Uint8Array(e.data);
+  const sender = guidFromDotNet(bytes.subarray(0, 16)); // server-stamped, trustworthy
+  onGameplay(sender, new DataView(e.data, 16));          // your payload starts at byte 16
+};
+
+// The server prefixes the sender's participant id in .NET GUID byte order:
+// the first three groups are little-endian.
+function guidFromDotNet(b) {
+  const h = (i) =&gt; b[i].toString(16).padStart(2, "0");
+  return `${h(3)}${h(2)}${h(1)}${h(0)}-${h(5)}${h(4)}-${h(7)}${h(6)}-` +
+         `${h(8)}${h(9)}-${h(10)}${h(11)}${h(12)}${h(13)}${h(14)}${h(15)}`;
+}
+</code></pre>
+<p>لا تضع أبدًا معرف اللاعب في حمولتك الخاصة وتثق به، فالبادئة ذات 16 بايت هي الهوية الوحيدة
+أن يضمن الخادم.</p>
+<h3 id="routing-and-budget">التوجيه والميزانية</h3>
+<p>تفرض المنصة شكل اللعب الذي يوجهه المضيف:</p>
+<ul>
+<li>A <strong>الضيف</strong> تصل الإطارات الثنائية <strong>المضيف فقط</strong> - هذه هي قناة الإدخال.</li>
+<li>ال <strong>المضيف</strong> تصل الإطارات الثنائية <strong>كل ضيف</strong> - هذه هي قناة اللقطة.</li>
+<li>كل إطار على الأكثر <strong>8 كيلو بايت</strong>; قد يرسل كل اتصال <strong>30 رسالة/ثانية</strong> (2 × انفجار لواحد
+الثانية). تجاوز يغلق المقبس مع <code>PolicyViolation</code>.</li>
+</ul>
+<p>لذا فإن المضيف يحاكي بأي معدل يبدو صحيحًا (60 هرتز هو النموذجي) ولكن <strong>يرسل</strong> لقطات في
+20 هرتز، ويرسل الضيوف المدخلات عند 20 هرتز. وهذا يترك مساحة للرأس لإطار التحكم العرضي.</p>
+<h3 id="frame-layouts-example">تخطيطات الإطار (مثال)</h3>
+<p>المدخلات، الضيف → المضيف، 7 بايت:</p>
+<table>
+<thead>
+<tr>
+<th>إزاحة</th>
+<th>يكتب</th>
+<th>مجال</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>u8</td>
+<td><code>1</code> = الإدخال</td>
+</tr>
+<tr>
+<td>1</td>
+<td>u16</td>
+<td><code>seq</code> - يزيد كل إرسال</td>
+</tr>
+<tr>
+<td>3</td>
+<td>i8</td>
+<td>توجيه، −127…127</td>
+</tr>
+<tr>
+<td>4</td>
+<td>u8</td>
+<td>دواسة الوقود، 0...255</td>
+</tr>
+<tr>
+<td>5</td>
+<td>u8</td>
+<td>القطع: 0 فرامل، 1 انجراف</td>
+</tr>
+<tr>
+<td>6</td>
+<td>u8</td>
+<td><code>itemPresses</code> - عداد وليس علم</td>
+</tr>
+</tbody>
+</table>
+<p><code>itemPresses</code> هو عدد مستمر من الضغطات على زر العنصر. عند 20 هرتز، سيتم الضغط لمدة أقصر من 50 مللي ثانية
+وإلا فإنها تقع بين العينات؛ باستخدام العداد، يقوم المضيف بإطلاق عنصر واحد لكل زيادة، ولكن
+هبطت المطابع.</p>
+<p>لقطات، المضيف → الضيوف، 4 + 22 بايت لكل كارت (176 بايت لشبكة كاملة):</p>
+<table>
+<thead>
+<tr>
+<th>إزاحة</th>
+<th>يكتب</th>
+<th>مجال</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>u8</td>
+<td><code>2</code> = لقطة</td>
+</tr>
+<tr>
+<td>1</td>
+<td>u16</td>
+<td>علامة المضيف</td>
+</tr>
+<tr>
+<td>3</td>
+<td>u8</td>
+<td>عدد الكارت</td>
+</tr>
+<tr>
+<td>لكل كارت</td>
+<td>u8, f32 ×4, u8, u16, u8, u8</td>
+<td>الفتحة، x، z، العنوان، السرعة، اللفة، نقطة التفتيش، العنصر، الأعلام</td>
+</tr>
+</tbody>
+</table>
+<p>يقدم الضيوف عربات أخرى <strong>~100 مللي ثانية في الماضي</strong>، الاستيفاء بين اللقطتين ذلك
+حددوا ذلك الوقت، وتوقعوا الكارت الخاص بهم محليًا من مدخلاتهم، متوجهين نحو المضيف
+الموقف عندما يختلفون. قم بتضمين الإدخال الأخير <code>seq</code> تقدم المضيف لكل كارت في <code>flags</code> أو
+حقل إضافي إذا كنت تريد المصالحة الدقيقة.</p>
+<h3 id="countdown-race-events-finish">العد التنازلي، أحداث السباق، النهاية</h3>
+<p>إطارات التحكم هي JSON، بحد أقصى 4 كيلوبايت، وطوابع الخادم <code>from</code> مع معرف المشارك للمرسل:</p>
+<ul>
+<li>يرسل الضيوف <code>{"type":"ready"}</code> بمجرد تحميل المسار.</li>
+<li>ينتظر المضيف أن يكون كل إنسان متصل جاهزًا (أو مهلة)، ثم يرسل
+<code>{"type":"event","kind":"countdown","goInMs":3000}</code>. يبدأ الضيوف العد التنازلي المحلي
+الاستلام - لا حاجة لمزامنة الساعة بهذه الدقة.</li>
+<li>إيقاعات السباق الأخرى موجودة أيضًا <code>event</code> إطارات: <code>{"kind":"lap","slot":3,"lap":2}</code>,
+<code>{"kind":"finished","slot":3,"place":1,"timeMs":94210}</code>.</li>
+<li><code>chat</code> متاح للجميع، ولكن يقتصر عدد الضيوف على 10 إطارات تحكم في الدقيقة - وهو عدد كافٍ
+<code>ready</code> وعدد قليل "زز"ق، وليس للعب.</li>
+</ul>
+<p>عندما يتجاوز آخر إنسان الخط (أو مؤقتًا بعد نفاد الفائز)، يرسل المضيف الرسالة
+النتيجة التي تغلق الغرفة وتدفع <code>{"type":"result"}</code> للجميع:</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms/{id}/result
+
+{ "teamScores": [0],
+  "metadata": { "track": "coral-loop",
+                "order": [ { "slot": 3, "timeMs": 94210 }, { "slot": 0, "timeMs": 95002 } ],
+                "bestLapMs": 30112 } }
+</code></pre>
+<p><code>teamScores</code> يحتاج بالضبط إلى إدخال واحد لكل فريق (مثبت 0-50)، والذي لا يحمل أي شيء مفيد في
+مجاني للجميع؛ ترتيب التشطيب موجود <code>metadata</code>. سباق الفريق هو نفس الغرفة مع
+<code>teamCount: 2</code> ونقاط كل فريق <code>teamScores</code>.</p>
+<h3 id="cpu-drivers-leavers-and-host-changes">برامج تشغيل وحدة المعالجة المركزية والمغادرين وتغييرات المضيف</h3>
+<ul>
+<li><strong>مقاعد الذكاء الاصطناعي متاحة لك للقيادة.</strong> تقوم المنصة بحجز المقعد وتسمية السائق؛ المضيف
+تقوم المحاكاة بتوجيهها (خط سباق عبر نقاط التفتيش، مع بعض الأربطة المطاطية).</li>
+<li><strong>الضيف الذي يغادر منتصف السباق</strong> (<code>POST /rooms/{id}/leave</code>) يحتفظون بعربتهم على الشبكة: القائمة
+يظهر الدفع نفس المشارك <code>id</code> الآن <code>isAi: true</code>، وتتولى وحدة المعالجة المركزية الخاصة بالمضيف مسؤولية تلك الكارت.</li>
+<li><strong>الضيف الذي يسقط</strong> لا يزال في الغرفة. احتفظ بسباق الكارت الخاص بهم واسمح لهم بإعادة الاتصال -
+أحدث المقبس يحل محل القديم.</li>
+<li><strong>إذا غادر المضيف</strong>، ينتقل دور المضيف إلى الإنسان المتبقي الأطول انضمامًا و
+يُظهر دفع القائمة الجديد <code>isHost</code>. كل ضيف يحمل بالفعل أحدث لقطة كاملة، وبالتالي فإن الجديد
+يستأنف المضيف المحاكاة منه ويبدأ في إرسال اللقطات؛ يتم الآن توجيه مدخلات الضيف إليهم.
+ترحيل المضيف هو مهمة الكود الخاص بك - النظام الأساسي ينقل الدور فقط.</li>
+<li><strong>إذا قام المضيف بقطع الاتصال فقط</strong>تغلق الغرفة بعد 60 ثانية بدون مقبس مضيف.</li>
+</ul>
+<h2 id="6-around-the-race">6. حول السباق</h2>
+<ul>
+<li><strong>الصوت والدردشة.</strong> يمكن لكل ضيف بالفعل <code>chat</code> على المقبس الحقيقي. للصوت، انظر
+<a href="/ar/docs/api/voice.html">صوت</a>.</li>
+<li><strong>مباراة العودة.</strong> يتم إغلاق الغرفة بعد النتيجة. اطلب من المضيف إنشاء غرفة جديدة ودعوة
+بشر القائمة السابقة، أو أرسل الجميع مرة أخرى للانضمام السريع.</li>
+<li><strong>المتصدرين في وقت اللفة.</strong> لوحة المتصدرين الخاصة بالمنصة الخاصة باللعبة هي لوحة elo الخاصة بها، والتي يتم كتابتها بواسطة الخادم فقط
+وقت التشغيل. يتم قبول لوحة المتصدرين التي يحددها الناشر <code>POST /api/v1/leaderboards/{id}/submit</code>ولكن هذا
+يتم المطالبة بالنتيجة من قبل العميل - وهو أمر جيد بالنسبة للتجربة الودية، وليس لأي شيء به جوائز.</li>
+</ul>
+<h2 id="7-variant-b-server-authoritative-racing">7. البديل ب: السباق الرسمي للخادم</h2>
+<p>بالنسبة إلى اللعب المصنف، انقل المحاكاة إلى برنامج نصي. اللوبي لم يتغير. إضافة البرنامج النصي و
+إعدادات التوفيق للبيان:</p>
+<pre><code class="language-ini">server=server.js
+matchmaking.max_wait_seconds=20
+matchmaking.ai_players=7
+</code></pre>
+<p>الآن شيئان يخلقان السباقات: <strong>بدء غرفة</strong> ينشئ جلسة مقيدة بالغرفة لبشره، و
+<strong>التوفيق</strong> (<code>POST /api/v1/games/{slug}/matchmaking?queue=grand-prix</code>) يخلق واحد عندما ثمانية
+تم العثور على اللاعبين - أو، باستخدام الإعدادات المذكورة أعلاه، بعد 20 ثانية مع وجود وحدات المعالجة المركزية في ما يصل إلى سبعة فارغة
+مقاعد. يمكن لردهة من الأصدقاء الوقوف في طابور معًا <code>POST /realtime/rooms/{id}/matchmake</code>.</p>
+<p>وفي كلتا الحالتين، يأخذ العملاء <code>sessionId</code> (الغرفة <code>gameSessionId</code>، أو التذكرة المطابقة) و
+انتهى اللعب <code>ws/v1/games?sessionId=…</code>. يتم الاحتفاظ بمقبس الوقت الفعلي، إن وجد، للقائمة فقط.</p>
+<h3 id="the-script">البرنامج النصي</h3>
+<p>المحاكاة بأكملها تعمل <code>onTick</code> عند السقف 30 هرتز. كل استدعاء هو بمثابة رمل جديد
+يحصل <code>sessionState</code> in وإعادتها للخارج، لذا أبقِ تلك الحالة صغيرة - حيث يتم إجراء تسلسل لها في كل علامة.</p>
+<pre><code class="language-js">const TRACK = { laps: 3, radius: 14,
+  checkpoints: [[0, 0], [120, 0], [160, 60], [120, 120], [0, 120], [-40, 60]] };
+
+globalThis.game = {
+  tickRateHz: 30,
+  replays: true,
+  queues: [{ key: "grand-prix", teams: 8, teamSize: 1 }],
+  achievements: [
+    { key: "chequered-flag", name: "Chequered Flag", description: "Win a race.", points: 10 }
+  ],
+
+  createSession(ctx) {
+    const karts = racers(ctx).map((r, i) =&gt; ({
+      id: r.id, name: r.name, ai: r.ai, x: -8 * (i % 2), z: -6 * i, heading: 0, speed: 0,
+      cp: 1, lap: 0, boost: 0, boosts: 1, input: {}, ack: 0, finishedAt: null
+    }));
+    return { ok: true, sessionState: { t: ctx.now, goAt: ctx.now + 4000, karts, order: [] } };
+  },
+
+  onPlayerMessage(ctx) {                       // durable commands: discrete actions
+    const s = copy(ctx.sessionState);
+    const k = s.karts.find((k) =&gt; k.id === ctx.message.from);
+    if (ctx.message.data?.type === "use-item" &amp;&amp; k &amp;&amp; k.boosts &gt; 0 &amp;&amp; ctx.now &gt;= s.goAt) {
+      k.boosts--; k.boost = 1.2;
+    }
+    return { ok: true, sessionState: s };
+  },
+
+  onTick(ctx) {
+    const s = copy(ctx.sessionState);
+    const dt = Math.min(Math.max((ctx.now - s.t) / 1000, 0), 0.1);
+    s.t = ctx.now;
+    for (const i of ctx.inputs || []) {        // latest realtime input per player since last tick
+      const k = s.karts.find((k) =&gt; k.id === i.from);
+      if (k) { k.input = i.data; k.ack = Math.max(k.ack, Math.floor(+i.data.seq) || 0); }
+    }
+    if (ctx.now &gt;= s.goAt) {
+      for (const k of s.karts) {
+        if (k.finishedAt) continue;
+        move(k, k.ai ? aiInput(k) : k.input, dt);   // pure motion — shared with the client
+        progress(k, s, ctx);                        // checkpoints, laps, finish — server only
+      }
+    }
+    const snap = s.karts.map((k) =&gt;
+      [k.id, r2(k.x), r2(k.z), r3(k.heading), r2(k.speed), r2(k.boost), k.lap, k.cp, k.ack]);
+    const out = { ok: true, sessionState: s,
+      broadcast: [{ to: "all", data: { type: "snap", t: s.t, goAt: s.goAt, karts: snap } }] };
+    if (raceOver(s, ctx)) Object.assign(out, finish(s, ctx));
+    return out;
+  }
+};
+</code></pre>
+<p>المساعدون هم رمز اللعبة العادي. الأجزاء التي تهتم بها المنصة:</p>
+<ul>
+<li><strong><code>racers(ctx)</code></strong> يقرأ الشبكة من أي بداية كانت للجلسة: <code>ctx.room.roster</code> ل
+الغرفة (مقاعد الذكاء الاصطناعي بها <code>userId: null</code>، لذا أعطهم معرفات مثل <code>ai-0-5</code>), <code>ctx.matchmaking.seats</code> ل
+سباق متطابق (تخطي المقاعد مع <code>id: null</code>)، آخر <code>ctx.players</code>.</li>
+<li><strong><code>move(k, input, dt)</code></strong> يجب <strong>المشبك كل قيمة الإدخال</strong> — <code>steer</code> إلى -1…1، <code>throttle</code> إلى 0…1 —
+لان <code>ctx.inputs[].data</code> هو كل ما أرسله العميل. فقط <code>from</code> موثوق به. اجعلها نقية -
+لا <code>ctx</code>، لا توجد حالة جلسة - حتى يتمكن العميل من تشغيلها أيضًا (انظر
+<a href="#client-side-prediction">التنبؤ من جانب العميل</a>).</li>
+<li><strong>العشوائية والوقت</strong> تأتي من <code>ctx.random</code> و <code>ctx.now</code>; لا يوجد <code>Date</code> أو <code>Math.random</code>.</li>
+<li><strong><code>finish(s, ctx)</code></strong> يعود <code>result</code> (الذي ينهي الجلسة، ويغلقها بالنسبة للغرفة)،
+<code>achievements</code> للفائز إذا كان الإنسان، و <code>eloUpdates</code> للمتسابقين من البشر - على سبيل المثال الزوجي
+elo عبر أمر التشطيب، اقرأ منه وأعد كتابته إليه <code>ctx.playerStates</code>. مقاعد الذكاء الاصطناعي لا تستطيع ذلك
+الحصول على حالة اللاعب أو التقييمات أو الإنجازات.</li>
+<li><strong><code>raceOver</code></strong> يجب أيضًا إنهاء السباقات التي لا يمكن لأحد أن ينهيها - كل إنسان ذهب وفقًا لذلك
+<code>ctx.presence</code> (غرف)، أو حد زمني صعب.</li>
+<li><strong>الاعادة</strong> احتفظ فقط ب <em>أخير</em> <code>sessionState</code>. احتفظ بجدول مدمج لوقت الدورة والتشطيب
+النظام فيه، وليس سجل موقف لكل علامة.</li>
+</ul>
+<h3 id="the-client">العميل</h3>
+<p>أرسل التوجيه كمدخل في الوقت الفعلي لكل علامة وإجراءات منفصلة كأوامر دائمة:</p>
+<pre><code class="language-js">// ~30 Hz: latest-wins, batched into the next onTick
+send({ type: "cmd", data: { type: "input", realtime: true, seq: ++seq,
+                            steer, throttle, brake, drift } });
+
+// on key press: a durable command, runs onPlayerMessage immediately
+send({ type: "cmd", data: { type: "use-item" } });
+</code></pre>
+<p>أغراض <strong>يجب</strong> تمر بأمر دائم. المدخلات في الوقت الفعلي هي أحدث المكاسب بين القراد، و
+تحافظ المنصة على الحقول ذات اللقطة الواحدة فقط <code>pass</code>, <code>tackle</code> و <code>shoot</code> عندما عينة أحدث
+يستبدل زرًا قديمًا - يمكن الكتابة فوق أي زر آخر في الإدخال الفعلي قبل وضع العلامة
+يرى ذلك.</p>
+<p><code>achievement</code> تصل الإطارات على نفس المقبس؛ يقرأ <code>GET /api/v1/games/{slug}/achievements</code> على
+تحميل لأي شيء ممنوح قبل فتحه.</p>
+<h3 id="client-side-prediction">التنبؤ من جانب العميل</h3>
+<p>إن عرض ما يرسله الخادم فقط يجعل الكارت يبدو وكأنه يتم توجيهه عبر الوحل. توجيه
+يجب أن يصل التغيير إلى الخادم، وينتظر العلامة التالية (حتى 33 مللي ثانية عند 30 هرتز)، ثم يعود بعد ذلك
+<code>snap</code> — عند 80 مللي ثانية من اختبار الاتصال (ping) أي ما يزيد عن 100 مللي ثانية قبل دوران الكارت. التنبؤ يخفي ذلك: العميل
+التحركات <strong>الكارت الخاص بها</strong> على الفور ويعامل كل منهما <code>snap</code> كتصحيح وليس كما في الصورة.</p>
+<h4 id="share-the-motion-code">شارك كود الحركة</h4>
+<p>قم بتقسيم المحاكاة بالطريقة التي يعمل بها البرنامج النصي أعلاه: نقي <code>move(k, input, dt)</code> للتعامل، و
+الخادم فقط <code>progress</code> لنقاط التفتيش واللفات والتشطيب. فضح رمز الحركة من <code>server.js</code>
+باعتباره عالميًا ثانيًا - وهو النمط الذي يستخدمه الشطرنج <code>globalThis.chessRules</code> - وقم بتحميل نفس الملف فيه
+المتصفح:</p>
+<pre><code class="language-js">// server.js — shared by the platform's sandbox and the browser
+function move(k, input, dt) { /* clamp input, integrate speed, heading, x, z, boost */ }
+globalThis.kartPhysics = { move, TRACK };
+globalThis.game = { /* ... as above ... */ };
+</code></pre>
+<pre><code class="language-html">&lt;script src="server.js"&gt;&lt;/script&gt;  &lt;!-- defines kartPhysics; the client never calls game.* --&gt;
+</code></pre>
+<p>يتنبأ العميل <strong>الحركة فقط</strong>. اللفات والمواضع والعناصر وترتيب النهاية تظل ملكًا للخادم
+اتصل. لا تتوقع نتائج متطابقة بعض الشيء: قد يختلف وضع الحماية والمتصفح في الأجزاء الأخيرة من
+<code>Math.sin</code>/<code>Math.cos</code>، والمناصب في <code>snap</code> يتم تقريبها. وتمتص المصالحة هذا الانجراف.</p>
+<h4 id="step-at-the-servers-rhythm">خطوة على إيقاع الخادم</h4>
+<p>لا يقوم الخادم بتشغيل خطوة واحدة لكل إدخال. كل علامة ينطبق عليها <strong>أحدث</strong> المدخلات التي يحملها ل
+يستمر هذا الكارت في استخدامه حتى وصول أحدث، ويتكامل في الوقت الفعلي منذ ذلك الحين
+القراد السابق. لذا قم بعكس هذا الشكل بدلاً من الانتقال إلى معدل إطارات العرض:</p>
+<pre><code class="language-js">const pending = [];                              // inputs the server hasn't acknowledged yet
+let seq = 0, predicted, previous;               // { x, z, heading, speed, boost }, seeded from the first snap
+let error = { x: 0, z: 0, heading: 0 };          // visual offset, decays in render()
+
+setInterval(() =&gt; {                              // 30 Hz, the script's tickRateHz
+  if (!predicted || serverNow() &lt; goAt) return;  // the server ignores movement before goAt
+  const input = { steer: readSteer(), throttle: readThrottle(), brake: held("brake"), drift: held("drift") };
+  const entry = { seq: ++seq, input, dt: 1 / 30 };
+  send({ type: "cmd", data: { type: "input", realtime: true, seq: entry.seq, ...input } });
+  pending.push(entry);
+  previous = { ...predicted };
+  kartPhysics.move(predicted, input, entry.dt);  // the kart responds now, not a round trip later
+}, 1000 / 30);
+</code></pre>
+<p>يتم إهدار الإرسال بشكل أسرع من معدل التجزئة — يتم استخدام أحدث إدخال فقط لكل علامة — ويتم هدر
+يسقط النظام الأساسي مدخلات الوقت الفعلي أعلى من الحد الأقصى لكل اتصال.</p>
+<h4 id="reconcile-on-every-snap">التوفيق على كل <code>snap</code></h4>
+<p>أصداء السيناريو <code>ack</code>، الأعلى <code>seq</code> لقد تم تطبيقه على كل كارت. على كل <code>snap</code>، الترجيع الخاص بك
+kart إلى حالة الخادم وإعادة تشغيل ما لم يشاهده الخادم بعد:</p>
+<pre><code class="language-js">function onSnap(snap) {
+  const [, x, z, heading, speed, boost, lap, cp, ack] = snap.karts.find((k) =&gt; k[0] === myId);
+  while (pending.length &amp;&amp; pending[0].seq &lt;= ack) pending.shift();   // applied or superseded
+
+  const corrected = { x, z, heading, speed, boost };
+  for (const p of pending) kartPhysics.move(corrected, p.input, p.dt);
+
+  if (!predicted) { predicted = corrected; previous = { ...corrected }; return; } // first snap
+  error.x += predicted.x - corrected.x;          // what the player would see jump
+  error.z += predicted.z - corrected.z;
+  error.heading += predicted.heading - corrected.heading;
+  if (Math.hypot(error.x, error.z) &gt; 3) error = { x: 0, z: 0, heading: 0 }; // wall hit, bump: snap
+  predicted = corrected;
+  hud.lap = lap; hud.checkpoint = cp;            // progress is never predicted
+}
+</code></pre>
+<p>نبذ كل ما يصل إلى <code>ack</code> صحيح على الرغم من أن أحدث المكاسب تتخطى بعض المدخلات: تم تخطيها
+تم استبدال الإدخال قبل تحديد الخادم، لذلك لم يؤثر أبدًا على بطاقة الخادم أيضًا.</p>
+<h4 id="smooth-corrections-render-at-frame-rate">تصحيحات سلسة، يتم عرضها بمعدل الإطارات</h4>
+<p>يجب أن تكون التصحيحات الصغيرة غير مرئية. ارسم الكارت في الموضع المتوقع بالإضافة إلى الاضمحلال
+إزاحة الخطأ، والاستيفاء بين آخر خطوتين للتنبؤ بتردد 30 هرتز، بحيث يتم عرض 60 أو 144 هرتز
+يتحرك بسلاسة:</p>
+<pre><code class="language-js">function render(frameDt) {
+  const decay = Math.exp(-frameDt / 0.1);        // ~100 ms to absorb a correction
+  error.x *= decay; error.z *= decay; error.heading *= decay;
+  const a = sinceLastStep() * 30;                // 0…1 between prediction steps
+  drawKart(lerp(previous.x, predicted.x, a) + error.x,
+           lerp(previous.z, predicted.z, a) + error.z,
+           lerpAngle(previous.heading, predicted.heading, a) + error.heading);
+}
+</code></pre>
+<p>قم بضبط عتبة المفاجئة بدلاً من الاضمحلال: التصحيح الأكبر من طول الكارت هو تصحيح حقيقي
+حدث (صدمة لم تتوقعها) ويُقرأ بشكل أفضل كلقطة سريعة بدلاً من شريحة بطيئة.</p>
+<h4 id="know-what-not-to-predict">تعرف على ما لا يجب التنبؤ به</h4>
+<ul>
+<li><strong>عربات أخرى.</strong> تم رسمها ~ 100 مللي ثانية في الماضي (buffer <code>snap</code>الصورة والاستيفاء بين
+اثنان تلك القوس <code>serverNow() - 100</code>)، فالاصطدام المتوقع ضدهم هو الاصطدام بـ
+حيث هم <em>كان</em>. توقع الجدران والمسار - فهي لا تتحرك - ودع الخادم يحل المشكلة
+مطبات الكارت إلى الكارت. يصل التصحيح خلال رحلة ذهابًا وإيابًا. إذا تم تشغيل المخزن المؤقت الجاف، استقراء
+من السرعة والتوجه لمدة تصل إلى 100 مللي ثانية تقريبًا، ثم استمر في الضغط.</li>
+<li><strong>أغراض.</strong> <code>use-item</code> هو أمر دائم، لذلك يعمل <code>onPlayerMessage</code> بمجرد وصوله -
+لا علامة الانتظار. قم بتشغيل اللهب والصوت عند الضغط على المفتاح؛ دع السرعة تصل من خلال
+المصالحة منذ ذلك الحين <code>boost</code> هو في <code>snap</code>. إذا رفض الخادم (لم يتبق أي رسوم)، فإن الخطوة التالية
+<code>snap</code> يعيدها.</li>
+<li><strong>حالة السباق.</strong> عدد اللفات والموقع والنهاية يأتي من <code>snap</code> وعمليات بث البرنامج النصي الخاص بك فقط.</li>
+</ul>
+<h4 id="estimate-the-server-clock">تقدير ساعة الخادم</h4>
+<p><code>snap.t</code> و <code>goAt</code> هي وقت الخادم (<code>ctx.now</code>). احتفظ بإزاحة من أصغر فجوة ملحوظة، والتي
+تصفية عمليات التسليم البطيئة:</p>
+<pre><code class="language-js">let offset = Infinity;
+function noteSnap(snap) { offset = Math.min(offset, performance.now() - snap.t); }
+const serverNow = () =&gt; performance.now() - offset;
+</code></pre>
+<p>بدء العد التنازلي من <code>goAt</code>، والتنبؤ بالبوابة عليه كما تفعل الحلقة أعلاه. الكارت الذي يتحرك
+من قبل <code>goAt</code> يتم إعادة ربط النطاقات المطاطية محليًا إلى الشبكة بحلول الأول <code>snap</code> بعد البداية.</p>
+<p>لضبط كل هذا، أضف الكمون الاصطناعي في التطوير (تأخير <code>send</code> و <code>onSnap</code> بمقدار 100-200 مللي ثانية)
+وقم بتسجيل حجم كل تصحيح - تعني التصحيحات الكبيرة الثابتة <code>move</code> وقد انجرفت من
+نسخة الخادم، أو يتم تثبيت حقل الإدخال بشكل مختلف على كل جانب.</p>
+<h2 id="checklist">قائمة التحقق</h2>
+<ul>
+<li>[ ] <code>starhermit.txt</code> في جذر بناء الإخراج، مع <code>control.*</code> لإجراءات الكارت.</li>
+<li>[ ] قراءة رمز الإطلاق من التجزئة، وتجريده، وتحديثه؛ سبيكة من <code>game_scope</code>.</li>
+<li>[ ] <code>GET /realtime/rooms/mine</code> قيد التحميل للانضمام مرة أخرى إلى السباق الجاري.</li>
+<li>[ ] غرفة لفريق واحد، قم بالمتابعة <code>metadata</code>; دعوات، رموز الانضمام، فتح + انضمام سريع، منفرد مع <code>aiPlayers</code>.</li>
+<li>[ ] تم فتح المقبس ببطاقة اتصال؛ تم تجريد بادئة المرسل المكونة من 16 بايت واستخدامها كهوية.</li>
+<li>[ ] لقطات المضيف ومدخلات الضيف بمعدل ≥ 20 هرتز لكل منها، الإطارات ≥ 8 كيلو بايت؛ يضغط العنصر كعداد.</li>
+<li>[ ] جاهز ← العد التنازلي ← أحداث السباق كإطارات تحكم؛ النتيجة مع النظام في <code>metadata</code>.</li>
+<li>[ ] يقود المضيف مقاعد الذكاء الاصطناعي وعربات المغادرة؛ يستأنف المضيف الجديد من اللقطة الأخيرة.</li>
+<li>[ ] البديل ب: <code>tickRateHz: 30</code>، المدخلات المثبتة، والعناصر كأوامر دائمة، <code>result</code> + <code>eloUpdates</code>.</li>
+<li>[ ] البديل ب: الكارت الخاص المتوقع مع المشترك <code>move</code>، مصالحة على <code>ack</code>، تنعيم التصحيحات؛
+لا حركة من قبل <code>goAt</code>; عربات أخرى محرفة خلف 100 مللي ثانية تقريبًا.</li>
+</ul>
+<h2 id="see-also">انظر أيضا</h2>
+<ul>
+<li><a href="/ar/docs/api/realtime.html">غرف الوقت الحقيقي</a> - ردهات، مقاعد، <code>ws/v1/realtime</code> عقد</li>
+<li><a href="/ar/docs/api/game-scripts.html">مخطوطات اللعبة</a> - معدل التجزئة، والمدخلات في الوقت الحقيقي، والجلسات المرتبطة بالغرفة</li>
+<li><a href="/ar/docs/api/games.html">ألعاب</a> - التوفيق، والضوابط، والإعدادات، ومقبس اللعب</li>
+<li><a href="/ar/docs/starhermit-txt.html"><code>starhermit.txt</code></a> — الضوابط، والمواعيد النهائية للتوفيق، ومقاعد الذكاء الاصطناعي</li>
+</ul>
+
+{% endraw %}

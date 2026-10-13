@@ -1,0 +1,449 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "SDK Unity"
+source_url: "/docs/sdk/unity.html"
+source_path: "docs/sdk/unity.md"
+source_hash: "49c40f7a86e1b1c9d76eecec12b5c49c0ad2c5b566298738cdb8050cf2dd4b86"
+translation: "machine"
+permalink: "/fr/docs/sdk/unity.html"
+---
+{% raw %}
+<h1 id="unity-sdk">SDK Unity</h1>
+<p>Le <strong>SDK Starhermit Unity</strong> (<a href="https://github.com/HypeDriven/starhermit-unity-sdk">HypeDriven/starhermit-unity-sdk</a>)
+est un package Unity Package Manager avec des clients C# typés et asynchrones pour la plateforme. Il gère
+Requêtes HTTP, analyse JSON, actualisation des jetons et reconnexion WebSocket.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Emballer</td>
+<td><code>com.starhermit.sdk</code>, version 0.1.0</td>
+</tr>
+<tr>
+<td>Espace de noms</td>
+<td><code>Starhermit</code></td>
+</tr>
+<tr>
+<td>Référence de l'API</td>
+<td>REST v1 et WebSocket v1</td>
+</tr>
+<tr>
+<td>Fonctionnalités REST plus récentes</td>
+<td>Utiliser <code>client.Raw</code> et modèle <code>RawJson</code> lorsque cette version du SDK n'a pas de membre typé</td>
+</tr>
+<tr>
+<td>Protocoles WebSocket</td>
+<td>tous les 6, une classe de connexion chacun</td>
+</tr>
+<tr>
+<td>Licence</td>
+<td>MIT</td>
+</tr>
+</tbody>
+</table>
+<p>Le SDK est un client et non une seconde implémentation de la plateforme. Autorisation, amitié,
+les droits, l'adhésion à la chambre, la validation des scores, les résultats des jeux et les budgets de stockage restent
+faisant autorité sur le serveur exactement comme documenté dans les pages ci-dessous — le SDK fait apparaître la réponse du serveur
+et ses limites publiées plutôt que de décider ou de mettre en cache les siennes.</p>
+<p>Cette page est le guide d'intégration. La documentation complète du package se trouve dans le référentiel sous
+<code>Packages/com.starhermit.sdk/Documentation~</code>.</p>
+<h2 id="requirements">Exigences</h2>
+<ul>
+<li>Unity 2021.3 LTS ou version ultérieure, niveau de compatibilité API <strong>Norme .NET 2.1</strong>, C# 9.</li>
+<li>Mono et IL2CPP, avec suppression gérée de Désactivé à <strong>Haut</strong> (le colis expédie son propre
+<code>Runtime/link.xml</code>).</li>
+<li>Aucune réflexion, aucune génération de code dynamique, aucun plugin natif obligatoire.</li>
+</ul>
+<p>Chaque module compile pour chaque cible de build. Lorsqu’une cible manque réellement de capacité – non
+microphone sur un serveur sans tête, pas d'en-têtes de prise de contact dans un navigateur - l'appel est lancé
+<code>StarhermitFeatureUnavailableException</code> avec une écurie <code>Reason</code>, au lieu d'échouer la construction ou
+désactiver les fonctionnalités non liées.</p>
+<table>
+<thead>
+<tr>
+<th>Capacité</th>
+<th>Ordinateur de bureau/mobile/console</th>
+<th>WebGL</th>
+<th>Serveur sans tête</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>REPOS</td>
+<td><code>UnityWebRequestTransport</code></td>
+<td><code>UnityWebRequestTransport</code></td>
+<td><code>HttpClientTransport</code></td>
+</tr>
+<tr>
+<td>WebSocket</td>
+<td><code>ClientWebSocketAdapter</code></td>
+<td><code>WebGLSocketFactory</code> + groupé <code>.jslib</code> pont</td>
+<td><code>ClientWebSocketAdapter</code></td>
+</tr>
+<tr>
+<td>OAuth</td>
+<td>injecté <code>IStarhermitOAuthBrowser</code></td>
+<td>adaptateur de navigateur injecté</td>
+<td>Transfert d'URL depuis l'hôte</td>
+</tr>
+<tr>
+<td>Stockage des jetons</td>
+<td>magasin injecté; <code>EncryptedFileTokenStore</code> s'inscrire</td>
+<td>stockage de navigateur injecté</td>
+<td>magasin ou mémoire injecté</td>
+</tr>
+<tr>
+<td>Transfert de fichiers</td>
+<td><code>SystemFileStore</code></td>
+<td>évier injecté</td>
+<td><code>SystemFileStore</code></td>
+</tr>
+<tr>
+<td>Capture / lecture vocale</td>
+<td><code>UnityMicrophoneCapture</code> / <code>UnityAudioPlayback</code></td>
+<td>adaptateur multimédia de navigateur injecté</td>
+<td>indisponible sauf injection</td>
+</tr>
+<tr>
+<td>Signature par clé publique</td>
+<td>injecté <code>IStarhermitSigner</code></td>
+<td>chiffrement du signataire ou du navigateur injecté</td>
+<td>signataire injecté</td>
+</tr>
+</tbody>
+</table>
+<h2 id="install">Installer</h2>
+<p>Gestionnaire de paquets → <strong>Ajouter un package à partir de l'URL git</strong>, ou une entrée dans <code>Packages/manifest.json</code>. Le paquet
+se trouve dans un sous-dossier du référentiel, l'URL doit donc <code>path=</code>:</p>
+<pre><code class="language-json">{
+  "dependencies": {
+    "com.starhermit.sdk": "https://github.com/HypeDriven/starhermit-unity-sdk.git?path=/Packages/com.starhermit.sdk"
+  }
+}
+</code></pre>
+<p>Épinglez une version en ajoutant <code>#&lt;tag-or-commit&gt;</code>:</p>
+<pre><code class="language-text">https://github.com/HypeDriven/starhermit-unity-sdk.git?path=/Packages/com.starhermit.sdk#v0.1.0
+</code></pre>
+<p>Unity débourse pour <code>git</code>, donc un dépôt privé n'est résolu que si le git de l'éditeur peut s'authentifier
+de manière non interactive - une clé SSH (<code>git@github.com:HypeDriven/starhermit-unity-sdk.git?path=/Packages/com.starhermit.sdk</code>) ou un
+assistant d'identification configuré. Un chemin local ou un registre étendu fonctionne de la même manière. L'importation modifie non
+paramètres du projet et n’effectue aucun accès au réseau.</p>
+<h2 id="create-a-client">Créer un client</h2>
+<pre><code class="language-csharp">using Starhermit;
+
+var client = StarhermitClient.Create(new StarhermitOptions
+{
+    ApiBaseUri = new Uri("https://api.starhermit.com/api/v1/"),
+    GameSlug   = "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+    TokenStore = myPlatformSecureStore,
+    LogLevel   = StarhermitLogLevel.Warning
+});
+
+await client.InitializeAsync();               // loads a stored session, refreshes it if expired
+var me = await client.Me.GetProfileAsync();
+</code></pre>
+<p><code>Create</code> n'effectue aucune E/S. Rien ne touche le réseau jusqu'à ce que vous initialisiez, appeliez un service ou ouvriez un
+connexion. La base WebSocket est dérivée de <code>ApiBaseUri</code> (<code>wss://&lt;host&gt;/ws/v1/</code>) sauf si vous définissez
+<code>WebSocketBaseUri</code> toi-même.</p>
+<p><code>StarhermitClient</code> est <code>IDisposable</code>&#160;: la suppression annule les demandes en vol, ferme chaque connexion
+distribué, arrête les battements de cœur et libère l'audio. Il n'y a pas d'état mutable statique dans le package, donc
+deux clients peuvent fonctionner côte à côte dans des environnements différents et un client survit aux chargements de scène.</p>
+<p><strong>Un jeu publié sur la plateforme</strong> est servi à partir de <code>https://&lt;slug&gt;.starhermit.com</code> avec <code>/api</code> et
+<code>/ws</code> proxy de même origine (voir <a href="/fr/docs/api/github-games.html">Jeux GitHub</a>). Une version WebGL publiée qui
+way doit pointer vers sa propre origine afin que le navigateur effectue des appels de même origine&#160;:</p>
+<pre><code class="language-csharp">ApiBaseUri = new Uri("https://83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com/api/v1/") // your game's uid
+</code></pre>
+<p>Pour un backend local, <code>AllowInsecureTransport = true</code> permis <code>http</code>/<code>ws</code>. Le client construction refuse un
+adresse non HTTPS sans elle, et la validation de build de l'éditeur échoue à une build de lecteur non-développeur
+cela l'a toujours réglé. Il ne désactive jamais la validation du certificat.</p>
+<h2 id="signing-in">Connexion</h2>
+<p>Les trois types de titres de compétences décrits dans <a href="/fr/docs/api/auth.html">Authentification</a> sont des types distincts dans des
+magasins dans le SDK&#160;; aucun ne peut remplacer un autre.</p>
+<p><strong>OAuth</strong> — le SDK ouvre l'URL d'autorisation via un fichier injecté <code>IStarhermitOAuthBrowser</code> et complète
+l'échange :</p>
+<pre><code class="language-csharp">var session = await client.Auth.SignInWithOAuthAsync("google");
+</code></pre>
+<p>Utiliser <code>BuildAuthorizeUri(provider)</code> plus <code>CompleteOAuthAsync(...)</code> au lieu de cela, lorsque votre plate-forme remet le
+redirigez-le via sa propre plomberie de lien profond ou de navigateur intégré.</p>
+<p><strong>Clé publique</strong> — le flux sans mot de passe pour les lecteurs embarqués, consoles et serveurs dédiés
+(voir <a href="/fr/docs/tutorials/dedicated-server-onboarding.html">Serveur dédié + intégration de lecteurs intégrés</a>).
+Les types de clés pris en charge sont <code>Ed25519</code>, <code>ECDSA-P256</code> et <code>RSA-PSS</code>; le SDK ne génère ni ne stocke jamais de
+clé privée, il appelle une clé injectée <code>IStarhermitSigner</code>:</p>
+<pre><code class="language-csharp">var session = await client.Auth.SignInWithPublicKeyAsync(signer);   // or (), using Options.Signer
+</code></pre>
+<blockquote>
+<p><strong>Détail du contrat à connaître.</strong> Le déploiement vérifie une signature de défi par rapport à la sienne
+PascalCase sérialisation du défi, alors que le JSON que vous recevez est camelCase — re-sérialisation
+la réponse ne serait jamais vérifiée. <code>StarhermitChallenge.CanonicalPayload</code> reproduit les octets exacts à
+signe, donc la signature roulée à la main doit faire de même.</p>
+</blockquote>
+<p><strong>Jeton de lancement du jeu</strong> — frappé par jeu et clôturé sur la surface de ce jeu&#160;:</p>
+<pre><code class="language-csharp">var chess = client.Games.ForSlug("83fd04b1-3cbe-4b09-a251-3733ad4b9d94");
+await chess.AcquireLaunchTokenAsync();
+var fenced = chess.WithLaunchToken();     // subsequent calls authorise with the launch token
+</code></pre>
+<p>La création d'un jeton de lancement ne remplace jamais la session de compte. Les informations d'identification portées par une demande sont
+décidé par le pipeline de requêtes, et non par le service que vous avez appelé.</p>
+<p>L'actualisation du jeton d'accès est coordonnée&#160;:&#160;un <code>401</code> achète au plus une actualisation et une relecture, et simultanément
+les appelants attendent la même actualisation plutôt que d'en démarrer plusieurs - avec un jeton d'actualisation rotatif, une seconde
+l'échange révoquerait la famille et déconnecterait le joueur. Un rejet définitif soulève <code>SessionExpired</code>
+une fois; un échec de transport laisse la session intacte.</p>
+<h3 id="accepting-the-current-terms">Accepter les conditions actuelles</h3>
+<p>Vérifiez l'acceptation avant de démarrer des battements de cœur, des demandes de jeu ou des sockets. La version 0.1.0 a
+<code>AcceptTermsAsync</code>, mais la découverte de champs de profil et de termes plus récents utilise sa prise en charge brute JSON&#160;:</p>
+<pre><code class="language-csharp">var profile = await client.Me.GetProfileAsync(ct);
+var needsAcceptance = profile.RawJson["termsAcceptanceRequired"].AsBooleanOrDefault();
+var terms = await client.Raw.SendForJsonAsync(new StarhermitRequest("GET", "terms"), ct);
+var textToDisplay = terms["text"].AsStringOrNull();
+var displayedHash = terms["hash"].AsStringOrNull();
+// Display textToDisplay. Retain displayedHash for this displayed revision.
+// Only in the user's Accept handler, using an account session:
+// await client.Me.AcceptTermsAsync(displayedHash, ct);
+</code></pre>
+<p>N'utilisez pas d'exemple d'étiquette de révision telle que <code>terms-2026-08</code>&#160;: seul le hachage actuel de l'API est
+accepté. Sur <code>409</code>, récupérez et affichez le nouveau texte pour une autre acceptation. Sur
+<code>403 terms_acceptance_required</code>, résolvez l'acceptation avant de réessayer&#160;; les jetons de lancement des joueurs peuvent également soumettre leur acceptation via l'API après consentement explicite. Voir <a href="/fr/docs/api/profile.html#terms-acceptance">Profil</a> pour le flux complet.</p>
+<h2 id="where-each-wiki-page-lives-in-the-sdk">Où se trouve chaque page wiki dans le SDK</h2>
+<p>Chaque zone REST documentée ici possède un service sur le client, et chaque protocole WebSocket possède un
+classe de connexion.</p>
+<table>
+<thead>
+<tr>
+<th>Page wiki</th>
+<th>SDK</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="/fr/docs/api/auth.html">Authentification</a></td>
+<td><code>client.Auth</code> (inscription et révocation des clés également sur <code>client.Me</code>)</td>
+</tr>
+<tr>
+<td><a href="/fr/docs/api/profile.html">Profil</a></td>
+<td><code>client.Me</code>, <code>client.Entitlements</code>, <code>StarhermitPresenceHeartbeat</code></td>
+</tr>
+<tr>
+<td><a href="/fr/docs/api/friends.html">Amis</a></td>
+<td><code>client.Friends</code></td>
+</tr>
+<tr>
+<td><a href="/fr/docs/api/chat.html">Chat</a></td>
+<td><code>client.Chat</code> + <code>StarhermitChatConnection</code></td>
+</tr>
+<tr>
+<td><a href="/fr/docs/api/voice.html">Voix</a></td>
+<td><code>client.Voice</code> + <code>StarhermitVoiceConnection</code></td>
+</tr>
+<tr>
+<td><a href="/fr/docs/api/catalog.html">Catalogue</a></td>
+<td><code>client.Software</code>, <code>client.CloudSaves</code>, <code>client.Ratings</code>, <code>client.Wishlist</code></td>
+</tr>
+<tr>
+<td><a href="/fr/docs/api/activity.html">Activité</a></td>
+<td><code>client.Activity</code></td>
+</tr>
+<tr>
+<td><a href="/fr/docs/api/external-libraries.html">Bibliothèques externes</a></td>
+<td><code>client.Activity</code> (lien, dissociation, logiciel détenu, lancement externe)</td>
+</tr>
+<tr>
+<td><a href="/fr/docs/api/achievements.html">Réalisations</a></td>
+<td><code>client.Achievements</code>, <code>client.Games.ForSlug(slug).GetAchievementsAsync()</code></td>
+</tr>
+<tr>
+<td><a href="/fr/docs/api/leaderboards.html">Classements</a></td>
+<td><code>client.Leaderboards</code></td>
+</tr>
+<tr>
+<td><a href="/fr/docs/api/games.html">Jeux</a></td>
+<td><code>client.Games.ForSlug(slug)</code> + <code>StarhermitGameConnection</code></td>
+</tr>
+<tr>
+<td><a href="/fr/docs/api/realtime.html">Salles en temps réel</a></td>
+<td><code>client.RealtimeRooms</code> + <code>StarhermitRealtimeConnection</code></td>
+</tr>
+<tr>
+<td><a href="/fr/docs/api/relay.html">Relais</a></td>
+<td><code>client.Relay</code> + <code>StarhermitRelayConnection</code></td>
+</tr>
+<tr>
+<td><a href="/fr/docs/api/container-games.html">Serveurs de jeux de conteneurs</a></td>
+<td><code>client.GameServer</code> (échange de jetons de serveur et recherche de session)</td>
+</tr>
+<tr>
+<td><a href="/fr/docs/api/github-games.html">Jeux GitHub</a></td>
+<td><code>client.BrowserGames</code> + <code>StarhermitGameUploadConnection</code></td>
+</tr>
+<tr>
+<td><a href="/fr/docs/api/publisher.html">Éditeur</a></td>
+<td><code>client.Publishers</code>, <code>StarhermitBuildPublisher</code></td>
+</tr>
+<tr>
+<td><a href="/fr/docs/getting-started.html#server-clock--get-apiv1time">Horloge du serveur</a></td>
+<td><code>client.Time</code>, <code>client.ServerClock</code></td>
+</tr>
+</tbody>
+</table>
+<p><a href="/fr/docs/api/game-scripts.html">Scripts de jeu</a> n'a pas de service SDK : un script s'exécute sur la plateforme, et son
+les clients y parlent via l'API des jeux ci-dessus.</p>
+<h2 id="a-session-end-to-end">Une séance de bout en bout</h2>
+<p>Le cycle de vie de <a href="/fr/docs/tutorials/chess-walkthrough.html">la procédure pas à pas d'intégration</a>, en C#&#160;:</p>
+<pre><code class="language-csharp">var chess = client.Games.ForSlug("83fd04b1-3cbe-4b09-a251-3733ad4b9d94");
+await chess.AcquireLaunchTokenAsync();
+
+var ticket = await chess.EnqueueMatchmakingAsync();
+while (!ticket.IsMatched)
+{
+    await Task.Delay(TimeSpan.FromSeconds(2), ct);
+    ticket = await chess.GetMatchmakingAsync(ct) ?? ticket;
+}
+
+using var game = client.CreateGameConnection(ticket.SessionId!.Value, "83fd04b1-3cbe-4b09-a251-3733ad4b9d94", useLaunchToken: true);
+game.FrameReceived       += frame =&gt; ApplyServerState(frame);
+game.AchievementUnlocked += unlock =&gt; ShowToast(unlock);
+game.PresenceChanged     += (userId, online) =&gt; UpdateOpponentDot(userId, online);
+game.ErrorReceived       += message =&gt; ShowError(message);
+
+await game.ConnectAsync(ct);
+await game.SendCommandAsync(writer =&gt;
+{
+    writer.Write("type", "move");
+    writer.Write("from", "e2");
+    writer.Write("to",   "e4");
+}, ct);
+</code></pre>
+<p><code>SendCommandAsync</code> encapsule la charge utile comme <code>{"type":"cmd","data":…}</code>; <code>SendRealtimeInputAsync</code> est le
+chemin à débit limité pour une entrée continue. La connexion ne coche pas la logique du jeu, prédit l'autorité
+énoncer, fabriquer un résultat ou renvoyer une commande éventuellement non idempotente après un message ambigu.
+déconnecter - le serveur reste la seule autorité sur ce qui s'est passé.</p>
+<p>Chaque connexion partage une machine à états&#160;: <code>Disconnected</code>, <code>Connecting</code>, <code>Connected</code>, <code>Reconnecting</code>,
+<code>Closing</code>, <code>Faulted</code>, avec <code>StateChanged</code>, <code>Closed</code> et <code>Faulted</code> événements, files d'attente sortantes délimitées avec
+contre-pression explicite et envois ordonnés. La reconnexion utilise un recul instable, réacquiert un courant
+jeton avant chaque tentative, et <strong>s’arrête définitivement lors d’une autorisation ou d’une clôture de police</strong> plutôt que
+martelant une porte, la plate-forme se ferma. On ne suppose jamais que l’adhésion a survécu à l’écart : chaque protocole
+récupère ou rejoint lors de la reconnexion.</p>
+<p>Les informations d'identification montent sur le <code>Authorization</code> en-tête là où la plateforme le permet et <code>?access_token=</code> sur
+<code>/ws/**</code> sinon, car un navigateur ne peut pas définir les en-têtes de prise de contact. Le jeton de requête est supprimé de
+chaque journal.</p>
+<h2 id="async-threading-and-unity">Async, threading et Unity</h2>
+<p>Chaque opération d'E/S renvoie <code>Task</code> et prend une traînée <code>CancellationToken</code>. Il n'y a pas <code>async void</code>
+méthodes et aucune méthode publique ne bloque le thread appelant.</p>
+<p>Les événements et les rappels de progression sont publiés dans le contexte de synchronisation sur lequel le client a été créé.
+si vous le créez sur le thread principal de Unity, un gestionnaire peut toucher <code>GameObject</code>s directement. Un serveur sans tête
+peut sauter le saut avec <code>options.CallbackDispatcher = ImmediateCallbackDispatcher.Instance</code>. Les rappels sont
+ordonné par connexion, et un gestionnaire qui lance est signalé aux diagnostics sans arrêter le
+recevoir la boucle.</p>
+<p><code>StarhermitLifecycle.Attach(client)</code> relie les événements d'application d'Unity&#160;: le battement de cœur de présence s'arrête
+en suspension et envoie immédiatement lors de la reprise, et le client est disposé à quitter sans synchronisation
+travail en réseau.</p>
+<p>Les modèles ne font jamais référence <code>GameObject</code>, <code>MonoBehaviour</code> ou une scène. <code>StarhermitTextures</code> convertit l'avatar et
+octets de pochette dans un <code>Texture2D</code> sur le thread principal — l'appelant est propriétaire du résultat et doit le détruire.</p>
+<h2 id="errors-retries-and-pagination">Erreurs, tentatives et pagination</h2>
+<table>
+<thead>
+<tr>
+<th>Statut</th>
+<th>Exception</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>400 / 422</td>
+<td><code>StarhermitBadRequestException</code>, <code>StarhermitValidationException</code> (erreurs de champ saisies par nom de fil)</td>
+</tr>
+<tr>
+<td>401</td>
+<td><code>StarhermitAuthenticationException</code></td>
+</tr>
+<tr>
+<td>402</td>
+<td><code>StarhermitEntitlementException</code></td>
+</tr>
+<tr>
+<td>403</td>
+<td><code>StarhermitAuthorizationException</code></td>
+</tr>
+<tr>
+<td>404</td>
+<td><code>StarhermitNotFoundException</code></td>
+</tr>
+<tr>
+<td>409</td>
+<td><code>StarhermitConflictException</code></td>
+</tr>
+<tr>
+<td>429</td>
+<td><code>StarhermitRateLimitException</code> (porte <code>RetryAfter</code>)</td>
+</tr>
+<tr>
+<td>5xx</td>
+<td><code>StarhermitServerException</code></td>
+</tr>
+</tbody>
+</table>
+<p>Chacun porte le statut, celui du serveur <code>{"error":"..."}</code> message, tout code lisible par machine, la demande
+pièce d'identité, <code>Retry-After</code>, des en-têtes expurgés et un corps expurgé avec une taille limitée. Une demande qui n'est jamais parvenue au
+L'API augmente <code>StarhermitTransportException</code> ou <code>StarhermitTimeoutException</code> — une panne de transport n'est jamais
+déguisé en réponse API. L'annulation apparaît toujours comme <code>OperationCanceledException</code>.</p>
+<p>Les tentatives sont limitées, instables, honneur <code>Retry-After</code> jusqu'à un plafond, et sont limités aux échecs par seconde
+tentative a pu survivre&#160;: erreurs de connexion, délais d'attente, <code>408</code>, <code>429</code> et transitoire <code>5xx</code>. <code>403</code>, <code>404</code>, <code>409</code>
+et les échecs de validation ne sont jamais réessayés, et un POST est réessayé uniquement lorsqu'il accepte avec
+<code>AsIdempotent</code>. Un budget de nouvelles tentatives à l'échelle du processus empêche plusieurs clients de transformer une panne en tempête.</p>
+<p>Retour de la liste des points de terminaison <code>StarhermitPage&lt;T&gt;</code> transportant les propres métadonnées de pagination du serveur, plus paresseux
+énumération qui récupère une page uniquement au fur et à mesure de sa consommation&#160;:</p>
+<pre><code class="language-csharp">await foreach (var title in client.Software.EnumerateTitlesAsync(query, cancellationToken: ct)) { … }
+</code></pre>
+<p>Les téléchargements sont diffusés vers un <code>IStarhermitFileStore</code> via un fichier temporaire, vérifiez un SHA-256 fourni et
+sont promus de manière atomique&#160;; <code>OpenDownloadAsync</code> rapports <code>IsResumed</code> seulement pour un vrai <code>206</code>, parce que
+ajouter un fichier entier à un fichier partiel le corrompt tout en passant une vérification de longueur.</p>
+<h2 id="storing-credentials">Stockage des informations d'identification</h2>
+<p>Le paquet <strong>n'expédie aucun magasin qui prétend être sécurisé.</strong> La valeur par défaut est en mémoire&#160;; l'adhésion
+<code>EncryptedFileTokenStore</code> (AES-CBC avec HMAC-SHA256 sur une clé fournie par votre application) est documenté
+comme obscurcissement au repos, pas un porte-clés. Fil <code>IStarhermitTokenStore</code> au propre sécurisé de la plateforme
+stockage - Trousseau, Keystore, stockage utilisateur du SDK de la console. <code>PlayerPrefs</code> n'est jamais présenté comme
+sécurisé.</p>
+<p>Les jetons, jetons d'actualisation, clés privées, secrets client et clés d'appel ne sont jamais sérialisés dans un
+<code>ScriptableObject</code>, une scène, <code>Resources</code>, un journal, un message d'exception, un événement de télémétrie ou un build
+artefact. <code>StarhermitSettings</code> ne contient que les valeurs par défaut non secrètes du projet&#160;: adresses, slug, niveau de journalisation,
+timeout et le drapeau de développement.</p>
+<p>La rédaction est structurelle — par en-tête, paramètre de requête et nom de membre JSON, à chaque profondeur — donc un
+Les informations d'identification dont cette version du SDK n'a jamais entendu parler sont toujours supprimées des journaux, des exceptions et de la télémétrie.
+Les fragments d'URL sont entièrement supprimés. Aucune télémétrie n'est collectée par défaut ; un lavabo injecté reçoit
+nom de l'événement, identifiant de l'opération, durée, famille de statuts, nombre de tentatives, identifiant et résultat de la demande, jamais d'URL,
+corps ou contenu du joueur.</p>
+<h2 id="when-the-platform-ships-something-new">Quand la plateforme embarque du nouveau</h2>
+<p>Les modèles sont immuables et conservent le JSON à partir duquel ils ont été analysés, donc un champ ajouté au déploiement après
+cette version du SDK est toujours lisible et un point de terminaison que cette version ne tape pas est toujours appelable avec
+les mêmes informations d'identification, tentatives et rédaction qu'un appel tapé&#160;:</p>
+<pre><code class="language-csharp">var value = profile.RawJson["shippedAfterThisSdk"].AsStringOrNull();
+
+var json  = await client.Raw.SendForJsonAsync(
+    new StarhermitRequest("GET", "some/new/route").WithQuery("page", 1), ct);
+</code></pre>
+<p>Les trames de socket sont distribuées sur leur discriminateur de type avec un repli de trame inconnue qui préserve le
+charge utile, les chaînes d'énumération inconnues sont conservées sous forme de chaînes plutôt que contraintes, et un niveau de confidentialité inconnu
+se lit comme le <strong>la plupart</strong> interprétation privée. <code>Optional&lt;T&gt;</code> distingue les valeurs nulles omises, explicites et
+valeur, ce dont un corps PATCH a besoin.</p>
+<p><code>client.GetDiagnostics()</code> renvoie les états de connexion, la profondeur de la file d'attente, le nombre de reconnexions, l'expiration du jeton, l'horloge
+fraîcheur, demandes en cours, tentatives effectuées et la dernière erreur expurgée - l'instantané à joindre à un
+rapport de bug.</p>
+<h2 id="samples">Échantillons</h2>
+<p>Huit échantillons sont livrés avec le package et sont compilés dans CI, afin qu'ils ne puissent pas dériver de l'API qu'ils utilisent.
+démontrer&#160;: authentification et profil, amis et chat, jeu de matchmaking, temps réel et relais, voix,
+Services de catalogue, outil d'édition et serveur dédié.</p>
+<h2 id="verification-status">Statut de vérification</h2>
+<p>La suite propre au SDK (144 tests hermétiques sous <code>dotnet test</code>, les mêmes fichiers exécutés que Unity EditMode
+tests) et un manifeste de couverture généré qui échoue à la construction lorsqu'une opération d'API n'a pas de mappage SDK
+exécuter à chaque changement&#160;; cinq tests supplémentaires lisent un déploiement en direct lorsqu'ils sont pointés vers un déploiement et sont ignorés
+sinon. La matrice de l'éditeur et IL2CPP
+les builds de lecteurs pour Linux, Android et WebGL sont définis dans CI mais nécessitent une ferme de build sous licence, donc le
+le tableau de plate-forme ci-dessus indique le support prévu - traitez une cible comme qualifiée uniquement une fois que vous avez construit pour
+c'est vous-même.</p>
+
+{% endraw %}

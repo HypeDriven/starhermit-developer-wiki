@@ -1,0 +1,185 @@
+---
+layout: "wiki"
+lang: "bn"
+title: "ক্র্যাশ এবং বাগ রিপোর্ট"
+source_url: "/docs/api/reports.html"
+source_path: "docs/api/reports.md"
+source_hash: "6d28d99eae2ec0d57e0611ea1d1db48136d4f38dacbb270fd4242dbfd0f0e97a"
+translation: "machine"
+permalink: "/bn/docs/api/reports.html"
+---
+{% raw %}
+<h1 id="crash-and-bug-reports">ক্র্যাশ এবং বাগ রিপোর্ট</h1>
+<p>প্লেয়াররা ক্র্যাশ বা বাগ রিপোর্ট করতে পারে যেকোন গেমের ভিতর থেকে যেটিতে স্লগ আছে — শুধুমাত্র ব্রাউজার-এর গেম
+অন্তর্ভুক্ত — গেমের লঞ্চ টোকেন বা একটি সম্পূর্ণ ব্যবহারকারীর টোকেন ব্যবহার করে। খেলার মালিক পড়া, triages এবং
+তাদের মাধ্যমে মুছে দেয় <code>/api/v1/me/github-games/{id}/reports</code>.</p>
+<p>একটি কন্টেইনার গেমের নিজস্ব সার্ভার আউটপুট এবং ক্র্যাশ রেকর্ডের জন্য, দেখুন
+<a href="/bn/docs/api/container-games.html#your-servers-output-and-crash-reports">কন্টেইনার-হোস্টেড গেম সার্ভার - আপনার সার্ভারের আউটপুট এবং ক্র্যাশ রিপোর্ট</a>.</p>
+<h2 id="endpoints">শেষবিন্দু</h2>
+<table>
+<thead>
+<tr>
+<th>পদ্ধতি</th>
+<th>পথ</th>
+<th>প্রমাণ</th>
+<th>বর্ণনা</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>পোস্ট</td>
+<td><code>/api/v1/games/{slug}/reports</code></td>
+<td>সেই গেমের জন্য টোকেন বা JWT লঞ্চ করুন</td>
+<td>একটি ক্র্যাশ বা বাগ রিপোর্ট ফাইল করুন</td>
+</tr>
+<tr>
+<td>পান</td>
+<td><code>/api/v1/games/{slug}/reports/mine</code></td>
+<td>সেই গেমের জন্য টোকেন বা JWT লঞ্চ করুন</td>
+<td>এই গেমের জন্য আপনার 50টি নতুন প্রতিবেদন, তাদের স্থিতি সহ</td>
+</tr>
+<tr>
+<td>পান</td>
+<td><code>/api/v1/me/github-games/{id}/reports</code></td>
+<td>JWT (মালিক)</td>
+<td>তালিকা রিপোর্ট: <code>?kind=crash|bug&amp;status=open|acknowledged|resolved&amp;page=&amp;pageSize=</code> (≤100)</td>
+</tr>
+<tr>
+<td>পান</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (মালিক)</td>
+<td>একটি রিপোর্ট, এর সংযুক্তি তালিকা সহ</td>
+</tr>
+<tr>
+<td>পান</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}/attachments/{attachmentId}</code></td>
+<td>JWT (মালিক)</td>
+<td>একটি সংযুক্তি, সর্বদা একটি ডাউনলোড হিসাবে</td>
+</tr>
+<tr>
+<td>প্যাচ</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (মালিক)</td>
+<td>সেট <code>status</code></td>
+</tr>
+<tr>
+<td>মুছুন</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (মালিক)</td>
+<td>একটি রিপোর্ট মুছুন → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="file-a-report">একটি রিপোর্ট ফাইল করুন</h2>
+<pre><code class="language-http">POST /api/v1/games/{slug}/reports
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  "kind": "crash",
+  "title": "Crash entering the second level",
+  "description": "TypeError: cannot read properties of undefined (reading 'tiles')\n    at loadLevel (game.js:812)",
+  "clientVersion": "1.4.2",
+  "platform": "web",
+  "buildId": "a1b2c3d",
+  "sessionId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "attachments": [
+    { "fileName": "console.log", "contentType": "text/plain", "dataBase64": "…" }
+  ]
+}
+</code></pre>
+<ul>
+<li><code>kind</code> হয় <code>crash</code> বা <code>bug</code>; <code>title</code> প্রয়োজন (≤200 অক্ষর)।</li>
+<li>বাকি সব ঐচ্ছিক. <code>userAgent</code> অনুরোধ এর ডিফল্ট <code>User-Agent</code> হেডার</li>
+<li>প্রতিক্রিয়া: <code>201 { "id", "kind", "status": "open", "createdAt" }</code>.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>স্ট্যাটাস</th>
+<th>অর্থ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td>বিকৃত: অজানা <code>kind</code>, অনুপস্থিত <code>title</code>, অবৈধ base64, বা JSON নয়</td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>অজানা বা সরানো খেলা</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>গেমের সীমার উপরে বর্ণনা, সংযুক্তি গণনা বা সংযুক্তি বাইট</td>
+</tr>
+<tr>
+<td><code>429</code></td>
+<td>এই গেমের জন্য দৈনিক প্রতিবেদনের সীমা ছাড়িয়ে গেছে; দেখুন <code>Retry-After</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="limits">সীমা</h2>
+<p>পুরো প্ল্যাটফর্ম এবং পৃথক গেমের জন্য অপারেটররা এর প্রতিটি পরিবর্তন করতে পারে; দৈনিক সীমা
+একজন খেলোয়াড়ের জন্যও সেট করা যেতে পারে।</p>
+<table>
+<thead>
+<tr>
+<th>সীমা</th>
+<th>ডিফল্ট</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>প্রতিদিন প্রতি গেম প্রতি খেলোয়াড়ের রিপোর্ট</td>
+<td>20</td>
+</tr>
+<tr>
+<td>বর্ণনার দৈর্ঘ্য</td>
+<td>20,000 অক্ষর</td>
+</tr>
+<tr>
+<td>রিপোর্ট প্রতি সংযুক্তি</td>
+<td>4</td>
+</tr>
+<tr>
+<td>রিপোর্ট প্রতি সংযুক্তি বাইট</td>
+<td>2 MiB</td>
+</tr>
+<tr>
+<td>খেলা প্রতি রিপোর্ট রাখা</td>
+<td>2,000</td>
+</tr>
+<tr>
+<td>গেম প্রতি বাইট রাখা</td>
+<td>256 MiB</td>
+</tr>
+<tr>
+<td>ধরে রাখা</td>
+<td>90 দিন</td>
+</tr>
+</tbody>
+</table>
+<p>যখন একটি গেম তার সঞ্চয়ের সীমায় পৌঁছে যায়, তখন সবচেয়ে পুরানো প্রতিবেদনগুলি — প্রথমে সমাধান করা হয় — সরিয়ে দেওয়া হয়৷
+জায়গা করা পুরো প্রতি-গেম বাইট সীমার চেয়ে বড় একটি একক প্রতিবেদন প্রত্যাখ্যান করা হয়েছে <code>413</code>.</p>
+<h2 id="triage-reports-game-owner">Triage রিপোর্ট (খেলার মালিক)</h2>
+<p>তালিকা ফিরে আসে <code>{ "items", "total", "page", "pageSize" }</code>; প্রতিটি আইটেম প্রতিবেদকের নাম বহন করে,
+<code>kind</code>, <code>status</code>, <code>title</code>, ক্লায়েন্টের বিশদ বিবরণ এবং এর সংযুক্তি সংখ্যা। মাধ্যমে একটি রিপোর্ট সরান
+<code>open</code> → <code>acknowledged</code> → <code>resolved</code> সঙ্গে:</p>
+<pre><code class="language-http">PATCH /api/v1/me/github-games/{id}/reports/{reportId}
+Content-Type: application/json
+
+{ "status": "resolved" }
+</code></pre>
+<p>সংযুক্তিগুলি ডাউনলোড হিসাবে পরিবেশিত হয় (<code>Content-Disposition: attachment</code>, <code>nosniff</code>, একটি স্যান্ডবক্সিং
+সিএসপি)। শুধুমাত্র জড় প্রকারগুলি তাদের ঘোষিত সামগ্রীর ধরন রাখে — পাঠ্য, JSON, PNG, JPEG, WebP, GIF, zip এবং
+gzip; অন্য কিছু, মার্কআপ অন্তর্ভুক্ত, হিসাবে পরিবেশন করা হয় <code>application/octet-stream</code>.</p>
+<h2 id="from-the-javascript-sdk">জাভাস্ক্রিপ্ট SDK থেকে</h2>
+<pre><code class="language-js">StarHermit.reportBug('Score did not save', 'Finished level 3, score shows 0', { clientVersion: '1.4.2' });
+StarHermit.captureCrashes({ clientVersion: '1.4.2' });   // opt-in: uncaught errors become crash reports
+</code></pre>
+<p>দেখুন <a href="/bn/docs/sdk/javascript.html#crash-and-bug-reports">জাভাস্ক্রিপ্ট SDK</a>.</p>
+<p>শেয়ার করা হয়েছে <a href="/bn/docs/api/conventions.html">এপিআই কনভেনশন</a> রেসপন্স পার্সিং, টাইমস্ট্যাম্প, পেজিনেশন এবং পুনঃপ্রচেষ্টা বর্ণনা করুন।</p>
+<p>দেখুন <a href="/bn/docs/credentials.html">শংসাপত্রের সামঞ্জস্য</a> এবং <a href="/bn/docs/api/contracts.html">মেশিন-পাঠযোগ্য চুক্তি</a>.</p>
+
+{% endraw %}

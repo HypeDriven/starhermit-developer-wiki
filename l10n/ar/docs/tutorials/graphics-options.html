@@ -1,0 +1,373 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "البرنامج التعليمي: خيارات الرسومات ذات الجودة المكتشفة تلقائيًا"
+source_url: "/docs/tutorials/graphics-options.html"
+source_path: "docs/tutorials/graphics-options.md"
+source_hash: "cd4437482fbf097933897dbbeaf9e978a67574c0fe1ff696ace01bf8e9239bf5"
+translation: "machine"
+permalink: "/ar/docs/tutorials/graphics-options.html"
+---
+{% raw %}
+<h1 id="tutorial-graphics-options-with-auto-detected-quality">البرنامج التعليمي: خيارات الرسومات ذات الجودة المكتشفة تلقائيًا</h1>
+<p>امنح لعبة المتصفح الخاصة بك أ <strong>الرسومات</strong> القائمة التي تختار مستوى جودة معقولًا لجهاز اللاعب
+عند الإطلاق لأول مرة، يتيح لهم تجاوزه، ويتذكر اختيارهم عبر الأجهزة من خلال StarHermit.</p>
+<p>للاطلاع على قسم الصوت المقابل، راجع <a href="/ar/docs/tutorials/audio-options.html">خيارات الصوت مع حد الصوت الذي يتم اكتشافه تلقائيًا</a>.</p>
+<p><a href="/docs/sdk/graphics-options.js"><code>graphics-options.js</code></a> هي وحدة ES واحدة، مع عدم وجود تبعيات، ذلك
+يتولى مسك الدفاتر:</p>
+<ul>
+<li><strong>آلي</strong> يختار واحدًا من أربعة إعدادات مسبقة (منخفض، ومتوازن، وعالي، وفائق) من وحدة معالجة الرسومات، والذاكرة، وأنوية وحدة المعالجة المركزية و
+نوع الجهاز، ويتنحى للجلسة إذا ظلت الإطارات بطيئة.</li>
+<li>يمكن للاعبين تجاوز كل تأثير (الظلال، أو الإطباق المحيط، أو الازدهار، أو الصقل، أو التأثير الخاص بك)،
+قم بتعيين مقياس عرض بنسبة 50-200%، واختر الحد الأقصى اليدوي لعدد الإطارات في الثانية بدلاً من التحديث التلقائي للعرض،
+وتبديل الدقة التكيفية وقراءات معدل الإطارات.</li>
+<li>يتم حفظ الإعدادات في <code>localStorage</code> لذلك يتم تطبيقها قبل الإطار الأول وعلى اللاعب
+<a href="/ar/docs/api/games.html#per-player-game-settings">إعدادات لكل لعبة</a> لذلك يتبعون اللاعب إلى مكانهم
+آلات أخرى.</li>
+<li>يتضمن لوحة خيارات جاهزة مبنية على نفس جدول الجودة.</li>
+</ul>
+<p>لا يستورد أي محرك. يستمع العارض الخاص بك إلى التغييرات ويطبق الطبقات. هذه الصفحة توصله إلى
+three.js. تستخدم المحركات الأخرى نفس الخطافات (انظر <a href="#other-engines">محركات أخرى</a>).</p>
+<ol>
+<li><a href="#1-add-the-files">أضف الملفات</a></li>
+<li><a href="#2-create-the-store-and-the-panel">إنشاء المتجر واللوحة</a></li>
+<li><a href="#3-apply-the-settings-to-your-renderer">قم بتطبيق الإعدادات على العارض الخاص بك</a></li>
+<li><a href="#4-fit-it-to-your-game">تناسب لعبتك</a></li>
+<li><a href="#5-test-it">اختبره</a></li>
+</ol>
+<h2 id="1-add-the-files">1. أضف الملفات</h2>
+<p>ينسخ <a href="/docs/sdk/starhermit-sdk.js"><code>starhermit-sdk.js</code></a> و
+<a href="/docs/sdk/graphics-options.js"><code>graphics-options.js</code></a> بجوار نصوص لعبتك، دون تغيير. يتصل
+<code>StarHermit.init()</code> <strong>قبل</strong> يتم تشغيل الوحدة النمطية الخاصة بك، لذلك تتم قراءة رمز الإطلاق المميز في الوقت الذي يتم فيه تشغيل الوحدة النمطية الخاصة بك
+يتحقق متجر الرسومات مما إذا كان اللاعب قد قام بتسجيل الدخول:</p>
+<pre><code class="language-html">&lt;script src="starhermit-sdk.js"&gt;&lt;/script&gt;
+&lt;script&gt;StarHermit.init();&lt;/script&gt;
+&lt;script type="module" src="main.js"&gt;&lt;/script&gt;
+</code></pre>
+<p>بدون رمز الإطلاق (التطوير المحلي، أي مضيف آخر)، يحتفظ المتجر بكل شيء
+<code>localStorage</code> ولا يقدم أي طلبات.</p>
+<h2 id="2-create-the-store-and-the-panel">2. قم بإنشاء المتجر واللوحة</h2>
+<pre><code class="language-js">import { createGraphics, mountGraphicsPanel } from './graphics-options.js';
+
+const gfx = createGraphics({ storageKey: 'mygame.graphics' });
+mountGraphicsPanel(document.getElementById('graphics-options'), gfx);
+</code></pre>
+<p><code>mountGraphicsPanel</code> يملأ العنصر بعناصر التحكم. يوفر مربع حوار الإعدادات الإطار، و
+العنوان وزر الإغلاق. يتم تطبيق كل تغيير على الفور ويتم حفظه.</p>
+<h3 id="how-auto-picks-a-preset">كيف يختار السيارات إعدادًا مسبقًا</h3>
+<p>عند الإنشاء، يقوم المتجر باستكشاف سياق WebGL المهمل مرة واحدة (<code>gfx.system</code>) ويقوم بتعيينه إلى إعداد مسبق
+(<code>gfx.detected</code>):</p>
+<table>
+<thead>
+<tr>
+<th>إشارة</th>
+<th>محددة مسبقا</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>لا يوجد WebGL أو عارض برامج (SwiftShader، llvmpipe، Microsoft Basic Render)</td>
+<td>قليل</td>
+</tr>
+<tr>
+<td>لا يوجد WebGL2، أو نواة وحدة المعالجة المركزية (CPU) أو أقل، أو ذاكرة بسعة 2 جيجابايت أو أقل</td>
+<td>قليل</td>
+</tr>
+<tr>
+<td>وحدة معالجة الرسومات المنفصلة (NVIDIA وAMD Radeon RX/Pro وApple M-series)</td>
+<td>عالي</td>
+</tr>
+<tr>
+<td>أي شيء آخر (Intel/AMD المدمج، ووحدات معالجة الرسومات المحمولة، وSafari المقنع "معالج رسوميات أبل")</td>
+<td>متوازن</td>
+</tr>
+<tr>
+<td>هاتف أو جهاز لوحي (مؤشر خشن)، أو ذاكرة سعة 4 جيجابايت أو أقل</td>
+<td>على الأكثر متوازنة</td>
+</tr>
+</tbody>
+</table>
+<p>تلقائي لا يحدد Ultra مطلقًا؛ يختار اللاعبون ذلك. اسم GPU يأتي من <code>RENDERER</code>، و
+<code>WEBGL_debug_renderer_info</code> يتم طلب الامتداد فقط عندما يقوم Chromium بإخفاء الاسم. يسجل فايرفوكس أ
+تحذير وحدة التحكم عند طلب هذا الامتداد، ويقوم بالفعل بالإبلاغ عن الاسم الحقيقي.</p>
+<p>أثناء تشغيل اللعبة، يقوم Auto أيضًا بمراقبة أوقات الإطارات. إذا انخفض القرار التكيفي بالفعل إلى مستوى
+لا يزال متوسط الأرضية والإطارات يزيد عن 26 مللي ثانية لثلاث نوافذ أخرى ذات 90 إطارًا، ويتنحى تلقائيًا بمقدار إعداد مسبق واحد
+لبقية الجلسة. الاختيار <strong>آلي</strong> في لوحة إعادة الكشف مرة أخرى. لاعب مسبقا
+التقطت باليد لا تتغير من تلقاء نفسها.</p>
+<h3 id="maximum-frame-rate">الحد الأقصى لمعدل الإطار</h3>
+<p><strong>الحد الأقصى لمعدل الإطار</strong> الافتراضي ل <strong>تلقائي (معدل التحديث)</strong>: عرض جداول المتصفح
+مع معدل تحديث الشاشة. يختار <strong>مخصص</strong> وأدخل عددا صحيحا من <strong>من 1 إلى 1000 إطارًا في الثانية</strong> ل
+تجاوزه. ينطبق الحد على الفور، ويتم حفظه محليًا وفي نفس ملف تعريف السحابة مثل ملف
+إعدادات الرسومات الأخرى، وتتحمل التغييرات المحددة مسبقًا للجودة. العودة إلى <strong>آلي</strong> لإزالة الحد.
+هذا الاختيار مستقل عن <strong>آلي</strong> الجودة المحددة مسبقًا.</p>
+<p>يجب على العارض الاتصال <code>gfx.shouldRender(now)</code> في حلقة الرسوم المتحركة الخاصة به، كما هو موضح أدناه. الحد هو أ
+السقف، وليس معدل الإطارات الموعود: لا يزال العرض لا يمكن أن يتجاوز عمليات رد الاتصال للرسوم المتحركة في المتصفح
+أو أداء الجهاز وبالتالي فإن ضبط 144 إطارًا في الثانية على شاشة 60 هرتز لا يزال يعرض 60 إطارًا في الثانية على الأكثر.</p>
+<p>للحصول على قائمة مخصصة، استخدم <code>gfx.set({ maxFps: 45 })</code> و <code>gfx.set({ maxFps: null })</code> لاستعادة السيارات.
+تم الحل <code>gfx.settings.maxFps</code> يكون <code>0</code> للسيارات. ترجع القيم المحفوظة غير الصالحة إلى تلقائي؛ إيجابي
+يتم تقريب الأرقام وتثبيتها إلى 1-1000.</p>
+<h3 id="where-the-settings-live">حيث تعيش الإعدادات</h3>
+<table>
+<thead>
+<tr>
+<th>محل</th>
+<th>مفتاح</th>
+<th>لماذا</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>localStorage</code></td>
+<td><code>&lt;storageKey&gt;.gpu.&lt;GPU profile&gt;</code></td>
+<td>اقرأ بشكل متزامن، لذا فإن الإطار الأول يستخدم بالفعل إعدادات وحدة معالجة الرسومات هذه</td>
+</tr>
+<tr>
+<td><a href="/ar/docs/api/games.html#per-player-game-settings">إعدادات لكل لاعب</a></td>
+<td><code>graphics.gpu.&lt;GPU profile&gt;</code></td>
+<td>يتبع اللاعب إلى جهاز آخر يُبلغ عن نفس وحدة معالجة الرسومات</td>
+</tr>
+</tbody>
+</table>
+<p>تحصل كل وحدة معالجة رسومات على ملف تعريف مستقل، يغطي كل اختيار للرسومات بما في ذلك الحد الأقصى لعدد الإطارات في الثانية.
+على سبيل المثال، قم بتعيين Ultra و90 إطارًا في الثانية على وحدة معالجة الرسومات A، ثم قم بتشغيل وحدة معالجة الرسومات B: يبدأ B مع اكتشاف الأجهزة
+الإعدادات الافتراضية ما لم تقم بحفظ الاختيارات مسبقًا لـ B. تؤدي العودة إلى A إلى استعادة Ultra و90 إطارًا في الثانية.
+لا يزال لدى وحدتي GPU اللتين تم اكتشافهما على أنهما عاليتين ملفات تعريف منفصلة. تغيير في الجودة المكتشفة
+لا تتجاهل الطبقة الموجودة على نفس وحدة معالجة الرسومات اختياراتها المحفوظة.</p>
+<p>الملف الشخصي عبارة عن تجزئة ثابتة مكونة من 16 حرفًا من اسم وحدة معالجة الرسومات (GPU) التي أبلغ عنها المتصفح، والتي تم تطبيعها لحالة الأحرف
+والمسافات البيضاء. <code>storageKey</code> و <code>cloudKey</code> بادئات العرض؛ <code>gfx.storageKey</code>, <code>gfx.cloudSlot</code>، و
+<code>gfx.gpuProfile</code> كشف المفاتيح النشطة والملف الشخصي. يحدث اكتشاف GPU عند إنشاء المتجر؛
+قم بإنشاء متجر جديد عند إطلاق اللعبة التالية لتحديد ملف تعريف GPU آخر.</p>
+<p>إذا لم يتوفر اسم GPU، فسيتم تطبيق الاختيارات على الجلسة دون استمرار محلي أو سحابي.
+إذا قام المتصفح بإخفاء وحدات معالجة رسومات متعددة بنفس الاسم، فإنهم يشاركون ملف تعريف لأنه لا يمكن ذلك
+تمييزهم. يتم ترك الإعدادات المحلية الأقدم غير النطاقية والإعدادات السحابية لفئة الجهاز دون تغيير
+ولا يتم استيرادها، لأنها لا تحدد وحدة معالجة الرسومات (GPU) التي تنتمي إليها الاختيارات.</p>
+<p>كل قيمة هي <code>{ "saved": {…}, "at": &lt;ms timestamp&gt; }</code>. ويتم التوفيق بين النسختين بنفس الطريقة
+<a href="/ar/docs/sdk/javascript.html#cloud-saves">يحفظ السحابة</a>:</p>
+<ul>
+<li><strong>اقرأ قبل الكتابة.</strong> عند بدء التشغيل (وعندما يقوم لاعب آخر بتسجيل الدخول)، يقرأ المتجر
+<code>GET /api/v1/games/{slug}/settings</code>. النسخة مع الأحدث <code>at</code> يفوز. إذا فازت النسخة السحابية، فإن
+المتجر يعتمده ويطلق النار على أ <code>change</code> مع السبب <code>'cloud'</code>. إذا كانت النسخة المحلية أحدث، المتجر
+يدفعه.</li>
+<li><strong>ويكتب كتل القراءة الفاشلة.</strong> النسخة المحلية تستمر في العمل. التغيير التالي الذي يجريه اللاعب
+أعد محاولة القراءة قبل كتابة أي شيء، لذلك لا يمكن للجهاز القديم استبدال الخيار الأحدث به
+لا أستطيع أن أرى.</li>
+<li>يتم دفع التغييرات مع <code>setSetting</code> بعد 800 مللي ثانية دون مزيد من التغييرات. تجديدات الرمز المميز (والتي
+قم أيضًا بإطلاق SDK <code>auth</code> حدث) لا تؤدي إلى قراءة أخرى.</li>
+</ul>
+<h2 id="3-apply-the-settings-to-your-renderer">3. قم بتطبيق الإعدادات على العارض الخاص بك</h2>
+<p>أربعة خطافات تربط المتجر بعارض three.js:</p>
+<ul>
+<li><code>gfx.on('change', fn)</code> للظلال وتبديل التأثيرات.</li>
+<li>سلسلة ما بعد المعالجة أعيد بناؤها من المستويات الحالية.</li>
+<li><code>gfx.frame(ms)</code> و <code>gfx.pixelRatio()</code> في حلقة العرض، التي تدفع الدقة التكيفية.</li>
+<li><code>gfx.shouldRender(now)</code> قبل الرسم، والذي يفرض حد FPS اليدوي.</li>
+</ul>
+<p>قم بإنشاء العارض باستخدام <code>antialias: false</code>. يأتي MSAA بعد ذلك من هدف عرض سلسلة النشر، لذلك
+يمكن تبديل كل طبقة مقاومة للتعرجات دون إعادة إنشاء سياق WebGL.</p>
+<pre><code class="language-js">import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+
+// canvas, scene, camera and a shadow-casting DirectionalLight `sun` are your game's own.
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
+const SHADOW_MAP = { off: 0, low: 1024, medium: 2048, high: 4096 };
+let composer = null;
+let size = {};
+
+gfx.on('change', (s) =&gt; {
+  const mapSize = SHADOW_MAP[s.shadows];
+  renderer.shadowMap.enabled = mapSize &gt; 0;
+  sun.castShadow = mapSize &gt; 0;
+  if (mapSize &amp;&amp; sun.shadow.mapSize.x !== mapSize) {
+    sun.shadow.mapSize.set(mapSize, mapSize);
+    sun.shadow.map?.dispose();
+    sun.shadow.map = null;
+  }
+  scene.traverse((o) =&gt; [].concat(o.material || []).forEach((m) =&gt; { m.needsUpdate = true; })); // shadow on/off recompiles
+  size = {}; // resize and rebuild the post chain on the next frame
+});
+
+function buildPost(s, w, h, ratio) {
+  composer?.dispose();
+  composer = null;
+  if (gfx.info.postFailed || (s.ao === 'off' &amp;&amp; s.bloom === 'off' &amp;&amp; s.antialias === 'off')) return;
+  try {
+    const pw = Math.round(w * ratio), ph = Math.round(h * ratio);
+    const target = new THREE.WebGLRenderTarget(pw, ph, { type: THREE.HalfFloatType, samples: s.antialias === 'msaa' ? 4 : 0 });
+    const c = new EffectComposer(renderer, target);
+    c.setPixelRatio(ratio);
+    c.setSize(w, h);
+    c.addPass(new RenderPass(scene, camera));
+    if (s.ao !== 'off') {
+      const ao = new GTAOPass(scene, camera, pw, ph);
+      ao.updateGtaoMaterial({ samples: s.ao === 'high' ? 16 : 8 });
+      c.addPass(ao);
+    }
+    if (s.bloom === 'on') c.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.5, 0.4, 0.9));
+    c.addPass(new OutputPass());
+    if (s.antialias === 'smaa') c.addPass(new SMAAPass());
+    if (s.antialias === 'fxaa') {
+      const fxaa = new ShaderPass(FXAAShader);
+      fxaa.material.uniforms.resolution.value.set(1 / pw, 1 / ph);
+      c.addPass(fxaa);
+    }
+    composer = c;
+  } catch {
+    gfx.report({ postFailed: true }); // the panel shows a note; don't console.warn
+  }
+}
+
+let last = performance.now();
+renderer.setAnimationLoop((now) =&gt; {
+  // Update your simulation here using its own elapsed time or fixed timestep.
+  // Keep simulation/input independent of skipped render ticks.
+  if (!gfx.shouldRender(now)) return;
+  gfx.frame(now - last); // elapsed time between rendered frames, including the FPS limit
+  last = now;
+  const w = canvas.clientWidth, h = canvas.clientHeight, ratio = gfx.pixelRatio();
+  if (w !== size.w || h !== size.h || ratio !== size.ratio) {
+    size = { w, h, ratio };
+    renderer.setPixelRatio(ratio);
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    buildPost(gfx.settings, w, h, ratio);
+    gfx.report({ pixels: [Math.round(w * ratio), Math.round(h * ratio)] });
+  }
+  try {
+    if (composer) composer.render();
+    else renderer.render(scene, camera);
+  } catch {
+    composer = null;
+    gfx.report({ postFailed: true });
+  }
+});
+</code></pre>
+<p>ملحوظات:</p>
+<ul>
+<li>ال <code>three/addons/</code> يجب أن تأتي الملفات من <strong>نفس الإصدار three.js</strong> مثل <code>three</code> نفسها. خلط
+الإصدارات تكسر سلسلة المشاركات. يستهدف الكود أعلاه الإصدارات الحالية. على كبار السن، <code>SMAAPass</code>
+يأخذ <code>(width, height)</code>.</li>
+<li>يقوم Low بإيقاف تشغيل كل تأثير ما بعد المعالجة، بحيث يتم عرض اللعبة مباشرة على اللوحة القماشية بسرعة
+تبلغ نسبة بكسلات الجهاز 1 على الأكثر. وهذا يبقي السعر منخفضًا كما كانت اللعبة قبل كل هذا.</li>
+<li><code>gfx.pixelRatio()</code> يعود <code>min(devicePixelRatio, preset cap) × preset scale × render scale × adaptive scale</code>، فرضت على 0.25-3. الحد الأقصى هو 1 للمنخفض و1.5 للمتوازن و2 للارتفاع و
+الترا.</li>
+<li>يبلغ متوسط ​​الدقة التكيفية 90 إطارًا. فوق 26 مللي ثانية، يتم خفض المقياس بمقدار 0.1 (إلى 0.6). أدناه
+14 مللي ثانية يرفع المقياس بمقدار 0.05 (حتى 1). الإطارات الأطول من 1 ثانية (علامات التبويب المتوقفة مؤقتًا أو الخلفية).
+يتم تجاهله، ويبلغ طول الإطار البطيء الواحد 250 مللي ثانية على الأكثر للتكيف، لذا لا يمكن خفض وصلة واحدة
+المقياس. تستخدم قراءات FPS الأوقات المنقضية الفعلية.
+مع الحد اليدوي، يكون الحد البطيء 115% على الأقل من الفاصل الزمني للإطار المستهدف و
+يبلغ الحد السريع 85% على الأقل، لذا فإن الحد المتعمد البالغ 30 إطارًا في الثانية لا يقلل من الجودة من تلقاء نفسه.
+بالنسبة للحدود المنخفضة جدًا، يكون كل من قطع الإيقاف المؤقت وقطع الربط فترتين مستهدفتين على الأقل.
+يٌطعم <code>gfx.frame</code> الإطارات المقدمة فقط؛ الاحتفاظ بالطابع الزمني الأخير الذي تم تقديمه عند تخطي علامة التجزئة.</li>
+</ul>
+<h3 id="other-engines">محركات أخرى</h3>
+<p>مهما كان ما يرسم إطاراتك، فإن التكامل يستخدم نفس الخطافات:</p>
+<table>
+<thead>
+<tr>
+<th>يتصل</th>
+<th>يستخدم</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gfx.on('change', (settings, reason) =&gt; …)</code></td>
+<td>تطبيق الطبقات. يعمل مرة واحدة على الفور (<code>'init'</code>)، ثم <code>'settings'</code>, <code>'cloud'</code> و <code>'auto'</code>. إرجاع وظيفة إلغاء الاشتراك.</td>
+</tr>
+<tr>
+<td><code>gfx.settings</code></td>
+<td><code>{ preset, auto, scale, dprCap, adaptive, showFps, maxFps, &lt;category&gt;: &lt;tier&gt; }</code>; <code>maxFps: 0</code> يعني التحديث التلقائي للعرض.</td>
+</tr>
+<tr>
+<td><code>gfx.shouldRender(now)</code></td>
+<td>كل رد اتصال للرسوم المتحركة، بطابعها الزمني بالمللي ثانية. تخطي الرسم إذا عاد <code>false</code>. حافظ على تحديثات المحاكاة/الإدخال مستقلة.</td>
+</tr>
+<tr>
+<td><code>gfx.frame(ms)</code></td>
+<td>كل إطار معروض، مع مرور الوقت منذ الإطار المعروض السابق. المرتجعات <code>true</code> عندما تتغير نسبة البكسل أو الإعداد المسبق التلقائي.</td>
+</tr>
+<tr>
+<td><code>gfx.pixelRatio()</code></td>
+<td>النسبة لتقديم في</td>
+</tr>
+<tr>
+<td><code>gfx.report({ pixels, postFailed })</code></td>
+<td>يخبر اللوحة بحجم الإخراج، أو أن التأثيرات غير متوفرة</td>
+</tr>
+</tbody>
+</table>
+<p>بالنسبة إلى لعبة قماشية ثنائية الأبعاد، قم بضرب حجم خلفية القماش في <code>gfx.pixelRatio()</code>، ورسم خريطة خاصة بك
+التأثيرات (الجسيمات، التوهج، طبقات المنظر) إلى الفئات كما هو موضح أدناه.</p>
+<h2 id="4-fit-it-to-your-game">4. تناسب لعبتك</h2>
+<p><strong>الآثار الخاصة بك.</strong> قم بتمرير جدول الجودة الذي يسرد فقط ما ترسمه لعبتك بالفعل. كل إعداد مسبق
+يحتاج الصف إلى طبقة لكل فئة، بالإضافة إلى ذلك <code>scale</code> و <code>dprCap</code>:</p>
+<pre><code class="language-js">import { createGraphics, CATEGORIES, TABLE } from './graphics-options.js';
+
+const gfx = createGraphics({
+  storageKey: 'mygame.graphics',
+  categories: { ...CATEGORIES, particles: ['off', 'low', 'high'] },
+  table: {
+    low: { ...TABLE.low, particles: 'off' },
+    balanced: { ...TABLE.balanced, particles: 'low' },
+    high: { ...TABLE.high, particles: 'high' },
+    ultra: { ...TABLE.ultra, particles: 'high' },
+  },
+});
+</code></pre>
+<p>تقوم اللوحة بإنشاء تحديد واحد لكل فئة، لذلك تظهر فئة جديدة تلقائيًا. سمها ب
+<code>strings.categories.particles</code>.</p>
+<p><strong>ترجمات.</strong> يتم تصدير السلاسل الإنجليزية الخاصة باللوحة بتنسيق <code>STRINGS</code>. تمر بنفسك مع نفسه
+الشكل. يتم استبدال المفاتيح التي تقدمها فقط:</p>
+<pre><code class="language-js">mountGraphicsPanel(el, gfx, {
+  strings: {
+    quality: 'Qualität', auto: 'Automatisch ({tier})', fromPreset: 'Laut Voreinstellung ({tier})',
+    renderScale: 'Renderskalierung', adaptive: 'Adaptive Auflösung', showFps: 'Bildrate anzeigen',
+    maxFps: 'Maximale Bildrate', autoFps: 'Automatisch (Bildschirmfrequenz)',
+    customFps: 'Benutzerdefiniert', fpsLimit: 'Maximale FPS (1–1000)',
+    categories: { shadows: 'Schatten', ao: 'Umgebungsverdeckung', particles: 'Partikel' },
+    tiers: { low: 'Niedrig', balanced: 'Ausgewogen', high: 'Hoch', off: 'Aus', on: 'An' },
+  },
+});
+</code></pre>
+<p><strong>التصميم.</strong> تستخدم اللوحة الفئات <code>.gfx-panel</code>, <code>.gfx-row</code>, <code>.gfx-summary</code> و <code>.gfx-note</code>. لها
+يتم تضمين القواعد المضمنة <code>:where()</code>، لذا فإن أي قاعدة في ورقة الأنماط الخاصة بك تتجاوزها. الصفوف هي
+لا يقل طوله عن 44 بكسل للمس. قراءات معدل الإطار (<code>#gfx-fps</code>) الموجود في الزاوية السفلية اليسرى،
+داخل المنطقة الآمنة، ولا يلتقط النقرات.</p>
+<p><strong>قراءة النتيجة في مكان آخر.</strong> <code>&lt;html&gt;</code> يحمل <code>data-gfx-preset</code> (الإعداد المسبق النشط) و
+<code>data-gfx-auto</code> (<code>1</code> أو <code>0</code>)، والتي يمكن لـ CSS والاختبارات إيقاف تشغيلها.</p>
+<h2 id="5-test-it">5. اختبره</h2>
+<ul>
+<li>يتم عرض المتصفحات مقطوعة الرأس باستخدام وحدة معالجة الرسومات الخاصة بالبرنامج، لذا يتم حل المشكلة تلقائيًا <strong>قليل</strong> والاختبارات تبقى سريعة.</li>
+<li>قيادة اللوحة الحقيقية. كل تحكم لديه <code>data-gfx</code> يصف (<code>preset</code>, <code>renderScale</code>,
+<code>adaptive</code>, <code>frameRate</code>, <code>maxFps</code>, <code>showFps</code>، أو اسم الفئة):</li>
+</ul>
+<pre><code class="language-js">const preset = () =&gt; page.evaluate(() =&gt; document.documentElement.dataset.gfxPreset);
+await page.locator('select[data-gfx=preset]').selectOption('high');
+assert.equal(await preset(), 'high');
+await page.reload();
+assert.equal(await preset(), 'high'); // persisted
+await page.locator('select[data-gfx=frameRate]').selectOption('custom');
+await page.locator('input[data-gfx=maxFps]').fill('45');
+await page.locator('input[data-gfx=maxFps]').press('Tab');
+await page.reload();
+assert.equal(await page.locator('input[data-gfx=maxFps]').inputValue(), '45');
+await page.locator('select[data-gfx=frameRate]').selectOption('auto');
+</code></pre>
+<ul>
+<li>الوظائف النقية <code>detectPreset(system)</code>, <code>resolve(saved, detected)</code> و <code>withPreset(saved, preset)</code>
+يعمل تحت العقدة لاختبارات الوحدة. <code>createGraphics({ sdk, storage, system })</code> كما يقبل المنتجات المقلدة للجميع
+ثلاثة.</li>
+<li><code>node --test tests/graphics-options.test.mjs</code> التحقق من التحقق من الصحة والاستمرارية والاستعادة لكل وحدة معالجة رسومات،
+سرعة الإطار على معدلات تحديث العرض المختلفة، والتبديل المباشر، والجودة التكيفية مع حد FPS.</li>
+</ul>
+
+{% endraw %}

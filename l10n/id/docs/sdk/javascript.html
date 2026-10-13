@@ -1,0 +1,345 @@
+---
+layout: "wiki"
+lang: "id"
+title: "JavaScript SDK (permainan peramban)"
+source_url: "/docs/sdk/javascript.html"
+source_path: "docs/sdk/javascript.md"
+source_hash: "4d041431633ef4a5afd148d1259d70f562c53aa7ae80afaf101ba1b9e35320a5"
+translation: "machine"
+permalink: "/id/docs/sdk/javascript.html"
+---
+{% raw %}
+<h1 id="javascript-sdk-browser-games">JavaScript SDK (permainan peramban)</h1>
+<p><a href="/docs/sdk/starhermit-sdk.js"><code>starhermit-sdk.js</code></a> adalah klien file tunggal, bebas ketergantungan untuk game browser
+diterbitkan di StarHermit. Ia membaca token peluncuran, terus memperbaruinya, dan menyediakan bantuan untuk hal-hal umum
+API token peluncuran cakupan game: identitas, penyimpanan cloud, pengaturan dan kontrol per pemain,
+undangan, perjodohan, sesi dan soket gameplay, pencapaian, papan peringkat, pemutaran ulang, obrolan,
+suara dan ruang waktu nyata.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mengajukan</td>
+<td><a href="/docs/sdk/starhermit-sdk.js"><code>docs/sdk/starhermit-sdk.js</code></a> — salin ke dalam game Anda tanpa perubahan</td>
+</tr>
+<tr>
+<td>Global</td>
+<td><code>window.StarHermit</code> (Juga <code>module.exports</code> di bawah Node, untuk pengujian)</td>
+</tr>
+<tr>
+<td>Ketergantungan</td>
+<td>tidak ada — ia menggunakan milik browsernya sendiri <code>fetch</code>, <code>WebSocket</code> dan (untuk membaca simpanan terkompresi) <code>DecompressionStream</code></td>
+</tr>
+<tr>
+<td>Garis dasar API</td>
+<td>REST v1 dan WebSocket v1, hanya permukaan token peluncuran</td>
+</tr>
+</tbody>
+</table>
+<p>SDK adalah klien, bukan implementasi kedua dari platform. Skor dan pencapaian terbuka
+hanya ditulis oleh server game (hasil skrip atau pesan kontrol kontainer) — klien
+tidak pernah bisa mempostingnya, dan SDK hanya membacanya. Segala sesuatu yang lain tetap otoritatif server
+persis seperti yang didokumentasikan di <a href="/id/#api-reference">halaman API</a>.</p>
+<p><strong>Pembantu yang diautentikasi tidak membuat permintaan API tanpa token peluncuran.</strong> Pembacaan umumnya terselesaikan
+untuk <code>null</code>, <code>[]</code>, atau peta kosong; menulis mungkin teratasi <code>null</code>/<code>false</code> dan penyelamatan yang didebounce tidak dapat dilakukan dengan segera
+nilai kembalian. Soket tetap terputus. Simpan kemajuan mandiri dalam memori jika pemain memilih
+pemutaran yang tidak terlacak. Panggilan <code>signOut()</code> sebelum beralih dari permainan akun ke mode itu sehingga perpanjangan berhenti.</p>
+<h2 id="install">Memasang</h2>
+<p>Salin file di samping skrip statis game Anda yang lain — ke mana pun build Anda mengirimkannya — dan muat
+itu sebelum kode Anda sendiri:</p>
+<pre><code class="language-html">&lt;script src="starhermit-sdk.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  StarHermit.init();          // as early as possible: it reads and strips the token from the URL fragment
+&lt;/script&gt;
+</code></pre>
+<p>Panggilan <code>init()</code> sekali, sebelum router apa pun bersentuhan <code>location.hash</code>. Pilihan:
+<code>init({ base, gameId, autoRefresh, launcherUrl })</code> — <code>base</code> menunjuk panggilan REST di tempat asal yang resmi
+selama pengembangan lokal (game yang dihosting platform menggunakan asal yang sama). <code>gameId</code>, jika disediakan, harus cocok
+UUID yang dihosting untuk masuk; halaman lokal/eksternal bukan asal masuk game yang valid. <code>autoRefresh: false</code> meninggalkan pembaruan token ke game itu
+menjalankan rantainya sendiri, dan <code>launcherUrl</code> mengesampingkan di mana <code>relaunch()</code> mengirimkan pemain (default
+<code>https://dashboard.starhermit.com/</code>).</p>
+<h2 id="sign-in-and-identity">Masuk dan identitas</h2>
+<table>
+<thead>
+<tr>
+<th>Membutuhkan</th>
+<th>Panggilan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Apakah ada pemain yang masuk?</td>
+<td><code>StarHermit.signedIn</code>, <code>StarHermit.userId</code>, <code>StarHermit.slug</code></td>
+</tr>
+<tr>
+<td>Bereaksi terhadap proses masuk/keluar/kedaluwarsa</td>
+<td><code>StarHermit.on('auth', ({ signedIn, reason }) =&gt; …)</code></td>
+</tr>
+<tr>
+<td>Tunjukkan a <strong>Masuk</strong> tombol</td>
+<td>hanya kapan <code>StarHermit.canSignIn()</code> (berlaku pada subdomain UUID game tanpa token); di klik <code>StarHermit.signIn()</code></td>
+</tr>
+<tr>
+<td>Nama pemain/avatar</td>
+<td><code>await StarHermit.profile()</code> → <code>{ userId, username, nickname, displayName }</code>; <code>StarHermit.avatarUrl()</code></td>
+</tr>
+<tr>
+<td>Teman-teman</td>
+<td><code>await StarHermit.friends()</code></td>
+</tr>
+</tbody>
+</table>
+<p>SDK menangani kedua bentuk peluncuran — <code>#game_token=&lt;jwt&gt;[&amp;session_id=…]</code> dari perpustakaan atau an
+mengundang, dan <code>#access_token=&lt;jwt&gt;</code> kembali dari proses masuk langsung — dan memperbarui token melalui
+<code>POST /api/v1/games/{slug}/launch-token</code> sebelum habis masa berlakunya (lihat
+<a href="/id/docs/api/auth.html">meluncurkan token</a>). Nama tampilan adalah profil <code>nickname</code>; <code>/api/v1/me</code> tidak
+dapat dijangkau dengan token peluncuran.</p>
+<h2 id="cloud-saves">Simpanan cloud</h2>
+<p>Slot permainannya adalah <code>game:&lt;slug&gt;</code> (<a href="/id/docs/api/catalog.html">katalog: menyimpan dari dalam game</a>); SDK
+membangun jalur, meng-zip payload dan menangani <code>/info</code> memeriksa.</p>
+<pre><code class="language-js">const remote = await StarHermit.loadJSON();          // null: empty slot, signed out — or a failed read
+if (StarHermit.saveLoadFailed()) showSyncError();    // tell those apart when it matters
+else if (remote &amp;&amp; isNewer(remote, local)) adopt(remote);
+
+StarHermit.saveJSON(state);                          // debounced (2 s) checkpoint upload
+addEventListener('pagehide', () =&gt; StarHermit.flushSave(true));   // keepalive flush
+StarHermit.on('saved', ok =&gt; setSyncIndicator(ok));
+</code></pre>
+<p><strong>Muat sebelum Anda menyimpan.</strong> Bandingkan dan adopsi salinan cloud sebelum tulisan apa pun dapat dijangkau
+<code>saveJSON</code> — termasuk pengaturan, nama panggilan atau pos pemeriksaan yang ditulis saat boot — atau salinan lokal yang sudah basi
+menimpa penyimpanan baru yang dibuat di perangkat lain. Tahan penyimpanan awal hingga beban permulaan selesai.</p>
+<p>SDK melindungi separuh lainnya dari perlombaan itu: ketika pembacaan gagal (kesalahan jaringan atau server, misalnya
+berlawanan dengan slot kosong) ia terbenam <code>saveLoadFailed()</code>, memancarkan <code>saveerror</code>, dan menolak menulis sampai
+<code>/info</code> memastikan slotnya kosong atau lebih baru <code>loadSave()</code> berhasil. Penulisan yang ditolak teratasi
+<code>false</code> dan memancarkan <code>saved</code> dengan <code>false</code>.</p>
+<p><strong>Penulisan setelah pemuatan bersifat kondisional.</strong> SDK mengingat versinya (<code>ETag</code>) dari menyimpannya terakhir
+membaca atau menulis dan mengirimkannya kembali, sehingga penulisan hanya mendarat pada penyimpanan yang menjadi dasarnya — atau, untuk sebuah slot
+itu kosong, hanya selagi masih ada. Ketika perangkat lain disimpan di antaranya, penulisan ditolak
+(<code>412</code>): SDK mengeluarkan <code>saveconflict</code>, set <code>saveConflicted()</code>, dan menolak penulisan lebih lanjut sampai a
+<code>loadSave()</code> memungkinkan game menggabungkan atau mengadopsi penyimpanan yang lebih baru. Sebuah permainan yang tidak pernah memuat tulisan
+tanpa syarat, seperti sebelumnya.</p>
+<pre><code class="language-js">StarHermit.on('saveconflict', async () =&gt; {
+  const remote = await StarHermit.loadJSON();       // lifts the block
+  StarHermit.saveJSON(merge(remote, local));        // conditional on the version just loaded
+});
+</code></pre>
+<p>Tingkat yang lebih rendah: <code>loadSave()</code> / <code>writeSave(text)</code> untuk string mentah, <code>saveInfo()</code> untuk
+<code>{ exists, sizeBytes, updatedAt, etag }</code>.</p>
+<h2 id="crash-and-bug-reports">Laporan kerusakan dan bug</h2>
+<p>Pemain dapat melaporkan masalah dari dalam game; pemilik melakukan triase melalui
+<a href="/id/docs/api/reports.html">melaporkan API</a>.</p>
+<pre><code class="language-js">await StarHermit.reportBug('Score did not save', 'Finished level 3, score shows 0', {
+  clientVersion: '1.4.2',
+  attachments: [{ fileName: 'state.json', contentType: 'application/json', data: JSON.stringify(state) }],
+});
+StarHermit.captureCrashes({ clientVersion: '1.4.2' });   // opt-in: uncaught errors become crash reports
+const mine = await StarHermit.myReports();               // [{ id, kind, status, title, ... }]
+</code></pre>
+<p><code>report(kind, title, description, opts)</code> adalah bentuk umum (<code>reportBug</code> Dan <code>reportCrash</code> memperbaiki
+baik hati). <code>captureCrashes</code> file paling banyak satu laporan per pesan berbeda dan tiga laporan per halaman dimuat, jadi a
+crash loop tidak dapat menghabiskan jatah harian pemain (20 per game secara default). Tanyakan kepada pemain sebelumnya
+melampirkan sesuatu yang bersifat pribadi.</p>
+<h2 id="settings-and-controls">Pengaturan dan kontrol</h2>
+<table>
+<thead>
+<tr>
+<th>Membutuhkan</th>
+<th>Panggilan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Preferensi per pemain (volume, preset grafis, bahasa, aksesibilitas…)</td>
+<td><code>getSettings()</code>, <code>getSetting(key)</code>, <code>setSetting(key, value)</code>, <code>patchSettings({…})</code> (a <code>null</code> nilai menghapus kunci), <code>deleteSetting(key)</code>, <code>clearSettings()</code></td>
+</tr>
+<tr>
+<td>Pengikatan keyboard dinyatakan dalam <code>starhermit.txt</code> sebagai <code>control.&lt;action&gt;=…</code></td>
+<td><code>await loadBindings(defaults)</code> → <code>{ action: codes[] }</code> dengan penggantian pemain diterapkan</td>
+</tr>
+<tr>
+<td>Layar yang mengikat ulang</td>
+<td><code>getControls()</code>, <code>setControl(action, codes)</code>, <code>setControls(bindings)</code>, <code>resetControls()</code></td>
+</tr>
+</tbody>
+</table>
+<p>Rute <code>keydown</code> melalui <code>event.code</code> dan ikatan dari <code>loadBindings</code>. Melihat
+<a href="/id/docs/tutorials/game-controls.html">tambahkan kontrol ke game Anda</a> dan itu
+<a href="/id/docs/starhermit-txt.html"><code>starhermit.txt</code> tampak</a>.</p>
+<p>Untuk menu Grafik, <a href="/docs/sdk/graphics-options.js"><code>graphics-options.js</code></a> berada di atas panggilan pengaturan:
+itu secara otomatis mendeteksi preset kualitas, mempertahankan pilihan pemain <code>localStorage</code> dan per game mereka
+pengaturan, dan mengirimkan panel yang sudah jadi. Melihat
+<a href="/id/docs/tutorials/graphics-options.html">pilihan grafis dengan kualitas terdeteksi otomatis</a>.</p>
+<p>Untuk bagian Audio, lihat <a href="/id/docs/tutorials/audio-options.html">opsi audio dengan batas suara yang terdeteksi secara otomatis</a>:
+kontrol volume dan suara yang disarankan, yang murni <a href="/docs/sdk/audio-options.js"><code>audio-options.js</code></a> pembantu,
+dan batas pemutaran yang diberlakukan oleh mixer Anda.</p>
+<h2 id="multiplayer-invites-and-social">Multipemain, undangan, dan sosial</h2>
+<p>Sesi gameplay, perjodohan, pencapaian game, papan peringkat, dan tayangan ulang memerlukan server
+(<a href="/id/docs/api/game-scripts.html">naskah</a> atau <a href="/id/docs/api/container-games.html">wadah</a>). Kamar waktu nyata dan
+teman tidak. Sesi obrolan dan suara memerlukan keanggotaan percakapan yang sesuai.</p>
+<table>
+<thead>
+<tr>
+<th>Daerah</th>
+<th>Panggilan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sesi</td>
+<td><code>mySessions()</code>, <code>getSession(id)</code>, <code>sessionRecovery(id)</code>, <code>leaveSession(id)</code>, <code>startAiSession()</code>; <code>StarHermit.launchSessionId</code> setelah peluncuran undangan</td>
+</tr>
+<tr>
+<td>Soket gameplay</td>
+<td><code>const conn = connect(sessionId, { onGame, onError, onPresence, onAchievement, onResumed, onAbandoned, onOpen, onClose, onAuthLost })</code>, Kemudian <code>conn.send(data)</code>; terhubung kembali dengan back-off, memperbarui token terlebih dahulu, dan berhenti pada penutupan normal/kebijakan/oversize (1000/1008/1009), 4403/4404, atau ketika perpanjangan ditolak (lihat <a href="#reconnecting-and-expired-tokens">menghubungkan kembali</a>)</td>
+</tr>
+<tr>
+<td>Penjaruman</td>
+<td><code>queues()</code>, <code>joinQueue([keys])</code>, <code>matchStatus()</code>, <code>cancelMatch()</code>, <code>waitForMatch(opts)</code></td>
+</tr>
+<tr>
+<td>Undangan</td>
+<td><code>sendInvite(toUserId[, sessionId])</code> (dengan a <code>sessionId</code> teman itu bergabung dalam sesi lari itu), <code>invites()</code>, <code>acceptInvite(id)</code>, <code>declineInvite(id)</code>; <code>inviteLink(query)</code> untuk tautan berbagi</td>
+</tr>
+<tr>
+<td>Posting lari ke papan peringkat Anda</td>
+<td><code>submitScores({ boardKey: number })</code> → kunci yang diterima (lihat <a href="#single-player-leaderboards">papan peringkat pemain tunggal</a>)</td>
+</tr>
+<tr>
+<td>Prestasi dan papan peringkat (hanya baca)</td>
+<td><code>achievements()</code>, <code>linkedAchievements(otherSlug)</code>, <code>leaderboards()</code>, <code>leaderboard(key, opts)</code>, <code>leaderboardEntries(boardId, opts)</code>; membuka kunci roti panggang melalui <code>on('achievement', …)</code></td>
+</tr>
+<tr>
+<td>Pemutaran ulang</td>
+<td><code>myReplays(limit)</code>, <code>getReplay(id)</code></td>
+</tr>
+<tr>
+<td>Sesi obrolan</td>
+<td><code>chatMessages(id)</code>, <code>sendChat(id, text)</code>, <code>pollChat(id, onMessages, intervalMs)</code> — REST dan polling hanya untuk token peluncuran</td>
+</tr>
+<tr>
+<td>Ruang suara / waktu nyata</td>
+<td><code>StarHermit.voice.*</code> (REST; sinyal WebRTC diserahkan pada permainan), <code>StarHermit.realtime.*</code> (kamar plus <code>ws/v1/realtime</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Apa pun yang belum dibungkus hanya berjarak satu panggilan: <code>StarHermit.api(path, { method, body })</code> mengirimkan sebuah
+permintaan JSON yang diautentikasi (terselesaikan <code>null</code> pada 404/204 atau saat keluar, ditolak
+<code>{ status, message }</code> pada kegagalan lainnya, perbarui sekali pada 401).</p>
+<h2 id="single-player-leaderboards">Papan peringkat pemain tunggal</h2>
+<p>Klien tidak pernah bisa memposting skor — hanya server game yang bisa — jadi game pemain tunggal memerlukan a
+skrip platform kecil untuk memiliki papannya. <a href="/docs/sdk/score-script.js"><code>score-script.js</code></a> adalah satu: salin berikutnya
+ke game Anda, nyatakan masuk <a href="/id/docs/starhermit-txt.html"><code>starhermit.txt</code></a> sebagai <code>server=score-script.js</code>, dan
+edit saja itu <code>BOARDS</code> blok, yang mencantumkan setiap papan sebagai Anda
+<a href="/id/docs/tutorials/game-leaderboards-achievements.html#1-create-the-leaderboards">buat itu</a>:</p>
+<pre><code class="language-js">var BOARDS = {
+  "high-score": { "name": "High score", "scoreType": "integer", "sortDirection": "desc", "minScore": 0, "maxScore": 1000000 }
+};
+</code></pre>
+<p>Saat lari berakhir, poskan dan tunjukkan tempat pemain:</p>
+<pre><code class="language-js">const accepted = await StarHermit.submitScores({ 'high-score': total });   // [] when signed out or refused
+if (accepted.includes('high-score')) {
+  const board = await StarHermit.leaderboard('high-score', { pageSize: 100 });
+  const me = board.items.find(e =&gt; e.userId === StarHermit.userId);
+  showRank(me &amp;&amp; me.rank);
+}
+</code></pre>
+<p><code>submitScores</code> membuka sesi latihan (<code>POST .../sessions/ai</code>), mengirimkan <code>{type:'result', scores}</code> pada
+soket gameplay, dan menyelesaikan kunci papan yang diterima skrip; itu juga memancarkan <code>scores</code> dengan
+daftar itu. Skrip menjatuhkan skor yang bukan merupakan angka yang sesuai dengan jenis papan atau berada di luar angka tersebut
+<code>minScore</code>/<code>maxScore</code>, memposting sisanya melaluinya <code>scores</code> kembali, dan mengakhiri sesi. Klien
+masih melaporkan hasilnya. Skor yang diciptakan dalam rentang bisa lulus; papan ini cocok untuk santai
+bermain. Untuk kompetisi, validasi proses dalam skrip atau wadah sebelum memberikan penghargaan. Pengakuan
+mencantumkan kunci yang diterima skrip; ini bukan bukti bahwa setiap dewan aktif atau ada yang terbaik dari diri mereka sendiri
+telah disimpan. Melihat <a href="/id/docs/availability.html#what-makes-a-result-trustworthy">kepercayaan dan ketersediaan</a>.</p>
+<h2 id="reconnecting-and-expired-tokens">Menghubungkan kembali dan token kedaluwarsa</h2>
+<p>Soket membawa token peluncuran di URL-nya, dan jabat tangan dengan token yang kedaluwarsa ditolak sebelumnya
+pemutakhiran — browser hanya melaporkan kode tutup <code>1006</code>, persis seperti penurunan jaringan. Jadi gagal
+menyambungkan kembali mungkin merupakan kegagalan autentikasi, dan mencoba kembali URL yang sama tidak akan pernah dapat dipulihkan. Pembaruan hanya berfungsi
+selama token saat ini valid dan dalam waktu 12 jam sejak peluncuran awal; setelah itu hanya
+peluncur dapat membuat token baru.</p>
+<p><code>connect()</code> menangani ini sendiri: sebelum setiap penyambungan kembali, token akan diperbarui
+<code>POST /api/v1/games/{slug}/launch-token</code> (kecuali jika diperbarui sejak soket dibuka) dan dibuka kembali
+dengan yang baru. Kesalahan jaringan atau server saat memperbarui mundur dan memperbarui lagi — tidak pernah terjadi
+membuka kembali URL lama. Jika perpanjangan ditolak atau token telah habis masa berlakunya, SDK akan keluar (<code>auth</code> dengan
+<code>reason: 'expired'</code>), berhenti menyambung kembali dan menelepon <code>onAuthLost()</code>:</p>
+<pre><code class="language-js">const conn = StarHermit.connect(sessionId, {
+  onGame, onClose,
+  onAuthLost: () =&gt; showReconnectPanel(),   // e.g. "Session expired — Back to StarHermit"
+});
+backButton.onclick = () =&gt; StarHermit.relaunch();
+</code></pre>
+<p><code>relaunch()</code> mengirim pemain kembali untuk mendapatkan token peluncuran baru: melalui masuk saat game dibuka
+seperti itu (<code>StarHermit.launchKind === 'sign-in'</code>), jika tidak, ke peluncur. Di dalam peluncur
+bingkai permainan itu menavigasi jendela atas, yang diizinkan browser hanya dari isyarat pengguna, jadi sebut saja
+dari satu klik; itu kembali <code>false</code> ketika navigasi ditolak.</p>
+<p>Browser dapat menyembunyikan sesi yang telah selesai, persyaratan, keanggotaan, atau kegagalan build sebagai <code>1006</code>. Sebelum sebuah
+coba lagi otomatis, <code>connect()</code> memeriksa status sesi melalui REST dan, kapan <code>opts.build</code> disediakan,
+membandingkannya dengan info game. <code>onUnavailable(error)</code> menerima kegagalan REST permanen atau berakhir
+sesi; <code>onTermsRequired(body)</code> meminta penerimaan persyaratan eksplisit. Buat koneksi baru setelahnya
+menyelesaikan ini. <code>onClose(1008)</code> berarti koneksi tersebut digantikan atau melanggar kebijakan; jangan
+membukanya kembali secara otomatis.</p>
+<p>Soket permainan Anda terbuka sendiri (<code>realtime.socketUrl(roomId)</code>, <code>voice.socketUrl(roomId)</code>) membutuhkan
+aturan yang sama. Sebelum membukanya kembali, teleponlah <code>renewForReconnect()</code> dan bertindak berdasarkan hasilnya:</p>
+<pre><code class="language-js">async function reopen() {
+  const r = await StarHermit.renewForReconnect();
+  if (r === 'renewed') ws = new WebSocket(StarHermit.realtime.socketUrl(roomId)); // fresh token in the URL
+  else if (r === 'retry') setTimeout(reopen, backoff());                         // renewal itself failed
+  else if (r === 'terms-required') showTermsPanel();                              // explicit acceptance
+  else showReconnectPanel();                                                     // 'relaunch'
+}
+</code></pre>
+<p>Perpanjangan serentak berbagi satu permintaan. <code>terms-required</code> mempertahankan token pemain dan memancarkannya
+<code>termsrequired</code>; menampilkan <code>getTerms()</code> dan menelepon <code>acceptTerms(displayed.hash)</code> hanya pada pemain
+Terima tindakan, lalu coba lagi. Soket yang dikelola game Anda juga memerlukan pemeriksaan REST untuk sumber daya yang habis
+dan harus berhenti pada penutupan kebijakan. Melihat <a href="/id/docs/troubleshooting.html#websockets">pemecahan masalah</a>.</p>
+<h2 id="events">Acara</h2>
+<p><code>StarHermit.on(type, fn)</code> mengembalikan fungsi berhenti berlangganan; <code>off(type, fn)</code> juga berfungsi.</p>
+<table>
+<thead>
+<tr>
+<th>Peristiwa</th>
+<th>Muatan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>auth</code></td>
+<td><code>{ signedIn, userId }</code> saat masuk; <code>{ signedIn: false, reason }</code> saat keluar atau habis masa berlakunya (<code>reason: 'expired'</code> ketika perpanjangan ditolak — penawaran <code>relaunch()</code>)</td>
+</tr>
+<tr>
+<td><code>saved</code></td>
+<td><code>true</code> / <code>false</code> setelah setiap cloud menulis</td>
+</tr>
+<tr>
+<td><code>saveerror</code></td>
+<td><code>{ op: 'load' }</code> setelah gagal membaca; <code>{ op: 'write', blocked: true }</code> untuk penulisan yang ditolak</td>
+</tr>
+<tr>
+<td><code>achievement</code></td>
+<td>pembukaan kunci didorong pada soket gameplay</td>
+</tr>
+<tr>
+<td><code>scores</code></td>
+<td>kunci papan diterima oleh <code>submitScores</code> (<code>[]</code> ketika tidak ada yang diposting)</td>
+</tr>
+<tr>
+<td><code>saveconflict</code></td>
+<td><code>{ etag }</code> ketika perangkat lain mengubah penyimpanan; muat ulang sebelum menggabungkan/menyimpan</td>
+</tr>
+<tr>
+<td><code>termsrequired</code></td>
+<td>Kesalahan istilah dikembalikan oleh pembaruan token peluncuran; simpan token dan minta persetujuan</td>
+</tr>
+</tbody>
+</table>
+<h2 id="keeping-your-copy-current">Menjaga salinan Anda tetap terkini</h2>
+<p>Perlakukan file sebagai file yang dijual: salin tanpa perubahan, jangan pernah mengedit salinan Anda, dan ganti secara grosir kapan pun
+file halaman ini berubah. Pastikan langkah pembuatan atau pengemasan Anda mengirimkannya bersamaan dengan langkah game
+file statis lainnya.</p>
+
+{% endraw %}

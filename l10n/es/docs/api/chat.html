@@ -1,0 +1,361 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Charlar"
+source_url: "/docs/api/chat.html"
+source_path: "docs/api/chat.md"
+source_hash: "9c505584849a0722b12e5a1beb5ca636c08fbd95af2294c71ff7c49eddef36ad"
+translation: "machine"
+permalink: "/es/docs/api/chat.html"
+---
+{% raw %}
+<h1 id="chat">Charlar</h1>
+<p>El chat de StarHermit cubre mensajes directos, salas de grupo y conversaciones de sesiones de juegos, a través de una API REST (<code>api/v1/chat</code>) más un canal push WebSocket de servidor a cliente (<code>ws/v1/chat</code>). Todos los puntos finales REST requieren autenticación. Los cuerpos de error varían; ver <a href="/es/docs/api/conventions.html#requests-and-responses">Convenciones API</a>.</p>
+<h2 id="rest-endpoints">Puntos finales de descanso</h2>
+<p>Base: <code>https://api.starhermit.com/api/v1/chat</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Camino</th>
+<th>autenticación</th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CORREO</td>
+<td><code>/conversations</code></td>
+<td>JWT</td>
+<td>Crear una conversación (1 amigo = directo, ≥2 = grupo)</td>
+</tr>
+<tr>
+<td>PARCHE</td>
+<td><code>/conversations/{id}</code></td>
+<td>JWT</td>
+<td>Cambiar el nombre de una conversación (cualquier miembro)</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/conversations/{id}/invites</code></td>
+<td>JWT</td>
+<td>Invitar a un usuario a un grupo</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/invites</code></td>
+<td>JWT</td>
+<td>Enumere sus invitaciones de chat pendientes</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/invites/{id}/accept</code></td>
+<td>JWT</td>
+<td>Aceptar una invitación de chat</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/invites/{id}/decline</code></td>
+<td>JWT</td>
+<td>Rechazar una invitación de chat</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/rooms/joinable</code></td>
+<td>JWT</td>
+<td>Listar habitaciones abiertas con ≥1 amigo dentro</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/conversations/{id}/join</code></td>
+<td>JWT</td>
+<td>Únase a una sala abierta (debe ser amigo de un miembro)</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/conversations/{id}/participants</code></td>
+<td>JWT</td>
+<td>Agregar participantes a una conversación</td>
+</tr>
+<tr>
+<td>BORRAR</td>
+<td><code>/conversations/{id}/participants/{userId}</code></td>
+<td>JWT</td>
+<td>Eliminar un participante (yo: cualquier miembro; otros: solo el creador del grupo)</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/conversations/{id}/leave</code></td>
+<td>JWT</td>
+<td>dejar una conversación</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/conversations</code></td>
+<td>JWT</td>
+<td>Enumerar conversaciones, incluido cada recuento no leído</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/conversations/{id}</code></td>
+<td>JWT</td>
+<td>Obtener una conversación, incluido el recuento de no leídos</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/unread</code></td>
+<td>JWT</td>
+<td>Obtenga el recuento total de mensajes no leídos</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/conversations/{id}/read</code></td>
+<td>JWT</td>
+<td>Marcar una conversación como leída</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/conversations/{id}/messages?page=&amp;pageSize=</code></td>
+<td>JWT</td>
+<td>Obtener historial de mensajes paginados</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/conversations/{id}/messages</code></td>
+<td>JWT</td>
+<td>Enviar un mensaje (tarifa limitada)</td>
+</tr>
+<tr>
+<td>PONER</td>
+<td><code>/conversations/{conversationId}/messages/{messageId}</code></td>
+<td>JWT</td>
+<td>Editar un mensaje</td>
+</tr>
+<tr>
+<td>BORRAR</td>
+<td><code>/conversations/{conversationId}/messages/{messageId}</code></td>
+<td>JWT</td>
+<td>Eliminar un mensaje (lápida sepulcral)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-conversation">Crear una conversación</h3>
+<p><code>POST /conversations</code></p>
+<pre><code class="language-json">{
+  "participantIds": ["&lt;guid&gt;"],
+  "name": "Friday night lobby",
+  "friendUserId": "&lt;guid&gt;",
+  "joinPolicy": "closed"
+}
+</code></pre>
+<p>Todos los campos son opcionales. Un amigo participante crea un <strong>directo</strong> conversación; dos o más crean un <strong>grupo</strong>. <code>joinPolicy</code> es <code>"open"</code> o <code>"closed"</code> (por defecto <code>"closed"</code>). Devuelve un <code>ConversationDto</code>.</p>
+<h3 id="rename-a-conversation">Cambiar el nombre de una conversación</h3>
+<p><code>PATCH /conversations/{id}</code> con <code>{ "name": "New name" }</code> → <code>ConversationDto</code>. Cualquier miembro puede cambiar de nombre; una nota del sistema con <code>kind: "system_rename"</code> se transmite.</p>
+<h3 id="invites">invita</h3>
+<p><code>POST /conversations/{id}/invites</code> con <code>{ "toUserId": "&lt;guid&gt;" }</code> → <code>ChatInviteDto</code>. Las invitaciones son la única forma de acceder a una sala cerrada.</p>
+<p><code>GET /invites</code> → <code>ChatInviteDto[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "id": "&lt;guid&gt;",
+    "conversationId": "&lt;guid&gt;",
+    "conversationName": "Friday night lobby",
+    "fromUserId": "&lt;guid&gt;",
+    "fromUsername": "alice",
+    "toUserId": "&lt;guid&gt;",
+    "status": "pending",
+    "createdAt": "2026-07-22T07:00:00Z"
+  }
+]
+</code></pre>
+<p><code>POST /invites/{id}/accept</code> y <code>POST /invites/{id}/decline</code> → <code>ChatInviteDto</code>.</p>
+<h3 id="joining-rooms">Unir salas</h3>
+<p><code>GET /rooms/joinable</code> → <code>JoinableRoomDto[]</code> — salas abiertas que tienen al menos uno de tus amigos dentro:</p>
+<pre><code class="language-json">[
+  {
+    "id": "&lt;guid&gt;",
+    "name": "Friday night lobby",
+    "joinPolicy": "open",
+    "createdAt": "2026-07-22T07:00:00Z",
+    "participants": [{ "userId": "&lt;guid&gt;", "username": "alice" }]
+  }
+]
+</code></pre>
+<p><code>POST /conversations/{id}/join</code> → <code>ConversationDto</code>. Se une a una sala abierta; debes ser amigo de un miembro.</p>
+<h3 id="participants">Participantes</h3>
+<p><code>POST /conversations/{id}/participants</code> con <code>{ "participantIds": ["&lt;guid&gt;"] }</code> → <code>ConversationDto</code>.</p>
+<p><code>DELETE /conversations/{id}/participants/{userId}</code> → <code>204</code>. Cualquier miembro podrá darse de baja; Para eliminar a otros es necesario ser el creador del grupo.</p>
+<p><code>POST /conversations/{id}/leave</code> → <code>204</code>.</p>
+<h3 id="reading-conversations">Leer conversaciones</h3>
+<p><code>GET /conversations</code> → <code>ConversationDto[]</code>.</p>
+<p><code>GET /conversations/{id}</code> → <code>ConversationDto</code>:</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "type": "group",
+  "name": "Friday night lobby",
+  "createdByUserId": "&lt;guid&gt;",
+  "joinPolicy": "closed",
+  "createdAt": "2026-07-22T07:00:00Z",
+  "participants": [{ "userId": "&lt;guid&gt;", "username": "alice" }],
+  "otherParticipant": { "userId": "&lt;guid&gt;", "username": "bob" },
+  "unreadCount": 3
+}
+</code></pre>
+<p><code>type</code> es uno de <code>direct</code>, <code>group</code>, <code>game</code>. <code>name</code>, <code>createdByUserId</code>, y <code>otherParticipant</code> puede estar ausente. <code>unreadCount</code> cuenta los mensajes de texto no leídos enviados por otros miembros después del horizonte de lectura por conversación de la persona que llama.</p>
+<h3 id="unread-state">Estado no leído</h3>
+<p><code>GET /unread</code> devuelve el recuento de no leídos en todas las conversaciones de la persona que llama:</p>
+<pre><code class="language-json">{ "total": 7 }
+</code></pre>
+<p><code>POST /conversations/{id}/read</code> avanza el horizonte de lectura de la persona que llama para esa conversación.
+Úselo después de mostrar la transcripción actual. El servidor emite un <code>conversation_read</code> evento a
+todos los sockets que pertenecen a la persona que llama, lo que permite que varios clientes que hayan iniciado sesión borre sus credenciales.
+Los mensajes nuevos y eliminados pueden cambiar el total, por lo que los clientes deben actualizar desde eventos WebSocket o
+recuperar periódicamente <code>/unread</code>.</p>
+<h3 id="messages">Mensajes</h3>
+<p><code>GET /conversations/{id}/messages?page=1&amp;pageSize=50</code> → <code>PagedMessagesDto</code>:</p>
+<pre><code class="language-json">{
+  "conversationId": "&lt;guid&gt;",
+  "page": 1,
+  "pageSize": 50,
+  "totalCount": 123,
+  "items": []
+}
+</code></pre>
+<p><code>POST /conversations/{id}/messages</code> con <code>{ "content": "hello" }</code> → <code>MessageDto</code>. Velocidad limitada a 10 mensajes/minuto por usuario; superandolo regresa <code>429</code>.</p>
+<p><code>PUT /conversations/{conversationId}/messages/{messageId}</code> con <code>{ "content": "edited" }</code> → <code>MessageDto</code>.</p>
+<p><code>DELETE /conversations/{conversationId}/messages/{messageId}</code> → <code>204</code>. La eliminación es una lápida: el mensaje permanece <code>isDeleted: true</code>.</p>
+<p><code>MessageDto</code>:</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "conversationId": "&lt;guid&gt;",
+  "senderId": "&lt;guid&gt;",
+  "senderUsername": "alice",
+  "content": "hello",
+  "kind": "text",
+  "metadata": { "key": "value" },
+  "sentAt": "2026-07-22T07:00:00Z",
+  "editedAt": null,
+  "isDeleted": false
+}
+</code></pre>
+<p><code>kind</code> es <code>"text"</code> o <code>"system_rename"</code>; <code>content</code>, <code>metadata</code> (a <code>Dictionary&lt;string,string&gt;</code>), y <code>editedAt</code> puede estar ausente/nulo.</p>
+<h2 id="websocket-wsv1chat">WebSocket: <code>ws/v1/chat</code></h2>
+<p>Conéctate a <code>wss://api.starhermit.com/ws/v1/chat</code> con un JWT a través del <code>Authorization</code> encabezamiento, <code>?ticket=</code>, o <code>?access_token=</code>.</p>
+<p>Este es un <strong>servidor puro → canal push de cliente</strong>: las tramas del cliente se ignoran (sólo <code>Close</code> es honrado). Cada cuadro es un sobre:</p>
+<pre><code class="language-json">{ "type": "&lt;event&gt;", "payload": { } }
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Evento <code>type</code></th>
+<th>Carga útil</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>conversation_created</code></td>
+<td><code>ConversationDto</code></td>
+</tr>
+<tr>
+<td><code>conversation_renamed</code></td>
+<td><code>ConversationDto</code></td>
+</tr>
+<tr>
+<td><code>participants_added</code></td>
+<td><code>ConversationDto</code></td>
+</tr>
+<tr>
+<td><code>participant_removed</code></td>
+<td><code>ConversationDto</code></td>
+</tr>
+<tr>
+<td><code>chat_invite</code></td>
+<td><code>ChatInviteDto</code></td>
+</tr>
+<tr>
+<td><code>chat_invite_responded</code></td>
+<td><code>ChatInviteDto</code></td>
+</tr>
+<tr>
+<td><code>new_message</code></td>
+<td><code>MessageDto</code></td>
+</tr>
+<tr>
+<td><code>message_updated</code></td>
+<td><code>MessageDto</code></td>
+</tr>
+<tr>
+<td><code>message_deleted</code></td>
+<td><code>MessageDto</code></td>
+</tr>
+<tr>
+<td><code>conversation_read</code></td>
+<td>Cambio de estado de lectura para el usuario que inició sesión; recuperar recuentos no leídos</td>
+</tr>
+<tr>
+<td><code>game_invite</code></td>
+<td><code>{ "inviteId", "kind", "gameSlug", "gameName", "roomId", "from": { "userId", "username" }, "createdAt", "acceptPath", "declinePath", "inProgress", "sessionId" }</code> - vea abajo</td>
+</tr>
+</tbody>
+</table>
+<h3 id="game_invite-one-event-for-both-invite-systems"><code>game_invite</code>: un evento para ambos sistemas de invitación</h3>
+<p>Cualquiera puede ser invitado a jugar de dos maneras, y este único evento incluye ambas: un cliente implementa un brindis, no dos:</p>
+<table>
+<thead>
+<tr>
+<th><code>kind</code></th>
+<th>Expedido por</th>
+<th>aceptándolo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>"session"</code></td>
+<td><a href="/es/docs/api/games.html#invites"><code>POST /games/{slug}/invites</code></a></td>
+<td>Crea una nueva sesión de juego para ustedes dos.</td>
+</tr>
+<tr>
+<td><code>"room"</code></td>
+<td><a href="/es/docs/api/realtime.html#invites"><code>POST /realtime/rooms/{id}/invites</code></a></td>
+<td>Toma asiento en una habitación en la que ya está sentado el que invita; <code>roomId</code> es esa habitación</td>
+</tr>
+</tbody>
+</table>
+<p><code>acceptPath</code> y <code>declinePath</code> son los puntos finales que responden <strong>este</strong> Invita: úsalos y la distinción nunca importará. Responder en el punto final del otro sistema es una <code>404</code>: los dos mantienen identificadores de invitación separados.</p>
+<p><code>inProgress</code> es <code>true</code> al aceptar, se une a un juego que ya se está jugando (una invitación a una sesión que nombra una sesión en ejecución o una invitación a una sala iniciada que permite unirse en progreso) y <code>sessionId</code> es la sesión de ese juego. Úselo para decir "únete a su juego" en lugar de "jugar".</p>
+<pre><code class="language-json">{
+  "type": "game_invite",
+  "payload": {
+    "inviteId": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+    "kind": "room",
+    "gameSlug": "poker",
+    "gameName": "StarHermit Poker",
+    "roomId": "b1d2c3e4-5f60-4a71-8b92-c3d4e5f60718",
+    "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "alice" },
+    "createdAt": "2026-07-26T14:10:00Z",
+    "acceptPath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/accept",
+    "declinePath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/decline"
+  }
+}
+</code></pre>
+<p><code>roomId</code> es <code>null</code> para <code>"session"</code> invita. Un token de lanzamiento con ámbito de juego no puede abrir este socket ni leer la información de toda la cuenta. <code>/me/game-invites</code> bandeja de entrada. Encuesta de clientes del juego <code>GET /api/v1/games/{slug}/invites</code> para invitaciones a sesiones y <code>GET /api/v1/realtime/rooms/invites</code> para invitaciones a la sala de juegos. Los clientes de cuentas pueden leer ambos tipos a través de <code>GET /api/v1/me/game-invites</code>.</p>
+<h2 id="chat-inside-a-game-session">Chat dentro de una sesión de juego</h2>
+<p>Un token de lanzamiento con ámbito de juego <strong>no puedo</strong> abierto <code>ws/v1/chat</code> — está bloqueado porque el socket transmite todas las conversaciones de un usuario. Fichas de lanzamiento <strong>puede</strong> utilizar la API REST de chat en conversaciones adjuntas a sus propias sesiones de juego: el detalle de la sesión devuelve un <code>chatConversationId</code>, la conversación tiene tipo <code>"game"</code>, sus participantes son los jugadores de la sesión y se saltan las reglas de amistad.</p>
+<p>Por lo tanto, los clientes de juegos suelen cargar el historial a través de REST y buscar nuevos mensajes en lugar de utilizar el socket. Por ejemplo, el <a href="/es/docs/tutorials/chess-walkthrough.html">implementación de referencia de ajedrez</a> encuestas cada 5 segundos:</p>
+<pre><code class="language-http">GET /api/v1/chat/conversations/{chatConversationId}/messages?page=1&amp;pageSize=50
+Authorization: Bearer &lt;launch-token&gt;
+</code></pre>
+<pre><code class="language-http">POST /api/v1/chat/conversations/{chatConversationId}/messages
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+
+{ "content": "good game" }
+</code></pre>
+<h2 id="see-also">Ver también</h2>
+<ul>
+<li><a href="/es/docs/api/voice.html">Voz</a> — Las salas de voz se anclan a las conversaciones de chat.</li>
+<li><a href="/es/docs/api/friends.html">Amigos</a> — puertas de amistad, chats directos y uniones a salas</li>
+<li><a href="/es/docs/api/games.html">Juegos</a> — sesiones de juego y sus <code>chatConversationId</code></li>
+</ul>
+<p>Ver <a href="/es/docs/credentials.html">compatibilidad de credenciales</a> y <a href="/es/docs/api/contracts.html">contratos legibles por máquina</a>.</p>
+
+{% endraw %}

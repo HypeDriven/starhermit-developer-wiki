@@ -1,0 +1,185 @@
+---
+layout: "wiki"
+lang: "hi"
+title: "क्रैश और बग रिपोर्ट"
+source_url: "/docs/api/reports.html"
+source_path: "docs/api/reports.md"
+source_hash: "6d28d99eae2ec0d57e0611ea1d1db48136d4f38dacbb270fd4242dbfd0f0e97a"
+translation: "machine"
+permalink: "/hi/docs/api/reports.html"
+---
+{% raw %}
+<h1 id="crash-and-bug-reports">क्रैश और बग रिपोर्ट</h1>
+<p>खिलाड़ी किसी भी गेम के अंदर से क्रैश या बग की रिपोर्ट कर सकते हैं जिसमें स्लग - केवल-ब्राउज़र गेम है
+शामिल - गेम के लॉन्च टोकन या पूर्ण उपयोगकर्ता टोकन का उपयोग करना। गेम का मालिक पढ़ता है, ट्राइएज करता है और
+के माध्यम से उन्हें हटा देता है <code>/api/v1/me/github-games/{id}/reports</code>.</p>
+<p>कंटेनर गेम के स्वयं के सर्वर आउटपुट और क्रैश रिकॉर्ड के लिए, देखें
+<a href="/hi/docs/api/container-games.html#your-servers-output-and-crash-reports">कंटेनर-होस्टेड गेम सर्वर - आपके सर्वर की आउटपुट और क्रैश रिपोर्ट</a>.</p>
+<h2 id="endpoints">अंतिमबिंदुओं</h2>
+<table>
+<thead>
+<tr>
+<th>तरीका</th>
+<th>पथ</th>
+<th>प्रमाणीकरण</th>
+<th>विवरण</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/games/{slug}/reports</code></td>
+<td>उस गेम या JWT के लिए टोकन लॉन्च करें</td>
+<td>क्रैश या बग रिपोर्ट दर्ज करें</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/reports/mine</code></td>
+<td>उस गेम या JWT के लिए टोकन लॉन्च करें</td>
+<td>इस गेम के लिए आपकी 50 नवीनतम रिपोर्ट, उनकी स्थिति के साथ</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/me/github-games/{id}/reports</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td>सूची रिपोर्ट: <code>?kind=crash|bug&amp;status=open|acknowledged|resolved&amp;page=&amp;pageSize=</code> (≤100)</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td>एक रिपोर्ट, उसकी अनुलग्नक सूची के साथ</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}/attachments/{attachmentId}</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td>एक अनुलग्नक, हमेशा एक डाउनलोड के रूप में</td>
+</tr>
+<tr>
+<td>पैबंद</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td>तय करना <code>status</code></td>
+</tr>
+<tr>
+<td>मिटाना</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td>एक रिपोर्ट हटाएँ → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="file-a-report">रिपोर्ट दर्ज करें</h2>
+<pre><code class="language-http">POST /api/v1/games/{slug}/reports
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  "kind": "crash",
+  "title": "Crash entering the second level",
+  "description": "TypeError: cannot read properties of undefined (reading 'tiles')\n    at loadLevel (game.js:812)",
+  "clientVersion": "1.4.2",
+  "platform": "web",
+  "buildId": "a1b2c3d",
+  "sessionId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "attachments": [
+    { "fileName": "console.log", "contentType": "text/plain", "dataBase64": "…" }
+  ]
+}
+</code></pre>
+<ul>
+<li><code>kind</code> है <code>crash</code> या <code>bug</code>; <code>title</code> आवश्यक है (≤200 अक्षर).</li>
+<li>बाकी सब वैकल्पिक है. <code>userAgent</code> अनुरोध के लिए डिफ़ॉल्ट <code>User-Agent</code> शीर्षक.</li>
+<li>प्रतिक्रिया: <code>201 { "id", "kind", "status": "open", "createdAt" }</code>.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>स्थिति</th>
+<th>अर्थ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td>विकृत: अज्ञात <code>kind</code>, गुम <code>title</code>, अमान्य बेस64, या JSON नहीं</td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>अज्ञात या हटाया गया गेम</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>खेल की सीमा से अधिक विवरण, अनुलग्नक संख्या या अनुलग्नक बाइट्स</td>
+</tr>
+<tr>
+<td><code>429</code></td>
+<td>इस गेम के लिए दैनिक रिपोर्ट सीमा से अधिक; देखना <code>Retry-After</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="limits">सीमाएं</h2>
+<p>ऑपरेटर इनमें से प्रत्येक को पूरे प्लेटफ़ॉर्म और व्यक्तिगत गेम के लिए बदल सकते हैं; दैनिक सीमा
+एक खिलाड़ी के लिए भी सेट किया जा सकता है।</p>
+<table>
+<thead>
+<tr>
+<th>आप LIMIT</th>
+<th>गलती करना</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>प्रति दिन प्रति गेम प्रति खिलाड़ी रिपोर्ट</td>
+<td>20</td>
+</tr>
+<tr>
+<td>विवरण लंबाई</td>
+<td>20,000 अक्षर</td>
+</tr>
+<tr>
+<td>प्रति रिपोर्ट संलग्नक</td>
+<td>4</td>
+</tr>
+<tr>
+<td>प्रति रिपोर्ट अनुलग्नक बाइट्स</td>
+<td>2 एमआईबी</td>
+</tr>
+<tr>
+<td>प्रति गेम रिपोर्टें रखी गईं</td>
+<td>2,000</td>
+</tr>
+<tr>
+<td>प्रति गेम बाइट्स रखी गईं</td>
+<td>256 एमआईबी</td>
+</tr>
+<tr>
+<td>अवधारण</td>
+<td>90 दिन</td>
+</tr>
+</tbody>
+</table>
+<p>जब कोई गेम अपनी भंडारण सीमा तक पहुँच जाता है, तो सबसे पुरानी रिपोर्ट - पहले हल की गई - हटा दी जाती हैं
+जगह बनाओ. संपूर्ण प्रति-गेम बाइट सीमा से बड़ी एकल रिपोर्ट को अस्वीकार कर दिया जाता है <code>413</code>.</p>
+<h2 id="triage-reports-game-owner">ट्राइएज रिपोर्ट (गेम मालिक)</h2>
+<p>सूची वापस आती है <code>{ "items", "total", "page", "pageSize" }</code>; प्रत्येक आइटम पर रिपोर्टर का नाम लिखा होता है,
+<code>kind</code>, <code>status</code>, <code>title</code>, ग्राहक विवरण और उसकी अनुलग्नक संख्या। एक रिपोर्ट को आगे बढ़ाएं
+<code>open</code> → <code>acknowledged</code> → <code>resolved</code> साथ:</p>
+<pre><code class="language-http">PATCH /api/v1/me/github-games/{id}/reports/{reportId}
+Content-Type: application/json
+
+{ "status": "resolved" }
+</code></pre>
+<p>अनुलग्नकों को डाउनलोड के रूप में प्रस्तुत किया जाता है (<code>Content-Disposition: attachment</code>, <code>nosniff</code>, एक सैंडबॉक्सिंग
+सीएसपी)। केवल निष्क्रिय प्रकार ही अपना घोषित सामग्री प्रकार रखते हैं - टेक्स्ट, JSON, PNG, JPEG, WebP, GIF, ज़िप और
+गज़िप; मार्कअप सहित कुछ भी अन्य, के रूप में परोसा जाता है <code>application/octet-stream</code>.</p>
+<h2 id="from-the-javascript-sdk">जावास्क्रिप्ट एसडीके से</h2>
+<pre><code class="language-js">StarHermit.reportBug('Score did not save', 'Finished level 3, score shows 0', { clientVersion: '1.4.2' });
+StarHermit.captureCrashes({ clientVersion: '1.4.2' });   // opt-in: uncaught errors become crash reports
+</code></pre>
+<p>देखें <a href="/hi/docs/sdk/javascript.html#crash-and-bug-reports">जावास्क्रिप्ट एसडीके</a>.</p>
+<p>साझा <a href="/hi/docs/api/conventions.html">एपीआई कन्वेंशन</a> प्रतिक्रिया पार्सिंग, टाइमस्टैम्प, पेजिनेशन और पुनः प्रयास का वर्णन करें।</p>
+<p>देखना <a href="/hi/docs/credentials.html">क्रेडेंशियल अनुकूलता</a> और <a href="/hi/docs/api/contracts.html">मशीन-पठनीय अनुबंध</a>.</p>
+
+{% endraw %}

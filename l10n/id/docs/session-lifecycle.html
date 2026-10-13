@@ -1,0 +1,152 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Sesi, dunia, dan pemulihan"
+source_url: "/docs/session-lifecycle.html"
+source_path: "docs/session-lifecycle.md"
+source_hash: "ce490b04789602ff10857e6496e4e3847230ac0bd33619cb5beb61051dc65c85"
+translation: "machine"
+permalink: "/id/docs/session-lifecycle.html"
+---
+{% raw %}
+<h1 id="sessions-worlds-and-recovery">Sesi, dunia, dan pemulihan</h1>
+<p>Sesi otoritatif dibuat melalui perjodohan, penerimaan undangan, latihan, atau permulaan
+ruang realtime dengan backend server. Sebuah ruangan adalah lobi dengan tempat duduk; -nya <code>gameSessionId</code> mengidentifikasi
+sesi terpisah menjalankan gameplay. Melihat <a href="/id/docs/api/games.html">Pertandingan</a> Dan <a href="/id/docs/api/realtime.html">Ruangan waktu nyata</a>.</p>
+<h2 id="lifecycle">Siklus hidup</h2>
+<p><img src="/docs/images/id/session-lifecycle.svg" alt="Sesi berpindah dari aktif ke dijeda dan kembali lagi, atau berakhir melalui hasil, keluar secara eksplisit, tindakan pemilik, atau habis masa berlaku retensi."></p>
+<p><code>status</code> adalah <code>active</code> atau <code>finished</code>. Menjeda tidak menimbulkan status ketiga: <code>pausedAt</code> tanda a
+menjeda sesi persisten. Sesi yang sudah selesai tidak dapat diputar lagi. Pemutaran ulang, jika diaktifkan, akan dibaca
+melalui titik akhir mereka sendiri.</p>
+<table>
+<thead>
+<tr>
+<th>Peristiwa</th>
+<th>Pertandingan biasa</th>
+<th>Sesi yang persisten</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Soket gameplay terakhir terputus</td>
+<td>Berakhir setelah sekitar 5 menit tanpa kembali</td>
+<td>Jeda setelah sekitar 15 detik</td>
+</tr>
+<tr>
+<td>Tidak ada aktivitas pemain selama 24 jam</td>
+<td>Bisa pensiun</td>
+<td>Menjeda daripada mengakhiri karena tidak ada aktivitas</td>
+</tr>
+<tr>
+<td>Pemain meminta sesi lain</td>
+<td>Dapat menghentikan pertandingan lama yang kosong</td>
+<td>Tidak menghentikan dunia parkir mereka</td>
+</tr>
+<tr>
+<td>Pemain terhubung kembali</td>
+<td>Hanya selagi masih aktif</td>
+<td>Melanjutkan sebelum perintah pertama</td>
+</tr>
+<tr>
+<td>Backend mengembalikan hasil</td>
+<td>Selesai</td>
+<td>Selesai</td>
+</tr>
+<tr>
+<td>Pemilik mengakhiri sesi</td>
+<td>Selesai tanpa perubahan pemenang/peringkat</td>
+<td>Sama</td>
+</tr>
+</tbody>
+</table>
+<p>Batas waktu dan pemulihan dapat bervariasi berdasarkan penerapan. Dunia yang dijeda dihitung berdasarkan per pemain
+batas sesi bersamaan. Tawarkan cara untuk meninggalkan atau menyelesaikan dunia secara eksplisit.</p>
+<h2 id="disconnecting-and-leaving-are-different">Memutuskan hubungan dan keluar itu berbeda</h2>
+<p>Menutup soket akan mempertahankan keanggotaan sehingga pemain dapat kembali. Eksplisit <strong>Tinggalkan dunia</strong> memberi
+meningkatkan keanggotaan dan akses ke soket gameplaynya.</p>
+<p>Untuk sesi yang persisten <strong>tanpa ruangan</strong>:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/sessions/{sessionId}/leave
+Authorization: Bearer &lt;player-token&gt;
+</code></pre>
+<p>Tidak ada badan permintaan. Sukses adalah <code>204</code>. Permainan diberitahu tentang perubahan keanggotaan dan
+soket gameplay meninggalkan dekat. Ketika anggota manusia terakhir pergi, dunia berakhir
+<code>players_left</code>. <code>404</code> berarti tidak ada sesi, <code>403</code> berarti bukan anggota, <code>410</code> berarti sudah berakhir, dan
+<code>409</code> berarti ini bukan dunia yang persisten atau milik sebuah ruangan.</p>
+<p>Untuk a <strong>sesi terikat ruangan</strong>, menggunakan <code>POST /api/v1/realtime/rooms/{roomId}/leave</code>. dalam sebuah
+ruang join-in-progress ini mengosongkan kursi dan menghapus keanggotaan sesi. Dalam pertandingan dengan daftar tetap,
+kursinya menjadi AI dan sesi tersebut dapat mempertahankan keanggotaan aslinya. Ikuti aturan ruangan;
+jangan panggil titik akhir cuti sesi mandiri.</p>
+<p>Dunia join-in-progress yang sedang berjalan dapat tetap terdaftar setelah pengunjung terakhirnya keluar. Seorang anggota a
+dunia yang gigih juga dapat menggunakan lobi biasa lainnya. Temukan keanggotaan saat ini melalui
+<code>GET /api/v1/realtime/rooms/joined</code>, tidak hanya <code>/rooms/mine</code>.</p>
+<h2 id="read-recovery-information">Baca informasi pemulihan</h2>
+<p>Pemain dalam sesi tersebut dan pemilik permainan dapat menghubungi:</p>
+<pre><code class="language-http">GET /api/v1/games/{slug}/sessions/{sessionId}/recovery
+Authorization: Bearer &lt;player-or-owner-token&gt;
+</code></pre>
+<p>Responsnya menjelaskan batas pemulihan dan pengangkutan efektif sesi ini:</p>
+<table>
+<thead>
+<tr>
+<th>Bidang</th>
+<th>Arti / satuan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sessionId</code>, <code>status</code>, <code>runtime</code>, <code>persistent</code></td>
+<td>Identitas dan jenis sesi; waktu proses adalah <code>script</code> atau <code>container</code></td>
+</tr>
+<tr>
+<td><code>pausedAt</code>, <code>pausedMillis</code></td>
+<td>Jeda mulai stempel waktu ISO; akumulasi waktu jeda dalam milidetik</td>
+</tr>
+<tr>
+<td><code>snapshotBytes</code>, <code>stateBudgetBytes</code>, <code>lastSnapshotAt</code></td>
+<td>Ukuran/anggaran dokumen pemulihan dalam byte dan waktu ISO snapshot terbaru</td>
+</tr>
+<tr>
+<td><code>snapshotIntervalSeconds</code>, <code>maxSnapshotPushHz</code></td>
+<td>Irama pos pemeriksaan kontainer dan langit-langit dorong; <code>null</code> untuk skrip</td>
+</tr>
+<tr>
+<td><code>maxRestoreStalenessSeconds</code></td>
+<td>Usia snapshot maksimum pencocokan kontainer; <code>null</code> jika tidak berlaku, termasuk dunia persisten</td>
+</tr>
+<tr>
+<td><code>maxRestores</code>, <code>restoreWindowMinutes</code>, <code>restoreCount</code></td>
+<td>Tunjangan upaya pemulihan, jangka waktunya, dan jumlah pemulihan yang dilaporkan</td>
+</tr>
+<tr>
+<td><code>retentionDays</code>, <code>recoveryDataExpiresAt</code></td>
+<td>Retensi dunia yang dijeda; <code>0</code> Dan <code>null</code> berarti tidak ada masa berlaku yang dikonfigurasi</td>
+</tr>
+<tr>
+<td><code>transport.maxMessageBytes</code>, <code>transport.maxRealtimeInputsPerSecond</code></td>
+<td>Bingkai gameplay/batas input</td>
+</tr>
+<tr>
+<td><code>transport.tickRateHz</code>, <code>transport.pacingRateHz</code></td>
+<td>Tingkat tick dan transport pacing yang efektif dalam Hz</td>
+</tr>
+</tbody>
+</table>
+<p>Bacalah nilai-nilai ini alih-alih menjanjikan retensi tanpa batas atau jendela crash-rewind yang tetap. SEBUAH
+positif <code>retentionDays</code> memungkinkan dunia yang dijeda menjadi kedaluwarsa. Menampilkan <code>recoveryDataExpiresAt</code> kapan diatur;
+kadaluarsa menyelesaikan sesi dengan <code>retention_expired</code>.</p>
+<h2 id="restoring-client-and-server-state">Memulihkan keadaan klien dan server</h2>
+<p>Saat soket tersambung kembali, minta pesan status lengkap game Anda. Pada <code>resumed</code>, buang interpolasi
+dan prediksi berdasarkan keadaan sebelumnya; <code>lostMs</code> melaporkan kesenjangan pemulihan. Jangan berasumsi untuk pindah
+yang pengakuannya hilang aman untuk dikirim ulang.</p>
+<p>Skrip mengembalikan dokumen negara secara lengkap. Kontainer harus membangun kembali seluruh sesi dari snapshot
+dan daftar pemain saat ini, termasuk pemain yang diterima sejak cuplikan sebelumnya. Dorong pos pemeriksaan setelahnya
+peristiwa penting, dalam batas maksimum yang dilaporkan. Jeda akan menghapus sesi live container dan sesi selanjutnya
+membuatnya kembali dari snapshot yang disimpan. Waktu permainan yang dijeda dapat digunakan <code>ctx.now - ctx.pausedMs</code>.</p>
+<p>Resume yang gagal membuat dunia terhenti dan menutup soket setelah terjadi kesalahan; mundur dan coba lagi.
+Pemulihan yang gagal malah dapat mengakhiri sesi. Terminal <code>abandoned</code> alasannya antara lain <code>players_left</code>,
+<code>idle_no_players</code>, <code>superseded</code>, <code>server_failure</code>, <code>restore_failed</code>, <code>operator_ended</code>, Dan
+<code>retention_expired</code>. Tunjukkan alasannya dan berhenti menyambung kembali. Pengabaian tidak memberikan pemenang atau perubahan Elo.</p>
+<p>Melihat <a href="/id/docs/tutorials/persistent-sessions.html">sesi yang persisten</a> untuk kode server dan
+<a href="/id/docs/troubleshooting.html#websockets">pemecahan masalah</a> untuk menghubungkan kembali keputusan.</p>
+
+{% endraw %}

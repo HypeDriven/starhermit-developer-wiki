@@ -1,0 +1,357 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Tutorial de integración: creación de un juego en StarHermit"
+source_url: "/docs/tutorials/chess-walkthrough.html"
+source_path: "docs/tutorials/chess-walkthrough.md"
+source_hash: "7821c7dca4a5960c279cb38770c02c54213ef04443d3147dac75b7d222022dec"
+translation: "machine"
+permalink: "/es/docs/tutorials/chess-walkthrough.html"
+---
+{% raw %}
+<h1 id="integration-walkthrough-building-a-game-on-starhermit">Tutorial de integración: creación de un juego en StarHermit</h1>
+<p>Esta página recorre el ciclo de vida completo de la integración de un juego con StarHermit, paso a paso: publicación, inicio, menú, emparejamiento, juego, chat, voz, calificaciones, repeticiones. Todo lo mostrado se aplica a <strong>cualquier</strong> Juego: tu juego sustituye su propio slug, sus propios comandos y su propio script de reglas.</p>
+<p>El ejemplo en ejecución es la implementación de referencia de ajedrez de código abierto, <a href="https://github.com/HypeDriven/starhermit-chess">ajedrez-ermitaño-estrella</a>: un juego de ajedrez por correspondencia (24 horas por movimiento, con clasificación elo) creado como un juego de navegador estático sin compilación en HTML/JS/CSS básico. Para cada paso, el tutorial muestra las llamadas exactas que realiza un cliente de juego y el archivo en el repositorio de referencia que las realiza. Dondequiera que aparezcan valores específicos del ajedrez (el UUID del juego de referencia, comandos de movimiento, la codificación del tablero, el "hala" IA, la fecha límite de movimiento de 24 horas: son valores de ejemplo que tu propio juego define en su propio guión.</p>
+<p>Léalo junto con las páginas de referencia de API a las que enlaza. La lista de verificación al final condensa todo en lo que tu propio juego necesita replicar.</p>
+<h2 id="1-anatomy-of-a-platform-hosted-game">1. Anatomía de un juego alojado en una plataforma</h2>
+<p>Un juego de plataformas con guión es un sitio estático simple más un archivo de reglas. La implementación de referencia de ajedrez, por ejemplo, no tiene paquete, marco ni paso de compilación:</p>
+<table>
+<thead>
+<tr>
+<th>Archivo</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index.html</code></td>
+<td>Toda la página: tablero, menú, chat y UI de voz</td>
+</tr>
+<tr>
+<td><code>app.js</code></td>
+<td>Arranque de la aplicación, menú principal, emparejamiento, invitaciones, repeticiones, perfiles</td>
+</tr>
+<tr>
+<td><code>net.js</code></td>
+<td>Capa HTTP: rutas de juego con alcance, tokens de lanzamiento, actualización de tokens</td>
+</tr>
+<tr>
+<td><code>game.js</code></td>
+<td>Controlador en el juego: juego WebSocket, chat, voz</td>
+</tr>
+<tr>
+<td><code>ui.js</code></td>
+<td>Representación de tablero y menú</td>
+</tr>
+<tr>
+<td><code>style.css</code></td>
+<td>Estilos</td>
+</tr>
+<tr>
+<td><code>server.js</code></td>
+<td>Las reglas - ver más abajo</td>
+</tr>
+<tr>
+<td><code>starhermit.txt</code></td>
+<td>Publicar manifiesto</td>
+</tr>
+</tbody>
+</table>
+<p>En la implementación de referencia, <code>server.js</code> merece especial atención. Es <strong>ambos</strong> cosas a la vez:</p>
+<ul>
+<li>El <strong>script autoritativo del servidor</strong> la plataforma se ejecuta (a través de su host Jint) exponiendo <code>globalThis.game</code>. Cada movimiento se valida aquí, en el servidor, según el contrato en <a href="/es/docs/api/game-scripts.html">game-scripts.md</a>.</li>
+<li>el del cliente <strong>motor de reglas compartidas</strong>, expuesto como <code>globalThis.chessRules</code>, que el navegador utiliza para renderizar tableros, mover vistas previas y reproducir reproducciones.</li>
+</ul>
+<p>Un archivo, una fuente de verdad, <strong>autoridad de reglas cero en el cliente</strong>. Un cliente de juego que sigue este patrón nunca decide si un movimiento es legal: muestra lo que transmite el servidor. Esta es la idea arquitectónica más importante en un juego de plataformas con guión, y la implementación de referencia lo demuestra.</p>
+<h2 id="2-publishing-your-game">2. Publicar tu juego</h2>
+<p>La publicación de cualquier juego comienza con el <code>starhermit.txt</code> manifiesto en la raíz del repositorio. Declara el juego <code>name</code>, <code>launch</code> punto de entrada, <code>owner</code>, y <code>server</code> guion. Opcional <code>cover=</code> es la obra de arte en el mosaico de la biblioteca; consulte <a href="/es/docs/starhermit-txt.html#game-with-cover-art">El <code>starhermit.txt</code> manifiesto</a>. El manifiesto de la implementación de referencia, por ejemplo:</p>
+<pre><code class="language-text">name=StarHermit Chess
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6  # StarHermit user ID, not username/nickname
+server=server.js
+</code></pre>
+<p>Usa lo inmutable <code>id</code> de <code>GET /api/v1/me</code> para <code>owner</code>; Se muestran los nombres de usuario y apodos.
+valores y no deben utilizarse como identificadores de propiedad manifiesta.</p>
+<p>La plataforma clona el repositorio, sirve los archivos estáticos en <code>&lt;slug&gt;.starhermit.com</code> — el slug es el fluido que la plataforma asigna al juego, nunca un nombre que tú elijas; el juego de referencia es <code>83fd04b1-3cbe-4b09-a251-3733ad4b9d94</code>, por lo que se puede reproducir en vivo en <a href="https://83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com">83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com</a> - y apoderados <code>/api</code> y <code>/ws</code> al fondo <strong>mismo origen</strong>. Esa única decisión elimina toda una categoría de trabajo: sin CORS, sin configuración basada en API, sin detección de entorno: los clientes de juegos solo usan rutas relativas.</p>
+<p>Flujo completo: <a href="/es/docs/api/github-games.html">github-games.md</a> y <a href="/es/docs/api/publisher.html">publisher.md</a>.</p>
+<h2 id="3-launch-and-authentication">3. Lanzamiento y autenticación.</h2>
+<p>El flujo de referencia de ajedrez recibe las credenciales del iniciador de la plataforma:</p>
+<ol>
+<li>El lanzador llama <code>POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/launch-token</code> (se muestra con el UUID del juego de referencia; sustitúyalo por el suyo) con el JWT de plataforma completa del usuario.</li>
+<li>Vuelve a ser de corta duración, <strong>ámbito del juego</strong> simbólico:</li>
+</ol>
+<pre><code class="language-json">{ "token": "&lt;jwt&gt;", "expiresInSeconds": 3600 }
+</code></pre>
+<ol start="3">
+<li>Abre el juego en <code>index.html#game_token=&lt;jwt&gt;</code>, opcionalmente con <code>&amp;session_id=&lt;guid&gt;</code> adjunto para invitar a enlaces profundos.</li>
+</ol>
+<p>En la implementación de referencia, el cliente lee el hash. <strong>una vez</strong>, luego lo pela con <code>history.replaceState</code> para que el token nunca permanezca en la barra de URL o en el historial (<code>app.js</code>, <code>App.init</code>). Decodifica la carga útil JWT para dos reclamaciones:</p>
+<ul>
+<li><code>sub</code> — la identificación del usuario</li>
+<li><code>game_scope</code> - la babosa del juego</li>
+</ul>
+<p>Ese segundo reclamo importa: <strong>un cliente de juego nunca debería codificar su slug</strong>. La implementación de referencia construye cada URL de API como <code>/api/v1/games/&lt;slug&gt;</code> más un sufijo (<code>net.js</code>, <code>Net.gamePath</code>), por lo que el mismo código funciona para cualquier juego, cualquier slug, cualquier implementación.</p>
+<p><strong>Refrescar.</strong> El token con alcance puede volver a llamarse <code>launch-token</code> para su propio juego, por lo que los clientes normalmente se actualizan periódicamente: la implementación de referencia se actualiza cada 45 minutos (<code>net.js</code>, <code>Net.startRefresh</code>), cómodamente dentro de la vida útil de 60 minutos.</p>
+<p>Un juego abierto directamente puede ofrecer en cambio <a href="/es/docs/api/auth.html#sign-in-from-a-directly-opened-browser-game">inicio de sesión en el navegador</a>,
+que regresa <code>#access_token</code> en lugar del lanzador <code>#game_token</code>. Maneje ambas rutas de entrada si
+apoyas a ambos. Renueve utilizando la vida útil devuelta y respete la cadena de renovación predeterminada de 12 horas
+techo. A <code>403 terms_acceptance_required</code> requiere que el jugador <a href="/es/docs/api/profile.html#terms-acceptance">aceptar a través de su cuenta</a>;
+o muestra los términos en el juego y acepta con el token de inicio del jugador. Iniciar sesión nuevamente no
+aceptación del registro.</p>
+<p>Referencia de autenticación: <a href="/es/docs/api/auth.html">auth.md</a>, <a href="/es/docs/api/games.html">games.md</a>.</p>
+<h2 id="4-loading-the-main-menu">4. Cargando el menú principal</h2>
+<p>El menú de un juego normalmente se abre con un pequeño lote de GET contra su propio slug. En la implementación de referencia esto es <code>refreshMenu</code> en <code>app.js</code>:</p>
+<p><strong>Información del juego + mis estadísticas:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94
+</code></pre>
+<pre><code class="language-json">{
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "name": "StarHermit Chess",
+  "enabled": true,
+  "leaderboardId": "&lt;guid&gt;",
+  "maxConcurrentSessionsPerPlayer": 20,
+  "me": {
+    "userId": "&lt;guid&gt;",
+    "elo": 1420,
+    "wins": 31,
+    "losses": 18,
+    "draws": 4,
+    "activeSessionCount": 3
+  }
+}
+</code></pre>
+<p>El <code>me</code> block es la tarjeta de jugador completa: elo, record y cuántas de las sesiones concurrentes permitidas están en uso (20 en el ejemplo de ajedrez).</p>
+<p><strong>Mis sesiones:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/mine
+</code></pre>
+<pre><code class="language-json">[
+  {
+    "sessionId": "&lt;guid&gt;",
+    "status": "active",
+    "players": [ /* ... */ ],
+    "createdAt": "…",
+    "finishedAt": null,
+    "myTurn": true,
+    "deadline": 1784642591000
+  }
+]
+</code></pre>
+<p><code>myTurn</code> y <code>deadline</code> son los que hacen que la lista de sesiones de un juego por correspondencia sea útil: el jugador ve de un vistazo qué juegos le esperan y cuándo debe realizarse cada movimiento.</p>
+<p><strong>Tabla de clasificación de amigos:</strong></p>
+<pre><code class="language-http">GET /api/v1/leaderboards/{leaderboardId}/entries?friendsOnly=true&amp;page=1&amp;pageSize=10
+</code></pre>
+<p>usando el <code>leaderboardId</code> de la respuesta de información del juego.</p>
+<p><strong>Repeticiones recientes:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/mine?limit=10
+</code></pre>
+<p><strong>Invitaciones pendientes:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites
+</code></pre>
+<p>Referencias: <a href="/es/docs/api/games.html">games.md</a>, <a href="/es/docs/api/leaderboards.html">leaderboards.md</a>.</p>
+<h2 id="5-getting-players-into-a-session--three-ways">5. Involucrar a los jugadores en una sesión: tres formas</h2>
+<p>Este tutorial utiliza práctica de emparejamiento, aceptación de invitaciones e inteligencia artificial para crear sesiones. Los juegos que necesitan un lobby pueden usar <a href="/es/docs/api/realtime.html">salas en tiempo real</a>, cuyo flujo de inicio también puede crear una sesión autorizada vinculada.</p>
+<h3 id="a-matchmaking">a. Casamentero</h3>
+<p>En la implementación de referencia, <code>App.startMatchmaking</code> en <code>app.js</code>:</p>
+<pre><code class="language-http">POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking
+</code></pre>
+<p>La respuesta es un ticket:</p>
+<pre><code class="language-json">{ "ticketId": "&lt;guid&gt;", "status": "queued" }
+</code></pre>
+<p>o una coincidencia inmediata:</p>
+<pre><code class="language-json">{ "status": "matched", "sessionId": "&lt;guid&gt;" }
+</code></pre>
+<p>Mientras están en cola, los clientes sondean el punto final de emparejamiento: las encuestas de implementación de referencia. <code>GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking</code> cada 3 segundos y <code>DELETE /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking</code> cancela el billete. El cliente de referencia también se asegura de que el jugador nunca se quede atascado mirando una ruleta: después de 30 segundos sin igual, un <strong>"jugar contra hal"</strong> Aparece el botón ("hala" es el oponente de IA integrado del ejemplo de ajedrez (ver §12), y <code>POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/ai</code> regresa <code>{ "sessionId" }</code>.</p>
+<h3 id="b-friend-invite">b. invitación de amigo</h3>
+<p>En la implementación de referencia, <code>App.inviteFriend</code> en <code>app.js</code>. Primera lista de amigos: este punto final está permitido explícitamente para tokens con ámbito de juego:</p>
+<pre><code class="language-http">GET /api/v1/me/friends
+</code></pre>
+<p>Luego envía la invitación:</p>
+<pre><code class="language-http">POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites
+{ "toUserId": "&lt;guid&gt;" }
+</code></pre>
+<p>El destinatario acepta (o rechaza) de su propio cliente:</p>
+<pre><code class="language-http">POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/{id}/accept   → { "sessionId": "&lt;guid&gt;" }
+POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/{id}/decline  → 204
+</code></pre>
+<p>Aceptar es lo que crea la sesión. El <code>&amp;session_id=</code> launch-hash deep-link (§3) coloca al jugador invitado directamente en él.</p>
+<p>Las invitaciones de amigos solo llegan a personas que ya son amigos. Para atraer a alguien que no está (o que no está en absoluto) en la plataforma, la implementación de referencia también ofrece una <strong>Compartir enlace de invitación</strong> botón (<code>App.shareInviteLink</code>): una línea de construcción de cadenas que copia</p>
+<pre><code>https://dashboard.starhermit.com/game-invite/&lt;Net.userId&gt;/&lt;slug&gt;
+</code></pre>
+<p>al portapapeles. El panel web maneja todo lo que el destinatario necesita (iniciar sesión, la solicitud de amistad, un apodo, iniciar el juego) y luego envía la invitación a jugar de nuevo al que comparte, por lo que llega a esta misma lista de invitaciones. Ver <a href="/es/docs/api/games.html#share-links-invite-by-url">Compartir enlaces</a> por el contrato completo.</p>
+<h3 id="c-the-rule">do. la regla</h3>
+<p>Las sesiones se crean mediante emparejamiento, invitación-aceptación, <code>sessions/ai</code>, o iniciar una sala en tiempo real con
+un servidor de fondo. Para un vestíbulo con asientos, utilice el <a href="/es/docs/api/realtime.html">API de salas en tiempo real</a>.</p>
+<h2 id="6-playing-over-the-gameplay-websocket">6. Jugar sobre el juego WebSocket</h2>
+<p>El bucle de juego es el mismo para todos los juegos con guión: recuperar la sesión, abrir el socket, renderizar transmisiones, enviar comandos. En la implementación de referencia esto vive en <code>game.js</code>, <code>GameController</code>.</p>
+<p><strong>Obtener la sesión:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/{sessionId}
+</code></pre>
+<pre><code class="language-json">{
+  "sessionId": "&lt;guid&gt;",
+  "status": "active",
+  "players": [ /* ... */ ],
+  "createdAt": "…",
+  "finishedAt": null,
+  "chatConversationId": "&lt;guid&gt;",
+  "result": null
+}
+</code></pre>
+<p>Nota <code>chatConversationId</code> — lo necesitarás para chatear (§7) y voz (§8).</p>
+<p><strong>Conecte la toma de juego:</strong></p>
+<pre><code class="language-text">ws(s)://&lt;host&gt;/ws/v1/games?sessionId=&lt;id&gt;&amp;access_token=&lt;token&gt;
+</code></pre>
+<p>En <code>open</code>, el cliente envía inmediatamente un comando de sincronización:</p>
+<pre><code class="language-json">{ "type": "cmd", "data": { "type": "sync" } }
+</code></pre>
+<p>En cualquier desconexión, se vuelve a conectar con un retroceso exponencial desde 1 segundo hasta un límite máximo de 30 segundos, y <strong>reenvía la sincronización en cada apertura</strong>. El comando sync hace que la reconexión sea sin estado y idempotente: todo lo que el cliente perdió, el servidor lo retransmite.</p>
+<p><strong>El sobre.</strong> Cada cuadro es un sobre JSON delgado:</p>
+<ul>
+<li>Cliente → servidor: <code>{"type":"cmd","data":&lt;command&gt;}</code></li>
+<li>Servidor → cliente: <code>{"type":"game","data":…}</code>, <code>{"type":"error","error":…}</code>, <code>{"type":"presence","userId","online"}</code></li>
+</ul>
+<p><strong>Los comandos del juego están definidos por tu propio script de reglas.</strong> Las órdenes del ejemplo del ajedrez, por ejemplo (la <code>data</code> carga útil de un <code>cmd</code> marco):</p>
+<pre><code class="language-json">{ "type": "sync" }
+{ "type": "move", "from": "e2", "to": "e4", "promo": "q" }
+{ "type": "resign" }
+{ "type": "offer-draw" }
+{ "type": "accept-draw" }
+{ "type": "decline-draw" }
+</code></pre>
+<p>En el ejemplo del ajedrez, <code>promo</code> sólo está presente en movimientos de promoción.</p>
+<p><strong>Las transmisiones también están definidas por script.</strong> Las transmisiones del ejemplo de ajedrez (las <code>data</code> carga útil de un <code>game</code> marco):</p>
+<ul>
+<li><code>state</code> - la instantánea completa:</li>
+</ul>
+<pre><code class="language-json">{
+  "type": "state",
+  "white": "&lt;userId&gt;",
+  "black": "&lt;userId&gt;",
+  "ratings": { "white": 1420, "black": 1388 },
+  "board": "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr",
+  "turn": "w",
+  "moves": [ { "from": "e2", "to": "e4", "promo": null, "san": "e4", "at": "…" } ],
+  "status": "active",
+  "result": null,
+  "deadline": 1784642591000,
+  "drawOfferBy": null,
+  "ai": false,
+  "aiName": null
+}
+</code></pre>
+<p>El <code>board</code> es una cadena de 64 caracteres, <code>index = rank * 8 + file</code> con <code>a1 = 0</code>, usando <code>PNBRQK</code> para blanco, <code>pnbrqk</code> para negro, <code>.</code> para casillas vacías: una codificación específica del ajedrez; Tu juego define su propia forma de estado.</p>
+<ul>
+<li><code>moved</code> – se aplicó un solo movimiento.</li>
+<li><code>draw-offered</code> / <code>draw-declined</code>.</li>
+<li><code>game-over</code> — <code>{ "result": { "kind", "reason", "at" }, "view" }</code>, dónde <code>reason</code> los valores están definidos por script; el ejemplo de ajedrez usa <code>checkmate</code>, <code>stalemate</code>, <code>threefold-repetition</code>, <code>fifty-move-rule</code>, <code>insufficient-material</code>, <code>resignation</code>, <code>agreement</code>, <code>timeout</code>, <code>timeout-no-moves</code>.</li>
+</ul>
+<p><strong>La identidad nunca se quita de las cargas útiles.</strong> El cliente envía comandos sin identificación de usuario y el script nunca confía en uno del cable: la plataforma pasa el remitente autenticado al script. No hay nada que falsificar.</p>
+<p>Ver <a href="/es/docs/api/game-scripts.html">game-scripts.md</a> por el contrato de guión detrás de todo esto.</p>
+<h2 id="7-in-game-chat">7. Chat en el juego</h2>
+<p>Cada sesión lleva un <code>chatConversationId</code> (§6) que los clientes del juego pueden usar para el chat dentro del juego. En la implementación de referencia, <code>initChat</code> en <code>game.js</code> lo usa así:</p>
+<pre><code class="language-http">GET  /api/v1/chat/conversations/{id}/messages?page=1&amp;pageSize=50
+POST /api/v1/chat/conversations/{id}/messages
+     { "content": "good luck!" }
+</code></pre>
+<p>El socket de chat en tiempo real <code>ws/v1/chat</code> es <strong>bloqueado para tokens relacionados con el juego</strong>. El cliente de referencia lo intenta una vez, es rechazado y vuelve a sondear el punto final REST cada 5 segundos; planifique sondear desde el principio en su propio juego.</p>
+<p>El chat funciona aunque los dos jugadores no sean amigos: la conversación de sesión (escriba <code>"game"</code>) se crea con ambos jugadores como participantes, por lo que las reglas habituales de permisos de chat ya se cumplen.</p>
+<p>Referencia: <a href="/es/docs/api/chat.html">chat.md</a>.</p>
+<h2 id="8-voice">8. Voz</h2>
+<p>La voz es opcional y los clientes del juego normalmente la conservan. <strong>desactivado por defecto</strong>. La implementación de referencia lo maneja en <code>game.js</code>, <code>VoiceController</code>. Cuando un jugador lo habilita:</p>
+<ol>
+<li>Busque o cree la sala vinculada a la conversación de la sesión:</li>
+</ol>
+<pre><code class="language-http">GET  /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;
+POST /api/v1/voice/rooms
+     { "conversationId": "&lt;chatConversationId&gt;" }
+</code></pre>
+<ol start="2">
+<li>Únase a él:</li>
+</ol>
+<pre><code class="language-http">POST /api/v1/voice/rooms/{roomId}/join
+</code></pre>
+<ol start="3">
+<li>Conecte la toma de voz:</li>
+</ol>
+<pre><code class="language-text">ws(s)://&lt;host&gt;/ws/v1/voice?roomId=&lt;id&gt;&amp;access_token=&lt;token&gt;
+</code></pre>
+<p>Los medios son <strong>WebRTC peer-to-peer con negociación perfecta</strong>; la toma sólo lleva señalización y control:</p>
+<ul>
+<li>Señalización: <code>{"type":"rtc","to":&lt;userId&gt;,"payload":{"sdp":…}}</code> o <code>{"type":"rtc","to":&lt;userId&gt;,"payload":{"ice":…}}</code></li>
+<li>Control: <code>{"type":"mute","muted":…}</code>, <code>{"type":"speaking","speaking":…}</code></li>
+<li>Eventos del servidor: <code>voice.roster</code>, <code>voice.participant_joined</code>, <code>voice.participant_left</code>, <code>voice.mute_changed</code>, <code>voice.speaking</code>, <code>voice.rtc</code></li>
+</ul>
+<p>Si P2P falla, el recurso alternativo son los fotogramas binarios opus transmitidos por el servidor: una identificación del remitente de 16 bytes seguida de la carga útil de audio.</p>
+<p>La voz es <strong>deshabilitado en juegos de IA</strong> — el cliente de referencia comprueba <code>view.ai</code> de la transmisión estatal y nunca ofrece el interruptor.</p>
+<p>Referencia: <a href="/es/docs/api/voice.html">voice.md</a>.</p>
+<h2 id="9-ratings-and-leaderboard">9. Calificaciones y clasificación</h2>
+<p>Los clientes del juego nunca envían una puntuación. Cuando termina un juego, el <strong>guion</strong> regresa <code>eloUpdates</code> y el <strong>plataforma</strong> los publica en la tabla de clasificación del juego. Los clientes nunca pueden escribir entradas en la tabla de clasificación directamente; el servidor también debe validar la jugabilidad detrás de sus actualizaciones de calificación.</p>
+<p>Por lo tanto, el lado del cliente es trivial: lea las entradas (§4) y renderícelas, como lo hace la implementación de referencia. Ver <a href="/es/docs/api/leaderboards.html">leaderboards.md</a>.</p>
+<h2 id="10-replays">10. Repeticiones</h2>
+<p>Un juego que declara <code>replays: true</code> en su script tiene guardadas todas las sesiones finalizadas por la plataforma; los clientes simplemente lo buscan y lo renderizan. Controlar <code>replaysEnabled</code> en <code>GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94</code> antes de ofrecer la pantalla: un operador puede responder por un juego de cualquier manera, y los puntos finales a continuación regresan <code>404</code> cuando las repeticiones están apagadas. En la implementación de referencia, la búsqueda es <code>App.loadReplays</code> / <code>App.openReplay</code> en <code>app.js</code>:</p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/mine?limit=10
+GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/{sessionId}
+</code></pre>
+<p>Una carga útil de repetición (que se muestra con la forma del resultado del ejemplo de ajedrez):</p>
+<pre><code class="language-json">{
+  "sessionId": "&lt;guid&gt;",
+  "players": [ /* ... */ ],
+  "finishedAt": "…",
+  "result": {
+    "kind": "win",
+    "reason": "checkmate",
+    "at": "…",
+    "white": "&lt;userId&gt;",
+    "black": "&lt;userId&gt;",
+    "moveCount": 41,
+    "eloBefore": { "white": 1420, "black": 1388 },
+    "eloAfter": { "white": 1436, "black": 1372 }
+  },
+  "state": { "game": { "moves": [ /* ... */ ] } }
+}
+</code></pre>
+<p>El espectador camina <code>state.game.moves</code> a través del compartido <code>chessRules</code> motor localmente - lo mismo <code>server.js</code> archivo de reglas, que se ejecuta en el navegador, por lo que las repeticiones no necesitan viajes de ida y vuelta al servidor; conservar la versión de las reglas utilizada para una partida archivada cuando las reglas cambian. Esta es la segunda recompensa del diseño de una fila y dos roles del §1, un patrón que cualquier juego puede adoptar con su propio archivo de reglas.</p>
+<h2 id="11-player-profiles">11. Perfiles de jugadores</h2>
+<p>Los clientes del juego resuelven a otros jugadores a través de puntos finales de perfil público. En la implementación de referencia, <code>App.profileFor</code> en <code>app.js</code>:</p>
+<pre><code class="language-http">GET /api/v1/users/{id}/profile  → { "id": "…", "username": "…", "nickname": "…" }
+GET /api/v1/users/{id}/avatar   → image/png, or 404
+</code></pre>
+<p>Dos reglas de UI que sigue el cliente de referencia:</p>
+<ul>
+<li>Prestar <strong>apodos</strong>, nunca nombres de usuario.</li>
+<li>retroceder a <code>"Player " + id.slice(0, 8)</code> cuando falta un perfil o un apodo está vacío.</li>
+</ul>
+<p>Referencia: <a href="/es/docs/api/profile.html">profile.md</a>.</p>
+<h2 id="12-ai-practice-opponents">12. Oponentes de práctica de IA</h2>
+<p><code>POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/ai</code> (que se muestra con el ejemplo) crea una sesión en la que la plataforma marca un asiento <code>ai: true</code> en <code>createSession</code>. El guión en sí desempeña ese papel: el comportamiento de la IA es algo que define su propio guión. En el ejemplo del ajedrez, el asiento lo juega "hala", un codicioso motor de captura de material que responde <strong>dentro de la misma invocación</strong> que procesa el movimiento del ser humano.</p>
+<p>El guión del juego decide si la práctica cambia la calificación del jugador humano. El asiento de IA no puede
+recibir escrituras de estado de jugador, calificación o logros de la cuenta. Mantenga las estadísticas de IA en estado de sesión.</p>
+<h2 id="13-what-the-reference-game-does-not-use">13. Lo que NO usa el juego de referencia</h2>
+<p>La implementación de referencia de ajedrez no toca ninguno de estos, pero todos están disponibles para juegos que los necesitan:</p>
+<ul>
+<li><strong>Logros</strong> - cualquier juego con un <code>server=</code> script puede declararlos (<code>game.achievements</code>) y otorgarles autoridad de servidor desde cualquier enlace de ciclo de vida; el ajedrez simplemente no lo hace. Los títulos del catálogo tienen una ruta separada reclamada por el cliente: <a href="/es/docs/api/achievements.html">achievements.md</a>, <a href="/es/docs/api/game-scripts.html#achievements">game-scripts.md</a>.</li>
+<li><strong>Catálogo / derechos</strong> — para juegos distribuidos y vendidos a través del catálogo: <a href="/es/docs/api/catalog.html">catalog.md</a>.</li>
+<li><strong>Relé</strong> — el canal de retransmisión de alta frecuencia para juegos de ritmo rápido en tiempo real donde el recorrido de ida y vuelta del script por comando es demasiado lento: <a href="/es/docs/api/relay.html">relay.md</a>.</li>
+<li><strong>Bibliotecas externas</strong> — vincular bibliotecas de juegos Steam, Epic o GOG: <a href="/es/docs/api/external-libraries.html">external-libraries.md</a>.</li>
+</ul>
+<p>El ejemplo del ajedrez, un juego de mesa por turnos, no necesita ninguno de ellos. Si su juego es en tiempo real, se distribuye por catálogo o necesita cargas útiles binarias, esas páginas son el lugar donde debe buscar a continuación.</p>
+<h2 id="14-integration-checklist">14. Lista de verificación de integración</h2>
+<ul>
+<li>[ ] Agregar un <code>starhermit.txt</code> manifiesto (<code>name</code>, <code>launch</code>, <code>owner</code>, <code>server</code>; opcional <code>cover=</code> para el mosaico de la biblioteca).</li>
+<li>[ ] Leer <code>#game_token</code> del hash de URL una vez, luego quítelo con <code>history.replaceState</code>.</li>
+<li>[] Decodifica el JWT para <code>sub</code> (identificación de usuario) y <code>game_scope</code> (babosa): nunca codifique su babosa.</li>
+<li>[] Cree todas las rutas de API como URL relativas del mismo origen: <code>/api/v1/games/&lt;slug&gt;</code> + sufijo.</li>
+<li>[] Actualiza el token de lanzamiento cada 45 minutos a través de <code>POST …/launch-token</code>.</li>
+<li>[ ] Utilice el <code>cmd</code> / <code>sync</code> Patrón WebSocket: envolver todo, sincronizar en cada apertura, volver a conectar con un retroceso de 1s→30s.</li>
+<li>[] Diseña los comandos y transmisiones de tu script <strong>como el contrato del cliente</strong> — el cliente realiza transmisiones y envía comandos, nada más.</li>
+<li>[] Devolver un objeto de resumen <code>{ turnPlayerId, deadline, status, moveCount }</code> para que la lista de sesiones pueda mostrar de quién es el turno.</li>
+<li>[] Termina los juegos devolviendo un <code>result</code> — ese valor de retorno es lo que impulsa tanto las repeticiones como el elo.</li>
+<li>[ ] Declarar <code>replays: true</code> en su secuencia de comandos si desea que se mantengan las sesiones terminadas y bifurque la interfaz de usuario de reproducción en <code>replaysEnabled</code>.</li>
+</ul>
+<p>La plataforma proporciona autenticación, sesiones, emparejamiento y almacenamiento; su guión proporciona la
+reglas del juego. Empezar con <a href="/es/docs/tutorials/browser-quickstart.html">el inicio rápido del navegador</a> para una primera carga completa.</p>
+
+{% endraw %}

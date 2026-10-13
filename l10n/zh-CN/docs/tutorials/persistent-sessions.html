@@ -1,0 +1,158 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "教程：持久会话 - 当所有人离开时暂停的游戏"
+source_url: "/docs/tutorials/persistent-sessions.html"
+source_path: "docs/tutorials/persistent-sessions.md"
+source_hash: "35977b60ae64d913cbd390339f114d1c67a92c310166173d669571a677e377fa"
+translation: "machine"
+permalink: "/zh-CN/docs/tutorials/persistent-sessions.html"
+---
+{% raw %}
+<h1 id="tutorial-persistent-sessions--games-that-pause-when-everyone-leaves">教程：持久会话 - 当所有人离开时暂停的游戏</h1>
+<p>通常情况下，平台会结束一场没有人参加的比赛：一旦每个玩家都断开连接，就没有人玩了
+五分钟内返回，会话结束为 <code>abandoned</code> 合理 <code>players_left</code>
+（看 <a href="/zh-CN/docs/api/games.html#server--client">游戏 API — 游戏 WebSocket</a>）。这对于国际象棋来说是正确的
+游戏或种族，对于农场、城市建设者、共享地下城或任何世界都是错误的
+玩家回归多日。</p>
+<p>游戏可以要求 <strong>持续会话</strong> 反而。当玩家断开连接时，持久会话会暂停：</p>
+<ol>
+<li>最后一名玩家离开。</li>
+<li>大约 15 秒后，无人连接，平台 <strong>停顿</strong> 会议。没有运行：
+脚本游戏没有 <code>onTick</code> 调用，并且容器游戏的会话将从
+容器。</li>
+<li>会话在其恢复保留策略内保持暂停状态。读 <code>/sessions/{id}/recovery</code>
+任何到期而不是假设它永远保留。</li>
+<li>第一个连接的玩家 <code>ws/v1/games</code> <strong>简历</strong> 在他们的第一个命令之前
+处理。比赛从停止的地方继续进行。</li>
+</ol>
+<p>本页展示了如何打开它，如何防止游戏时钟跳过暂停，以及
+您的客户需要做什么。</p>
+<h2 id="1-opt-in">1. 选择加入</h2>
+<p>持久性是每个游戏的声明，在发布或更新游戏时阅读 - 发布
+更改后更新。一定是字面意思 <code>true</code> 或者 <code>false</code>;其他任何事情都算作“不”
+声明，并且不声明任何内容的游戏的行为与以前一样。</p>
+<p><strong>脚本游戏</strong> — 静态 <code>persistent</code> 于 <code>game</code> 对象（参见
+<a href="/zh-CN/docs/api/game-scripts.html#persistent-sessions">游戏脚本</a>):</p>
+<pre><code class="language-js">globalThis.game = {
+  persistent: true,
+  tickRateHz: 1,
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<p><strong>集装箱游戏</strong> — <code>persistent</code> 在你的 <code>GET /describe</code> 答案（参见
+<a href="/zh-CN/docs/api/container-games.html#get-describe">容器游戏服务器</a>):</p>
+<pre><code class="language-json">{ "protocol": 1, "tickRateHz": 20, "maxSessions": 48, "persistent": true }
+</code></pre>
+<p>会话的创建方式没有任何变化：匹配、邀请、AI 端点和实时
+所有房间都会为持久游戏产生持久会话。</p>
+<h2 id="2-keep-game-time-still-while-paused">2. 暂停时保持游戏时间静止</h2>
+<p>平台不重写 <code>ctx.now</code> — 它仍然是真正的挂钟，因此您可以在任何绝对时间
+显示玩家（截止日期、 "收获准备在") 保持它所说的意思。而是坚持不懈
+会话获得一个额外的上下文字段：</p>
+<pre><code class="language-js">ctx.pausedMs   // total milliseconds this session has spent paused, so far
+</code></pre>
+<p>它只会增长，并且只会在持续的会话中增长（其他游戏永远不会看到这个领域）。减去它和你
+有一个 <strong>比赛时钟</strong> 当没人在那里时就停止了：</p>
+<pre><code class="language-js">function gameTime(ctx) {
+  return ctx.now - (ctx.pausedMs || 0);
+}
+
+globalThis.game = {
+  persistent: true,
+  tickRateHz: 1,
+
+  createSession(ctx) {
+    return { ok: true, sessionState: { lastTick: gameTime(ctx), crops: [] } };
+  },
+
+  onTick(ctx) {
+    var state = ctx.sessionState;
+    var t = gameTime(ctx);
+    var dt = t - state.lastTick;      // never includes the time the world was paused
+    state.crops.forEach(function (crop) { crop.growth += dt; });
+    state.lastTick = t;
+    return { ok: true, sessionState: state };
+  },
+
+  onPlayerMessage(ctx) { /* ... */ }
+};
+</code></pre>
+<p>在游戏时间中存储您自己的时间戳（<code>gameTime(ctx)</code>），不在 <code>ctx.now</code>，并仅比较它们
+针对比赛时间。如果你 <em>想</em> 世界在无人注视的情况下继续前进——农作物正在生长
+隔夜 — 使用 <code>ctx.now</code> 相反，要赶上简历后的第一个刻度。不管怎样，它都是你的
+选择；该平台仅报告发生的情况。</p>
+<p>时间安排的两个细节：</p>
+<ul>
+<li>在最后一个玩家离开和暂停之间的约 15 秒内，会话仍然进行
+正常勾选。连接断开并立即恢复的玩家不会导致暂停。</li>
+<li>简历结束后，接下来 <code>onTick</code> 稍后出现一个刻度间隔。暂停时间不重播
+作为错过的报价的积压。</li>
+</ul>
+<p>一个容器接收 <code>pausedMs</code> 在同一个地方：在 <code>POST /sessions</code> 正文发送时
+会话在暂停后恢复。</p>
+<h2 id="3-your-client">3. 你的客户</h2>
+<p>暂停的会话仍然是活动会话，因此客户端流程是您已有的流程：</p>
+<ul>
+<li><strong>列出要重新加入的世界</strong> 和 <code>GET /api/v1/games/{slug}/sessions/mine</code>。每个条目都有一个
+<code>pausedAt</code> 暂停时的时间戳和 <code>null</code> 当有人在其中时，您可以展示 "暂停
+自从…" 或者 "2 位朋友正在玩" （看 <a href="/zh-CN/docs/api/games.html#get-apiv1gamesslugsessionsmine">游戏 API — 会话</a>).</li>
+<li><strong>重新加入</strong> 通过打开 <code>ws/v1/games?sessionId=…</code> 和以前一样。简历发生在
+连接。没有什么特别的 "恢复" 它的框架——游戏只是在你第一次运行时运行
+命令到达 - 因此请求或等待游戏的正常完整状态消息，就像您在
+任何重新连接。</li>
+<li><strong>处理失败的简历。</strong> 如果平台无法恢复会话——很可能是容器
+服务器仍在启动的游戏 - 您收到 <code>{"type":"error","error":"…"}</code> 和插座
+已用代码关闭 <code>1001</code>。会话保持暂停状态，不会丢失任何内容。短暂后重新连接
+退避（几秒钟，不断增长），并显示 "开始世界……" 而不是一个错误。</li>
+<li><code>presence</code> 框架照常工作，因此其他玩家可以看到现在世界上有谁。</li>
+</ul>
+<h2 id="4-ending-a-persistent-session">4. 结束持久会话</h2>
+<p>持久会话在以下情况下结束：</p>
+<ul>
+<li><strong>您的游戏报告了 <code>result</code></strong> （脚本返回值或容器控制消息），或者</li>
+<li>游戏的所有者结束了它（<code>DELETE /api/v1/me/github-games/{id}/sessions/{sessionId}</code>),</li>
+<li>最后一个成员明确地离开了一个没有空间的世界 <code>/sessions/{id}/leave</code>， 或者</li>
+<li>根据部署的保留策略，其暂停的恢复数据将过期。</li>
+</ul>
+<p>断开连接后会员资格完好无损；明确退出即表示放弃会员资格。看
+<a href="/zh-CN/docs/session-lifecycle.html">会话生命周期和恢复</a> 对于两个流。</p>
+<p>要求新游戏确实 <strong>不是</strong> 退出玩家的暂停会话，暂停的会话仍然有效
+限制每个玩家的并发会话上限（默认为 20）。 <strong>给玩家一种完成或完成的方法
+离开一个世界</strong> - 一个 "放弃世界" 命令你的脚本回答 <code>result</code>， 例如。
+否则，已满上限的玩家将无法开始任何新的事情。</p>
+<pre><code class="language-js">onPlayerMessage(ctx) {
+  var msg = ctx.message.data;
+  if (msg.type === "close-world" &amp;&amp; ctx.message.from === ctx.sessionState.ownerId) {
+    return { ok: true, sessionState: ctx.sessionState, result: { kind: "closed" } };
+  }
+  /* ... */
+}
+</code></pre>
+<h2 id="5-container-games-parking">5.集装箱游戏：停车</h2>
+<p>对于容器游戏来说，暂停是 <strong>公园</strong>:</p>
+<ol>
+<li>该平台要求提供最终快照（<code>GET /sessions/{id}/snapshot</code>）并持久保存。</li>
+<li>它破坏了会话（<code>DELETE /sessions/{id}</code>）。你的容器停止模拟它，如果
+它没有其他会话，部署可以在其空闲期后停止。</li>
+<li>在下一次加入时，它会重新创建会话 <code>POST /sessions</code>，携带存储的 <code>snapshot</code>
+以及更新后的 <code>pausedMs</code> — 与崩溃恢复相同的请求 — 唤醒停止的部署
+如果需要的话首先。</li>
+</ol>
+<p>所以你返回的快照必须足以重建整个世界，而不仅仅是恢复几个世界
+播放秒数。如果最终快照失败，会话将从其最后一个周期停止
+检查站。与崩溃不同，停放并恢复不会计入您的重启预算，并且
+玩家得不到 <code>resumed</code> 框架：没有人在那里看到状态倒带。</p>
+<h2 id="checklist">清单</h2>
+<ul>
+<li>[ ] <code>persistent: true</code> 声明（脚本）或返回自 <code>/describe</code> （容器），并发布更新。</li>
+<li>[ ] 游戏计时器使用 <code>ctx.now - ctx.pausedMs</code>，或故意使用 <code>ctx.now</code> 并赶上。</li>
+<li>[ ] 客户列表 <code>sessions/mine</code>，显示 <code>pausedAt</code>，并重新加入 <code>ws/v1/games</code>.</li>
+<li>[ ] 客户端在一次后通过退避重试 <code>error</code> 接下来是关闭代码 <code>1001</code> 连接上。</li>
+<li>[ ] 玩家有办法结束世界，因此他们永远不会陷入会话上限。</li>
+<li>[ ]（容器）快照重建整个世界。</li>
+</ul>
+
+{% endraw %}

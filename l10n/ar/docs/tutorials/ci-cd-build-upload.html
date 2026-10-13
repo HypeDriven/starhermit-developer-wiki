@@ -1,0 +1,284 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "تحميل الإصدارات من CI/CD باستخدام مفتاح عام مسجل في OAuth"
+source_url: "/docs/tutorials/ci-cd-build-upload.html"
+source_path: "docs/tutorials/ci-cd-build-upload.md"
+source_hash: "0f3e9f3e48bf88125b2110acdd92ab62aeb0840f0bbc758e7c52b911a434e718"
+translation: "machine"
+permalink: "/ar/docs/tutorials/ci-cd-build-upload.html"
+---
+{% raw %}
+<h1 id="upload-builds-from-cicd-with-an-oauth-enrolled-public-key">تحميل الإصدارات من CI/CD باستخدام مفتاح عام مسجل في OAuth</h1>
+<p>يمنح هذا البرنامج التعليمي مسار النشر بيانات اعتماد StarHermit الخاصة به دون تخزين Google الخاص بك
+أو رموز GitHub OAuth في CI. الإعداد لمرة واحدة تفاعلي:</p>
+<ol>
+<li>قم بتسجيل الدخول عبر OAuth واقبل شروط StarHermit الحالية.</li>
+<li>أضف مفتاحًا عامًا مخصصًا لحساب StarHermit الخاص بك.</li>
+<li>ضع فقط النصف الخاص بهذا المفتاح في متجر CI السري.</li>
+</ol>
+<p>يوقع كل تشغيل لخط أنابيب على تحدي StarHermit قصير الأمد، ويتلقى 15 دقيقة عادية
+رمز الوصول، وتحميل البنية الجديدة. يعمل مفتاح خط الأنابيب كحسابك ويمكن تحديثه فقط
+الألعاب التي يمتلكها الحساب.</p>
+<h2 id="why-use-a-separate-deployment-key">لماذا نستخدم مفتاح نشر منفصل؟</h2>
+<p>لا تقم بحفظ وصول OAuth أو رمز التحديث في CI. المفتاح العام StarHermit هو آلة أفضل
+الاعتماد لأنه يمكن تصنيفها وتدقيقها وإبطالها بشكل مستقل. تمت مصادقة الجلسة
+بواسطة ذلك المفتاح <strong>لا يمكن إضافة مفاتيح أو إلغاء مفاتيح أخرى</strong>; تتطلب هذه العمليات مصادقة OAuth
+جلسة. يمكنها إلغاء نفسها من خلال <code>/api/v1/me/public-keys/current</code>. إذا تسرب سر CI، فقم بتسجيل الدخول باستخدام Google أو GitHub وقم بإلغاء مفتاح النشر.
+يؤدي الإلغاء أيضًا إلى إنهاء جلسات التحديث التي تم إنشاؤها بواسطة هذا المفتاح ويجعل رموز الوصول الموجودة الخاصة به تفشل
+على طلب API التالي.</p>
+<p>استخدم مفتاحًا واحدًا لكل مستودع/بيئة، على سبيل المثال <code>orbit-league-production</code>، بدلاً من المشاركة
+مفتاح خاص واحد بين كل سير عمل.</p>
+<h2 id="prerequisites">المتطلبات الأساسية</h2>
+<ul>
+<li>حساب StarHermit تم تسجيل الدخول إليه من خلال Google أو GitHub OAuth.</li>
+<li>لعبة موجودة يملكها هذا الحساب. احفظها <code>id</code> مثل <code>GAME_ID</code>; تحديثات نقطة نهاية الحزمة أ
+لعبة ولكن لا يخلق واحدة.</li>
+<li>بناء عميل قابل للتوزيع و/أو متوافق مع Docker <code>docker save</code> صورة. يرى
+<a href="/ar/docs/api/github-games.html#push-a-game-bundle">ألعاب جيثب</a> لتخطيط الأرشيف.</li>
+<li>Python 3 لأوامر الإعداد وسير العمل النموذجي؛ <code>curl</code> و <code>jq</code> بالنسبة لمثال التسجيل</li>
+</ul>
+<p>يمكن لخط الأنابيب تسجيل الدخول بنجاح ولا يزال يتلقى <code>403 terms_acceptance_required</code> عندما
+يقوم بتحميل أو فتح مقبس التحميل. اطلب من صاحب الحساب مراجعة و <a href="/ar/docs/api/profile.html#terms-acceptance">قبول الشروط الحالية</a>
+بشكل تفاعلي، ثم أعد تشغيل المهمة. يمكن أن يتكرر هذا عندما تتغير المصطلحات؛ لا تقبل تلقائيا
+شروط من CI.</p>
+<h2 id="one-time-setup">الإعداد لمرة واحدة</h2>
+<h3 id="1-generate-a-deployment-key-locally">1. قم بإنشاء مفتاح نشر محليًا</h3>
+<p>يستخدم المثال Ed25519. قم بتشغيل هذا على محطة عمل موثوقة، وليس في مهمة CI:</p>
+<pre><code class="language-bash">python -m pip install cryptography
+python - &lt;&lt;'PY'
+import base64
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat, PublicFormat
+
+key = Ed25519PrivateKey.generate()
+private = key.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())
+public = key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+print("STARHERMIT_PRIVATE_KEY=" + base64.b64encode(private).decode())
+print("STARHERMIT_PUBLIC_KEY=" + base64.b64encode(public).decode())
+PY
+</code></pre>
+<p>القيمة الخاصة هي البذرة ذات 32 بايت وتظهر مرة واحدة في هذه المحطة المحلية الموثوقة. لا تلتزم أبدًا
+أو قم بطباعته في سجلات CI أو وضعه في قطعة أثرية أو إرساله إلى StarHermit. الحفاظ على القيمة العامة ل
+الخطوة التالية ولمتغير سير العمل.</p>
+<h3 id="2-sign-in-with-oauth-and-add-the-public-key">2. قم بتسجيل الدخول باستخدام OAuth وأضف المفتاح العام</h3>
+<p>افتح أحد عناوين URL هذه في المتصفح:</p>
+<pre><code class="language-text">https://api.starhermit.com/api/v1/auth/oauth/github/authorize
+https://api.starhermit.com/api/v1/auth/oauth/google/authorize
+</code></pre>
+<p>بعد رد الاتصال، استخدم رمز الوصول المصادق عليه OAuth على الفور. ضعه في مكان محلي
+متغير البيئة وليس في تاريخ شل:</p>
+<pre><code class="language-bash">read -rsp 'OAuth access token: ' OAUTH_ACCESS_TOKEN; echo
+read -rp  'Public key: ' STARHERMIT_PUBLIC_KEY
+
+curl -sS -X POST https://api.starhermit.com/api/v1/me/public-keys \
+  -H "Authorization: Bearer $OAUTH_ACCESS_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data "$(jq -n \
+    --arg keyData "$STARHERMIT_PUBLIC_KEY" \
+    --arg label 'orbit-league-production' \
+    '{keyType:"Ed25519", keyData:$keyData, label:$label}')"
+</code></pre>
+<p>تعود المكالمة <code>201</code> والسجل الرئيسي. أ <code>403</code> يعني أن هذا الرمز المميز لم يأتي من OAuth
+الجلسة (لا يكفي التحقق من البريد الإلكتروني أو المفتاح العام أو الرمز المميز لإطلاق اللعبة). أ <code>409</code> يعني
+المفتاح نشط بالفعل أو أن الحساب قد وصل إلى حد المفتاح النشط الخاص به.</p>
+<p>التحقق من النتيجة مع <code>GET /api/v1/me/public-keys</code>. تتضمن القائمة الملصقات وبصمات الأصابع وآخر استخدام
+مرات، والمفاتيح التي تم إبطالها، لذلك فهو أيضًا مسار تدقيق بيانات الاعتماد.</p>
+<h3 id="3-configure-the-repository">3. تكوين المستودع</h3>
+<p>في جيثب، أضف:</p>
+<ul>
+<li>سر الافعال <code>STARHERMIT_PRIVATE_KEY</code>: البذور الخاصة Base64.</li>
+<li>متغير الأفعال <code>STARHERMIT_PUBLIC_KEY</code>: المفتاح العام الأساسي Base64.</li>
+<li>متغير الأفعال <code>STARHERMIT_GAME_ID</code>: معرف اللعبة المملوكة.</li>
+</ul>
+<p>قم بحماية الإنتاج باستخدام بيئة GitHub إذا كانت الموافقة مطلوبة. يمكن أن تكون القيم المكافئة
+المخزنة في متغيرات GitLab المحمية أو Azure Key Vault أو أي مخزن سري آخر لـ CI.</p>
+<h2 id="add-the-authenticationupload-helper">أضف مساعد المصادقة/التحميل</h2>
+<p>ارتكب ما يلي كما <code>ci/starhermit_upload.py</code>. إنه يعيد بناء التحدي الدقيق JSON الذي
+يقوم StarHermit بالتوقيع داخليًا، والمصادقة باستخدام Ed25519، واختيار HTTP للأرشيفات الصغيرة أو
+تحميل WebSocket للأرشيفات التي يزيد حجمها عن 90 ميجابايت. يتجنب WebSocket نص HTTP الذي يبلغ حجمه 100 ميجا بايت تقريبًا لشبكة CDN
+الحد.</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+import argparse, asyncio, base64, json, os
+from pathlib import Path
+from urllib.parse import quote, urlparse, urlunparse
+
+import requests
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+
+def authenticate(api, public_key, private_key):
+    challenge = requests.post(
+        f"{api}/api/v1/auth/public-key/challenge",
+        json={"keyType": "Ed25519", "keyData": public_key}, timeout=30)
+    challenge.raise_for_status()
+    body = challenge.json()
+    p = body["payload"]
+
+    # Public JSON is camelCase; the server verifies its ChallengePayload serialization, whose
+    # property names and order are the PascalCase sequence below.
+    payload = {
+        "ChallengeId": p["challengeId"],
+        "Fingerprint": p["fingerprint"],
+        "Issuer": p["issuer"],
+        "Audience": p["audience"],
+        "Expiry": p["expiry"],
+        "Nonce": p["nonce"],
+        "ClientTimestamp": p["clientTimestamp"],
+    }
+    # System.Text.Json escapes '+' in string fields (the Base64 nonce) as \u002B.
+    # DateTimeOffset fields keep literal '+' in their offsets: do not replace globally.
+    fields = []
+    for name, value in payload.items():
+        encoded = json.dumps(value)
+        if name == "Nonce":
+            encoded = encoded.replace("+", r"\u002B")
+        fields.append(json.dumps(name) + ":" + encoded)
+    signed_payload = ("{" + ",".join(fields) + "}").encode("utf-8")
+
+    seed = base64.b64decode(private_key, validate=True)
+    signature = Ed25519PrivateKey.from_private_bytes(seed).sign(signed_payload)
+    complete = requests.post(
+        f"{api}/api/v1/auth/public-key/complete",
+        json={"challengeId": body["challengeId"],
+              "signature": base64.b64encode(signature).decode(),
+              "keyType": "Ed25519", "keyData": public_key}, timeout=30)
+    complete.raise_for_status()
+    return complete.json()["accessToken"]
+
+
+def upload_http(api, game_id, token, archive, mode):
+    with archive.open("rb") as stream:
+        response = requests.post(
+            f"{api}/api/v1/me/github-games/{game_id}/bundle",
+            params={"mode": mode} if mode != "replace" else None,
+            headers={"Authorization": f"Bearer {token}",
+                     "Content-Type": "application/gzip"},
+            data=stream, timeout=1800)
+    response.raise_for_status()
+    print(json.dumps(response.json()))
+
+
+async def upload_websocket(api, game_id, token, archive, mode):
+    import websockets
+    parsed = urlparse(api)
+    query = f"gameId={quote(game_id)}&amp;access_token={quote(token)}"
+    if mode != "replace":
+        query += f"&amp;mode={quote(mode)}"
+    uri = urlunparse(("wss" if parsed.scheme == "https" else "ws", parsed.netloc,
+                      "/ws/v1/game-upload", "", query, ""))
+    async with websockets.connect(uri, max_size=None, ping_interval=20) as ws:
+        ready = json.loads(await ws.recv())
+        if ready.get("type") != "ready":
+            raise RuntimeError(ready)
+        with archive.open("rb") as stream:
+            while chunk := stream.read(512 * 1024):
+                await ws.send(chunk)
+        await ws.send(json.dumps({"type": "complete"}))
+        while True:
+            message = json.loads(await ws.recv())
+            if message.get("type") == "result":
+                print(json.dumps(message))
+                return
+            if message.get("type") == "error":
+                raise RuntimeError(message)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("archive", type=Path)
+    parser.add_argument("--api", default="https://api.starhermit.com")
+    parser.add_argument("--mode", choices=("replace", "merge"), default="replace",
+                        help="replace the live client files (default) or patch them")
+    args = parser.parse_args()
+    game_id = os.environ["STARHERMIT_GAME_ID"]
+    token = authenticate(args.api.rstrip("/"), os.environ["STARHERMIT_PUBLIC_KEY"],
+                         os.environ["STARHERMIT_PRIVATE_KEY"])
+    if args.archive.stat().st_size &lt; 90 * 1024 * 1024:
+        upload_http(args.api.rstrip("/"), game_id, token, args.archive, args.mode)
+    else:
+        asyncio.run(upload_websocket(args.api.rstrip("/"), game_id, token, args.archive, args.mode))
+
+
+if __name__ == "__main__":
+    main()
+</code></pre>
+<p>تعامل مع الخروج غير الصفري باعتباره عملية نشر فاشلة. لا تقم بتسجيل رمز الوصول أو نص الطلب الكامل.
+يستمر رمز الوصول لمدة 15 دقيقة، لذا قم بالمصادقة فورًا قبل التحميل؛ ويب سوكيت
+يتحقق منه أثناء المصافحة وقد ينتهي بعد انتهاء صلاحية الرمز المميز.</p>
+<h2 id="github-actions-example">مثال على إجراءات جيثب</h2>
+<p>ينشر هذا المثال محتويات <code>dist/</code> في كل دفعة ل <code>main</code>:</p>
+<p>{٪ خام ٪}</p>
+<pre><code class="language-yaml">name: Deploy to StarHermit
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Package StarHermit bundle
+        run: |
+          mkdir -p bundle/client
+          cp -R dist/. bundle/client/
+          cp starhermit.txt bundle/starhermit.txt
+          tar -C bundle -czf game-bundle.tar.gz .
+
+      - name: Install uploader dependencies
+        run: python -m pip install 'cryptography&gt;=42,&lt;45' 'requests&gt;=2.31,&lt;3' 'websockets&gt;=12,&lt;13'
+
+      - name: Upload build
+        env:
+          STARHERMIT_PRIVATE_KEY: ${{ secrets.STARHERMIT_PRIVATE_KEY }}
+          STARHERMIT_PUBLIC_KEY: ${{ vars.STARHERMIT_PUBLIC_KEY }}
+          STARHERMIT_GAME_ID: ${{ vars.STARHERMIT_GAME_ID }}
+        run: python ci/starhermit_upload.py game-bundle.tar.gz
+</code></pre>
+<p>{% أندراو %}</p>
+<p>للحصول على خادم مخصص، أضف <code>docker build</code>، احفظ الصورة في <code>bundle/server/image.tar</code>، والاحتفاظ بها
+<code>starhermit.txt</code> في جذر الحزمة:</p>
+<pre><code class="language-bash">docker build -t my-game-server:${GITHUB_SHA} -f Dockerfile.server .
+mkdir -p bundle/server
+docker save my-game-server:${GITHUB_SHA} -o bundle/server/image.tar
+tar -C bundle -czf game-bundle.tar.gz .
+</code></pre>
+<p>يعني نجاح تحميل الحزمة أن StarHermit قبلت الحزمة ونشرتها ذريًا؛ إنه كذلك
+لا يعني أن الحاوية الجديدة قد اجتازت الفحوصات الصحية. استطلاع
+<code>GET /api/v1/me/github-games/{id}/deployment</code> بنفس الرمز المميز المصادق عليه حديثًا وقم بتشغيل ملف
+اختبار الدخان قبل الترويج للإصدار.</p>
+<h2 id="rotation-and-incident-response">التناوب والاستجابة للحوادث</h2>
+<ol>
+<li>قم بتسجيل الدخول عبر OAuth واقبل شروط StarHermit الحالية.</li>
+<li>قم بإضافة مفتاح تم إنشاؤه حديثًا ومسمى بشكل واضح.</li>
+<li>استبدل سر ومتغير CI، ثم قم بتشغيل النشر.</li>
+<li>قم بإلغاء المفتاح القديم باستخدام <code>DELETE /api/v1/me/public-keys/{keyId}</code>.</li>
+</ol>
+<p>من أجل التوصل إلى تسوية واسعة النطاق مشتبه بها، <code>DELETE /api/v1/me/public-keys/all</code> يلغي كل مفتاح نشط.
+تتطلب كلتا عمليتي الحذف جلسة مصادقة OAuth. خط أنابيب مصادق عليه من تلقاء نفسه
+لا يمكن للمفتاح إلغاء المفاتيح الأخرى أو إضافة بديل أو تغيير البريد الإلكتروني للحساب أو إزالة هوية OAuth.
+يمكن أن يلغي نفسه مع <code>DELETE /api/v1/me/public-keys/current</code>; تجاهل الرموز المخزنة بعد ذلك.</p>
+<h2 id="see-also">انظر أيضا</h2>
+<ul>
+<li><a href="/ar/docs/api/profile.html#public-keys">الملف الشخصي: إدارة المفتاح العام</a></li>
+<li><a href="/ar/docs/api/auth.html#public-key-login">المصادقة: تسجيل الدخول بالمفتاح العام</a></li>
+<li><a href="/ar/docs/api/github-games.html#push-a-game-bundle">ألعاب GitHub: ادفع حزمة اللعبة</a></li>
+<li><a href="/ar/docs/api/github-games.html#upload-over-a-websocket">ألعاب GitHub: التحميل عبر WebSocket</a></li>
+</ul>
+
+{% endraw %}

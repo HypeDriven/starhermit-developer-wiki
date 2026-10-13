@@ -1,0 +1,220 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Tutorial: opções de áudio com limite de som detectado automaticamente"
+source_url: "/docs/tutorials/audio-options.html"
+source_path: "docs/tutorials/audio-options.md"
+source_hash: "f94d55a5fbdf452a7ffb1992ee0ddde65a728d25c497469cf233f4440ff666ea"
+translation: "machine"
+permalink: "/pt/docs/tutorials/audio-options.html"
+---
+{% raw %}
+<h1 id="tutorial-audio-options-with-an-auto-detected-sound-limit">Tutorial: opções de áudio com limite de som detectado automaticamente</h1>
+<p>Dê ao seu jogo um <strong>Áudio</strong> seção ao lado <a href="/pt/docs/tutorials/graphics-options.html">Gráficos</a>, disponível no
+menu principal e durante o jogo. Comece com a linha de base abaixo, deixe os jogadores substituí-la e aplique uma
+número máximo de instâncias de reprodução simultânea para manter o trabalho de mixagem e espacialização limitado.
+Esses são os padrões recomendados do lado do jogo, não as configurações impostas pela plataforma.</p>
+<p><a href="/docs/sdk/audio-options.js"><code>audio-options.js</code></a> fornece ajudantes livres de dependência para curvas de volume,
+validação de configurações e um limite de som automático conservador. Não cria contexto de áudio, microfone
+captura, mixer, painel de opções ou conexão de rede; seu jogo conecta os controles e a reprodução.</p>
+<h2 id="1-baseline-controls">1. Controles de linha de base</h2>
+<table>
+<thead>
+<tr>
+<th>Controlar</th>
+<th>Valor inicial recomendado</th>
+<th>Comportamento</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Volume mestre</td>
+<td>80%</td>
+<td>Controla toda a reprodução do jogo, incluindo voz recebida</td>
+</tr>
+<tr>
+<td>Volume da música</td>
+<td>70%</td>
+<td>Ônibus musical, multiplicado pelo Master</td>
+</tr>
+<tr>
+<td>Volume dos efeitos sonoros</td>
+<td>100%</td>
+<td>Barramento de efeitos de jogabilidade, multiplicado por Master</td>
+</tr>
+<tr>
+<td>Volume da IU</td>
+<td>80%</td>
+<td>Menu e barramento de interface, multiplicados por Master</td>
+</tr>
+<tr>
+<td>Volume de voz</td>
+<td>100%</td>
+<td>Barramento de voz recebido, multiplicado pelo Master; nunca muda o ganho do microfone</td>
+</tr>
+<tr>
+<td>Máximo de sons simultâneos</td>
+<td>Auto</td>
+<td>Exibir a contagem detectada e o limite efetivo; oferecem 16, 32, 64, 128 fixos e uma contagem personalizada validada dentro do limite do jogo</td>
+</tr>
+<tr>
+<td>Bate-papo por voz</td>
+<td>Desligado</td>
+<td>Aceitação de sessão explícita; oferece push-to-talk e microfone aberto quando a voz é suportada</td>
+</tr>
+<tr>
+<td>Microfone/dispositivo de saída</td>
+<td>Padrão do sistema</td>
+<td>Seleção de ofertas quando suportada; mantenha os identificadores de dispositivos locais</td>
+</tr>
+<tr>
+<td>Cancelamento de eco/supressão de ruído</td>
+<td>Ligado / Ligado</td>
+<td>Solicitar processamento de captura suportado; exibir o resultado efetivo</td>
+</tr>
+<tr>
+<td>Ganho automático do microfone</td>
+<td>Desligado</td>
+<td>Processamento de captura opcional, independente do volume de reprodução</td>
+</tr>
+</tbody>
+</table>
+<p>Oculte os controles de voz em jogos sem voz. Dê a cada controle deslizante uma porcentagem visível, um rótulo acessível,
+suporte de teclado e um alvo de toque utilizável; deixe o painel rolar em telas pequenas. Incluir um explícito
+controle mudo que lembra o nível anterior. Aplique as alterações imediatamente sem recarregar.
+O volume opcional por participante e o mudo local ajudam os jogadores a equilibrar a sala de voz.</p>
+<p>Trate as posições do controle deslizante como 0–1 e use <code>volumeGain(position)</code> (posição ao cubo) para uma curva perceptiva.
+Conecte cada barramento através de seu próprio ganho, depois o ganho Master, para que o Master seja aplicado exatamente uma vez.
+Ganhos de rampa ao longo de cerca de 20 ms para evitar cliques; zero deve ficar em silêncio. Normalize ativos e forneça resultados
+headroom ou um limitador para evitar cortes quando os sons se sobrepõem. Desbloquear a reprodução do navegador de um usuário
+gesticular e lidar com contextos suspensos; o áudio indisponível deve deixar o jogo jogável.</p>
+<h2 id="2-auto-detect-a-sensible-concurrency-limit">2. Detecte automaticamente um limite de simultaneidade sensato</h2>
+<p>Use dicas de CPU e memória, independentemente da predefinição gráfica ou GPU. A política inicial é:</p>
+<table>
+<thead>
+<tr>
+<th>Dicas disponíveis (avaliar de cima para baixo)</th>
+<th>Contagem inicial</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No máximo duas CPUs lógicas ou no máximo 2 GB de memória relatada</td>
+<td>16</td>
+</tr>
+<tr>
+<td>Pelo menos quatro CPUs lógicas, sem a restrição acima</td>
+<td>64</td>
+</tr>
+<tr>
+<td>Capacidade desconhecida ou menos de quatro CPUs sem a restrição acima</td>
+<td>32</td>
+</tr>
+</tbody>
+</table>
+<p>O auxiliar de referência limita essas contagens ao teto rígido do jogo, <strong>64 por padrão</strong>e limites
+tetos personalizados para 1–256. Um desenvolvedor pode permitir 128 ou 256 manualmente após criar o perfil do jogo; Automático
+não os escolhe apenas pela contagem de núcleos. Um jogo menor pode definir um teto de 16 ou 32.
+Dicas ausentes ou inválidas permanecem desconhecidas. Esses números são heurísticas iniciais, não medidas de hardware
+capacidade: <a href="https://html.spec.whatwg.org/multipage/system-state.html#dom-navigator-hardwareconcurrency">contagens lógicas de CPU podem ser reduzidas pelo navegador</a>,
+e <a href="https://www.w3.org/TR/device-memory/">dicas de memória são aproximadas e restritas à privacidade</a>.</p>
+<pre><code class="language-js">import { detectAudioSystem, resolveAudio, volumeGain } from './audio-options.js';
+
+const system = detectAudioSystem();
+const GAME_SOUND_CEILING = 64;
+let saved = {}; // Load your player's validated preferences; empty means defaults.
+
+function applyAudio() {
+  const settings = resolveAudio(saved, system, GAME_SOUND_CEILING);
+  // mixer is your own adapter, not a StarHermit SDK API.
+  mixer.setPlaybackLimit(settings.effectiveConcurrentSounds);
+  mixer.setBusGain('master', volumeGain(settings.master));
+  for (const bus of ['music', 'effects', 'ui', 'voice']) {
+    mixer.setBusGain(bus, volumeGain(settings[bus]));
+  }
+  return settings; // Show recommendedConcurrentSounds and effectiveConcurrentSounds.
+}
+
+function setSoundLimit(value) {
+  // A select supplies 'auto'; parse and validate the custom integer before calling.
+  saved = { ...saved, maxConcurrentSounds: value };
+  applyAudio();
+  // Persist the requested choice, including 'auto', through your settings store.
+}
+</code></pre>
+<p>Execute Auto novamente em cada dispositivo e após alterações relevantes no formato do mixer/saída. Salvar <code>'auto'</code>, não é
+número detectado. Uma contagem manual permanece manual, sujeita ao teto do jogo/backend. Mostrar uma explicação
+quando a contagem efetiva difere da contagem solicitada.</p>
+<p>Para um mixer instrumentado, refine Auto com uma carga de trabalho representativa limitada e inaudível: teste
+a cadeia real de reamostragem, espacialização e efeitos e visa no máximo 25% do bloco de áudio
+duração da mistura. Por exemplo, um bloco de 128 quadros a 48 kHz fornece cerca de 0,67 ms para esse alvo.
+Agende a criação de perfil fora do jogo ativo. Um ganho silencioso por si só não garante
+funciona porque um back-end pode otimizar o silêncio. O áudio da Web padrão não expõe o tempo de CPU por gráfico;
+use a dica alternativa, a menos que seu próprio back-end forneça um tempo confiável. Não inferir o custo da CPU de áudio
+do FPS ou contagem de canais de saída.</p>
+<p>Automático pode diminuir a sessão em caso de sobrecarga ou subexecução medida sustentada, com histerese para
+evite oscilação; não substitua a preferência salva. Recomendações medidas em cache localmente por
+backend, formato, configuração de efeitos e versão do código. Reavalie após essas mudanças. Instância
+conta com trabalho limitado de mixagem, mas decodificação, processamento de microfone e rede precisam de orçamentos separados.</p>
+<h2 id="3-enforce-the-cap-in-playback">3. Aplique o limite na reprodução</h2>
+<p>Contar <strong>cada instância de reprodução ativa</strong> em música, loops, efeitos, UI e voz recebida.
+Estéreo é um exemplo. Sons pausados/parados, captura de microfone e sons virtuais sem atividade
+renderização não conta. Crossfades musicais e caudas de lançamento contam até terminarem. Agendar futuro
+inicia pelo mesmo alocador e também vincula sua fila pendente.</p>
+<p>Use um alocador limitado para cada caminho de reprodução, incluindo elementos de mídia e saída WebRTC:</p>
+<ol>
+<li>Reserve parte do total para música, dicas importantes e vozes esperadas dos participantes. Reservas
+compartilhe o limite; eles não adicionam slots extras. Adapte-os quando o tamanho ou limite da sala mudar.</li>
+<li>Na capacidade, elimine um efeito de entrada de baixa prioridade ou substitua uma instância ativa de baixa prioridade.
+Distância, audibilidade e efeitos repetidos podem romper laços de prioridade. Desduplicar intermitências e limitar
+emissores repetidos antes de criar nós de áudio ou decodificar novos buffers.</li>
+<li>Uma vítima desvanecida ainda ocupa seu lugar: coloque seu substituto na fila até que ele pare ou pare-o em um cofre
+limite antes de iniciar a substituição. Nunca exceda temporariamente o limite de fades.</li>
+<li>Libere e desconecte fontes encerradas. A redução do limite deve recuperar slots, incluindo loops e
+coroa, antes de admitir nova reprodução. Os loops virtualizados retêm apenas dados baratos de posição/estado;
+desconecte também seu processamento caro e a escrituração de instâncias virtuais vinculadas.</li>
+</ol>
+<p>Dê preferência à voz e às dicas de jogo significativas em vez do ambiente. Uma trilha WebRTC conectada ao mixer deve
+desative a reprodução direta de elementos de mídia para evitar áudio duplicado e reprodução incontável.
+Silenciar um ganho por si só não interrompe a decodificação ou a espacialização; suprimir, pausar ou desconectar o trabalho
+onde o back-end permite. Expor contagens ativas, suprimidas e virtualizadas no desenvolvimento
+diagnósticos para que o limite da CPU possa ser verificado.</p>
+<h2 id="4-voice-chat-controls">4. Controles de bate-papo por voz</h2>
+<p>Siga o <a href="/pt/docs/api/voice.html">API de voz</a> para adesão à conversa, entrar/sair, sinalização, próprio mudo
+e host mudo. Participe explicitamente e solicite acesso ao microfone somente após o player habilitar a captura;
+ouvir sem microfone pode permanecer disponível. A captura do navegador requer
+<a href="https://www.w3.org/TR/mediacapture-streams/#dom-mediadevices-getusermedia">permissão e um contexto seguro</a>.
+A negação de permissão deve mostrar um estado útil e deixar a reprodução e o bate-papo por texto utilizáveis.</p>
+<p>Use Push-to-talk como modo recomendado ao ativar a voz. Forneça uma chave religável e um
+controle de toque pressione e segure; liberar transmissão ao liberar chave/ponteiro, entrada cancelada, desfoque e
+transições de página oculta. O microfone aberto é uma alternativa explícita. Mostrar permissão do microfone,
+nível de entrada, estado de fala, mudo/surdo e qualquer mudo do host. Um teste de microfone é executado somente mediante solicitação.
+Deafen silencia a voz recebida e suprime a transmissão local enquanto está ativo.</p>
+<p>Gate o áudio de saída localmente, bem como atualize o estado mudo da própria plataforma. Em cada junção ou
+reconecte, restaure o mudo pretendido antes de enviar mídia: ingressar limpa o mudo do próprio participante
+na API, enquanto o host mute sobrevive. A mídia peer-to-peer também deve respeitar o host mute localmente; sinalização
+não permite que a plataforma filtre um fluxo de áudio peer direto. Pare de capturar faixas e feche a mídia
+conexões quando a voz é desativada ou a sessão termina. Salvar um modo preferido nunca silenciosamente
+reabre o microfone na próxima inicialização.</p>
+<h2 id="5-save-and-verify">5. Salve e verifique</h2>
+<p>Salve as preferências comuns no jogo <a href="/pt/docs/api/games.html#per-player-game-settings">configurações por jogador</a>,
+por exemplo sob <code>audio</code> como <code>{ saved: { master: 0.8, maxConcurrentSounds: 'auto', voiceMode: 'off' }, at: … }</code>.
+Mantenha um cache local com namespace para reprodução independente. Leia antes de escrever, reconcilie os carimbos de data e hora e
+bloquear gravações na nuvem após uma leitura com falha até uma nova tentativa bem-sucedida, como no tutorial gráfico.
+Valide as configurações remotas antes de aplicá-las. Mantenha IDs de dispositivos, permissões, resultados de criação de perfil,
+associação à sessão e atividade local atual do microfone; armazene o modo de voz preferido separadamente
+se a captura está habilitada no momento.</p>
+<ul>
+<li><code>node --test tests/audio-options.test.mjs</code> verifica o auxiliar enviado desconhecido/restrito/mais forte
+detecção, limites máximos, escolhas manuais, Automático em outro dispositivo, limites de volume e padrões de voz.</li>
+<li>No seu jogo, controle os controles reais com mouse, teclado e toque; verifique as alterações de volume ao vivo,
+restauração de mudo, persistência e comutação automática/manual após recarga.</li>
+<li>Acione músicas, efeitos, vozes, fades e sons programados sobrepostos além do limite. Confirmar
+a reprodução ativa nunca o excede, inclusive ao baixá-lo ao vivo, e sugestões importantes sobrevivem.</li>
+<li>Teste permissão de microfone negada, cancelamento push-to-talk, reconectar mudo, host mudo, dispositivo
+perda e abandono da voz. Nenhuma transmissão pode ser retomada sem a aceitação da sessão pretendida.</li>
+</ul>
+<p>Veja também: <a href="/pt/docs/tutorials/graphics-options.html">Opções gráficas</a> · <a href="/pt/docs/sdk/javascript.html">SDK JavaScript</a> ·
+<a href="/pt/docs/api/voice.html">API de voz</a>.</p>
+
+{% endraw %}

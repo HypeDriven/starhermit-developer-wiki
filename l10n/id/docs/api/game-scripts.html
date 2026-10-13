@@ -1,0 +1,474 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Skrip Permainan"
+source_url: "/docs/api/game-scripts.html"
+source_path: "docs/api/game-scripts.md"
+source_hash: "cd6edb40d369c5c960591888b2d4bcb941948f0cd0a801d320fe8ae34ab69966"
+translation: "machine"
+permalink: "/id/docs/api/game-scripts.html"
+---
+{% raw %}
+<h1 id="game-scripts">Skrip Permainan</h1>
+<p>Permainan resmi StarHermit dapat didefinisikan dengan a <strong>file JavaScript tunggal</strong> dieksekusi di sisi server dalam kotak pasir <a href="https://github.com/sebastienros/jint">Jint</a> mesin. Skrip adalah satu-satunya otoritas dalam aturan permainan itu: skrip memvalidasi setiap perintah pemain, mengubah status, memutuskan apa yang mungkin dilihat setiap klien, menghitung Elo, dan mengakhiri permainan. Klien tidak memiliki otoritas. Halaman ini mendokumentasikan runtime JavaScript; permainan yang membutuhkan bahasa lain mungkin mengimplementasikannya <a href="/id/docs/api/container-games.html">Server Permainan Kontainer</a> protokol. Keduanya menggunakan tampilan pemain yang sama <a href="/id/docs/api/games.html">API Permainan</a>. Contoh yang berhasil adalah catur - implementasi referensi di <a href="https://github.com/HypeDriven/starhermit-chess">HypeDriven/catur pertapa bintang</a>.</p>
+<h2 id="execution-model">Model eksekusi</h2>
+<ul>
+<li>Satu file JS per game, dieksekusi dalam a <strong>mesin Jint kotak pasir baru per pemanggilan</strong>. Tidak ada yang tersisa di memori di antara panggilan — semua status ada di dokumen yang Anda kembalikan.</li>
+<li>Tidak ada lingkungan sekitar <code>Date</code> atau <code>Math.random</code>. Waktu dan keacakan diberikan sebagai: <code>ctx.now</code> (ms zaman) dan <code>ctx.random</code> (melayang masuk <code>[0, 1)</code>).</li>
+<li>Platform memanggil skrip saat pemain mengirimkan perintah tahan lama, saat sesi dibuat, dan secara berkala <code>onTick</code> menyapu (lihat <a href="/id/docs/api/games.html#runtime-timing">API Game — Waktu proses</a>). Waktu nyata <code>{type:"input", realtime:true}</code> frame adalah pengecualian: frame tersebut di-buffer pada kemenangan terbaru dan dikirim sebagai batch ke tick berikutnya.</li>
+</ul>
+<h2 id="entry-points">Titik masuk</h2>
+<p>Paparkan penangannya <code>globalThis.game</code>. Enam opsional <strong>statis</strong> deklarasi yang ada di samping mereka:
+<code>tickRateHz</code> menanyakan platform seberapa sering harus dipanggil <code>onTick</code> — nyatakan jika game Anda bergantung pada
+centang, karena permainan yang mengatakan tidak ada yang dicentang setiap empat detik sekali (lihat <a href="#tick-rate">Tingkat centang</a>),
+<code>achievements</code> mencatat pencapaian permainan (lihat <a href="#achievements">Prestasi</a>), <code>replays</code>
+meminta platform untuk menyimpan sesi Anda yang telah selesai (lihat <a href="#replays">Pemutaran ulang</a>), <code>persistent</code> jeda
+sesi alih-alih mengakhirinya ketika semua orang pergi (lihat <a href="#persistent-sessions">Sesi yang persisten</a>),
+<code>linkedAchievements</code> sebutkan game lain yang pembukaan kuncinya Anda terima <code>ctx.linkedAchievements</code> (melihat
+<a href="/id/docs/api/achievements.html#achievements-from-other-games">Prestasi dari game lain</a>), Dan <code>queues</code> menyatakan
+bentuk perjodohan menerima (lihat <a href="/id/docs/api/games.html#matchmaking">Permainan — Menjodohkan</a>). Sebuah permainan
+yang menyatakan tidak ada antrian yang memiliki 1v1 implisit:</p>
+<pre><code class="language-js">globalThis.game = {
+  tickRateHz: 0, // turn-based: opt out of periodic ticks
+  replays: true, // keep finished sessions as replays
+  queues: [{ key: "duos", teams: 2, teamSize: 2 }],
+  achievements: [
+    { key: "first-win", name: "First Win", description: "Win a match.", points: 10 }
+  ],
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<p>Deklarasi dibaca dengan mengevaluasi skrip Anda <strong>saat game diterbitkan atau diperbarui</strong>,
+tidak pada setiap pemanggilan — jadi nilai tersebut harus berupa nilai statis di <code>game</code> obyek. Publikasikan pembaruan
+untuk menerapkan perubahan.</p>
+<ul>
+<li><code>createSession(ctx)</code> — dipanggil ketika sesi dibuat (perjodohan, penerimaan undangan, latihan AI, atau ruang waktu nyata dimulai — lihat <a href="#room-bound-sessions">Sesi terikat ruangan</a>).</li>
+<li><code>onPlayerMessage(ctx)</code> — meminta perintah klien tahan lama yang diterima melalui gameplay WebSocket. Masukan ditandai secara eksplisit <code>realtime:true</code> melewati titik masuk ini.</li>
+<li><code>onMembershipChange(ctx)</code> - opsional. Dipanggil ketika pemain bergabung atau meninggalkan sesi lari (a <a href="/id/docs/api/realtime.html">ruang bergabung dalam proses</a>, atau sebuah <a href="/id/docs/api/games.html#inviting-a-friend-into-a-game-in-progress">mengundang ke permainan yang sedang berlangsung</a>). <code>ctx.players</code> sudah mencerminkan perubahan, dan <code>ctx.membership</code> adalah <code>{ change: "joined" | "left", userId, name, team, slot }</code>. Kembali <code>{ ok: false }</code> untuk menolak bergabung; skrip tanpa pengait ini menolak setiap penggabungan. Cuti bersifat final, apa pun pengembaliannya. Pencapaian dan skor dapat menentukan hasil; A <code>sessionState</code> diabaikan.</li>
+<li><code>onTick(ctx)</code> — dipanggil oleh layanan pengatur waktu platform pada tingkat tick efektif; input realtime terbaru tersedia di <code>ctx.inputs</code>. Game yang diselesaikan hingga 0 Hz tidak menerima panggilan berkala, namun fungsinya harus tetap ada untuk memenuhi kontrak skrip.</li>
+</ul>
+<h2 id="context-object">Objek konteks</h2>
+<pre><code class="language-js">ctx = {
+  now: 1721473200000,              // ms epoch, from the host clock
+  random: 0.7231,                  // float in [0, 1), from the host RNG
+  sessionId: "0f8fad5b-...",       // current session id
+  pausedMs: 0,                     // persistent games only: total ms this session has spent paused
+  players: [                       // session participants
+    { id: "7c9e6679-...", name: "alice" },
+    { id: "00000000-0000-4000-8000-00000000a1a1", name: "The House", ai: true }
+  ],
+  sessionState: { /* ... */ },     // this script's session document, or null
+  playerStates: {                  // per-player documents (elo, history), or null
+    "7c9e6679-...": { elo: 1200, wins: 4, losses: 2, draws: 1, /* ... */ }
+  },
+  message: {                       // onPlayerMessage only
+    from: "7c9e6679-...",          // the authenticated user id — trusted
+    data: { type: "move", from: "e2", to: "e4" }  // client payload — untrusted (example: a chess move)
+  },
+  inputs: [                        // onTick only; omitted when none are pending
+    { from: "7c9e6679-...",        // authenticated sender id — trusted
+      data: { type: "input", seq: 42, mx: 0.7, mz: -0.2 } }
+  ]
+}
+</code></pre>
+<ul>
+<li>Kursi AI (jika ada) ditandai dengan <code>ai: true</code> pada entri pemainnya.</li>
+<li>Sebuah permainan yang menyatakan <code>linkedAchievements</code> juga mendapat <code>ctx.linkedAchievements</code>: <code>{ &lt;playerId&gt;: { &lt;otherSlug&gt;: [unlocked keys] } }</code>, baca ulang setiap doa. Melihat <a href="/id/docs/api/achievements.html#achievements-from-other-games">Prestasi dari game lain</a>.</li>
+<li>Sesi terikat ruang (dimulai dari ruang waktu nyata) mendapatkan dua bidang ctx tambahan, <code>ctx.room</code> Dan <code>ctx.presence</code>, pada <strong>setiap</strong> doa — lihat <a href="#room-bound-sessions">Sesi terikat ruangan</a>.</li>
+<li><strong>Jangan percaya apa pun dari <code>ctx.message.data</code> atau <code>ctx.inputs[].data</code>.</strong> Identitas tepercaya adalah yang sesuai <code>from</code>, yang dilampirkan server dari koneksi yang diautentikasi — klien tidak akan pernah dapat menyediakan atau memalsukannya.</li>
+<li>Masukan ikut serta dalam pengelompokan dengan <code>{type:"input", realtime:true, ...}</code>. Tidak ditandai <code>input</code> perintah tetap tahan lama <code>onPlayerMessage</code> memerlukan kompatibilitas ke belakang. Input waktu nyata menggunakan satu slot tertunda per pengirim: pergerakan adalah kemenangan terbaru, sementara <code>pass</code>, <code>shoot</code>, Dan <code>tackle</code> tepi tindakan digabungkan sehingga sampel gerakan berikut tidak dapat menghapusnya sebelum centang berikutnya. Skrip harus menjepit dan memvalidasi setiap nilai saat menggunakan batch.</li>
+</ul>
+<h2 id="tick-rate">Tingkat centang</h2>
+<p>Platformnya berjalan <code>onTick</code> menyapu per sesi aktif pada tingkat yang dapat dikonfigurasi. <strong>Skrip Anda menanyakan tarif yang diinginkan</strong> dengan mendeklarasikan statis <code>tickRateHz</code> pada objek permainan, di samping titik masuk:</p>
+<pre><code class="language-js">globalThis.game = {
+  tickRateHz: 15,          // ask the platform to tick this game 15x/second
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<ul>
+<li>Deklarasi dibacakan <strong>saat game Anda diterbitkan atau diperbarui</strong>, tidak pada setiap centang. Publikasikan pembaruan setelah mengubahnya.</li>
+<li><strong>Sebuah permainan yang menyatakan tidak ada rate dicentang pada 0,25 Hz</strong> — setiap empat detik sekali. Itu cukup
+memutuskan jam pergerakan atau batas waktu dan hampir tidak membebani platform, tetapi ini terlalu lambat
+untuk apa pun yang bergantung pada gameplay Anda. Jika <code>onTick</code> menggerakkan permainan Anda, nyatakan tarif yang Anda perlukan.</li>
+<li>Permintaan dibatasi hingga maksimum platform (<strong>30Hz</strong> secara default), sehingga game dapat meminta lebih sedikit
+melebihi yang dimungkinkan oleh platform, namun tidak lebih dari itu. Mintalah <strong>0</strong> untuk menonaktifkan centang sepenuhnya untuk sebuah game
+yang hanya bereaksi terhadap perintah pemain.</li>
+<li>Tarif mungkin <strong>pecahan</strong>: <code>0.5</code> adalah tanda centang setiap dua detik. Angka bukan nol terkecil adalah
+<code>0.01</code> Hz — angka positif yang lebih kecil dimunculkan daripada dibaca sebagai pilihan untuk tidak ikut serta, karena a
+pecahan kecil adalah permainan yang lambat. Berdetak tidak aktif hanya untuk <code>0</code> atau tingkat negatif. Hilang atau
+deklarasi yang tidak dapat digunakan (string, <code>null</code>, <code>NaN</code>) mengambil default 0,25 Hz.</li>
+<li>Operator dapat mengganti tarif untuk permainan tertentu, ke arah mana pun.</li>
+<li>Input waktu nyata adalah hasil terbaru di antara tick, sementara tepi tindakan terpisah tetap teratur. Penerima yang lambat mungkin melewatkan snapshot yang sudah usang tetapi tidak dapat menunda simulasi atau penerima lainnya.</li>
+</ul>
+<h2 id="replays">Pemutaran ulang</h2>
+<p>Saat sesi selesai, platform dapat melanjutkan sesi finalnya <code>sessionState</code> sebagai <strong>memutar ulang</strong> — itu
+dokumen dilayani oleh <code>GET /api/v1/games/{slug}/replays/{sessionId}</code> (melihat
+<a href="/id/docs/api/games.html#replays">API Game — Pemutaran ulang</a>). Tayangan ulang disimpan selama rekor pertandingan
+adalah, jadi <strong>permainan Anda hanya mendapat satu jika diminta</strong>:</p>
+<pre><code class="language-js">globalThis.game = {
+  replays: true,           // keep finished sessions as replays
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<ul>
+<li>Deklarasinya harus literal <code>true</code> atau <code>false</code> — apa pun yang lain dibaca sebagai tidak ada deklarasi, dan
+permainan yang menyatakan tidak ada yang tidak dapat diputar ulang.</li>
+<li>Itu dibaca <strong>saat game Anda diterbitkan atau diperbarui</strong>. Publikasikan pembaruan setelah mengubahnya.</li>
+<li>Operator platform dapat menjawab permainan tertentu, jadi deklarasinya adalah permintaan
+bukan jaminan. <code>GET /api/v1/games/{slug}</code> melaporkan jawabannya sebagai <code>replaysEnabled</code> —
+cabangkan UI replay Anda pada hal itu, bukan pada apa yang diminta skrip Anda.</li>
+<li>Tidak ada hal lain yang berubah jika pemutaran ulang dinonaktifkan: status sesi Anda masih disimpan dan diteruskan kembali
+setiap doa sebagai <code>ctx.sessionState</code>, dan ini masih merupakan titik pemulihan kerusakan. Permainan yang luar biasa
+tanpa pemutaran ulang tidak mendapatkan salinan yang bertahan lebih lama dari sesi tersebut, jadi jawaban titik akhir pemutaran ulangnya
+<code>404</code>.</li>
+<li>Rancang finalnya <code>sessionState</code> agar layak untuk diputar ulang — log pergerakan, atau apa pun yang dibutuhkan klien Anda
+untuk merekonstruksi pertandingan. Implementasi referensi catur terus berlanjut <code>state.game.moves</code> dan melangkah itu
+melalui modul aturan yang sama yang dijalankan platform.</li>
+</ul>
+<h2 id="persistent-sessions">Sesi yang persisten</h2>
+<p>Sebuah permainan yang menyatakan <code>persistent: true</code> mempertahankan sesinya ketika setiap pemain pergi. Sekitar 15
+detik setelah pemutusan sesi terakhir <strong>dijeda</strong> - TIDAK <code>onTick</code> panggilan — dan yang pertama
+pemain untuk menyambung kembali melanjutkannya. Memutuskan sambungan atau tidak aktif akan menjeda sesi alih-alih mengabaikannya. Hasil permainan, pemilik
+tindakan, cuti anggota akhir yang eksplisit, kedaluwarsa retensi yang dikonfigurasi, atau kegagalan pemulihan terminal dapat terjadi
+masih mengakhirinya. Melihat <a href="/id/docs/session-lifecycle.html">Siklus hidup sesi</a>.</p>
+<pre><code class="language-js">globalThis.game = {
+  persistent: true,        // pause empty sessions instead of ending them
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<ul>
+<li>Harus literal <code>true</code> atau <code>false</code>. Itu dibaca <strong>saat game Anda diterbitkan atau diperbarui</strong>.</li>
+<li><code>ctx.now</code> tetap menjadi jam dinding. Sesi persisten juga didapat <code>ctx.pausedMs</code>, total waktu yang dihabiskan
+berhenti, jadi <code>ctx.now - ctx.pausedMs</code> adalah jam yang berhenti sementara tidak ada orang di sana.</li>
+<li>Sesi yang dijeda dihitung berdasarkan batas sesi per pemain, jadi berikan perintah kepada pemain untuk mengakhiri a
+dunia dengan a <code>result</code>.</li>
+</ul>
+<p>Lihat <a href="/id/docs/tutorials/persistent-sessions.html">tutorial sesi persisten</a> untuk contoh yang berhasil dan aliran klien.</p>
+<h2 id="matchmaking-seat-layout">Tata letak kursi perjodohan</h2>
+<p>Sesi matchmade baru diterima <code>ctx.matchmaking</code> pada <strong>setiap</strong> doa (buat, perintah dan centang).
+Ini mempertahankan bentuk antrean dan tempat duduk bahkan jika game di-deploy ulang nanti:</p>
+<pre><code class="language-js">ctx.matchmaking = {
+  queue: "ffa", teams: 4, teamSize: 1,
+  seats: [
+    { id: "human-uuid", name: "Alice", team: 0, slot: 0, ai: false },
+    { id: "synthetic-ai-uuid", name: "AI 2-1", team: 1, slot: 0, ai: true },
+    { id: null, name: null, team: 2, slot: 0, ai: false },
+    { id: null, name: null, team: 3, slot: 0, ai: false }
+  ]
+};
+</code></pre>
+<p><code>ctx.players</code> hanya berisi kursi yang terisi, dengan <code>team</code> Dan <code>ai:true</code> untuk AI. Indeks tim/slot adalah
+berbasis nol. ID AI stabil dalam sesi ini dan bukan ID akun StarHermit. Hanya manusia
+memiliki keanggotaan sesi/obrolan dan dapat menerima status pemain akun, peringkat, atau penulisan pencapaian.
+Pertahankan status AI <code>sessionState</code>. Salin bidang daftar mana pun yang dibutuhkan klien ke dalam status game Anda
+atau siaran. Sesi lama dan sesi non-perjodohan dapat dihilangkan <code>ctx.matchmaking</code>.</p>
+<p>Nyatakan tenggat waktu mulai dan jumlah AI maksimum
+<a href="/id/docs/starhermit-txt.html#starting-matchmaking-before-every-human-seat-is-filled"><code>starhermit.txt</code></a>.
+Dengan hitungan AI <code>0</code>, kursi kosong tetap kosong. Konteks yang sama dikirimkan ke server kontainer.</p>
+<h2 id="room-bound-sessions">Sesi terikat ruangan</h2>
+<p>Sesi bisa saja <strong>terikat pada ruang waktu nyata</strong>: ketika a <a href="/id/docs/api/realtime.html">ruang waktu nyata</a> untuk permainan dengan a <code>server=</code> skrip dimulai, platform membuat satu sesi N-pemain untuk ruangan itu <strong>manusia</strong> peserta (kursi AI hanya ada di daftar yang menghadap skrip). Beginilah cara permainan waktu nyata yang otoritatif di server (misalnya sepak bola) dijalankan: ruangan menyediakan lobi/perjodohan, skrip menjalankan pertandingan. Melihat <a href="/id/docs/api/realtime.html#room-bound-sessions">Ruang Realtime — jembatan</a> untuk siklus hidup sisi ruangan.</p>
+<p>Setiap pemanggilan (<code>createSession</code>, <code>onPlayerMessage</code>, <code>onTick</code>) dari sesi terikat ruangan menerima dua bidang ctx tambahan:</p>
+<pre><code class="language-js">ctx.room = {
+  roomId: "0f8fad5b-...",
+  metadata: { /* ... */ },        // the room's opaque config.metadata blob
+  roster: [                       // frozen match roster, humans AND AI seats,
+    { userId: "7c9e6679-...",     //   ordered by team then slot
+      name: "alice", team: 0, slot: 0, ai: false },
+    { userId: null,               // AI seat — never a session player
+      name: "Rafa Vento", team: 0, slot: 1, ai: true }
+  ]
+};
+ctx.presence = {                  // every user who is or was a human participant
+  "7c9e6679-...": { online: true, left: false }
+};
+</code></pre>
+<ul>
+<li><code>presence.online</code> — pengguna memiliki soket langsung di salah satu registri koneksi (ruang waktu nyata <strong>atau</strong> <code>ws/v1/games</code>).</li>
+<li><code>presence.left</code> — pengguna tidak lagi memegang kursi aktif: mereka secara eksplisit keluar dan kursi mereka diubah menjadi peserta AI. <code>left</code> bersifat permanen; <code>online</code> mungkin mengepak. Skrip ini diharapkan dapat mendorong logika pengambilalihan/penggabungan kembali AI dari tanda-tanda ini.</li>
+<li>Daftar tersebut dibaca ulang pada setiap pemanggilan, sehingga konversi kursi (manusia → AI) muncul saat terjadi.</li>
+</ul>
+<p>Saat skrip terikat ruangan kembali <code>result</code>, platform menyelesaikan sesi, <strong>menyimpan hasilnya di ruangan, dan menutup ruangan</strong> — tidak ada hasil yang dikirimkan host yang terlibat.</p>
+<p>Hal sebaliknya tidak benar: <strong>penutupan ruangan tidak menyelesaikan sesinya.</strong> Jika ruangan ditutup terlebih dahulu (misalnya karena orang terakhirnya meninggalkan ruangan tanpa proses bergabung — bukan hanya karena tuan rumah offline, yang hanya memindahkan peran tuan rumah saat sesi aktif), sesi tetap berjalan, <code>ctx.room.roster</code> menjadi kosong dan setiap manusia menunjukkan <code>left: true</code>. Kembali <code>result</code> lalu jika pertandingan harus diakhiri dengan room. Melihat <a href="/id/docs/api/realtime.html#the-60-second-host-rule-and-room-bound-sessions">Ruang Waktu Nyata — aturan tuan rumah berdurasi 60 detik dan sesi terikat ruangan</a>.</p>
+<h2 id="return-shape">Kembalikan bentuk</h2>
+<p>Setiap titik masuk mengembalikan bentuk yang sama (semua bidang opsional kecuali <code>ok</code>):</p>
+<pre><code class="language-js">return {
+  ok: true,                        // false on failure
+  error: "Illegal move",           // goes only to the sender (as a WS "error" frame)
+  sessionState: { /* ... */ },     // REPLACES the stored session document
+  playerStates: {                  // REPLACES stored per-player documents
+    "7c9e6679-...": { elo: 1216, /* ... */ }
+  },
+  broadcast: [                     // only these messages ever reach clients
+    { to: "all", data: { type: "moved", /* ... */ } },
+    { to: ["9b2f8c1a-..."], data: { type: "state", /* ... */ } }
+  ],
+  eloUpdates: {                    // published to the game's leaderboard by the host
+    "7c9e6679-...": 1216,
+    "9b2f8c1a-...": 1184
+  },
+  achievements: {                  // server-authoritative unlocks, by player id
+    "7c9e6679-...": ["first-win", "flawless"]
+  },
+  scores: {                        // to your game's own leaderboards, by board key
+    "high-score": { "7c9e6679-...": 4200 }
+  },
+  result: { kind: "white-win", reason: "checkmate" }  // ends the session (example: a chess result)
+};
+</code></pre>
+<p>Aturan utama:</p>
+<ul>
+<li><code>sessionState</code> dan setiap entri <code>playerStates</code> <strong>mengganti</strong> dokumen yang disimpan — selalu mengembalikan dokumen lengkap, tidak pernah berbeda.</li>
+<li>Hanya pesan yang terdaftar di <code>broadcast</code> dikirimkan ke klien, masing-masing ditujukan ke id pemain eksplisit atau <code>"all"</code>. Tidak ada lagi yang bocor.</li>
+<li><code>eloUpdates</code> adalah satu-satunya cara peringkat berubah. Nilai adalah milik masing-masing pemain <strong>peringkat absolut baru</strong>, diterapkan saat dikirim — platform tidak membatasi perubahan per pertandingan, jadi jepit sendiri (lihat <a href="/id/docs/api/games.html#elo-per-match">Elo per pertandingan</a>). Tuan rumah menggunakannya untuk perjodohan dan mempublikasikannya ke papan peringkat permainan; klien tidak pernah dapat mengirimkan skor secara langsung (lihat <a href="/id/docs/api/leaderboards.html">Papan peringkat</a>). Pertahankan peringkatnya <code>playerStates[id].elo</code> jadi milik pemiliknya <a href="/id/docs/api/leaderboards.html#resetting-a-players-rating">pengaturan ulang peringkat</a> mencapai salinan Anda juga.</li>
+<li><code>achievements</code> adalah satu-satunya cara pencapaian diberikan. Kunci diselesaikan berdasarkan pencapaian game — diumumkan, atau dibuat oleh pemiliknya — dan disimpan oleh platform; melihat <a href="#achievements">Prestasi</a>.</li>
+<li><code>scores</code> adalah satu-satunya cara papan peringkat game Anda berubah — lihat <a href="#leaderboards">Papan peringkat</a>.</li>
+<li>Akhiri permainan melalui <code>result</code>. Tuan rumah kemudian menyelesaikan sesi tersebut, dan memulai permainan dengan <a href="#replays">memutar ulang</a> <strong>mengarsipkan final <code>sessionState</code></strong> sebagai tayangan ulang (disajikan oleh <code>GET .../replays/{sessionId}</code> - melihat <a href="/id/docs/api/games.html#replays">API Permainan</a>).</li>
+</ul>
+<h2 id="achievements">Prestasi</h2>
+<p>Skrip Anda adalah <strong>hanya</strong> hal yang dapat membuka pencapaian game Anda. Tidak ada klien
+titik akhir bagi mereka: <code>POST /api/v1/me/achievements/unlock</code> langsung menolak pencapaian dalam lingkup game,
+dan titik akhir CRUD penerbit menolak untuk menyentuhnya. Pemilik game dapat menambahkan prestasi di sampingnya
+yang dinyatakan melalui
+<a href="/id/docs/api/achievements.html#achievements-created-by-the-games-owner"><code>/me/github-games/{id}/achievements</code></a>;
+skrip Anda membukanya dengan kunci dengan cara yang persis sama. Hal ini menjadikan prestasi sebagai server-
+berwibawa seperti permainan lainnya, dan itulah mekanismenya <strong>setiap</strong> permainan dengan a <code>server=</code> naskah
+harus digunakan — termasuk yang alur permainannya berjalan di tempat lain (lihat
+<a href="/id/docs/api/achievements.html#which-games-can-use-this">game mana yang bisa menggunakan ini</a>).</p>
+<h3 id="declare">Menyatakan</h3>
+<p>Sebuah statis <code>achievements</code> susunan di <code>game</code> obyek. Hanya <code>key</code> diperlukan:</p>
+<pre><code class="language-js">globalThis.game = {
+  achievements: [
+    { key: "first-win", name: "First Win", description: "Win a match.", points: 10 },
+    { key: "flawless",  name: "Flawless",  description: "Win without conceding.",
+      points: 50, secret: true, icon: "https://cdn.example/flawless.png" }
+  ],
+  // ...entry points
+};
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Bidang</th>
+<th>Jenis</th>
+<th>Catatan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>key</code></td>
+<td>rangkaian</td>
+<td><strong>Diperlukan.</strong> Id stabil, ≤ 128 karakter, unik di dalam game. Duplikat setelah yang pertama diabaikan.</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>rangkaian</td>
+<td>Defaultnya adalah <code>key</code>.</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>rangkaian</td>
+<td>Defaultnya adalah <code>""</code>.</td>
+</tr>
+<tr>
+<td><code>icon</code></td>
+<td>rangkaian</td>
+<td>URL opsional.</td>
+</tr>
+<tr>
+<td><code>secret</code></td>
+<td>boolean</td>
+<td>Tersembunyi dari pemain sampai <em>mereka</em> membukanya. Defaultnya adalah <code>false</code>.</td>
+</tr>
+<tr>
+<td><code>points</code></td>
+<td>nomor</td>
+<td>Dijepit ke 0–10000. Defaultnya adalah <code>0</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Array diterapkan saat game diterbitkan atau diperbarui:</p>
+<ul>
+<li>Definisi dicocokkan dengan <code>key</code> — mengedit nama, ikon, titik, atau bendera rahasia akan memperbarui definisi yang ada, dan setiap orang yang telah mendapatkannya akan menyimpannya.</li>
+<li>Kunci yang Anda berhenti deklarasikan akan dihapus <strong>hanya ketika tidak ada yang membukanya</strong>. Sejarah yang diperoleh tidak pernah dimusnahkan, sehingga pencapaian yang dihentikan tetap dapat dilihat oleh pemain yang memegangnya.</li>
+<li>Paling banyak <strong>100</strong> pencapaian per game; tambahan di luar itu dihilangkan.</li>
+<li>Deklarasinya adalah <strong>upaya terbaik</strong>: entri yang salah format dilewati. Selalu konfirmasikan definisi yang dipublikasikan dengan <code>GET /api/v1/games/{slug}/achievements</code> setelah memperbarui permainan.</li>
+</ul>
+<h3 id="unlock">Membuka kunci</h3>
+<p>Kembalikan sebuah <code>achievements</code> peta dari <strong>setiap</strong> titik masuk - <code>createSession</code>, <code>onPlayerMessage</code>, atau
+<code>onTick</code>:</p>
+<pre><code class="language-js">onTick(ctx) {
+  const state = JSON.parse(JSON.stringify(ctx.sessionState));
+  const unlocks = {};
+  for (const p of ctx.players) {
+    if (!p.ai &amp;&amp; state.scores[p.id] &gt;= 10) unlocks[p.id] = ["ten-points"];
+  }
+  return { ok: true, sessionState: state, achievements: unlocks };
+}
+</code></pre>
+<ul>
+<li>Buka kuncinya adalah <strong>idempoten</strong> — menegaskan kembali kunci yang sudah dipegang pemain adalah sebuah larangan, sehingga skrip dapat dengan aman memberikan penghargaan dari kondisi yang dievaluasi ulang pada setiap centang alih-alih melacak "sudah diberikan penghargaan" di negara bagiannya sendiri.</li>
+<li>Kunci yang tidak diketahui (tidak dideklarasikan atau dibuat oleh pemilik game), pengguna yang bukan peserta sesi ini, dan kursi AI akan diabaikan secara diam-diam.</li>
+<li>Paling banyak <strong>32</strong> kunci diterima per pemain per pemanggilan; kunci selanjutnya dalam larik yang sama akan dibuang.</li>
+<li>Baris dipertahankan dengan sisa penulisan doa, sehingga pembukaan kunci tidak dapat bertahan jika doa gagal.</li>
+</ul>
+<h3 id="delivery">Pengiriman</h3>
+<p>Setiap pembukaan kunci yang baru diberikan akan diteruskan ke pemain yang memperoleh penghasilan <code>ws/v1/games</code> sebagai bingkai yang berbeda -
+itu adalah kebenaran platform, bukan salah satu milik Anda <code>broadcast</code> pesan:</p>
+<pre><code class="language-json">{ "type": "achievement",
+  "data": { "key": "first-win", "name": "First Win", "description": "Win a match.",
+            "icon": null, "points": 10, "unlockedAt": "2026-07-25T09:14:02Z" } }
+</code></pre>
+<p>Buka kunci diberikan dari <code>createSession</code> mendarat sebelum ada soket, jadi mereka tiba tanpa bingkai —
+klien harus membaca <code>GET /api/v1/games/{slug}/achievements</code> pada beban dan perlakukan bingkai sebagai
+jalur pembaruan langsung. Permukaan penuh masuk <a href="/id/docs/api/achievements.html">Prestasi</a>.</p>
+<h2 id="leaderboards">Papan peringkat</h2>
+<p>Selain papan elo, game Anda dapat memiliki papan peringkat yang dibuat oleh pemiliknya
+<a href="/id/docs/api/leaderboards.html#your-games-own-leaderboards"><code>POST /api/v1/me/github-games/{id}/leaderboards</code></a>,
+masing-masing dengan a <code>key</code>. Posting ke mereka dengan kembali <code>scores</code> dari titik masuk mana pun — kunci papan → id pemain →
+nomor:</p>
+<pre><code class="language-js">onPlayerMessage(ctx) {
+  var s = ctx.sessionState;
+  if (ctx.message.data.type === "finish-run") {
+    var scores = { "high-score": {}, "fastest-run": {} };
+    scores["high-score"][ctx.message.from] = s.points[ctx.message.from];
+    scores["fastest-run"][ctx.message.from] = ctx.now - s.startedAt;   // a time-ms board
+    return { ok: true, sessionState: s, scores: scores };
+  }
+  /* ... */
+}
+</code></pre>
+<ul>
+<li>Setiap pemain menyimpannya <strong>terbaik</strong> skor di setiap papan, berdasarkan arah pengurutan papan, jadi laporkan
+setiap hasil — hasil yang lebih buruk diabaikan begitu saja.</li>
+<li>Hanya peserta sesi yang dihitung. Kunci tidak diketahui atau tidak aktif, dan skor di luar aturan dewan,
+dijatuhkan secara diam-diam. Paling banyak 16 papan per pengembalian.</li>
+<li>Berbeda dengan <code>eloUpdates</code>, tidak ada yang dipublikasikan ke <code>playerStates</code> — simpan salinanmu sendiri
+<code>playerStates</code> jika permainan perlu membaca kembali yang terbaik pribadi.</li>
+</ul>
+<h2 id="where-your-script-runs">Di mana skrip Anda berjalan</h2>
+<p>Skrip yang berulang tanpa batas, menghabiskan memorinya, atau melebihi anggaran waktunya akan gagal
+doa. Hasil yang gagal tidak diterapkan. Perintah atau centang melaporkan salah satu dari:</p>
+<ul>
+<li><code>Game script error: the script crashed its runtime (for example, by recursing without limit).</code></li>
+<li><code>Game script error: the script exceeded its memory budget.</code></li>
+<li><code>Game script error: the script exceeded its time budget.</code></li>
+</ul>
+<h2 id="your-games-share-of-the-server">Bagian server game Anda</h2>
+<ul>
+<li><strong>Waktu skrip.</strong> Semua sesi game berbagi anggaran waktu skrip, sebesar 2000 ms per detik
+default, dibebankan dengan apa yang sebenarnya dilakukan oleh setiap pemanggilan. Permainan atas bagiannya malah ditolak
+daripada antri: tanda centang dilewati, perintah dijawab dengan "Game ini menggunakan lebih dari bagiannya
+dari server saat ini; coba lagi sebentar lagi.", dan membuat sesi kembali <code>429</code>.</li>
+<li><strong>Perintah.</strong> Setiap pemain dapat mengirimkan 20 perintah tahan lama per detik per sesi (dengan ledakan singkat
+tunjangan); lebih dari itu sebuah perintah dijawab dengan an <code>error</code> bingkai, "Terlalu banyak perintah; lambat
+turun." Bingkai tidak menyertakan status HTTP. Masukan waktu nyata dibatasi secara terpisah.</li>
+<li><strong>Hasil.</strong> Hasil akhir sesi mungkin paling banyak 64 KB; yang lebih besar ditolak
+<code>422</code>.</li>
+<li><strong>Ukuran skrip.</strong> A <code>server=</code> skrip mungkin paling banyak 2 MB; yang lebih besar ditolak <code>422</code> sebelumnya
+itu disimpan atau diurai.</li>
+</ul>
+<p>Operator dapat menaikkan atau menurunkan masing-masingnya untuk satu permainan.</p>
+<h2 id="budgets">Anggaran</h2>
+<p>Skrip dijalankan berdasarkan anggaran sumber daya berikut:</p>
+<ul>
+<li>~250 ms CPU per pemanggilan</li>
+<li>Memori 32 MB</li>
+<li>Batas pernyataan per pemanggilan</li>
+<li>Anggaran byte negara bagian per pemain — semua dokumen negara bagian harus tetap dapat diserialkan dan berukuran kecil</li>
+<li>Nilai bersarang paling banyak pada kedalaman 64 tingkat ketika menjadi teks. Apa pun yang dikembalikan oleh titik masuk, semuanya
+deklarasi, <code>JSON.stringify</code>, Dan <code>Array.prototype.join</code>/<code>toString</code>/<code>toLocaleString</code> menolak a
+nilai yang lebih dalam dengan a <code>RangeError</code> (yang dikembalikan gagal dalam pemanggilan: "bersarang lebih dari 64 level
+dalam"). <code>JSON.parse</code> sudah berhenti di 64, jadi nilai yang lebih dalam tidak akan pernah bisa bolak-balik. <code>flat</code>
+meratakan hingga 64 level dan melempar jika array bersarang lebih dalam — termasuk array yang berisi
+itu sendiri.</li>
+<li>Satu panggilan tidak dapat mengalokasikan lebih dari anggaran memori. <code>repeat</code>, <code>padStart</code>/<code>padEnd</code>, <code>concat</code> Dan
+<code>replace</code>/<code>replaceAll</code> melemparkan <code>RangeError: Invalid string length</code> ketika hasilnya bisa melebihi setengahnya
+anggaran dalam karakter (16M pada default 32 MB; penggantian regex dibatasi seolah-olah setiap
+posisi cocok, yang hanya mempengaruhi string sekitar satu juta karakter atau lebih).
+<code>ArrayBuffer</code> dan mengetikkan lemparan array <code>RangeError</code> melewati anggaran dalam byte, dan melewati array
+elemen anggaran/8 ditolak. Anggarannya juga diperiksa setelah hook Anda kembali, jadi an
+pernyataan akhir yang melebihi anggaran gagal dalam pemanggilan alih-alih berhasil.</li>
+</ul>
+<p>Skrip referensi catur sengaja membuat dokumennya tetap kecil — sebagai contoh agar tetap sesuai anggaran, dokumen per pemainnya adalah</p>
+<pre><code class="language-js">{
+  elo: 1200,
+  wins: 0, losses: 0, draws: 0,
+  lastColorVs: "9b2f8c1a-...",        // for color alternation on rematch
+  lastColorOrder: "w",
+  recentGames: [ /* up to 30 summaries */ ]
+}
+</code></pre>
+<p>Batas sesi bersamaan adalah 20 per pemain secara default.</p>
+<h2 id="the-platform-readable-window">Jendela yang dapat dibaca platform</h2>
+<p>Semuanya masuk <code>sessionState</code> tidak tembus pandang ke platform <strong>kecuali</strong> satu bidang:</p>
+<pre><code class="language-js">sessionState.summary = {
+  turnPlayerId: "7c9e6679-...",
+  deadline: 1784642591000,
+  status: "active",
+  moveCount: 41
+};
+</code></pre>
+<p><code>deadline</code> adalah stempel waktu Unix bilangan bulat <strong>milidetik</strong>, atau dihilangkan ketika tidak ada tenggat waktu.
+String tanggal ISO tidak dikenali. <code>turnPlayerId</code> adalah pemain UUID.</p>
+<p><code>GET /api/v1/games/{slug}/sessions/mine</code> membaca <code>summary</code> untuk menghitung <code>myTurn</code> Dan <code>deadline</code> untuk penelepon. Tetap akurat pada setiap perubahan negara bagian; simpan yang lainnya di mana pun skrip Anda suka.</p>
+<h2 id="worked-example-the-chess-script">Contoh yang berhasil: naskah catur</h2>
+<p>Segala sesuatu di bagian ini khusus untuk implementasi referensi catur — bentuk keadaan, pengkodean papan, kumpulan perintah, alasan permainan berakhir, konstanta Elo, AI, dan batas waktu di bawah ini adalah pilihan catur sendiri, yang ditentukan dalam skripnya. Tidak ada satupun yang merupakan perilaku platform; game Anda menentukan padanannya sendiri.</p>
+<p>Status sesi:</p>
+<pre><code class="language-js">{
+  white: "7c9e6679-...",
+  black: "9b2f8c1a-...",
+  aiId: "00000000-0000-4000-8000-00000000a1a1",   // present in AI games
+  game: {
+    board: "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr", // 64 chars
+    turn: "w",
+    castling: { K: true, Q: true, k: true, q: true },
+    epSquare: null,
+    halfmoveClock: 0,
+    fullmove: 1,
+    moves: [ { from: "e2", to: "e4", promo: null, san: "e4", at: 1721473200000 } ],
+    positionCounts: { /* fen-key: count, for threefold repetition */ },
+    status: "active"
+  },
+  createdAt: 1721473200000,
+  deadline: 1721559600000,
+  result: null,
+  drawOfferBy: null,
+  summary: { turnPlayerId: "...", deadline: "...", status: "active", moveCount: 1 }
+}
+</code></pre>
+<p>Pengkodean papan: string 64 karakter di mana <code>index = rank * 8 + file</code> Dan <code>a1</code> adalah indeks 0. <code>PNBRQK</code> adalah potongan putih, <code>pnbrqk</code> hitam, <code>.</code> adalah kotak kosong.</p>
+<p>Perintah ditangani oleh <code>onPlayerMessage</code>: <code>sync</code>, <code>move</code>, <code>resign</code>, <code>offer-draw</code>, <code>accept-draw</code>, <code>decline-draw</code> (bentuk kawat masuk <a href="/id/docs/api/games.html#example-chess-command-shapes">API Permainan</a>).</p>
+<p>Permainan berakhir <code>reason</code> nilai: <code>checkmate</code>, <code>stalemate</code>, <code>threefold-repetition</code>, <code>fifty-move-rule</code>, <code>insufficient-material</code>, <code>resignation</code>, <code>agreement</code>, <code>timeout</code>, <code>timeout-no-moves</code>.</p>
+<p>Spesifik catur lainnya:</p>
+<ul>
+<li><strong>Halo</strong> menggunakan K=32, dihitung dalam <code>finishGame</code> ketika pertandingan berakhir, dan kembali melalui <code>eloUpdates</code>.</li>
+<li><strong>Permainan AI:</strong> ketika kursi AI akan dipindahkan, <code>aiReply</code> diputar <strong>"hal"</strong> — mesin penangkap material yang rakus — di dalam doa yang sama. Tidak ada bot eksternal.</li>
+<li><strong>Batas waktu:</strong> <code>onTick</code> memutuskan jam pergerakan 24 jam — jika tidak ada gerakan yang dimainkan, permainannya adalah a <code>timeout-no-moves</code> menggambar; jika tidak, pemain yang bergerak akan kalah <code>timeout</code>.</li>
+</ul>
+<h2 id="deployment">Penyebaran</h2>
+<p>Deklarasikan skrip di repositori game Anda <code>starhermit.txt</code> tampak:</p>
+<pre><code>server=server.js
+</code></pre>
+<p>Alur penerbitan melalui integrasi GitHub — lihat <a href="/id/docs/api/github-games.html">Permainan GitHub</a>. Platform mengeksekusi skrip sesuai anggaran yang terdokumentasi. Jangan digabungkan <code>server=</code> dengan <code>container.image=</code>; gunakan <a href="/id/docs/api/container-games.html">waktu proses kontainer</a> sebagai gantinya saat mengirimkan gambar.</p>
+<h2 id="best-practices">Praktik terbaik</h2>
+<ul>
+<li><strong>Validasi setiap perintah.</strong> Merawat <code>ctx.message.data</code> sebagai bermusuhan: periksa jenis, rentang, urutan giliran, dan status permainan sebelum menyentuh status.</li>
+<li><strong>Pertahankan pemanggilan dengan cepat dan nyatakan dalam jumlah kecil.</strong> Anda memiliki ~250 ms dan anggaran byte per dokumen pemain; naskah referensi catur, misalnya caps <code>recentGames</code> pada 30 entri karena alasan ini.</li>
+<li><strong>Menggunakan <code>ctx.now</code> / <code>ctx.random</code> hanya.</strong> TIDAK <code>Date</code>, TIDAK <code>Math.random</code> — tuan rumah memiliki jam dan dadu.</li>
+<li><strong>Desain <code>broadcast</code> pesan sebagai satu-satunya kontrak klien.</strong> Klien harus dapat merender keseluruhan game dari skrip yang dikirimkan; apa pun yang tidak disiarkan tidak ada bagi mereka.</li>
+<li><strong>Satu file, dua permukaan.</strong> File yang sama dapat berfungsi ganda sebagai aturan sisi klien melalui ekspor terpisah: implementasi referensi catur, misalnya, diekspos <code>globalThis.chessRules</code> untuk browser (pindahkan pratinjau, petunjuk validasi) dan <code>globalThis.game</code> untuk tuan rumah. Satu sumber kebenaran, tidak ada otoritas pada klien.</li>
+<li><strong>Selalu akhiri permainan melalui <code>result</code></strong> jadi platform menerbitkan pembaruan Elo dan mengarsipkan tayangan ulangnya saat game Anda memilikinya <a href="#replays">memutar ulang</a>.</li>
+</ul>
+<p>Lihat <a href="/id/docs/tutorials/chess-walkthrough.html">Panduan Catur</a> untuk tur baris demi baris, dan <a href="/id/docs/tutorials/ai-prompts.html">Anjuran AI</a> untuk bantuan membuat skrip Anda sendiri.</p>
+<p>Dibagikan <a href="/id/docs/api/conventions.html">konvensi API</a> menjelaskan penguraian respons, stempel waktu, penomoran halaman, dan percobaan ulang.</p>
+<p>Melihat <a href="/id/docs/credentials.html">kompatibilitas kredensial</a> Dan <a href="/id/docs/api/contracts.html">kontrak yang dapat dibaca mesin</a>.</p>
+
+{% endraw %}

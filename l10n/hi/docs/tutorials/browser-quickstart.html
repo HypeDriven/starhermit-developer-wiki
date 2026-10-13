@@ -1,0 +1,111 @@
+---
+layout: "wiki"
+lang: "hi"
+title: "अपना पहला होस्टेड ब्राउज़र गेम बनाएं"
+source_url: "/docs/tutorials/browser-quickstart.html"
+source_path: "docs/tutorials/browser-quickstart.md"
+source_hash: "41cf9fbedb43c0236d904fb42d9467a521861df09572f995e085dda2e06c1d23"
+translation: "machine"
+permalink: "/hi/docs/tutorials/browser-quickstart.html"
+---
+{% raw %}
+<h1 id="build-your-first-hosted-browser-game">अपना पहला होस्टेड ब्राउज़र गेम बनाएं</h1>
+<p><a href="/docs/examples/browser-quickstart.zip">स्टार कलेक्टर डाउनलोड करें</a>, दो प्रविष्टियों वाला एक पूर्ण छोटा खेल
+विकल्प: क्लाउड सेव के साथ अकाउंट प्ले, और सिंगल-प्लेयर प्ले जिसकी प्रगति केवल मेमोरी में रखी जाती है।
+<a href="/docs/examples/browser-quickstart/index.html">अहस्ताक्षरित खेल का प्रयास करें</a> इस विकी पर; अकाउंट साइन-इन हो जाता है
+आपके द्वारा StarHermit पर अपनी प्रति प्रकाशित करने के बाद उपलब्ध है।</p>
+<p>प्रकाशित करने के लिए आपको एक StarHermit खाते की आवश्यकता है। गेम को स्वयं किसी सर्वर बैकएंड, निर्भरता की आवश्यकता नहीं है
+स्थापना, निर्माण चरण, या प्रकाशक संगठन।</p>
+<h2 id="1-unzip-and-play-locally">1. अनज़िप करें और स्थानीय स्तर पर खेलें</h2>
+<p>ज़िप में शामिल है <code>index.html</code>, <code>app.js</code>, <code>style.css</code>, <code>starhermit.txt</code>, और दो सहायक फ़ाइलें।
+निकाले गए फ़ोल्डर को स्थानीय स्थैतिक सर्वर के साथ परोसें, उदाहरण के लिए:</p>
+<pre><code class="language-bash">python3 -m http.server 8000 --directory star-collector
+</code></pre>
+<p>यहाँ <code>star-collector</code> वह फ़ोल्डर है जिसे आपने निकाला है। खुला <code>http://localhost:8000</code> और चुनें
+<strong>एकल खिलाड़ी खेलें (प्रगति सहेजी नहीं गई है)</strong>. स्टार पर क्लिक करें. प्रारंभ पर लौटना या पुनः लोड करना
+एक नया अनट्रैक रन प्रारंभ करता है. यह मोड न तो स्थानीय प्रगति लिखता है और न ही खाता प्रगति।</p>
+<h2 id="2-publish-the-distributable-folder">2. वितरणयोग्य फ़ोल्डर प्रकाशित करें</h2>
+<p>मेनिफेस्ट पहले से ही फ़ोल्डर रूट पर है:</p>
+<pre><code class="language-ini">name=Star Collector Quickstart
+launch=index.html
+description=A small single-player game with account saves or untracked play.
+</code></pre>
+<p>StarHermit के गेम प्रकाशन UI में, इस फ़ोल्डर को एक नए गेम के रूप में जोड़ें। संपूर्ण चयनित फ़ोल्डर है
+प्रकाशित निर्माण. केवल वही फ़ाइलें रखें जिन्हें आप परोसना चाहते हैं। एपीआई समकक्ष फाइलों को पैकेज करता है
+के अंतर्गत <code>client/</code> और एक कच्चा gzip संग्रह भेजता है:</p>
+<pre><code class="language-bash">mkdir -p bundle/client
+cp -R star-collector/. bundle/client/
+cp star-collector/starhermit.txt bundle/starhermit.txt
+# Write the archive outside bundle so it cannot include itself.
+tar -C bundle -czf star-collector.tar.gz .
+
+curl --fail-with-body -X POST https://api.starhermit.com/api/v1/me/github-games/upload \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H 'Content-Type: application/gzip' \
+  --data-binary @star-collector.tar.gz
+</code></pre>
+<p><code>ACCESS_TOKEN</code> स्पष्ट वर्तमान शर्तों की स्वीकृति के बाद, यह आपका पूर्ण खाता टोकन है। प्रतिक्रिया है
+<code>game.id</code>, <code>game.gameSlug</code>, और होस्ट किया गया उपडोमेन आपके गेम की पहचान करता है। लौटाया गया होस्ट किया गया यूआरएल खोलें.
+बाद की रिलीज़ के लिए उस गेम का उपयोग करें <a href="/hi/docs/api/github-games.html#push-a-game-bundle">बंडल समापन बिंदु</a>
+दूसरी सूची बनाने के बजाय। देखना <a href="/hi/docs/tutorials/ci-cd-build-upload.html">सीआई प्रकाशन</a> जब तैयार हो.</p>
+<h2 id="3-try-the-two-account-entry-paths">3. दो खाता प्रविष्टि पथ आज़माएँ</h2>
+<p><strong>स्टारहर्मिट से लॉन्च:</strong> लॉन्चर आपूर्ति करता है <code>#game_token=&lt;jwt&gt;</code>. सहायक इसे पकड़ लेता है और
+गेम मॉड्यूल चलने से पहले इसे यूआरएल से हटा देता है। चुनना <strong>अपने StarHermit खाते को जारी रखें</strong>.</p>
+<p><strong>होस्ट किए गए URL को सीधे खोलें:</strong> चुनना <strong>StarHermit के साथ साइन इन करें</strong>. प्रदाता चयनकर्ता इसकी अनुमति देता है
+खिलाड़ी किसी मौजूदा खाते से साइन इन करें या एक खाता बनाएं। यह एक स्कोप के साथ सीधे इस गेम में लौटता है
+<code>#access_token=&lt;jwt&gt;</code>; खेल के लिए कोई खाता-व्यापी क्रेडेंशियल नहीं भेजा जाता है।</p>
+<p>गेम तभी प्रगति को लोड करता है जब खिलाड़ी अकाउंट प्ले चुनता है। यदि वर्तमान शर्तों को स्वीकृति की आवश्यकता है,
+यह दस्तावेज़ को टेक्स्ट और ऑफ़र के रूप में प्रदर्शित करता है <strong>स्वीकार करें और जारी रखें</strong>. स्वीकृति केवल हैश भेजती है
+प्रदर्शित संशोधन का. एक परिवर्तित संशोधन को किसी अन्य स्पष्ट निर्णय के लिए पुनः प्रदर्शित किया जाता है।</p>
+<h2 id="4-check-progress-and-failures">4. प्रगति और विफलताओं की जाँच करें</h2>
+<p>खाता मोड में कुछ सितारे एकत्र करें, प्रतीक्षा करें <strong>सहेजा गया</strong>, और पुनः लोड करें। चुनने के बाद गिनती वापस आ जाती है
+खाता खेलें. उसी सहेजी गई गिनती पर दूसरा टैब खोलें: एक में सहेजें, फिर दूसरे में इकट्ठा करें। द
+दूसरे को संघर्ष और प्रस्ताव दिखाना होगा <strong>नवीनतम क्लाउड प्रगति लोड करें</strong> इसे ओवरराइट करने के बजाय।</p>
+<p>सेव दस्तावेज़ है <code>{ version: 1, points: &lt;non-negative integer&gt; }</code>. गेम लोड होता है और मान्य होता है
+लिखने से पहले, सशर्त अद्यतनों के लिए लोड किए गए ईटैग का उपयोग करता है, और असफल पढ़ने के बाद लिखने को रोकता है।
+यह प्रत्येक संग्रह पर सहेजता है और पावती के बाद ही सहेजे गए डेटा को लेबल करता है। देखना
+<a href="/hi/docs/tutorials/cloud-save-sync.html">बचत का नुस्खा</a> प्रारूप, माइग्रेशन और बड़े दस्तावेज़ों के लिए।</p>
+<p>ट्रैक न किए गए खेल का चयन करने से गेम का प्लेयर टोकन समाप्त हो जाता है और पृष्ठभूमि नवीनीकरण रुक जाता है। कोई बादल नहीं
+सेव, उपलब्धि, लीडरबोर्ड, या स्थानीय-प्रगति लेखन होता है। अकाउंट प्ले का चयन फिर से उपयोग करता है
+नया टोकन प्राप्त करने के लिए साइन-इन करें।</p>
+<h2 id="5-adapt-it-to-your-game">5. इसे अपने खेल के अनुरूप ढालें</h2>
+<p>अपने गेमप्ले के साथ स्टार बटन और प्रगति स्कीमा को बदलें। प्रवेश विकल्प, टोकन रखें
+कैप्चर, स्पष्ट शर्तों की स्वीकृति, लोड-पहले-सेव नियम, त्रुटि प्रबंधन, और सेव स्थिति।
+मेनिफ़ेस्ट में कीबोर्ड क्रियाओं की घोषणा करें और पढ़ें <a href="/hi/docs/api/games.html#per-player-control-bindings">एपीआई को नियंत्रित करता है</a>
+जब आपके गेम को रीबाइंडिंग की आवश्यकता हो। वॉल्यूम और ग्राफ़िक्स प्राथमिकताएँ डालें <a href="/hi/docs/api/games.html#per-player-game-settings">सेटिंग्स</a>.</p>
+<p>मल्टीप्लेयर या मान्य प्रतिस्पर्धी परिणामों के लिए, जोड़ें <a href="/hi/docs/choosing-an-integration.html">एक स्क्रिप्ट या कंटेनर</a>.
+यह क्विकस्टार्ट का क्लाउड काउंटर ग्राहक-स्वामित्व वाली प्रगति है, वैध स्कोर का प्रमाण नहीं।</p>
+<table>
+<thead>
+<tr>
+<th>फ़ाइल</th>
+<th>उद्देश्य</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index.html</code>, <code>style.css</code></td>
+<td>सुलभ प्रविष्टि, शर्तें, गेमप्ले और स्थिति यूआई</td>
+</tr>
+<tr>
+<td><code>app.js</code></td>
+<td>प्रवेश मोड, स्पष्ट सहमति, प्रगति सत्यापन, चौकियाँ, संघर्ष</td>
+</tr>
+<tr>
+<td><code>starhermit-sdk.js</code></td>
+<td>लॉन्च-टोकन कैप्चर, होस्टेड साइन-इन, टोकन नवीनीकरण</td>
+</tr>
+<tr>
+<td><code>cloud-save-store.js</code></td>
+<td>रॉ JSON लोड/कंडीशनल सेव रेसिपी</td>
+</tr>
+<tr>
+<td><code>starhermit.txt</code></td>
+<td>सार्वजनिक प्रकाशन मेटाडेटा</td>
+</tr>
+</tbody>
+</table>
+<p>देखना <a href="/hi/docs/credentials.html">साख</a>, <a href="/hi/docs/api/conventions.html">एपीआई कन्वेंशन</a>, और
+<a href="/hi/docs/troubleshooting.html">समस्या निवारण</a> जब कोई अनुरोध अपेक्षा से भिन्न व्यवहार करता है।</p>
+
+{% endraw %}

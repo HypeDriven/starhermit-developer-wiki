@@ -1,0 +1,132 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Contratos REST y WebSocket"
+source_url: "/docs/api/contracts.html"
+source_path: "docs/api/contracts.md"
+source_hash: "373c7589e9304a2144060efd06d29237e3468f3d33f187e151dba7bb1212148c"
+translation: "machine"
+permalink: "/es/docs/api/contracts.html"
+---
+{% raw %}
+<h1 id="rest-and-websocket-contracts">Contratos REST y WebSocket</h1>
+<p>Estos contratos descargables complementan las páginas de referencia. Utilícelos para inspeccionar operaciones,
+valide cargas útiles de ejemplo o importe solicitudes REST en un cliente compatible con OpenAPI.</p>
+<table>
+<thead>
+<tr>
+<th>Archivo</th>
+<th>Cobertura</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="/docs/contracts/openapi.json">Contrato REST de OpenAPI</a></td>
+<td>Métodos REST públicos, rutas, parámetros, modelos de solicitud JSON, respuestas exitosas y familias de credenciales; las operaciones de generación reservadas están marcadas como no disponibles</td>
+</tr>
+<tr>
+<td><a href="/docs/contracts/websocket.schema.json">Esquemas WebSocket JSON</a></td>
+<td>Marcos de texto conocidos por protocolo y dirección; Los datos de juego/señalización propiedad de la aplicación permanecen abiertos.</td>
+</tr>
+<tr>
+<td><a href="/docs/contracts/binary-protocols.json">diseños binarios</a></td>
+<td>Prefijo de remitente en tiempo real, prefijo de voz, retransmisión sin marco, encabezado de flujo de contenedor y fragmentos de carga</td>
+</tr>
+</tbody>
+</table>
+<h2 id="rest-contracts">Contratos RESTO</h2>
+<p>El archivo REST utiliza <a href="https://spec.openapis.org/oas/v3.0.3.html">OpenAPI 3.0.3</a> y el origen de la API pública. Cada operación enlaza con su página de referencia,
+que incluye las reglas completas de autorización, validación, límites y error. <code>x-credentials</code>
+identifica las familias de credenciales aceptadas; no reemplaza los cheques de propiedad o membresía.
+<code>x-required-policies</code> describe permisos con nombre donde la API los aplica.</p>
+<p>Las respuestas pueden incluir campos adicionales. JSON, metadatos, diagnósticos y carga específicos del juego
+Los resultados utilizan formas abiertas donde la referencia del juego o del punto final define su contenido. Éxito
+Los esquemas no son una promesa de que todas las personas que llaman estén autorizadas. Los errores de punto final pueden ser JSON, texto sin formato,
+respuestas vacías o validación Detalles del problema; usar <a href="/es/docs/api/conventions.html#requests-and-responses">análisis de respuesta defensiva</a>.</p>
+<p>No trate las operaciones de generación reservada como un servicio en funcionamiento. Su contrato describe el
+actual <code>503 overloaded</code> respuesta, no campos de solicitud futuros o comportamiento de generación.</p>
+<h2 id="websocket-contracts">Contratos WebSocket</h2>
+<p>Elige un <code>$defs</code> esquema para el protocolo y la dirección de su socket. Por ejemplo, validar un cliente.
+marco de movimiento contra <code>GameRealtimeInput</code>, en lugar del genérico duradero <code>GameCommand</code>:</p>
+<pre><code class="language-json">{ "type": "cmd", "data": { "type": "input", "realtime": true, "seq": 1, "x": 0.5 } }
+</code></pre>
+<p><code>realtime</code> pertenece <strong>adentro <code>data</code></strong>. Los campos de juego posteriores son el contrato de tu juego.
+Utilice un <a href="https://json-schema.org/draft/2020-12/json-schema-core">Esquema JSON 2020-12</a> validador con el documento de esquema completo para que se resuelvan las referencias locales.
+El documento raíz contiene definiciones; Es necesario seleccionar una definición para validar un marco.</p>
+<table>
+<thead>
+<tr>
+<th>Protocolo</th>
+<th>Definición de texto del cliente</th>
+<th>Definición de texto del servidor</th>
+<th>datos binarios</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Juegos</td>
+<td><code>GameCommand</code> / <code>GameRealtimeInput</code></td>
+<td><code>GameServerFrame</code></td>
+<td>Juego de texto solo</td>
+</tr>
+<tr>
+<td>Salas en tiempo real</td>
+<td><code>RealtimeClientControl</code></td>
+<td><code>RealtimeServerFrame</code></td>
+<td>Datos del juego enrutados por el host, prefijo del participante del remitente de 16 bytes al recibir</td>
+</tr>
+<tr>
+<td>Voz</td>
+<td><code>VoiceClientControl</code></td>
+<td><code>VoiceServerEvent</code></td>
+<td>Audio, prefijo de usuario remitente de 16 bytes al recibir</td>
+</tr>
+<tr>
+<td>Charlar</td>
+<td>Sin comandos de cliente; utilizar DESCANSO</td>
+<td><code>ChatServerPush</code></td>
+<td>Ninguno</td>
+</tr>
+<tr>
+<td>Retransmisión entre pares</td>
+<td>Sin marco JSON</td>
+<td>Sin marco JSON</td>
+<td>Carga útil sin cambios; sin prefijo de identidad</td>
+</tr>
+<tr>
+<td>Subir juego</td>
+<td><code>UploadClientControl</code></td>
+<td><code>UploadServerFrame</code></td>
+<td>Fragmentos de archivo</td>
+</tr>
+<tr>
+<td>Control de contenedores</td>
+<td><code>ContainerControl</code> desde el servidor</td>
+<td>Sin sobre de reconocimiento general</td>
+<td>El juego utiliza el contenedor separado. <code>/stream</code></td>
+</tr>
+</tbody>
+</table>
+<p>Los tipos de tramas futuros deberían llegar al controlador de tramas desconocidas de su cliente en lugar de bloquear la recepción.
+bucle. La validación de forma JSON no valida las reglas del juego, no autoriza la membresía ni aplica la tasa.
+límites. Las páginas de referencia definen restricciones de función y tamaño/tasa.</p>
+<h2 id="guid-byte-order">Orden de bytes GUID</h2>
+<p>Los primeros tres grupos de UUID son little-endian en un encabezado de bytes GUID de .NET. Por ejemplo:</p>
+<pre><code class="language-text">UUID:  00112233-4455-6677-8899-aabbccddeeff
+Bytes: 33 22 11 00 55 44 77 66 88 99 aa bb cc dd ee ff
+</code></pre>
+<p>Un decodificador de navegador para el prefijo de 16 bytes:</p>
+<pre><code class="language-js">function guidFromDotNet(bytes) {
+  if (bytes.length !== 16) throw new Error('Expected a 16-byte GUID');
+  const hex = i =&gt; bytes[i].toString(16).padStart(2, '0');
+  return `${hex(3)}${hex(2)}${hex(1)}${hex(0)}-${hex(5)}${hex(4)}-${hex(7)}${hex(6)}-` +
+    `${hex(8)}${hex(9)}-${hex(10)}${hex(11)}${hex(12)}${hex(13)}${hex(14)}${hex(15)}`;
+}
+</code></pre>
+<p>Los prefijos en tiempo real identifican <strong>participantes</strong>, mientras que los prefijos de voz identifican <strong>usuarios</strong>. un contenedor
+La secuencia tiene un tipo de un byte seguido de los UUID de sesión/usuario, por lo que su JSON comienza en el byte. <strong>33</strong>. el
+El relé no agrega ningún prefijo. Leer cada socket como el mismo diseño binario corrompe las cargas útiles y la identidad.</p>
+<p>Ver <a href="/es/docs/credentials.html">credenciales e identificadores</a>, <a href="/es/docs/session-lifecycle.html">ciclo de vida de la sesión</a>,
+y <a href="/es/docs/troubleshooting.html#websockets">Solución de problemas de WebSocket</a>.</p>
+
+{% endraw %}

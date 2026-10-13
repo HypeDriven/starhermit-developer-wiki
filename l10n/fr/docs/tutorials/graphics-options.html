@@ -1,0 +1,373 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "Tutoriel : options graphiques avec qualité détectée automatiquement"
+source_url: "/docs/tutorials/graphics-options.html"
+source_path: "docs/tutorials/graphics-options.md"
+source_hash: "cd4437482fbf097933897dbbeaf9e978a67574c0fe1ff696ace01bf8e9239bf5"
+translation: "machine"
+permalink: "/fr/docs/tutorials/graphics-options.html"
+---
+{% raw %}
+<h1 id="tutorial-graphics-options-with-auto-detected-quality">Tutoriel&#160;: options graphiques avec qualité détectée automatiquement</h1>
+<p>Donnez à votre jeu par navigateur un <strong>Graphique</strong> menu qui sélectionne un niveau de qualité raisonnable pour la machine du joueur
+lors du premier lancement, leur permet de le remplacer et se souvient de leur choix sur tous les appareils via StarHermit.</p>
+<p>Pour la section Audio correspondante, voir <a href="/fr/docs/tutorials/audio-options.html">options audio avec une limite sonore détectée automatiquement</a>.</p>
+<p><a href="/docs/sdk/graphics-options.js"><code>graphics-options.js</code></a> est un module ES unique, sans dépendances, qui
+s'occupe de la comptabilité :</p>
+<ul>
+<li><strong>Auto</strong> sélectionne l'un des quatre préréglages (Low, Balanced, High, Ultra) à partir du GPU, de la mémoire, des cœurs du CPU et
+type d'appareil et descend pour la session si les images restent lentes.</li>
+<li>Les joueurs peuvent remplacer chaque effet (ombres, occlusion ambiante, floraison, anti-aliasing ou le vôtre),
+définissez une échelle de rendu de 50 à 200&#160;%, choisissez un FPS maximum manuel au lieu d'un rafraîchissement automatique de l'affichage,
+et basculez la résolution adaptative et une lecture de la fréquence d'images.</li>
+<li>Les paramètres sont enregistrés dans <code>localStorage</code> ils s'appliquent donc avant la première image, et au joueur
+<a href="/fr/docs/api/games.html#per-player-game-settings">paramètres par jeu</a> alors ils suivent le joueur jusqu'à leur
+d'autres machines.</li>
+<li>Il comprend un panneau d'options prêts à l'emploi construit à partir de la même table de qualité.</li>
+</ul>
+<p>Il n'importe aucun moteur. Votre moteur de rendu écoute les modifications et applique les niveaux. Cette page le connecte à
+trois.js. D'autres moteurs utilisent les mêmes crochets (voir <a href="#other-engines">Autres moteurs</a>).</p>
+<ol>
+<li><a href="#1-add-the-files">Ajouter les fichiers</a></li>
+<li><a href="#2-create-the-store-and-the-panel">Créer le magasin et le panel</a></li>
+<li><a href="#3-apply-the-settings-to-your-renderer">Appliquez les paramètres à votre moteur de rendu</a></li>
+<li><a href="#4-fit-it-to-your-game">Adaptez-le à votre jeu</a></li>
+<li><a href="#5-test-it">Testez-le</a></li>
+</ol>
+<h2 id="1-add-the-files">1. Ajoutez les fichiers</h2>
+<p>Copie <a href="/docs/sdk/starhermit-sdk.js"><code>starhermit-sdk.js</code></a> et
+<a href="/docs/sdk/graphics-options.js"><code>graphics-options.js</code></a> à côté des scripts de votre jeu, inchangés. Appel
+<code>StarHermit.init()</code> <strong>avant</strong> votre module s'exécute, donc le jeton de lancement a été lu au moment où le
+Graphics Store vérifie si un joueur est connecté&#160;:</p>
+<pre><code class="language-html">&lt;script src="starhermit-sdk.js"&gt;&lt;/script&gt;
+&lt;script&gt;StarHermit.init();&lt;/script&gt;
+&lt;script type="module" src="main.js"&gt;&lt;/script&gt;
+</code></pre>
+<p>Sans jeton de lancement (développement local, tout autre hébergeur), la boutique conserve tout
+<code>localStorage</code> et ne fait aucune demande.</p>
+<h2 id="2-create-the-store-and-the-panel">2. Créez le magasin et le panel</h2>
+<pre><code class="language-js">import { createGraphics, mountGraphicsPanel } from './graphics-options.js';
+
+const gfx = createGraphics({ storageKey: 'mygame.graphics' });
+mountGraphicsPanel(document.getElementById('graphics-options'), gfx);
+</code></pre>
+<p><code>mountGraphicsPanel</code> remplit l'élément avec les contrôles. Votre boîte de dialogue de paramètres fournit le cadre, le
+titre et le bouton Fermer. Chaque modification s'applique immédiatement et est enregistrée.</p>
+<h3 id="how-auto-picks-a-preset">Comment Auto sélectionne un préréglage</h3>
+<p>Lors de la création, le magasin sonde une fois un contexte WebGL jetable (<code>gfx.system</code>) et le mappe à un préréglage
+(<code>gfx.detected</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Signal</th>
+<th>Préréglage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pas de WebGL, ni de moteur de rendu logiciel (SwiftShader, llvmpipe, Microsoft Basic Render)</td>
+<td>Faible</td>
+</tr>
+<tr>
+<td>Pas de WebGL2, 2 cœurs de processeur ou moins, ou 2 Go de mémoire ou moins</td>
+<td>Faible</td>
+</tr>
+<tr>
+<td>GPU discret (NVIDIA, AMD Radeon RX/Pro, Apple série M)</td>
+<td>Haut</td>
+</tr>
+<tr>
+<td>Tout le reste (Intel/AMD intégré, GPU mobiles, masqués de Safari "GPU Apple")</td>
+<td>Équilibré</td>
+</tr>
+<tr>
+<td>Téléphone ou tablette (pointeur grossier), ou 4 Go de mémoire ou moins</td>
+<td>au plus équilibré</td>
+</tr>
+</tbody>
+</table>
+<p>Auto ne sélectionne jamais Ultra&#160;; les joueurs y participent. Le nom du GPU vient de <code>RENDERER</code>, et le
+<code>WEBGL_debug_renderer_info</code> l'extension n'est demandée que lorsque Chromium masque le nom. Firefox enregistre un
+avertissement de la console lorsque cette extension est demandée, et elle indique déjà le vrai nom.</p>
+<p>Pendant l'exécution du jeu, Auto surveille également les temps d'image. Si la résolution adaptative est déjà tombée à son niveau
+le plancher et les images restent en moyenne supérieures à 26 ms pour trois fenêtres supplémentaires de 90 images, Auto réduit d'un préréglage
+pour le reste de la séance. Choisir <strong>Auto</strong> dans le panneau à nouveau re-détecte. Un préréglage du lecteur
+cueilli à la main ne change jamais tout seul.</p>
+<h3 id="maximum-frame-rate">Fréquence d'images maximale</h3>
+<p><strong>Fréquence d'images maximale</strong> par défaut <strong>Auto (taux de rafraîchissement)</strong>: le navigateur programme le rendu
+avec le taux de rafraîchissement de l'écran. Choisir <strong>Coutume</strong> et entrez un entier de <strong>1 à 1000 FPS</strong> à
+le remplacer. La limite s'applique immédiatement, est enregistrée localement et sur le même profil cloud que le
+d'autres paramètres graphiques et survit aux changements de qualité prédéfinis. Retour à <strong>Auto</strong> pour supprimer la limite.
+Ce choix est indépendant du <strong>Auto</strong> préréglage de qualité.</p>
+<p>Le moteur de rendu doit appeler <code>gfx.shouldRender(now)</code> dans sa boucle d'animation, comme indiqué ci-dessous. Une limite est un
+plafond, pas une fréquence d'images promise&#160;: le rendu ne peut toujours pas dépasser les rappels d'animation du navigateur
+ou les performances de la machine. Le réglage de 144 FPS sur un écran 60 Hz restitue donc toujours au maximum 60 FPS.</p>
+<p>Pour un menu personnalisé, utilisez <code>gfx.set({ maxFps: 45 })</code> et <code>gfx.set({ maxFps: null })</code> pour restaurer Auto.
+Résolu <code>gfx.settings.maxFps</code> est <code>0</code> pour l'automobile. Les valeurs enregistrées non valides reviennent à Auto&#160;; positif
+les nombres sont arrondis et limités à 1-1000.</p>
+<h3 id="where-the-settings-live">Où vivent les paramètres</h3>
+<table>
+<thead>
+<tr>
+<th>Magasin</th>
+<th>Clé</th>
+<th>Pourquoi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>localStorage</code></td>
+<td><code>&lt;storageKey&gt;.gpu.&lt;GPU profile&gt;</code></td>
+<td>Lire de manière synchrone, de sorte que la première image utilise déjà les paramètres de ce GPU</td>
+</tr>
+<tr>
+<td><a href="/fr/docs/api/games.html#per-player-game-settings">Paramètres par joueur</a></td>
+<td><code>graphics.gpu.&lt;GPU profile&gt;</code></td>
+<td>Suit le joueur vers une autre machine signalant le même GPU</td>
+</tr>
+</tbody>
+</table>
+<p>Chaque GPU dispose d'un profil indépendant, couvrant tous les choix graphiques, y compris le FPS maximum.
+Par exemple, définissez Ultra et 90 FPS sur le GPU A, puis lancez sur le GPU B&#160;: B démarre avec le matériel détecté
+par défaut, sauf si vous avez précédemment enregistré les choix pour B. Le retour à A restaure Ultra et 90 FPS.
+Deux GPU détectés tous deux comme étant élevés ont toujours des profils distincts. Un changement dans la qualité détectée
+Le niveau sur le même GPU n’écarte pas ses choix enregistrés.</p>
+<p>Le profil est un hachage stable de 16 caractères du nom du GPU signalé par le navigateur, normalisé pour la casse.
+et des espaces. <code>storageKey</code> et <code>cloudKey</code> fournir des préfixes&#160;; <code>gfx.storageKey</code>, <code>gfx.cloudSlot</code>, et
+<code>gfx.gpuProfile</code> exposer les clés et le profil actifs. La détection du GPU se produit lors de la création du magasin&#160;;
+créez un nouveau magasin au prochain lancement du jeu pour sélectionner le profil d'un autre GPU.</p>
+<p>Si aucun nom de GPU n'est disponible, les choix s'appliquent à la session sans persistance locale ou cloud.
+Si le navigateur masque plusieurs GPU portant le même nom, ils partagent un profil car il ne peut pas le faire.
+les distinguer. Les anciens paramètres locaux non délimités et les paramètres cloud de classe d'appareil restent intacts.
+et ne sont pas importés, car ils n’identifient pas à quel GPU appartiennent les choix.</p>
+<p>Chaque valeur est <code>{ "saved": {…}, "at": &lt;ms timestamp&gt; }</code>. Les deux copies sont rapprochées de la même manière que
+<a href="/fr/docs/sdk/javascript.html#cloud-saves">le cloud enregistre</a>:</p>
+<ul>
+<li><strong>Lire avant d'écrire.</strong> Au démarrage (et lorsqu'un autre joueur se connecte), le magasin lit
+<code>GET /api/v1/games/{slug}/settings</code>. La copie avec le plus récent <code>at</code> gagne. Si la copie cloud gagne, le
+le magasin l'adopte et licencie un <code>change</code> avec raison <code>'cloud'</code>. Si la copie locale est plus récente, le magasin
+le pousse.</li>
+<li><strong>Un échec de lecture bloque l’écriture.</strong> La copie locale continue de fonctionner. Le prochain changement effectué par le joueur
+réessaye la lecture avant que quoi que ce soit ne soit écrit, afin qu'un périphérique obsolète ne puisse pas écraser un choix plus récent.
+Je ne pouvais pas voir.</li>
+<li>Les changements sont poussés avec <code>setSetting</code> après 800 ms sans autre modification. Les renouvellements de jetons (qui
+lance également le SDK <code>auth</code> événement) ne déclenche pas une autre lecture.</li>
+</ul>
+<h2 id="3-apply-the-settings-to-your-renderer">3. Appliquez les paramètres à votre moteur de rendu</h2>
+<p>Quatre hooks connectent le magasin à un moteur de rendu three.js&#160;:</p>
+<ul>
+<li><code>gfx.on('change', fn)</code> pour les ombres et les effets.</li>
+<li>Une chaîne de post-traitement reconstruite à partir des niveaux actuels.</li>
+<li><code>gfx.frame(ms)</code> et <code>gfx.pixelRatio()</code> dans la boucle de rendu, qui pilote la résolution adaptative.</li>
+<li><code>gfx.shouldRender(now)</code> avant de dessiner, ce qui applique la limite manuelle de FPS.</li>
+</ul>
+<p>Créez le moteur de rendu avec <code>antialias: false</code>. MSAA provient alors de la cible de rendu de la post-chaîne, donc
+chaque niveau d'anticrénelage peut être commuté sans recréer le contexte WebGL.</p>
+<pre><code class="language-js">import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+
+// canvas, scene, camera and a shadow-casting DirectionalLight `sun` are your game's own.
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
+const SHADOW_MAP = { off: 0, low: 1024, medium: 2048, high: 4096 };
+let composer = null;
+let size = {};
+
+gfx.on('change', (s) =&gt; {
+  const mapSize = SHADOW_MAP[s.shadows];
+  renderer.shadowMap.enabled = mapSize &gt; 0;
+  sun.castShadow = mapSize &gt; 0;
+  if (mapSize &amp;&amp; sun.shadow.mapSize.x !== mapSize) {
+    sun.shadow.mapSize.set(mapSize, mapSize);
+    sun.shadow.map?.dispose();
+    sun.shadow.map = null;
+  }
+  scene.traverse((o) =&gt; [].concat(o.material || []).forEach((m) =&gt; { m.needsUpdate = true; })); // shadow on/off recompiles
+  size = {}; // resize and rebuild the post chain on the next frame
+});
+
+function buildPost(s, w, h, ratio) {
+  composer?.dispose();
+  composer = null;
+  if (gfx.info.postFailed || (s.ao === 'off' &amp;&amp; s.bloom === 'off' &amp;&amp; s.antialias === 'off')) return;
+  try {
+    const pw = Math.round(w * ratio), ph = Math.round(h * ratio);
+    const target = new THREE.WebGLRenderTarget(pw, ph, { type: THREE.HalfFloatType, samples: s.antialias === 'msaa' ? 4 : 0 });
+    const c = new EffectComposer(renderer, target);
+    c.setPixelRatio(ratio);
+    c.setSize(w, h);
+    c.addPass(new RenderPass(scene, camera));
+    if (s.ao !== 'off') {
+      const ao = new GTAOPass(scene, camera, pw, ph);
+      ao.updateGtaoMaterial({ samples: s.ao === 'high' ? 16 : 8 });
+      c.addPass(ao);
+    }
+    if (s.bloom === 'on') c.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.5, 0.4, 0.9));
+    c.addPass(new OutputPass());
+    if (s.antialias === 'smaa') c.addPass(new SMAAPass());
+    if (s.antialias === 'fxaa') {
+      const fxaa = new ShaderPass(FXAAShader);
+      fxaa.material.uniforms.resolution.value.set(1 / pw, 1 / ph);
+      c.addPass(fxaa);
+    }
+    composer = c;
+  } catch {
+    gfx.report({ postFailed: true }); // the panel shows a note; don't console.warn
+  }
+}
+
+let last = performance.now();
+renderer.setAnimationLoop((now) =&gt; {
+  // Update your simulation here using its own elapsed time or fixed timestep.
+  // Keep simulation/input independent of skipped render ticks.
+  if (!gfx.shouldRender(now)) return;
+  gfx.frame(now - last); // elapsed time between rendered frames, including the FPS limit
+  last = now;
+  const w = canvas.clientWidth, h = canvas.clientHeight, ratio = gfx.pixelRatio();
+  if (w !== size.w || h !== size.h || ratio !== size.ratio) {
+    size = { w, h, ratio };
+    renderer.setPixelRatio(ratio);
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    buildPost(gfx.settings, w, h, ratio);
+    gfx.report({ pixels: [Math.round(w * ratio), Math.round(h * ratio)] });
+  }
+  try {
+    if (composer) composer.render();
+    else renderer.render(scene, camera);
+  } catch {
+    composer = null;
+    gfx.report({ postFailed: true });
+  }
+});
+</code></pre>
+<p>Remarques&#160;:</p>
+<ul>
+<li>Le <code>three/addons/</code> les fichiers doivent provenir du <strong>même version three.js</strong> comme <code>three</code> lui-même. Mélange
+les versions brisent la chaîne de publication. Le code ci-dessus cible les versions actuelles. Sur les plus âgés, <code>SMAAPass</code>
+prend <code>(width, height)</code>.</li>
+<li>Low désactive tous les effets de post-traitement, de sorte que le jeu s'affiche directement sur le canevas à un moment donné.
+rapport de pixels de l'appareil d'au plus 1. Cela maintient Low aussi bon marché que le jeu l'était avant tout cela.</li>
+<li><code>gfx.pixelRatio()</code> retours <code>min(devicePixelRatio, preset cap) × preset scale × render scale × adaptive scale</code>, serré à 0,25–3. Les plafonds sont 1 pour Low, 1,5 pour Balanced et 2 pour High et
+Ultra.</li>
+<li>La résolution adaptative est en moyenne de 90 images. Au-dessus de 26 ms, l'échelle est réduite de 0,1 (jusqu'à 0,6). Ci-dessous
+14 ms, l'échelle augmente de 0,05 (jusqu'à 1). Les images de plus de 1 s (onglets en pause ou en arrière-plan) sont
+ignoré, et une seule trame lente compte au maximum 250 ms pour l'adaptation, donc un accroc ne peut pas diminuer
+l'échelle. La lecture FPS utilise les temps réellement écoulés.
+Avec une limite manuelle, le seuil de lenteur est d'au moins 115&#160;% de l'intervalle d'image cible et le
+le seuil de rapidité est d'au moins 85 %, donc une limite délibérée de 30 FPS ne diminue pas en soi la qualité.
+Pour des limites très basses, la coupure de pause et la coupure d'attelage correspondent à au moins deux intervalles cibles.
+Alimentation <code>gfx.frame</code> uniquement les images rendues&#160;; conserver le dernier horodatage rendu lorsqu'une tick est ignorée.</li>
+</ul>
+<h3 id="other-engines">Autres moteurs</h3>
+<p>Quel que soit le dessin de vos frames, l'intégration utilise les mêmes hooks&#160;:</p>
+<table>
+<thead>
+<tr>
+<th>Appel</th>
+<th>Utiliser</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gfx.on('change', (settings, reason) =&gt; …)</code></td>
+<td>Appliquez des niveaux. S'exécute une fois immédiatement (<code>'init'</code>), puis sur <code>'settings'</code>, <code>'cloud'</code> et <code>'auto'</code>. Renvoie une fonction de désabonnement.</td>
+</tr>
+<tr>
+<td><code>gfx.settings</code></td>
+<td><code>{ preset, auto, scale, dprCap, adaptive, showFps, maxFps, &lt;category&gt;: &lt;tier&gt; }</code>; <code>maxFps: 0</code> signifie rafraîchissement automatique de l’affichage.</td>
+</tr>
+<tr>
+<td><code>gfx.shouldRender(now)</code></td>
+<td>Chaque rappel d'animation, avec son horodatage en millisecondes. Ignorer le dessin s'il revient <code>false</code>. Gardez les mises à jour de simulation/entrée indépendantes.</td>
+</tr>
+<tr>
+<td><code>gfx.frame(ms)</code></td>
+<td>Chaque image rendue, avec le temps écoulé depuis l'image rendue précédente. Retours <code>true</code> lorsque le rapport de pixels ou le préréglage automatique a changé.</td>
+</tr>
+<tr>
+<td><code>gfx.pixelRatio()</code></td>
+<td>Le rapport à rendre à</td>
+</tr>
+<tr>
+<td><code>gfx.report({ pixels, postFailed })</code></td>
+<td>Indique au panneau la taille de sortie ou que les effets ne sont pas disponibles</td>
+</tr>
+</tbody>
+</table>
+<p>Pour un jeu sur toile 2D, multipliez la taille du support de la toile par <code>gfx.pixelRatio()</code>, et cartographiez le vôtre
+effets (particules, lueur, couches de parallaxe) aux catégories comme décrit ci-dessous.</p>
+<h2 id="4-fit-it-to-your-game">4. Adaptez-le à votre jeu</h2>
+<p><strong>Vos propres effets.</strong> Passez un tableau de qualité qui répertorie uniquement ce que votre jeu dessine réellement. Chaque préréglage
+la ligne nécessite un niveau pour chaque catégorie, plus <code>scale</code> et <code>dprCap</code>:</p>
+<pre><code class="language-js">import { createGraphics, CATEGORIES, TABLE } from './graphics-options.js';
+
+const gfx = createGraphics({
+  storageKey: 'mygame.graphics',
+  categories: { ...CATEGORIES, particles: ['off', 'low', 'high'] },
+  table: {
+    low: { ...TABLE.low, particles: 'off' },
+    balanced: { ...TABLE.balanced, particles: 'low' },
+    high: { ...TABLE.high, particles: 'high' },
+    ultra: { ...TABLE.ultra, particles: 'high' },
+  },
+});
+</code></pre>
+<p>Le panneau crée une sélection par catégorie, donc une nouvelle catégorie apparaît automatiquement. Nommez-le avec
+<code>strings.categories.particles</code>.</p>
+<p><strong>Traductions.</strong> Les chaînes anglaises du panneau sont exportées sous forme <code>STRINGS</code>. Passez le vôtre avec le même
+forme. Seules les clés que vous donnez sont remplacées :</p>
+<pre><code class="language-js">mountGraphicsPanel(el, gfx, {
+  strings: {
+    quality: 'Qualität', auto: 'Automatisch ({tier})', fromPreset: 'Laut Voreinstellung ({tier})',
+    renderScale: 'Renderskalierung', adaptive: 'Adaptive Auflösung', showFps: 'Bildrate anzeigen',
+    maxFps: 'Maximale Bildrate', autoFps: 'Automatisch (Bildschirmfrequenz)',
+    customFps: 'Benutzerdefiniert', fpsLimit: 'Maximale FPS (1–1000)',
+    categories: { shadows: 'Schatten', ao: 'Umgebungsverdeckung', particles: 'Partikel' },
+    tiers: { low: 'Niedrig', balanced: 'Ausgewogen', high: 'Hoch', off: 'Aus', on: 'An' },
+  },
+});
+</code></pre>
+<p><strong>Stylisme.</strong> Le panel utilise les classes <code>.gfx-panel</code>, <code>.gfx-row</code>, <code>.gfx-summary</code> et <code>.gfx-note</code>. C'est
+les règles intégrées sont enveloppées dans <code>:where()</code>, donc toute règle de votre propre feuille de style les remplace. Les lignes sont
+au moins 44 px de hauteur pour le toucher. La lecture de la fréquence d'images (<code>#gfx-fps</code>) se trouve dans le coin inférieur gauche,
+à l'intérieur de la zone de sécurité et ne capture pas les clics.</p>
+<p><strong>Lire le résultat ailleurs.</strong> <code>&lt;html&gt;</code> porte <code>data-gfx-preset</code> (le préréglage actif) et
+<code>data-gfx-auto</code> (<code>1</code> ou <code>0</code>), que CSS et les tests peuvent activer.</p>
+<h2 id="5-test-it">5. Testez-le</h2>
+<ul>
+<li>Les navigateurs sans tête s'affichent avec un GPU logiciel, donc Auto se résout en <strong>Faible</strong> et les tests restent rapides.</li>
+<li>Conduisez le vrai panneau. Chaque contrôle a un <code>data-gfx</code> attribut (<code>preset</code>, <code>renderScale</code>,
+<code>adaptive</code>, <code>frameRate</code>, <code>maxFps</code>, <code>showFps</code>, ou le nom de la catégorie)&#160;:</li>
+</ul>
+<pre><code class="language-js">const preset = () =&gt; page.evaluate(() =&gt; document.documentElement.dataset.gfxPreset);
+await page.locator('select[data-gfx=preset]').selectOption('high');
+assert.equal(await preset(), 'high');
+await page.reload();
+assert.equal(await preset(), 'high'); // persisted
+await page.locator('select[data-gfx=frameRate]').selectOption('custom');
+await page.locator('input[data-gfx=maxFps]').fill('45');
+await page.locator('input[data-gfx=maxFps]').press('Tab');
+await page.reload();
+assert.equal(await page.locator('input[data-gfx=maxFps]').inputValue(), '45');
+await page.locator('select[data-gfx=frameRate]').selectOption('auto');
+</code></pre>
+<ul>
+<li>Les fonctions pures <code>detectPreset(system)</code>, <code>resolve(saved, detected)</code> et <code>withPreset(saved, preset)</code>
+exécuté sous Node pour les tests unitaires. <code>createGraphics({ sdk, storage, system })</code> accepte également les contrefaçons pour tous
+trois.</li>
+<li><code>node --test tests/graphics-options.test.mjs</code> vérifie la validation, la persistance et la restauration par GPU,
+rythme d'image sur différents taux de rafraîchissement d'affichage, commutation en direct et qualité adaptative avec une limite FPS.</li>
+</ul>
+
+{% endraw %}

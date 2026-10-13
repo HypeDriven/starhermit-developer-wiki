@@ -1,0 +1,369 @@
+---
+layout: "wiki"
+lang: "hi"
+title: "ट्यूटोरियल: सार्वजनिक कुंजी वाले खिलाड़ियों को ऑनबोर्ड करें"
+source_url: "/docs/tutorials/public-key-onboarding.html"
+source_path: "docs/tutorials/public-key-onboarding.md"
+source_hash: "49ebc031a538076978eab193219b2c0fd3cce731ed6327ede6768bbbcbb310f3"
+translation: "machine"
+permalink: "/hi/docs/tutorials/public-key-onboarding.html"
+---
+{% raw %}
+<h1 id="tutorial-onboard-players-with-a-public-key">ट्यूटोरियल: सार्वजनिक कुंजी वाले खिलाड़ियों को ऑनबोर्ड करें</h1>
+<p>StarHermit खाते को Google, GitHub या किसी अन्य साइन-इन प्रदाता की आवश्यकता नहीं है। इसकी साख हो सकती है
+एक कुंजी जोड़ी बनें जो आपका गेम खिलाड़ी के डिवाइस पर उत्पन्न करता है, साथ ही खिलाड़ी का एक ईमेल पता भी
+एक बार पुष्टि करता है. उसके बाद, आपका गेम प्रत्येक लॉन्च पर एक चुनौती पर हस्ताक्षर करके चुपचाप साइन इन करता है
+कुंजी. खिलाड़ी कभी भी पासवर्ड टाइप नहीं करता है और उसे कभी भी StarHermit पेज पर नहीं जाना पड़ता है।</p>
+<p>यह ट्यूटोरियल उस प्रवाह को शुरू से अंत तक बनाता है: कुंजी उत्पन्न करें, इसे पंजीकृत करें, प्लेयर के लिए प्रतीक्षा करें
+पुष्टि करें, साइन इन करें, सत्र जारी रखें, और दूसरे डिवाइस और खोई हुई कुंजियों को संभालें।</p>
+<p><strong>इसके लिए इसका प्रयोग करें</strong> देशी और स्टैंडअलोन गेम, लॉन्चर, स्टीम/एपिक/जीओजी बिल्ड और डेस्कटॉप टूल्स -
+कुछ भी जो खिलाड़ी की मशीन पर चलता है और वहां एक निजी कुंजी रख सकता है।</p>
+<p><strong>के लिए कुछ और प्रयोग करें</strong></p>
+<ul>
+<li><strong>StarHermit पर होस्ट किया गया एक ब्राउज़र गेम</strong>, जिसे खोलने पर पहले से ही एक लॉन्च टोकन प्राप्त होता है
+डैशबोर्ड, या दिखा सकते हैं <a href="/hi/docs/api/auth.html#sign-in-from-a-directly-opened-browser-game">साइन इन बटन</a>.</li>
+<li><strong>एक सीआई पाइपलाइन</strong>, जिसे बिना किसी ईमेल चरण के OAuth सत्र से एक कुंजी नामांकित करनी चाहिए:
+<a href="/hi/docs/tutorials/ci-cd-build-upload.html">ट्यूटोरियल: सीआई/सीडी से बिल्ड अपलोड करें</a>.</li>
+<li><strong>एक समर्पित गेम सर्वर</strong>, जिसका अपना स्वयं का परिनियोजन टोकन है और वह निर्माण या कार्य नहीं कर सकता है
+खिलाड़ी: <a href="/hi/docs/tutorials/dedicated-server-onboarding.html">ट्यूटोरियल: एक समर्पित सर्वर प्रकाशित करें</a>.</li>
+</ul>
+<h2 id="what-the-player-sees">खिलाड़ी क्या देखता है</h2>
+<ol>
+<li>आपका गेम एक ईमेल पता और एक StarHermit खाता बनाने के लिए उनकी सहमति मांगता है।</li>
+<li>वे पुष्टिकरण ईमेल खोलते हैं, लिंक पर क्लिक करते हैं और दबाते हैं <strong>पुष्टि करना</strong> पेज पर यह खुलता है.</li>
+<li>आपके गेम में वापस, वे साइन इन हैं। बाद के लॉन्च पर कुछ भी नहीं पूछा जाता है।</li>
+</ol>
+<p>एक ईमेल पता आवश्यक है, और खिलाड़ी को एक बार इसकी पुष्टि करनी होगी। बनाने का कोई तरीका नहीं है
+अकेले स्टीम, एपिक या जीओजी पहचान से स्टारहर्मिट खाता चुपचाप।</p>
+<h2 id="before-you-start">आपके शुरू करने से पहले</h2>
+<p>इस पृष्ठ पर कोड WebCrypto का उपयोग करके सादा जावास्क्रिप्ट है <code>fetch</code>, तो यह एक ब्राउज़र में चलता है
+इलेक्ट्रॉन और नोड 20 या बाद में। <strong> <code>js</code> नीचे दिए गए ब्लॉक, क्रम में, एक ईएस मॉड्यूल बनाते हैं</strong> - उन्हें बचाएं
+एक साथ जैसे <code>starhermit-key-auth.js</code>. कोई भी अन्य भाषा इसी तरह काम करती है: चरण 1 सटीक जानकारी देता है
+बाइट प्रारूप, और चरण 3 हस्ताक्षर करने के लिए सटीक बाइट्स।</p>
+<pre><code class="language-js">const API = 'https://api.starhermit.com';
+
+const b64 = (bytes) =&gt; btoa(String.fromCharCode(...new Uint8Array(bytes)));
+</code></pre>
+<h2 id="1-create-the-device-key">1. डिवाइस कुंजी बनाएं</h2>
+<p>उत्पन्न <strong>प्रति इंस्टालेशन एक कुंजी जोड़ी</strong>, पहली बार आपके गेम को एक खाते की आवश्यकता होगी। निजी
+कुंजी डिवाइस को कभी नहीं छोड़ती: आपके सर्वर पर नहीं, StarHermit पर नहीं।</p>
+<table>
+<thead>
+<tr>
+<th><code>keyType</code></th>
+<th><code>keyData</code> (मानक बेस64)</th>
+<th>हस्ताक्षर (मानक बेस64)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Ed25519</code> - अनुशंसित</td>
+<td>कच्ची 32-बाइट सार्वजनिक कुंजी</td>
+<td>कच्चा 64-बाइट Ed25519 हस्ताक्षर</td>
+</tr>
+<tr>
+<td><code>ECDSA-P256</code></td>
+<td>सार्वजनिक बिंदु: 65-बाइट असंपीड़ित (<code>04‖X‖Y</code>) या 33-बाइट संपीड़ित</td>
+<td>SHA-256 के साथ ECDSA, <strong>ASN.1 DER-एन्कोडेड</strong></td>
+</tr>
+<tr>
+<td><code>RSA-PSS</code></td>
+<td><code>SubjectPublicKeyInfo</code> डीईआर, 2048-8192-बिट मापांक, घातांक ≤ 32 बिट्स</td>
+<td>आरएसएएसएसए-पीएसएस, एसएचए-256, एमजीएफ1-एसएचए-256, 32-बाइट नमक</td>
+</tr>
+</tbody>
+</table>
+<p><code>keyData</code> अधिकतम 2,000 अक्षर हैं. एक कुंजी पूरे प्लेटफ़ॉर्म पर एक खाते की होती है।</p>
+<p>चुनना <strong>Ed25519</strong> जब तक कि आपका प्लेटफ़ॉर्म इसका उत्पादन न कर सके। यदि आप ECDSA का उपयोग करते हैं, तो ध्यान दें कि WebCrypto,
+विंडोज़ सीएनजी और अधिकांश हार्डवेयर कीस्टोर हस्ताक्षर को कच्चा बताते हैं <code>r‖s</code> (64 बाइट्स). स्टारहर्मिट
+डीईआर की अपेक्षा है, इसलिए इसे परिवर्तित करें - नीचे दिया गया मॉड्यूल करता है।</p>
+<pre><code class="language-js">// One key per installation. The private key can sign but is never exported.
+export async function createDeviceKey(keyType = 'Ed25519') {
+  if (!['Ed25519', 'ECDSA-P256'].includes(keyType)) throw new Error('This helper supports Ed25519 or ECDSA-P256');
+  const algorithm = keyType === 'Ed25519'
+    ? { name: 'Ed25519' }
+    : { name: 'ECDSA', namedCurve: 'P-256' };
+  const pair = await crypto.subtle.generateKey(algorithm, false, ['sign', 'verify']);
+  return {
+    keyType: keyType === 'Ed25519' ? 'Ed25519' : 'ECDSA-P256',
+    keyData: b64(await crypto.subtle.exportKey('raw', pair.publicKey)),
+    privateKey: pair.privateKey,
+  };
+}
+</code></pre>
+<p><strong>निजी कुंजी को वहां संग्रहीत करें जहां ऑपरेटिंग सिस्टम उसकी सुरक्षा करता है।</strong> किसी ब्राउज़र या इलेक्ट्रॉन रेंडरर में,
+एक गैर-निकालने योग्य <code>CryptoKey</code> IndexedDB में इसे वैसे ही रखा जा सकता है जैसे यह है। एक देशी खेल का उपयोग करना चाहिए
+प्लेटफ़ॉर्म कीस्टोर - विंडोज डीपीएपीआई या सीएनजी, मैकओएस किचेन, लिनक्स पर लिबसेक्रेट। इकट्ठा करना <code>keyType</code> और
+<code>keyData</code> इसके बगल में; आप उन्हें हर अनुरोध के साथ भेजते हैं।</p>
+<h2 id="2-start-registration">2. पंजीकरण प्रारंभ करें</h2>
+<p>खिलाड़ी का ईमेल पता और सहमति पूछें, फिर:</p>
+<pre><code class="language-js">async function post(path, body) {
+  const res = await fetch(API + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json().catch(() =&gt; ({})) };
+}
+
+function fail(step, { status, body }) {
+  return Object.assign(new Error(`${step}: ${body.error ?? status}`), { status, body });
+}
+
+export async function register(key, email) {
+  const res = await post('/api/v1/auth/public-key/register',
+    { email, keyType: key.keyType, keyData: key.keyData });
+  if (res.status !== 202) throw fail('register', res);
+  return res.body; // { registrationId, email, emailSent, deferralReason, message }
+}
+</code></pre>
+<p><code>202</code> इसका मतलब है कि StarHermit ने पंजीकरण स्वीकार कर लिया है। अगर <code>emailSent</code> है <code>false</code>, ईमेल कतारबद्ध है और
+अभी भी आएँगे; <code>deferralReason</code> कहता है कि इसका इंतजार क्यों किया गया। अभी तक किसी भी खाते से कुछ भी जुड़ा नहीं है.</p>
+<p>तीन नियम आपके यूआई को आकार देते हैं:</p>
+<ul>
+<li><strong>प्रत्येक 24 घंटे में प्रति ईमेल पते पर एक पंजीकरण और प्रति आईपी पते पर एक पंजीकरण।</strong> दूसरा प्रयास
+है <code>429</code> साथ <code>Retry-After</code>. इसे भेजने से पहले खिलाड़ी से पते की पुष्टि करवा लें, क्योंकि इसमें कोई त्रुटि है
+उनका एक दिन खर्च होता है। खिलाड़ी के डिवाइस से अनुरोध भेजें, अपने सर्वर के माध्यम से कभी नहीं: प्रत्येक
+प्लेयर आपके सर्वर का आईपी और उसका एकल दैनिक पंजीकरण साझा करेगा।</li>
+<li><strong>लिंक 4 घंटे के बाद समाप्त हो जाता है.</strong> यदि यह समाप्त हो जाता है, तो खिलाड़ी 24 घंटे के भीतर एक बार फिर से पंजीकरण कर सकता है
+ऊपर हैं.</li>
+<li><strong><code>400</code></strong> इसका मतलब है कि ईमेल पता या मुख्य सामग्री अस्वीकार कर दी गई थी; <code>error</code> जो कहता है.</li>
+</ul>
+<h2 id="3-sign-in-with-the-key">3. कुंजी के साथ साइन इन करें</h2>
+<p>साइन इन करना एक चुनौती और एक प्रतिक्रिया है। <code>POST /api/v1/auth/public-key/challenge</code> रिटर्न:</p>
+<pre><code class="language-json">{
+  "challengeId": "4fc4d72b-4c12-41ca-a500-dc13cccc3865",
+  "payload": {
+    "challengeId": "4fc4d72b-4c12-41ca-a500-dc13cccc3865",
+    "fingerprint": "9c0b7a…",
+    "issuer": "starhermit",
+    "audience": "starhermit",
+    "expiry": "2026-10-09T14:21:41.9264875+00:00",
+    "nonce": "NmL+tgMum6HXU/pa3T9xjQ==",
+    "clientTimestamp": "2026-10-09T14:16:41.9265739+00:00"
+  },
+  "expiresIn": 300
+}
+</code></pre>
+<p><strong>आप जिस पर हस्ताक्षर करते हैं वह आपको प्राप्त JSON नहीं है।</strong> StarHermit हस्ताक्षर को स्वयं सत्यापित करता है
+का क्रमांकन <code>payload</code>:</p>
+<ul>
+<li>कॉम्पैक्ट JSON, कोई रिक्त स्थान नहीं;</li>
+<li><strong>पास्कलकेस</strong> सदस्यों के नाम, बिल्कुल क्रम में <code>ChallengeId</code>, <code>Fingerprint</code>, <code>Issuer</code>,
+<code>Audience</code>, <code>Expiry</code>, <code>Nonce</code>, <code>ClientTimestamp</code>;</li>
+<li>प्रत्येक मान की प्रतिलिपि बनाई गई <strong>बिल्कुल वैसा ही जैसा परोसा गया</strong> - तारीखों का विश्लेषण और पुन: स्वरूपण न करें;</li>
+<li>प्रत्येक <code>+</code> नॉन में इस प्रकार लिखा गया है <code>\u002B</code>. <code>+</code> तिथियों में जैसा है वैसा ही रहता है।</li>
+</ul>
+<p>उपरोक्त चुनौती के लिए, हस्ताक्षरित बाइट्स UTF-8 एन्कोडिंग हैं:</p>
+<pre><code class="language-text">{"ChallengeId":"4fc4d72b-4c12-41ca-a500-dc13cccc3865","Fingerprint":"9c0b7a…","Issuer":"starhermit","Audience":"starhermit","Expiry":"2026-10-09T14:21:41.9264875+00:00","Nonce":"NmL\u002BtgMum6HXU/pa3T9xjQ==","ClientTimestamp":"2026-10-09T14:16:41.9265739+00:00"}
+</code></pre>
+<p>इनमें से कोई भी गलत समझें और उत्तर है <code>401 "Invalid signature."</code>, जिसे दोबारा प्रयास करने से ठीक नहीं किया जा सकेगा।</p>
+<pre><code class="language-js">const FIELDS = ['challengeId', 'fingerprint', 'issuer', 'audience', 'expiry', 'nonce', 'clientTimestamp'];
+
+export function challengeSigningBytes(payload) {
+  const members = FIELDS.map((field) =&gt; {
+    let value = JSON.stringify(payload[field]);
+    if (field === 'nonce') value = value.replaceAll('+', '\\u002B');
+    return `"${field[0].toUpperCase()}${field.slice(1)}":${value}`;
+  });
+  return new TextEncoder().encode(`{${members.join(',')}}`);
+}
+
+export async function signChallenge(key, payload) {
+  const data = challengeSigningBytes(payload);
+  if (key.keyType === 'Ed25519')
+    return b64(await crypto.subtle.sign({ name: 'Ed25519' }, key.privateKey, data));
+  // WebCrypto returns an ECDSA signature as raw r||s; the server expects ASN.1 DER.
+  const rs = new Uint8Array(
+    await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key.privateKey, data));
+  return b64(derEcdsaSignature(rs));
+}
+
+function derEcdsaSignature(rs) {
+  const integer = (bytes) =&gt; {
+    let i = 0;
+    while (i &lt; bytes.length - 1 &amp;&amp; bytes[i] === 0) i++;
+    const value = [...bytes.slice(i)];
+    return value[0] &amp; 0x80 ? [0x02, value.length + 1, 0, ...value] : [0x02, value.length, ...value];
+  };
+  const body = [...integer(rs.slice(0, 32)), ...integer(rs.slice(32))];
+  return new Uint8Array([0x30, body.length, ...body]);
+}
+
+// Resolves to { userId, accessToken, refreshToken }, or null while the key is not attached to
+// an account yet — the player has not confirmed, the link expired, or the key was revoked.
+export async function signIn(key) {
+  const { keyType, keyData } = key;
+  const challenge = await post('/api/v1/auth/public-key/challenge', { keyType, keyData });
+  if (challenge.status !== 200) throw fail('challenge', challenge);
+  const signature = await signChallenge(key, challenge.body.payload);
+  const done = await post('/api/v1/auth/public-key/complete',
+    { challengeId: challenge.body.challengeId, signature, keyType, keyData });
+  if (done.status === 200) return done.body;
+  if (done.status === 401 &amp;&amp; done.body.error === 'Public key not registered or revoked.') return null;
+  throw fail('complete', done); // "Invalid signature." will never succeed: fix it, don't retry it
+}
+</code></pre>
+<p>एक चुनौती पाँच मिनट तक चलती है और एकल-उपयोग होती है, भले ही प्रयास विफल हो जाए, इसलिए नए सिरे से अनुरोध करें
+हर प्रयास के लिए. चुनौती दें और प्रति आईपी पते पर प्रति मिनट 60 अनुरोधों की सीमा साझा करें।</p>
+<h2 id="4-wait-for-the-player-to-confirm">4. खिलाड़ी द्वारा पुष्टि किए जाने तक प्रतीक्षा करें</h2>
+<p>ईमेल किया गया लिंक एक StarHermit पेज खोलता है जिसमें बताया गया है कि पुष्टि करने से क्या होगा; इसे खोलने पर परिवर्तन हो जाता है
+कुछ भी नहीं, इसलिए लिंक का पूर्वावलोकन करने वाला मेल स्कैनर खिलाड़ी की ओर से पुष्टि नहीं कर सकता है। जब
+खिलाड़ी दबाता है <strong>पुष्टि करना</strong>, StarHermit अपना खाता बनाता है, आपकी कुंजी संलग्न करता है और पता चिह्नित करता है
+सत्यापित. यदि कोई खाता पहले से ही उस पते का उपयोग करता है, तो पृष्ठ ऐसा कहता है और कुंजी उसमें जोड़ दी जाती है
+इसके बजाय, जिस खिलाड़ी के पास पहले से ही स्टारहर्मिट खाता है वह इसे रखता है। फिर वे Starhermit.com पर उतरते हैं
+StarHermit डैशबोर्ड पर, पहले से ही साइन इन है।</p>
+<p><strong>आपके गेम को उस पेज से कभी भी टोकन प्राप्त नहीं होंगे</strong>, और उनकी जरूरत नहीं है. खिलाड़ी हो सकता है
+फ़ोन पर या किसी अन्य ब्राउज़र में पुष्टि करें। एक बार कुंजी संलग्न हो जाने पर, आपका गेम आसानी से साइन इन हो सकता है
+इसके साथ. तो दिखाओ ए "अपने इनबॉक्स की जाँच करें" स्क्रीन करें और प्रयास करते रहें:</p>
+<pre><code class="language-js">// Poll until the player confirms the emailed link. Two requests per attempt, so every 5 s stays
+// well inside the 60-per-minute sign-in limit.
+export async function waitUntilConfirmed(key, { intervalMs = 5000, signal } = {}) {
+  for (;;) {
+    signal?.throwIfAborted();
+    const session = await signIn(key);
+    if (session) return session;
+    await new Promise((resolve) =&gt; setTimeout(resolve, intervalMs));
+  }
+}
+</code></pre>
+<p>चरण 1 से 4 को एक साथ रखना:</p>
+<pre><code class="language-javascript">import { createDeviceKey, register, signIn, waitUntilConfirmed } from './starhermit-key-auth.js';
+
+const key = await loadStoredKey() ?? await saveKey(await createDeviceKey());
+let session = await signIn(key);                // a returning player is signed in here
+if (!session) {
+  const email = await askForEmailAndConsent();
+  await register(key, email);
+  showCheckYourInbox(email);
+  session = await waitUntilConfirmed(key, { signal: cancelButton.signal });
+}
+</code></pre>
+<p><code>loadStoredKey</code>, <code>saveKey</code>, <code>askForEmailAndConsent</code> और <code>showCheckYourInbox</code> क्या आप लिखने वाले हैं?
+प्रस्ताव ए <strong>रद्द करना</strong> जो प्रतीक्षा को समाप्त कर देता है, और चार घंटे के बाद, जब लिंक समाप्त हो जाता है, मतदान रोक देता है।</p>
+<p>भले ही आपके प्लेटफ़ॉर्म का पुष्टिकरण पृष्ठ आपकी साइट पर वापस रीडायरेक्ट हो, तब भी मतदान जारी रखें। खिलाड़ी अक्सर
+ईमेल को प्रतीक्षारत डिवाइस से भिन्न डिवाइस पर खोलता है, और फिर रीडायरेक्ट कहीं नहीं होता है
+आपकी प्रतीक्षा स्क्रीन के पास; मतदान वह है जो प्रतीक्षा उपकरण को संकेत देता है। यदि रीडायरेक्ट आता है
+दूसरे टैब में, उनमें से केवल एक के साथ साइन इन करें और अतिरिक्त सत्र रद्द करें, या खिलाड़ी समाप्त हो जाएगा
+दो के साथ.</p>
+<h2 id="5-keep-the-session">5. सत्र रखें</h2>
+<p><code>complete</code> 15 मिनट का एक्सेस टोकन और एक ताज़ा टोकन लौटाता है जो सात दिनों तक चलता है और घूमता है।
+एक्सेस टोकन को इस रूप में भेजें <code>Authorization: Bearer …</code>, और समाप्त होने से पहले ताज़ा करें:</p>
+<pre><code class="language-js">// Resolves to the new pair, or null when the session is over — sign in with the key again.
+export async function refresh(refreshToken) {
+  const res = await post('/api/v1/auth/refresh', { refreshToken });
+  return res.status === 200 ? res.body : null; // { accessToken, refreshToken }
+}
+</code></pre>
+<p>प्रतिस्थापित करें <strong>दोनों</strong> हर बार टोकन. उपयोग किए गए ताज़ा टोकन को प्रस्तुत करने से पूरा सत्र समाप्त हो जाता है, इसलिए बनाएं
+सुनिश्चित करें कि दो थ्रेड या प्रक्रियाएँ कभी भी एक साथ ताज़ा नहीं होतीं। कब <code>refresh</code> रिटर्न <code>null</code>, पुकारना <code>signIn</code> —
+कोई ईमेल शामिल नहीं है. कुंजी लंबे समय तक जीवित रहने वाली साख है; टोकन इसका एक कैश मात्र हैं।</p>
+<h2 id="6-finish-setting-up-the-account">6. खाता सेट करना समाप्त करें</h2>
+<p><strong>शर्तें।</strong> किसी भी अन्य चीज़ का उपयोग करने से पहले एक नए खाते को वर्तमान StarHermit शर्तों को स्वीकार करना होगा।
+पुकारना <code>GET /api/v1/me</code>. अगर <code>termsAcceptanceRequired</code> है <code>true</code>, से पाठ दिखाएँ
+<code>GET /api/v1/terms</code>, और जब खिलाड़ी इसे स्वीकार कर ले, तो इसका हैश भेज दें <code>POST /api/v1/me/terms/accept</code>.
+बाद के लॉन्च पर दोबारा जांच करें, क्योंकि शर्तें संशोधित हैं। विवरण:
+<a href="/hi/docs/api/profile.html#terms-acceptance">शर्तें स्वीकृति</a>.</p>
+<p><strong>नाम।</strong> खाता a से शुरू होता है <code>pk-…</code> उपयोक्तानाम. खिलाड़ी को एक उपनाम चुनने दें:</p>
+<pre><code class="language-http">PATCH /api/v1/me
+Authorization: Bearer &lt;access-token&gt;
+Content-Type: application/json
+
+{ "nickname": "RookPilot" }
+</code></pre>
+<p>यहां से खाता किसी भी अन्य खाते की तरह है: दोस्त, चैट, मंगनी, क्लाउड सेव, उपलब्धियां।</p>
+<h2 id="7-second-devices-lost-keys-and-limits">7. दूसरा उपकरण, खोई हुई चाबियाँ, और सीमाएँ</h2>
+<p><strong>एक दूसरा उपकरण</strong> अपनी स्वयं की कुंजी बनाता है और उसे पंजीकृत करता है <strong>वही ईमेल पता</strong>. जब
+खिलाड़ी पुष्टि करता है, कुंजी नया खाता बनाने के बजाय उनके मौजूदा खाते से जुड़ जाती है। 24 घंटे
+प्रति पते की सीमा यहां भी लागू होती है।</p>
+<p><strong>खोया हुआ या चोरी हुआ उपकरण.</strong> <code>POST /api/v1/auth/public-key/revoke-request</code> साथ <code>{ "email": "…" }</code>
+किसी पृष्ठ का लिंक ईमेल करता है; वहां पुष्टि करने से निरस्त हो जाता है <strong>प्रत्येक</strong> खाते पर कुंजी डालें और सत्र समाप्त करें
+उन कुंजियों में साइन इन किया गया है। केवल लिंक खोलने से कुछ भी नहीं बदलता है। अनुरोध हमेशा उत्तर देता है <code>202</code> एक ही संदेश के साथ, चाहे या नहीं
+पते का एक खाता है. लिंक चार घंटे के बाद समाप्त हो जाता है, और एक खाता हर 15 में एक बार पूछ सकता है
+मिनट. बाद में, प्रत्येक शेष डिवाइस फिर से पंजीकृत होता है (चरण 2)।</p>
+<p><strong>केवल कुंजी वाला खाता क्या नहीं कर सकता.</strong> कुछ परिवर्तन खाते की साख की रक्षा करते हैं, इसलिए वे
+ऐसे सत्र की आवश्यकता है जिसमें Google या GitHub जैसे प्रदाता के माध्यम से साइन इन किया गया हो:</p>
+<table>
+<thead>
+<tr>
+<th>कार्रवाई</th>
+<th>केवल-कुंजी खाता</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>एक कुंजी जोड़ें या अन्य डिवाइस निरस्त करें (<code>POST /me/public-keys</code>, <code>DELETE /me/public-keys/{id}</code> या <code>/all</code>)</td>
+<td><code>403</code> - ईमेल पंजीकरण के माध्यम से नामांकन करें, या OAuth-प्रमाणीकृत सत्र का उपयोग करें</td>
+</tr>
+<tr>
+<td>खाते का ईमेल पता बदलें</td>
+<td><code>403 oauth_session_required</code> - जब तक कोई प्रदाता लिंक न हो तब तक संभव नहीं है</td>
+</tr>
+<tr>
+<td>इस संस्थापन की अपनी कुंजी को निरस्त करें</td>
+<td><code>DELETE /api/v1/me/public-keys/current</code>, अपने पूर्ण सार्वजनिक-कुंजी खाता सत्र का उपयोग करके; सफलता के बाद स्थानीय साख को त्यागें</td>
+</tr>
+</tbody>
+</table>
+<p>अन्य क्रेडेंशियल प्रबंधित करने या ईमेल बदलने के लिए, किसी प्रदाता को लिंक करें। जब कोई केवल-कुंजी खाता किसी एक को लिंक करता है, तो लिंक रुका रहता है
+जब तक खिलाड़ी अपने ईमेल से इसकी पुष्टि नहीं कर देता। उसके बाद, एक प्रदाता साइन-इन उपरोक्त सभी कार्य कर सकता है।
+देखना <a href="/hi/docs/api/auth.html#get-apiv1authoauthproviderauthorizelinkclient"><code>authorize?link=true</code></a>.</p>
+<h2 id="troubleshooting">समस्या निवारण</h2>
+<table>
+<thead>
+<tr>
+<th>प्रतिक्रिया</th>
+<th>अर्थ</th>
+<th>हल करना</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>register</code> → <code>400</code> "कुंजी डेटा वैध नहीं है...कुंजी"</td>
+<td><code>keyData</code> इसके लिए गलत प्रारूप में है <code>keyType</code></td>
+<td>चरण 1 में तालिका की जाँच करें। Ed25519 और ECDSA कच्ची कुंजी बाइट्स लेते हैं, नहीं <code>SubjectPublicKeyInfo</code></td>
+</tr>
+<tr>
+<td><code>register</code> → <code>429</code></td>
+<td>यह पता या आईपी पिछले 24 घंटों में पंजीकृत हुआ है</td>
+<td>के लिए प्रतीक्षा करें <code>Retry-After</code>; एक लूप में पुनः प्रयास न करें</td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "सार्वजनिक कुंजी पंजीकृत या निरस्त नहीं की गई."</td>
+<td>खिलाड़ी ने अभी तक पुष्टि नहीं की है, लिंक समाप्त हो गया है, या कुंजी निरस्त कर दी गई है</td>
+<td>प्रतीक्षा करते रहें (चरण 4), या फिर से पंजीकरण करें</td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "अमान्य हस्ताक्षर."</td>
+<td>हस्ताक्षरित बाइट्स या हस्ताक्षर प्रारूप मेल नहीं खाते</td>
+<td>हस्ताक्षरित स्ट्रिंग को बिल्कुल दोबारा बनाएं (चरण 3)। ईसीडीएसए के लिए, डीईआर भेजें, नहीं <code>r‖s</code></td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "चुनौती नहीं मिली या समाप्त हो गई."</td>
+<td>चुनौती पाँच मिनट से अधिक पुरानी थी या पहले ही उपयोग की जा चुकी थी</td>
+<td>प्रत्येक प्रयास के लिए एक नई चुनौती का अनुरोध करें</td>
+</tr>
+<tr>
+<td><code>challenge</code> / <code>complete</code> → <code>429</code></td>
+<td>इस आईपी से एक मिनट में 60 से अधिक साइन-इन अनुरोध</td>
+<td>मतदान कम बार</td>
+</tr>
+<tr>
+<td>पृष्ठ की पुष्टि करें → "इस लिंक का उपयोग नहीं किया जा सकता"</td>
+<td>पहले ही पुष्टि हो चुकी है, समाप्त हो चुकी है, अपूर्ण रूप से कॉपी की गई है, या भेजे जाने के बाद से खाते का पता बदल गया है</td>
+<td>यदि आपका गेम साइन इन कर सकता है, तो कुंजी संलग्न है और कुछ भी गलत नहीं है। यदि नहीं, तो पुनः पंजीकरण करें</td>
+</tr>
+<tr>
+<td>पुष्टि करें → दबाएँ "वह सार्वजनिक कुंजी पहले से ही किसी अन्य खाते में पंजीकृत है।"</td>
+<td>यह कुंजी किसी भिन्न खाते से संबंधित है</td>
+<td>इस डिवाइस पर एक नई कुंजी जनरेट करें</td>
+</tr>
+<tr>
+<td><code>403</code> "यह खाता निलंबित कर दिया गया है."</td>
+<td>खाता निलंबित कर दिया गया है</td>
+<td>आपका गेम कुछ भी ठीक नहीं कर सकता</td>
+</tr>
+</tbody>
+</table>
+
+{% endraw %}

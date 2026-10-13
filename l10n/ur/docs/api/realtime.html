@@ -1,0 +1,597 @@
+---
+layout: "wiki"
+lang: "ur"
+title: "ریئل ٹائم کمرے"
+source_url: "/docs/api/realtime.html"
+source_path: "docs/api/realtime.md"
+source_hash: "9ba1c7babc144fc3452532ed6c2cfd2092bc5ad1db8ee2ea833b22fabcc8fffe"
+translation: "machine"
+permalink: "/ur/docs/api/realtime.html"
+---
+{% raw %}
+<h1 id="realtime-rooms">ریئل ٹائم کمرے</h1>
+<p>ریئل ٹائم رومز تیز رفتار ملٹی پلیئر گیمز کے لیے عمومی لابی ہیں: کمرے کی تخلیق، دوستوں کی دعوتیں، فوری جوائن میچ میکنگ، AI پلیئرز آن ڈیمانڈ کے علاوہ AI-سیٹ بیک فل، اور رول سے آگاہ ریئل ٹائم ٹرانسپورٹ (<code>ws/v1/realtime</code>)۔ سب سسٹم جان بوجھ کر گیم-ایگنوسٹک ہے — کمرے فی گیم سلگ کے دائرہ کار میں ہیں، کمرہ <code>metadata</code> ایک مبہم فی گیم JSON بلاب ہے، اور <code>teamCount = 1</code> تمام گیمز کے لیے مفت ماڈلز۔</p>
+<p>ایک میچ دو طریقوں میں سے ایک چلتا ہے:</p>
+<ul>
+<li><strong>میزبان روٹڈ (پہلے سے طے شدہ)</strong> - پلیٹ فارم سرور ایک سمارٹ ٹرانسپورٹ ہے، سمیلیٹر نہیں: کمرے کے تخلیق کار کا کلائنٹ ہے <strong>میزبان</strong> اور مستند گیم سمولیشن چلاتا ہے۔ دوسرے کلائنٹ (مہمان) میزبان کو ان پٹ بھیجتے ہیں اور میزبان کے اسنیپ شاٹس وصول کرتے ہیں۔ سرور روٹنگ، کردار، صلاحیت، شرح کی حد، اور شناخت کو نافذ کرتا ہے — کلائنٹ ایک دوسرے کو دھوکہ نہیں دے سکتے، اور صرف سرور کے تفویض کردہ میزبان ہی نشر کر سکتے ہیں۔</li>
+<li><strong>کمرہ بند سیشن (سرور مستند)</strong> — ایسے کھیلوں کے لیے جو جہاز بھیجتے ہیں۔ <code>server=</code> سکرپٹ یا a <a href="/ur/docs/api/container-games.html">کنٹینر</a>: جب کمرہ شروع ہوتا ہے، پلیٹ فارم ایک پابند این پلیئر سیشن بناتا ہے (<a href="/ur/docs/api/game-scripts.html#room-bound-sessions">سکرپٹ</a> یا کنٹینر) جو نقلی سرور کی طرف چلتا ہے۔ گیم پلے پھر ختم ہو جاتا ہے۔ <code>ws/v1/games</code> اور ریئل ٹائم WS صرف لابی/روسٹر کے لیے استعمال ہوتا ہے۔ دیکھیں <a href="#room-bound-sessions">پل</a> نیچے</li>
+</ul>
+<p>اس کے ساتھ موازنہ کریں۔ <a href="/ur/docs/api/relay.html">ہم مرتبہ ریلے</a> (موجودہ کمرے/سیشن روسٹر کے ساتھ مبہم پنکھا آؤٹ، بطور ڈیفالٹ غیر فعال) اور سادہ <a href="/ur/docs/api/games.html">سکرپٹ کھیل</a> (سرور مستند، سیشن میچ میکنگ اور دعوت نامے کے ساتھ لیکن کوئی روم لابی نہیں)۔ ریئل ٹائم کمرے ہیں۔ <strong>ڈیفالٹ کی طرف سے فعال</strong>.</p>
+<p>تمام REST اینڈ پوائنٹس کے لیے تصدیق کی ضرورت ہوتی ہے اور ایک مکمل صارف ٹوکن اور گیم اسکوپڈ لانچ ٹوکن دونوں کے ساتھ کام کرتے ہیں۔ خرابی کی لاشیں مختلف ہوتی ہیں؛ دیکھیں <a href="/ur/docs/api/conventions.html#requests-and-responses">API کنونشنز</a>.</p>
+<p><img src="/docs/images/ur/multiplayer-routing.svg" alt="میزبان کے راستے والے کمرے میزبان کو ان پٹ بھیجتے ہیں اور اسنیپ شاٹس واپس کرتے ہیں۔ سرور سے مستند کمرے گیمز ساکٹ کا استعمال کرتے ہوئے ایک الگ گیم پلے سیشن بناتے ہیں۔"></p>
+<h2 id="data-model">ڈیٹا ماڈل</h2>
+<p><strong>کمرہ</strong> لائف سائیکل: <code>Lobby</code> → <code>Open</code> (میچ میکنگ) → <code>Playing</code> (روسٹر منجمد، خالی نشستیں کمرے کے الاؤنس تک AI سے بھری ہوئی ہیں) → <code>Closed</code>. کے ساتھ بنایا گیا ایک کمرہ <a href="#join-in-progress"><code>joinInProgress</code></a> جبکہ کھلاڑیوں کو لے جاتا ہے <code>Playing</code>.</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "hostUserId": "&lt;guid&gt;",
+  "status": "Lobby",
+  "gameSessionId": null,
+  "config": {
+    "teamCount": 2,
+    "seatsPerTeam": 5,
+    "backfillAfterSeconds": 30,
+    "aiPlayers": 0,
+    "backfillAiPlayers": null,
+    "joinInProgress": false,
+    "metadata": { "map": "arena" }
+  },
+  "participants": [
+    {
+      "id": "&lt;guid&gt;",
+      "userId": "&lt;guid&gt;",
+      "username": "ada",
+      "isAi": false,
+      "isHost": true,
+      "team": 0,
+      "slot": 0,
+      "joinedAt": "2026-07-22T07:00:00Z",
+      "leftAt": null
+    }
+  ],
+  "name": "Friday night",
+  "joinCode": "K7MP2X",
+  "isVisible": false,
+  "revision": 1,
+  "createdAt": "2026-07-22T07:00:00Z",
+  "openedAt": null,
+  "startedAt": null,
+  "closedAt": null,
+  "result": null
+}
+</code></pre>
+<ul>
+<li><code>config.metadata</code> ایک مبہم JSON بلاب ہے جو پلیٹ فارم کی کبھی ترجمانی نہیں کرتا ہے۔ یہ، اور ایک جمع کرایا
+نتیجہ کا میٹا ڈیٹا، زیادہ سے زیادہ 16 KB ہو سکتا ہے (<code>413</code>)، اور ایک کمرے میں زیادہ سے زیادہ 100 نشستیں ہیں۔ ایک آپریٹر کر سکتا ہے۔
+یا تو ایک کھیل کے لیے تبدیل کریں۔</li>
+<li><code>config.aiPlayers</code> یہ ہے کہ تخلیق کار نے کتنے AI کھلاڑیوں سے میچ شروع کرنے کو کہا - جب کمرہ بنتا ہے تو وہ بیٹھے ہوتے ہیں (دیکھیں <a href="#ai-players">نیچے</a>)۔ یہ درخواست کو ریکارڈ کرتا ہے؛ دی <code>participants</code> روسٹر اس کے لیے مستند ہے جو اصل میں سیٹ رکھتا ہے۔</li>
+<li>AI شرکاء کے پاس ہے۔ <code>userId: null</code>, <code>isAi: true</code>، اور سرور سے تیار کردہ بے ترتیب عرفی نام، جو کمرے کے اندر منفرد ہے۔</li>
+<li><code>(team, slot)</code> ایک شریک کی نشست کوآرڈینیٹ ہے؛ انسانوں کو جوائن کرنے کی ترتیب میں بیٹھا ہے۔</li>
+<li><code>gameSessionId</code> باؤنڈ گیم سیشن ہے، جب سرور بیک اینڈ کے ساتھ گیم کے لیے کمرہ شروع ہوتا ہے - a <code>server=</code> سکرپٹ یا a <a href="/ur/docs/api/container-games.html">کنٹینر</a> (دیکھیں۔ <a href="#room-bound-sessions">پل</a>); <code>null</code> دوسری صورت میں یہ روسٹر پش میں بھی شامل ہے۔</li>
+<li><code>result</code> نتیجہ ہوتا ہے، جب کمرہ بند ہو جاتا ہے — میزبان کے ذریعے جمع کرائے گئے ہوسٹ روٹڈ گیمز کے لیے، اسکرپٹ کے ذریعے کمرہ بند ہونے والے سیشنز کے لیے واپس کیا جاتا ہے۔</li>
+<li><code>joinCode</code> چھ حروف ہے (ایک جیسے پڑھنے والے جوڑے ہٹا دیے گئے)۔ کے لیے دعوت ہے۔ <code>join-by-code</code>. فہرستوں میں اسے کبھی شامل نہیں کیا جاتا ہے۔</li>
+<li><code>isVisible</code> کمرے کی فہرست دیتا ہے۔ <code>GET /rooms</code>. کھلا ہونا (فوری طور پر شامل ہونے والا) اور فہرست میں شامل ہونا خود مختار ہیں۔</li>
+<li><code>revision</code> ٹکراؤ صرف اس وقت ہوتا ہے جب میزبان کنفیگریشن میں ترمیم کرتا ہے (<code>PATCH</code>)، جب سیٹ بھر جائے تو کبھی نہیں۔ اسے بطور پاس کریں۔ <code>expectedRevision</code> پر <code>PATCH</code> موازنہ اور تبادلہ کے لیے (<code>409</code> تنازعہ پر)۔</li>
+</ul>
+<p><strong>دعوت دیں۔</strong>: <code>{ "id", "roomId", "gameSlug", "fromUserId", "fromUsername", "toUserId", "status", "createdAt", "notified" }</code> کے ساتھ <code>status</code> میں سے ایک <code>pending</code> | <code>accepted</code> | <code>declined</code> | <code>expired</code> (دعوتیں اس وقت ختم ہوجاتی ہیں جب کمرہ بند ہوجاتا ہے یا جواب دینے سے پہلے شروع ہوجاتا ہے)۔ <code>notified</code> کے جواب پر ظاہر ہوتا ہے۔ <code>POST /rooms/{id}/invites</code> اور رپورٹ کرتا ہے کہ آیا مدعو کی اطلاع لائیو کنکشن تک پہنچ گئی ہے۔ یہ ہے <code>null</code> جب لسٹنگ.</p>
+<h2 id="rest-endpoints">ریسٹ اینڈ پوائنٹس</h2>
+<p>بنیاد: <code>https://api.starhermit.com/api/v1/realtime</code> - تو
+<code>POST /rooms</code> ذیل میں ہے <code>POST /api/v1/realtime/rooms</code>.</p>
+<table>
+<thead>
+<tr>
+<th>طریقہ</th>
+<th>راستہ</th>
+<th>ڈبلیو ایچ او</th>
+<th>تفصیل</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms</code></td>
+<td>کوئی بھی</td>
+<td>ایک لابی بنائیں، اختیاری طور پر AI کھلاڑیوں کے ساتھ؛ کال کرنے والا میزبان بن جاتا ہے۔</td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/rooms?gameSlug=[&amp;includeInProgress=true]</code></td>
+<td>کوئی بھی</td>
+<td>کھلے، فہرست شدہ کمروں کو براؤز کریں جن میں ابھی بھی سیٹ موجود ہے — اور، پوچھے جانے پر، جوائن ان پروگریس رومز چل رہے ہیں (کوئی کوڈ، کوئی روسٹر؛ زیادہ سے زیادہ 50)</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms/join-by-code</code></td>
+<td>کوئی بھی</td>
+<td>کمرے کے جوائن کوڈ کے ساتھ بیٹھیں (غیر فہرست شدہ / اسٹیل لابی کمروں پر کام کرتا ہے)</td>
+</tr>
+<tr>
+<td>پیچ</td>
+<td><code>/rooms/{id}</code></td>
+<td>میزبان</td>
+<td>نام تبدیل کریں، فہرست/غیر فہرست کریں، میٹا ڈیٹا کو تبدیل کریں، سوئچ کریں۔ <code>joinInProgress</code>بیک فل الاؤنس مقرر کریں (<code>expectedRevision</code> CAS)</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms/{id}/matchmake</code></td>
+<td>میزبان، لابی</td>
+<td>ایک پارٹی/ٹیم کے طور پر پورے روسٹر کو قطار میں لگائیں۔</td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/rooms/{id}</code></td>
+<td>شرکاء + مدعو</td>
+<td>کمرہ + فہرست</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/api/v1/realtime/connection-tickets</code></td>
+<td>کوئی بھی</td>
+<td>ایک بار <code>?ticket=</code> ریئل ٹائم (اور دیگر) ساکٹ کے لیے</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms/{id}/invites</code></td>
+<td>شرکاء</td>
+<td>ایک دوست کو مدعو کریں؛ انہیں مطلع کرتا ہے (<code>409</code> نقل پر)</td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/rooms/invites</code></td>
+<td>کوئی بھی</td>
+<td>کالر کے زیر التواء کمرے کے دعوت نامے (کراس گیم)</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms/invites/{inviteId}/accept</code></td>
+<td>مدعو</td>
+<td>کمرے میں شامل ہوں (سیٹ تفویض)</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms/invites/{inviteId}/decline</code></td>
+<td>مدعو</td>
+<td>انکار (<code>204</code>)</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms/{id}/open</code></td>
+<td>میزبان</td>
+<td>میچ میکنگ کے لیے کھلا؛ بیک فل کاؤنٹ ڈاؤن شروع ہوتا ہے۔</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms/quick-join</code></td>
+<td>کوئی بھی</td>
+<td>کھیل کے لیے مفت سیٹ کے ساتھ سب سے پرانے کھلے کمرے میں شامل ہوں، اختیاری طور پر مماثل فلٹرز</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms/{id}/start</code></td>
+<td>میزبان</td>
+<td>AI، اسٹیٹس → کے ساتھ خالی سیٹوں کو بیک فل کریں۔ <code>Playing</code></td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms/{id}/leave</code></td>
+<td>شرکاء</td>
+<td>چھوڑنا؛ لابی/اوپن میں سیٹ کو ہٹا دیا جاتا ہے، سیٹ چلانے میں ایک AI شرکت کنندہ میں بدل جاتا ہے — یا، جوائن ان پروگریس روم میں، خالی کر دیا جاتا ہے</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms/{id}/seats</code></td>
+<td>میزبان</td>
+<td>میچ شروع ہونے سے پہلے سیٹوں کو دوبارہ بیلنس کریں۔</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/rooms/{id}/result</code></td>
+<td>میزبان</td>
+<td>نتیجہ جمع کروائیں؛ کمرہ → <code>Closed</code></td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/rooms/mine</code></td>
+<td>کوئی بھی</td>
+<td>کالر کا فعال کمرہ، اگر کوئی ہو (دوبارہ جڑیں)</td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/rooms/joined[?gameSlug=]</code></td>
+<td>کوئی بھی</td>
+<td>ہر کمرے میں کال کرنے والا ایک سیٹ رکھتا ہے، دنیا بھی شامل ہے (خالی فہرست جب کوئی نہیں)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-room--post-rooms">ایک کمرہ بنائیں - <code>POST /rooms</code></h3>
+<pre><code class="language-json">{ "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "teamCount": 2, "seatsPerTeam": 5, "backfillAfterSeconds": 30, "aiPlayers": 0, "backfillAiPlayers": 4, "name": "Friday night", "isVisible": false, "metadata": { "map": "arena" } }
+</code></pre>
+<ul>
+<li><code>gameSlug</code> مکمل صارف ٹوکن کے لیے ضروری ہے۔ گیم اسکوپڈ لانچ ٹوکن کے ساتھ سلگ ٹوکن سے لیا جاتا ہے۔ <code>game_scope</code> (ایک مماثل باڈی ویلیو کے ساتھ رد کر دیا جاتا ہے۔ <code>403</code>).</li>
+<li>کیپس: <code>teamCount</code> 1–2, <code>seatsPerTeam</code> 1–100، کل نشستیں ≤ 100 (100 کی ایک ٹیم، یا 50 میں سے دو)۔ <code>backfillAfterSeconds</code> پہلے سے طے شدہ <code>30</code> اور ہونا ضروری ہے
+کم از کم <code>1</code> (<code>400</code> دوسری صورت میں؛ وہاں ہے <strong>زیادہ سے زیادہ نہیں</strong> 32 بٹ انٹیجر کے سائز سے آگے۔ ایک لمبی
+الٹی گنتی صرف اس وقت ہوتی ہے جب کوئی منسلک رہتا ہے، حالانکہ: ایک <code>Open</code> کمرہ جس میں کوئی نہیں ہے۔
+<code>ws/v1/realtime</code> 60 منٹ کے بعد بند ہوجاتا ہے (دیکھیں۔ <a href="#automatic-room-lifecycle">خودکار کمرے کا لائف سائیکل</a>)
+لہذا اس سے زیادہ طویل الٹی گنتی صرف اس صورت میں پہنچتی ہے جب کوئی شریک ساکٹ کھلا رکھے۔
+بڑے کمرے بینڈوتھ کے پابند ہیں، سیٹ کے پابند نہیں: ہر مہمان کے فریم میزبان کے پاس جاتے ہیں، اور ہر میزبان کے فریم کو ہر مہمان کے پاس کاپی کیا جاتا ہے — دیکھیں <a href="#sizing-a-large-room">ایک بڑے کمرے کا سائز</a>.</li>
+<li><code>aiPlayers</code> پہلے سے طے شدہ <code>0</code>. رینج <code>0</code>–<code>(teamCount × seatsPerTeam) − 1</code> - میزبان کو ہمیشہ ایک نشست کی ضرورت ہوتی ہے، لہذا ایک مکمل AI کمرہ ہے۔ <code>400</code>.</li>
+<li><code>backfillAiPlayers</code> جب میچ شروع ہوتا ہے تب بھی کتنی سیٹیں خالی ہوتی ہیں اس کا تعین AI کو دیا جاتا ہے — دیکھیں <a href="#backfill-allowance">بیک فل الاؤنس</a>. چھوڑ دیا گیا یا <code>null</code> ان سب کو بھرتا ہے.</li>
+<li><code>joinInProgress</code> (پہلے سے طے شدہ <code>false</code>) شروع ہونے کے بعد پلیئرز لینے کے کمرے کو رکھتا ہے — دیکھیں <a href="#join-in-progress">ترقی میں شامل ہوں۔</a>.</li>
+<li>فی صارف ایک فعال کمرہ: جب آپ کسی غیر میں ہوں تو بنانا یا اس میں شامل ہونا<code>Closed</code> کمرے کی واپسی <code>409</code>.</li>
+<li>تخلیق کار میزبان بن جاتا ہے، ٹیم 0، سلاٹ 0 پر بیٹھتا ہے۔ کمرہ واپس کرتا ہے۔</li>
+</ul>
+<h4 id="ai-players">AI کھلاڑی</h4>
+<p><code>aiPlayers</code> بتاتا ہے کہ کتنے AI کھلاڑی ہیں۔ <strong>میچ کے ساتھ شروع ہونا چاہئے</strong>. وہ بعد میں چھڑانے کا وعدہ نہیں ہیں — سرور انہیں فوری طور پر سیٹ کرتا ہے، لہذا آپ جو کمرہ واپس لیں گے وہ پہلے سے ہی ان پر مشتمل ہے:</p>
+<ul>
+<li>وہ عام شرکاء ہیں (<code>isAi: true</code>, <code>userId: null</code>، منفرد عرفی نام) اور فہرست میں اور ہر ایک میں ظاہر ہوتا ہے۔ <code>roster</code> کمرے کے موجود ہونے کے وقت سے دھکیلیں۔</li>
+<li>وہ <strong>نشستوں پر قبضہ</strong>، اس لیے وہ انسانوں کے لیے چھوڑی ہوئی صلاحیت کو کم کرتے ہیں: دعوتیں اور فوری شمولیت صرف وہی بھرتی ہے جو باقی رہ جاتی ہے، اور <code>POST /rooms/invites/{id}/accept</code> واپسی <code>409</code> ایک بار کوئی مفت نشست نہیں چھوڑی جاتی ہے۔ آپ کو AI کی بالکل وہی تعداد ملتی ہے جو آپ نے مانگی تھی - میچ میکنگ سے زیادہ کبھی نہیں۔</li>
+<li>پلیسمنٹ بھرتا ہے۔ <strong>سب سے پہلے خالی ٹیم</strong> (تعلقات نچلے ٹیم انڈیکس پر جاتے ہیں)، سب سے کم مفت سلاٹ۔ تو اے <code>teamCount: 2, seatsPerTeam: 1</code> کے ساتھ کمرہ <code>aiPlayers: 1</code> AI کو میزبان کے سامنے رکھتا ہے، اور بڑے کمرے متوازن رہتے ہیں۔ ان کو دوبارہ بٹھائیں جس کے ساتھ آپ چاہیں۔ <code>POST /rooms/{id}/seats</code> میچ شروع ہونے سے پہلے.</li>
+<li>وہ اسٹارٹ ٹائم بیک فل سے الگ ہیں، جو ان سیٹوں کو بھرتی ہے جو کمرہ شروع ہونے پر کسی نے نہیں لی تھی - کمرے تک <a href="#backfill-allowance">بیک فل الاؤنس</a>.</li>
+</ul>
+<h4 id="backfill-allowance">بیک فل الاؤنس</h4>
+<p>جب ایک کمرہ شروع ہوتا ہے — اس کے بیک فل کی آخری تاریخ پر، جیسے ہی یہ بھرتا ہے، یا میزبان کے زبردستی شروع ہونے پر —
+کسی نے نہیں لی سیٹیں AI کھلاڑیوں کو دی جاتی ہیں۔ <code>backfillAiPlayers</code> کتنے کا فیصلہ کرتا ہے:</p>
+<table>
+<thead>
+<tr>
+<th><code>backfillAiPlayers</code></th>
+<th>شروع میں</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>چھوڑ دیا گیا/ <code>null</code> (پہلے سے طے شدہ)</td>
+<td>ہر خالی سیٹ AI پلیئر بن جاتی ہے۔</td>
+</tr>
+<tr>
+<td><code>0</code></td>
+<td>کوئی AI نہیں: میچ خالی نشستوں کے ساتھ شروع ہوتا ہے۔</td>
+</tr>
+<tr>
+<td><code>n</code></td>
+<td>زیادہ سے زیادہ <code>n</code> خالی نشستیں AI بن جاتی ہیں۔ اس سے آگے کوئی بھی خالی رہو</td>
+</tr>
+</tbody>
+</table>
+<p>کیپڈ AI پر جائیں <strong>سب سے پہلے خالی ٹیم</strong> (کم ٹیم انڈیکس سے تعلق)، لہذا a <code>2 × 3</code> کے ساتھ کمرہ
+ایک میزبان اور <code>backfillAiPlayers: 3</code> 2-بمقابلہ-2 شروع ہوتا ہے۔ رینج <code>0</code>–<code>teamCount × seatsPerTeam</code>، اور <code>400</code>.
+میزبان اسے میچ سے پہلے تبدیل کر سکتا ہے۔ <code>PATCH /rooms/{id}</code> (<code>"backfillAiPlayers": 2</code>)، یا
+کے ساتھ ہر سیٹ کو بھرنے کے لئے واپس <code>"backfillAllEmptySeats": true</code>. اس پر اثر نہیں پڑتا <code>aiPlayers</code>,
+جو کمرہ بننے پر بیٹھ جاتے ہیں۔</p>
+<p>اگر آپ کا گیم انڈر فلڈ کھیلنا ہے - ایک مفت کے لیے جو کہ آٹھ میں سے چھ کے ساتھ ٹھیک ہے۔
+کھلاڑی - استعمال کریں۔ <code>0</code> اور اپنے کھیل کو خالی نشستوں کو سنبھالنے دیں۔ پہلے سے طے شدہ کے ساتھ، ایک کمرہ کبھی شروع نہیں ہوتا ہے۔
+ایک خالی سیٹ کے ساتھ۔</p>
+<p><strong>کمپیوٹر کے خلاف سولو کھیلنا</strong> لہذا دو کالز ہیں - ہر دوسری سیٹ کے ساتھ AI کے طور پر کمرہ بنائیں، پھر اسے شروع کریں:</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms
+{ "gameSlug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94", "teamCount": 2, "seatsPerTeam": 1, "aiPlayers": 1 }
+
+POST /api/v1/realtime/rooms/{id}/start
+</code></pre>
+<p>AI سیٹیں شناخت اور سیٹ ریزرویشن ہیں، بوٹ سروس نہیں — پلیٹ فارم پر موجود کوئی بھی چیز آپ کے لیے انہیں نہیں چلاتی۔ ایک میزبان کے ذریعے چلنے والا کھیل انہیں اپنے تخروپن میں چلاتا ہے۔ a کے ساتھ ایک کھیل <code>server=</code> اسکرپٹ ان کو ڈھونڈتا ہے۔ <code>ctx.room.roster</code> پرچم لگایا <code>ai: true</code> اور انہیں اسکرپٹ کے اندر چلاتا ہے (دیکھیں۔ <a href="/ur/docs/api/game-scripts.html#room-bound-sessions">کھیل ہی کھیل میں سکرپٹ</a>).</p>
+<h3 id="invites">دعوت دیتا ہے۔</h3>
+<p><code>POST /rooms/{id}/invites</code> کے ساتھ <code>{ "toUserId": "&lt;guid&gt;" }</code>. دعوتیں ہیں۔ <strong>صرف دوست</strong> (<code>403</code> دوسری صورت میں؛ دوستی کا وہی اصول جیسا کہ گیم کی دعوت دیتا ہے)، صرف شرکاء، اور صرف اس وقت جب کہ کمرہ شامل ہوتا ہے: میں <code>Lobby</code>/<code>Open</code>، یا <code>Playing</code> کے ساتھ <a href="#join-in-progress"><code>joinInProgress</code></a>. <code>409</code> اگر صارف پہلے سے ہی کمرے میں ہے یا اس کے پاس پہلے سے زیر التواء دعوت نامہ ہے۔ <code>400</code> اپنے آپ کو مدعو کرتے وقت دعوت نامہ واپس کرتا ہے۔</p>
+<p><strong>مدعو آپ کے لیے مطلع کیا جاتا ہے۔</strong> کمرے کا دعوت نامہ بھیجنا a <a href="/ur/docs/api/chat.html#game_invite-one-event-for-both-invite-systems"><code>game_invite</code> دھکا</a> مدعو کرنے والے کے چیٹ ساکٹ پر اور دعوت کو شامل کرتا ہے۔ <code>GET /api/v1/me/game-invites</code>، تو ایک دوست جو StarHermit ڈیش بورڈ میں ہے (یا آپ کے گیم کے علاوہ کہیں بھی) اب بھی اس کے بارے میں سنتا ہے۔ آپ کرتے ہیں <strong>نہیں</strong> گیمز-API دعوت نامہ بھی بھیجنے کی ضرورت ہے - جو دو بار مطلع کرے گا۔ جواب ہے۔ <code>notified</code> آپ کو بتاتا ہے کہ آیا دھکا براہ راست کنکشن تک پہنچا؛ <code>false</code> صرف اس کا مطلب ہے کہ مدعو اس وقت منسلک نہیں ہے اور اس کے بجائے ان کے ان باکس سے دعوت نامہ دیکھے گا۔</p>
+<p>چونکہ ایک اطلاع دونوں دعوتی نظاموں کا احاطہ کرتی ہے، اس لیے اس کا پے لوڈ ہوتا ہے۔ <code>kind: "room"</code> پلس <code>roomId</code> اور <code>acceptPath</code>/<code>declinePath</code> کے لیے <strong>یہ</strong> دعوت دینا نیچے دیے گئے ریئل ٹائم اینڈ پوائنٹس پر کمرے کے دعوت نامے کا جواب دیں — کمرے کی دعوت کی شناخت درست نہیں ہے <code>/games/{slug}/invites/...</code> اور اس کے برعکس.</p>
+<p><code>GET /rooms/invites</code> تمام گیمز میں کال کرنے والے کے زیر التواء کمرے کی دعوتوں کی فہرست بناتا ہے (لانچ ٹوکن صرف ان کے اپنے گیمز کو دیکھتے ہیں)۔ اسے گیم کلائنٹ کے پولز کے کمرے میں دعوت نامے کے طور پر استعمال کریں۔ متحد دعوت ان باکس پر <code>GET /api/v1/me/game-invites</code> یہ بھی واپس کرتا ہے.</p>
+<p><code>POST /rooms/invites/{inviteId}/accept</code> کال کرنے والے کو بٹھاتا ہے اور کمرہ واپس کرتا ہے۔ <strong>پارٹی پننگ</strong>: invite-joins میزبان کی ٹیم پر بیٹھے ہوتے ہیں جب تک کہ جگہ رہتی ہے، پھر دوسری ٹیموں کو اوور فلو ہوجاتی ہے۔ <code>409</code> اگر کمرہ بھرا ہوا ہے، پہلے سے شروع/بند ہے، یا کال کرنے والا دوسرے فعال کمرے میں ہے (<a href="#worlds-do-not-count-as-your-room">دنیا</a> مستثنیٰ)۔ کسی کمرے میں دعوت نامہ قبول کرنا جس میں کال کرنے والا پہلے سے بیٹھا ہے بس اسے قبول کرتا ہے۔</p>
+<p><code>POST /rooms/invites/{inviteId}/decline</code> → <code>204</code>.</p>
+<h3 id="matchmaking">میچ میکنگ</h3>
+<p><code>POST /rooms/{id}/open</code> (صرف میزبان): <code>Lobby</code> → <code>Open</code>، سیٹ <code>openedAt</code>، اور بیک فل الٹی گنتی شروع کرتا ہے۔ پہلے سے ہی بے حس <code>Open</code>; <code>409</code> ایک بار <code>Playing</code>/<code>Closed</code>.</p>
+<p>ایک <code>Open</code> کمرہ ایک بار اپنی الٹی گنتی کا انتظار نہیں کرتا ہے۔ <strong>ہر نشست لی جاتی ہے</strong> - انسانوں کے ذریعہ یا تخلیق کے وقت تشکیل کردہ AI کھلاڑیوں کے ذریعہ۔ یہ وہاں اور پھر شروع ہوتا ہے، تو اس کا جواب <code>open</code> (یا جوائن کرنے کے لیے جس نے آخری سیٹ بھری ہو) پہلے ہی ہو سکتا ہے۔ <code>Playing</code> کے ساتھ کمرہ <code>startedAt</code> سیٹ ہر سیٹ پر AI کے ساتھ ایک کمرہ بنایا گیا ہے لیکن میزبان اس کے کھلتے ہی شروع ہو جاتا ہے۔</p>
+<p><code>GET /rooms?gameSlug=</code> اس گیم کے کھلے، لسٹڈ رومز کو براؤز کرتا ہے جن میں ابھی بھی سیٹ موجود ہے، سب سے پرانا کھلا ہوا، 50 پر محدود ہے۔ ہر قطار کا نام، میزبان کا نام، کھلاڑی/کی صلاحیت کی گنتی، <code>freeSeats</code>میٹا ڈیٹا، <code>startedAt</code> اور <code>joinInProgress</code> — <strong>کوئی جوائن کوڈ اور کوئی روسٹر نہیں۔</strong>. شامل کریں۔ <code>includeInProgress=true</code> چلانے کی بھی فہرست بنانے کے لیے <a href="#join-in-progress">شمولیت میں پیش رفت</a> خالی سیٹ والے کمرے، ہر کمرہ بھرنے کے بعد۔</p>
+<p><code>POST /rooms/join-by-code</code> کے ساتھ <code>{ "joinCode": "K7MP2X" }</code> ایک نشست لیتا ہے. کوڈز وائٹ اسپیس- اور کیس غیر حساس ہیں۔ فوری شمولیت کے برعکس یہ غیر فہرست شدہ کمرے میں کام کرتا ہے۔ <code>Lobby</code>. کمرہ بند ہونے پر کوڈ جاری کیا جاتا ہے۔</p>
+<p><code>PATCH /rooms/{id}</code> (میزبان): <code>{ "name", "isVisible", "metadata", "joinInProgress", "backfillAiPlayers", "backfillAllEmptySeats", "expectedRevision" }</code>. چھوڑے گئے فیلڈز اکیلے رہ گئے ہیں۔ بھیجیں <code>name: ""</code> نام صاف کرنے کے لیے۔ اے <code>Playing</code> کمرے کا اب بھی نام تبدیل کیا جا سکتا ہے، درج یا غیر فہرست کیا جا سکتا ہے، اس کا میٹا ڈیٹا تبدیل کر کے اسے تبدیل کیا جا سکتا ہے <code>joinInProgress</code>; بیک فل سیٹنگز سے انکار کر دیا گیا ہے (<code>409</code>میچ شروع ہونے کے بعد۔</p>
+<p><code>POST /rooms/{id}/matchmake</code> (میزبان، <code>Lobby</code> صرف) کمرے کی قطار <strong>انسان</strong> ایک کے طور پر فہرست
+پارٹی/ٹیم؛ پہلے سے بیٹھے ہوئے AI شرکاء پارٹی کے رکن نہیں ہیں۔ پہلے سے طے شدہ پالیسی کے ساتھ، پارٹی کا سائز
+منتخب قطار کے برابر ہونا چاہیے۔ <code>teamSize</code>. ایک کے ساتھ <a href="/ur/docs/starhermit-txt.html#starting-matchmaking-before-every-human-seat-is-filled">مینی فیسٹ شروع کرنے کی آخری تاریخ</a>,
+ایک چھوٹی پارٹی ڈیڈ لائن پر ایک بڑی ٹیم پر قبضہ کر سکتی ہے۔ باقی نشستیں AI تک بن جاتی ہیں۔
+گیم کی تشکیل شدہ ٹوپی، پھر خالی رہیں۔ پارٹیاں ساتھ رہتی ہیں اور ٹکٹ ایک ٹیم میں نہیں ملتے ہیں۔</p>
+<p>استعمال کریں۔ <code>?queue=duos</code> ایک شکل یا دہرانے کے لیے <code>?queues=</code> سب سیٹ کی اجازت دینے کے لیے، جیسا کہ گیمز API میں ہے:</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms/{id}/matchmake?queues=duos&amp;queues=trios
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<p>واپس کرتا ہے۔ <a href="/ur/docs/api/games.html#post-apiv1gamesslugmatchmaking">میچ میکنگ ٹکٹ</a>سمیت <code>status</code> اور
+<code>sessionId</code> جب ملایا. میزبان پولز <code>GET /api/v1/games/{slug}/matchmaking</code> اور کے ساتھ منسوخ کرتا ہے۔
+<code>DELETE</code> اس راستے پر. پہلے سے قطار میں کھڑا کمرہ یا پارٹی جو اجازت شدہ شکلوں میں سے کسی کو بھی فٹ نہیں کرتی ہے۔
+واپسی <code>409</code>. یہ مستند میچ میکنگ بہاؤ فوری شمولیت کے لیے کمرہ کھولنے سے الگ ہے۔
+اور اس کے کمرے کی سطح کے بیک فل کاؤنٹ ڈاؤن۔</p>
+<p><code>POST /rooms/quick-join</code> کے ساتھ <code>{ "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "seats": 1 }</code> کال کرنے والے کو میں رکھتا ہے۔ <strong>مفت نشست کے ساتھ سب سے قدیم کھلا کمرہ</strong> اس گیم سلگ کے لیے — AI سیٹیں لی گئی تعداد کے مطابق شمار ہوتی ہیں، اس لیے ایک کمرہ جس کی باقی سیٹیں تمام AI ہیں چھوڑ دی جاتی ہیں۔ <code>404</code> جب کوئی کمرہ اہل نہیں ہوتا ہے - کلائنٹ کو پھر اپنا کمرہ بنانا چاہیے اور اسے کھولنا چاہیے۔ صرف سنگل سیٹ کوئیک جوائن سپورٹ ہے (<code>seats</code> ہونا ضروری ہے <code>1</code>).</p>
+<p><strong>فلٹرز۔</strong> ان میں سے کسی کو بھی شامل کریں صرف اس کمرے میں شامل ہونے کے لیے جو فٹ بیٹھتا ہو۔ دیئے گئے ہر فلٹر کو لازمی طور پر رکھنا چاہیے، اور
+مندرجہ بالا سلوک کوئی نہیں دیا گیا ہے:</p>
+<pre><code class="language-json">{ "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "seats": 1, "teamCount": 2, "seatsPerTeam": 4, "metadata": { "mode": "ranked", "map": "arena" }, "includeInProgress": true }
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>فلٹر</th>
+<th>ایک ایسے کمرے سے میل کھاتا ہے جس کا…</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>teamCount</code></td>
+<td>ٹیم کا شمار بالکل یہی ہے۔</td>
+</tr>
+<tr>
+<td><code>seatsPerTeam</code></td>
+<td>فی ٹیم سیٹ بالکل یہ ہے</td>
+</tr>
+<tr>
+<td><code>metadata</code></td>
+<td>میٹا ڈیٹا پر مشتمل ہے۔ <strong>ہر</strong> مساوی قیمت کے ساتھ دی گئی جائیداد۔ وہ پراپرٹیز جن کا آپ نام نہیں لیتے نظر انداز کر دیا جاتا ہے، لہذا <code>{"mode":"ranked"}</code> میچز <code>{"mode":"ranked","map":"desert"}</code>. قدروں کا موازنہ JSON کے طور پر کریں: تعداد کے لحاظ سے قدر (<code>1</code> برابر <code>1.0</code>) کلیدی ترتیب سے قطع نظر اشیاء، ترتیب میں صفیں۔ ایک اعتراض ہونا چاہیے (<code>400</code> بصورت دیگر)۔</td>
+</tr>
+</tbody>
+</table>
+<p><code>includeInProgress: true</code> درج، چلانے پر بھی غور کرتا ہے۔ <a href="#join-in-progress">شمولیت میں پیش رفت</a> ایک خالی نشست کے ساتھ کمرے؛ اب بھی بھرنے والے کمرے پہلے آتے ہیں۔ اس کے بغیر ایک رننگ میچ کبھی بھی شامل نہیں ہوتا ہے، اس لیے جو کلائنٹ جوائن ان پروگریس کی پیش گوئی کرتا ہے وہ کبھی بھی ایک میں نہیں آتا۔ اے <code>metadata</code> فلٹر جس کی شناخت آپ کے گیم کے کمرے کے میٹا ڈیٹا میں ڈالی جاتی ہے اس طرح ایک کلائنٹ جوائن کرتا ہے۔ <strong>ایک خاص</strong> لسٹڈ روم، چونکہ لسٹنگ میں کوئی جوائن کوڈ نہیں ہوتا۔</p>
+<p>مفت نشست کے ساتھ سب سے پرانا ملاپ والا کھلا کمرہ جیت جاتا ہے۔ جب کوئی بھی میل نہیں کھاتا ہے، <code>404</code> کہتے ہیں
+<code>"No open room with free seats matches those filters."</code> - ایک کمرہ بنانے اور کھولنے کا معمول کا اشارہ
+خود اس میٹا ڈیٹا کے ساتھ، لہذا اگلے کھلاڑی کا فلٹر کیا ہوا کوئیک جوائن اسے ڈھونڈتا ہے۔</p>
+<h3 id="start-seats-leave-result">شروع کریں، نشستیں، چھوڑیں، نتیجہ</h3>
+<p><code>POST /rooms/{id}/start</code> (صرف میزبان): بھرتا ہے۔ <strong>ابھی تک خالی</strong> نشستیں - ان سب، یا کمرے تک <a href="#backfill-allowance">بیک فل الاؤنس</a> - AI شرکاء کے ساتھ (<code>isAi: true</code>, <code>userId: null</code>, منفرد بے ترتیب عرفی نام) — تخلیق کے وقت بیٹھے ہوئے AI کھلاڑی اپنی شناخت، عرفی نام اور نشست رکھتے ہیں — روسٹر کو منجمد کر دیتا ہے، سیٹ کرتا ہے <code>status: "Playing"</code>، اور منجمد فہرست واپس کرتا ہے۔ اگر گیم میں سرور کا بیک اینڈ ہے (a <code>server=</code> اسکرپٹ یا ایک کنٹینر)، اس سے کمرے کا پابند سیشن بھی بنتا ہے (دیکھیں۔ <a href="#room-bound-sessions">پل</a>); لوٹا ہوا کمرہ اور روسٹر پش کیری <code>gameSessionId</code>. A <strong>کنٹینر</strong> سیشن جو تخلیق نہیں کیا جا سکتا ہے - اکثر ایک تعیناتی اب بھی بیکار سے جاگتی ہے - کمرے کو غیر شروع کر دیتا ہے: <code>start</code> اس غلطی کا جواب دیتا ہے (دوبارہ کوشش کریں)، اور ایک مکمل کمرہ یا بیک فل سویپ اس کے اگلے پاس پر دوبارہ کوشش کرتا ہے۔ اسکرپٹ کی ناکامی اب بھی کمرے کو میزبان کے راستے سے شروع کرتی ہے۔ <strong>بے حس</strong> --.شروع کرنا a <code>Playing</code> کمرہ دوبارہ روسٹر واپس کرتا ہے۔ بیک فل کی آخری تاریخ گزرنے پر کمرہ خود بخود شروع ہو سکتا ہے۔</p>
+<p><code>POST /rooms/{id}/seats</code> (صرف میزبان، <code>Lobby</code>/<code>Open</code> صرف) دوبارہ سیٹ کرنے والے شرکاء:</p>
+<pre><code class="language-json">{ "seats": [ { "participantId": "&lt;guid&gt;", "team": 1, "slot": 0 } ] }
+</code></pre>
+<p><code>400</code> کمرے کی ٹیم/ سلاٹ باؤنڈز یا نامعلوم شرکاء سے باہر کی نشستوں کے لیے؛ <code>409</code> اگر دو شرکاء ایک نشست کا اشتراک کریں گے۔</p>
+<p><code>POST /rooms/{id}/leave</code> کمرے کی حیثیت کے مطابق برتاؤ:</p>
+<ul>
+<li><strong>لابی/اوپن</strong>: سیٹ ہٹا دیا گیا ہے۔ اگر <strong>میزبان</strong> پتوں، میزبان کا کردار سب سے طویل خدمت کرنے والے بقیہ انسانی شریک کو منتقل ہو جاتا ہے۔ اگر کوئی انسان باقی نہ رہے تو کمرہ ہے۔ <code>Closed</code>.</li>
+<li><strong>کھیلنا، <a href="#join-in-progress">شمولیت میں پیش رفت</a> کمرہ</strong>: سیٹ ہے <strong>خالی</strong> (AI کو نہیں دیا گیا)، کھلاڑی کو باؤنڈ سیشن سے ہٹا دیا جاتا ہے (ان کے <code>ws/v1/games</code> ساکٹ بند) اور گیم کو بتایا جاتا ہے۔ جب آخری انسان چلا جاتا ہے اور پابند سیشن ابھی بھی فعال ہے، کمرہ ہے <strong>نہیں</strong> بند: دنیا فہرست میں رہتی ہے اور شامل ہونے کے قابل ہے، اور پہلا کھلاڑی واپس میزبان کا کردار ادا کرتا ہے۔</li>
+<li><strong>چل رہا ہے (AI ٹیک اوور)</strong>: میچ جاری ہے - چھوڑنے والے کی سیٹ AI سیٹ بن جاتی ہے: <code>isAi: true</code>, <code>userId: null</code>ایک تازہ منفرد عرفی نام اور اسی شریک کے ساتھ <code>id</code>, <code>team</code>, <code>slot</code>، اور <code>joinedAt</code>. چھوڑنے والے کو فوری طور پر آزاد کر دیا جاتا ہے (ایک فعال کمرے کا قاعدہ اب ان کا شمار نہیں کرتا، لہذا وہ دوسرا کمرہ بنا یا اس میں شامل ہو سکتے ہیں) جبکہ روسٹر پش ہر کلائنٹ کو بتاتا ہے کہ ایک AI اب اس سیٹ پر قابض ہے۔ اگر چھوڑنے والا ہے۔ <strong>میزبان</strong> اور کم از کم ایک اور انسان باقی رہ جاتا ہے، میزبان کا کردار سب سے طویل عرصے سے جڑے ہوئے بقیہ انسان کو منتقل ہو جاتا ہے اور کمرہ باقی رہتا ہے۔ <code>Playing</code> (کلائنٹ کی طرف سے میزبان کی منتقلی کھیل کی تشویش ہے)؛ اگر کوئی انسان باقی نہ رہے تو کمرہ ہے۔ <code>Closed</code>.</li>
+</ul>
+<p>کمرہ واپس کرتا ہے۔</p>
+<p><code>POST /rooms/{id}/result</code> (صرف میزبان، <code>Playing</code> صرف) نتائج کو ریکارڈ کرتا ہے، کمرے کو بند کرتا ہے، اور ویب ساکٹ پر نتیجہ کو مداح کرتا ہے۔ <strong>صرف ہوسٹ روٹڈ گیمز</strong> - اسکرپٹ کے واپس آنے پر ایک پابند اسکرپٹڈ سیشن والا کمرہ ختم ہوجاتا ہے۔ <code>result</code>، جو کمرہ خود بخود بند ہوجاتا ہے (دیکھیں۔ <a href="#room-bound-sessions">پل</a>).</p>
+<pre><code class="language-json">{ "teamScores": [3, 1], "metadata": { "durationSeconds": 360 } }
+</code></pre>
+<p><code>teamScores</code> فی ٹیم بالکل ایک اندراج ہونا ضروری ہے؛ ہر اسکور کو 0-50 تک سنٹی کلیمپ کیا گیا ہے۔ کلیمپ شدہ نتیجہ کمرے میں محفوظ کیا جاتا ہے۔ <code>result</code> اور منسلک شرکاء کو بطور a <code>{"type":"result"}</code> کنٹرول فریم.</p>
+<p><code>GET /rooms/mine</code> کال کرنے والے کے موجودہ غیر کو واپس کرتا ہے<code>Closed</code> کمرہ (دوبارہ جڑنے کے لیے)، یا <code>404</code>. ایک کھلاڑی
+جس کا بھی تعلق ہے <a href="#worlds-do-not-count-as-your-room">دنیا</a> وہ کمرہ ملتا ہے جو ان پر قبضہ کرتا ہے، ورنہ
+دنیا میں وہ حال ہی میں شامل ہوئے ہیں۔</p>
+<p><code>GET /rooms/joined</code> فہرستیں <strong>ہر</strong> کال کرنے والے کمرے میں ایک نشست رکھتا ہے، سب سے پہلے - ان کی دنیایں بطور
+نیز ایک کمرہ جو ان پر قابض ہے — بطور مکمل کمرے (روسٹر اور جوائن کوڈ شامل)۔ ایک لانچ
+ٹوکن صرف اپنے گیم کے کمرے دیکھتا ہے۔ مکمل ٹوکن کے ساتھ، <code>?gameSlug=</code> اسے تنگ کرتا ہے. یہ خالی جواب دیتا ہے۔
+فہرست، نہیں a <code>404</code>، لہذا ایک کلائنٹ لاگ ان غلطی کے بغیر ہر آغاز پر پوچھ سکتا ہے۔</p>
+<h3 id="join-in-progress">ترقی میں شامل ہوں۔</h3>
+<p>ایک کمرہ بنایا گیا (یا <code>PATCH</code>ایڈ) کے ساتھ <code>"joinInProgress": true</code> بعد میں کھلاڑیوں کو لے جاتا ہے <code>start</code>.
+دعوت دیتا ہے، <code>join-by-code</code> اور اس کے ساتھ جلدی شامل ہوں۔ <code>includeInProgress: true</code> پھر a پر کام کریں۔ <code>Playing</code> کمرہ
+a کے ساتھ <strong>خالی</strong> سیٹ - اس میں کوئی نہیں، AI نہیں - لہذا اس طرح کا کمرہ عام طور پر شروع ہوتا ہے۔
+<code>"backfillAiPlayers": 0</code>. پرچم کے بغیر ایک شروع شدہ کمرہ پہلے کی طرح ہر شمولیت سے انکار کرتا ہے۔</p>
+<ul>
+<li><strong>کھیل فیصلہ کرتا ہے۔</strong> اگر کمرہ گیم سیشن کا پابند ہے، تو نئے آنے والے کو اس میں داخل کیا جاتا ہے۔
+سیٹ رکھنے سے پہلے سیشن: پلیٹ فارم اسکرپٹ سے پوچھتا ہے۔ <code>game.onMembershipChange(ctx)</code> یا a
+کنٹینر <a href="/ur/docs/api/container-games.html#post-sessionssessionidmembers"><code>POST /sessions/{id}/members</code></a>. ایک کھیل
+جو انکار کرتا ہے (یا دونوں میں سے کوئی نہیں ہے) کو سیٹ واپس مل جاتی ہے اور جوائن ہوتا ہے a <code>409</code>; ایک قبول شدہ دعوت نامہ رہتا ہے۔
+زیر التواء ایک بار داخل ہونے کے بعد، کھلاڑی ہر لحاظ سے ایک سیشن پلیئر ہوتا ہے — درست آن <code>ws/v1/games</code>,
+بحالی اور دوبارہ جڑنے میں۔</li>
+<li><strong>چھوڑنے سے سیٹ خالی ہو جاتی ہے۔</strong> اور کھلاڑی کو سیشن سے ہٹاتا ہے، اور گیم کو بتایا جاتا ہے۔</li>
+<li><strong>دنیا اپنے زائرین کو پیچھے چھوڑ دیتی ہے۔</strong> جب آخری انسان چلا جاتا ہے اور سیشن ابھی بھی فعال ہے،
+کمرہ کھلا، درج اور جوڑنے کے قابل رہتا ہے۔ پہلا کھلاڑی واپس میزبان بن جاتا ہے۔ ایک کمرہ
+فعال سیشن اس کے میزبان کے آف لائن ہونے کے لیے بھی بند نہیں ہے (دیکھیں۔
+<a href="#the-60-second-host-rule-and-room-bound-sessions">60 سیکنڈ کا میزبان اصول</a>)۔ سیشن کا اپنا
+لائف سائیکل فیصلہ کرتا ہے کہ یہ کب ختم ہو جائے گا۔ <a href="/ur/docs/tutorials/persistent-sessions.html">مسلسل</a> کھیل روکتا ہے
+ختم ہونے کے بجائے - اور کمرہ اس کے ساتھ بند ہو جاتا ہے۔</li>
+<li><strong>ایک تلاش کرنا۔</strong> <code>GET /rooms?includeInProgress=true</code> جوائن ان پروگریس رومز کی فہرستیں جو خالی ہیں
+نشست <code>POST /rooms/quick-join</code> کے ساتھ <code>includeInProgress: true</code> ایک میں شامل ہوتا ہے (ایک شامل کریں۔ <code>metadata</code> کو فلٹر کریں۔
+ایک خاص کمرہ منتخب کریں)۔ فوری جوائن ان کمروں سے گزرتا ہے جس میں کال کرنے والا پہلے سے بیٹھا ہوتا ہے۔</li>
+</ul>
+<h4 id="worlds-do-not-count-as-your-room">دنیا آپ کے کمرے میں شمار نہیں ہوتی</h4>
+<p>ایک کھلاڑی اس میں شامل ہو سکتا ہے۔ <strong>ایک وقت میں ایک فعال کمرہ</strong>: بنانا، کوڈ کے ذریعے شامل ہونا، جلدی شامل ہونا یا
+دعوت قبول کرنا a <code>409 "You are already in an active room."</code> جب کہ وہ دوسری جگہ پر بیٹھتے ہیں۔
+کمرہ جو بند نہیں ہے۔ میں ایک نشست a <strong>دنیا</strong> شمار نہیں کرتا: a <code>Playing</code>, <code>joinInProgress</code> پابند کمرے
+کے ایک فعال سیشن میں <a href="/ur/docs/tutorials/persistent-sessions.html">مسلسل</a> کھیل ایک دنیا اتنی دیر تک رہتی ہے۔
+چونکہ آخری ملاقاتی کے جانے کے بعد اس کا سیشن اور اس کا کمرہ کھلا رہتا ہے، اس لیے ایک میں ایک نشست رکنیت ہے،
+ایک لابی نہیں جس میں کھلاڑی بیٹھا ہے — وہ کسی بھی گیم میں، کئی دنیا سے تعلق رکھ سکتے ہیں، اور پھر بھی استعمال کر سکتے ہیں۔
+ایک عام کمرہ۔ ایک جوائن ان پروگریس میچ جو مستقل نہیں ہے اب بھی شمار ہوتا ہے: یہ ختم ہوتا ہے، اور جب
+یہ چلتا ہے کھلاڑی اس میں ہے. اسی کمرے میں دوسری نشست سے انکار کر دیا گیا ہے (<code>409</code>ہر راستے پر۔ فہرست a
+کھلاڑیوں کی دنیا کے ساتھ <a href="#start-seats-leave-result"><code>GET /rooms/joined</code></a>.</p>
+<h2 id="websocket-wsv1realtime">ویب ساکٹ: <code>ws/v1/realtime</code></h2>
+<p>سے جڑیں۔ <code>wss://api.starhermit.com/ws/v1/realtime?roomId=&lt;guid&gt;</code> کے ذریعے JWT کے ساتھ <code>Authorization</code> ہیڈر <code>?ticket=</code> سے <code>POST /api/v1/realtime/connection-tickets</code>، یا <code>?access_token=</code>. ٹکٹ کو ترجیح دیں: یہ ایک بار استعمال ہوتا ہے اور سیکنڈز زندہ رہتا ہے۔ <strong>صرف شرکاء</strong> (<code>403</code> دوسری صورت میں؛ ایک لانچ ٹوکن <code>game_scope</code> کمرے کے برابر ہونا ضروری ہے <code>gameSlug</code>. تازہ ترین کنکشن صارف کے پچھلے ایک کو ختم کر دیتا ہے — پرانا ساکٹ اس کے ساتھ بند ہے۔ <code>PolicyViolation</code> ("ایک نئے کنکشن کے ذریعے ختم کر دیا گیا۔").</p>
+<h3 id="binary-frames-gameplay">بائنری فریم (گیم پلے)</h3>
+<p>بائنری فریم اس کے لیے گیم پلے چینل ہیں۔ <strong>میزبان کی طرف سے راستہ</strong> گیمز (کمرے سے منسلک اسکرپٹڈ سیشن ختم ہوتے ہیں۔ <code>ws/v1/games</code> اس کے بجائے - دیکھیں <a href="#room-bound-sessions">پل</a>)۔ سرور <strong>کبھی تجزیہ نہیں کرتا</strong> ان کے پے لوڈز - میزبان اتھارٹی گیم کا معاہدہ ہے - لیکن یہ روٹنگ اور شناخت کو نافذ کرتا ہے:</p>
+<ul>
+<li>سرور <strong>بھیجنے والے کے 16-بائٹ شریک آئی ڈی کے ساتھ ہر فریم کا سابقہ ​​لگاتا ہے۔</strong> (. NET بائٹ آرڈر میں شریک GUID)۔ کلائنٹس کو پہلے 16 بائٹس کو ہٹانا چاہیے اور پے لوڈ کے اندر بھیجنے والے کی شناخت پر کبھی بھروسہ نہیں کرنا چاہیے۔</li>
+<li><strong>میزبان → کمرہ</strong>: میزبان کے فریموں کو ہر دوسرے منسلک شریک (اسنیپ شاٹس) سے باہر کیا جاتا ہے۔</li>
+<li><strong>مہمان → صرف میزبان</strong>: مہمان کے فریم میزبان کو پہنچائے جاتے ہیں اور کوئی نہیں (ان پٹ)۔</li>
+<li>فریم سائز ٹوپی: <strong>8 KB</strong>. شرح کی حد: <strong>30 پیغامات/سیکنڈ فی کنکشن</strong>1 سیکنڈ کے لیے 2× برسٹ الاؤنس کے ساتھ ٹوکن بالٹی۔ خلاف ورزی ساکٹ کو بند کر دیتی ہے۔ <code>PolicyViolation</code>.</li>
+</ul>
+<h3 id="json-text-control-frames">JSON ٹیکسٹ کنٹرول فریم</h3>
+<p>چھوٹے JSON فریم (≤ <strong>4 KB</strong>) کیری لابی اور میچ ایونٹس:</p>
+<pre><code class="language-json">{ "type": "ready" }
+{ "type": "chat", "text": "Ready to race" }
+{ "type": "event", "kind": "countdown", "goInMs": 3000 }
+</code></pre>
+<ul>
+<li>دی <strong>میزبان</strong> بھیج سکتے ہیں۔ <code>event</code>, <code>chat</code>، اور <code>ready</code>; فریم ہر دوسرے شریک کو نشر کیے جاتے ہیں۔</li>
+<li><strong>مہمان</strong> صرف بھیج سکتے ہیں۔ <code>ready</code> اور <code>chat</code> (براڈکاسٹ بھی)، شرح تک محدود <strong>10 فی منٹ</strong>.</li>
+<li>سرور <strong>ہر کنٹرول فریم کو دوبارہ ٹیگ کرتا ہے۔</strong> بھیجنے والے کے شریک آئی ڈی کے ساتھ: کلائنٹ کی طرف سے فراہم کردہ <code>from</code> چھین کر بدل دیا جاتا ہے۔ <code>"from": "&lt;participantId&gt;"</code>.</li>
+<li>ایک ناقابل تجزیہ فریم، ایک نامعلوم <code>type</code>، یا ایک قسم بھیجنے والے کا کردار ساکٹ کو بند نہیں کر سکتا <code>PolicyViolation</code>.</li>
+</ul>
+<h3 id="server-pushes">سرور دھکیلتا ہے۔</h3>
+<p>سرور خود JSON ٹیکسٹ فریموں کو آگے بڑھاتا ہے:</p>
+<ul>
+<li><code>{"type":"presence","userId":"&lt;guid&gt;","online":true|false}</code> - ہر کنیکٹ/منقطع ہونے پر۔</li>
+<li><code>{"type":"roster","roomId":"&lt;guid&gt;","status":"Playing","participants":[ ... ]}</code> - کنیکٹنگ ساکٹ تک، اور جوڑ، پتے، سیٹ کی تبدیلی، کھلنے اور شروع ہونے پر پورے کمرے تک۔ روسٹر پش کے بعد <code>start</code> منجمد میچ روسٹر ہے، AI سیٹیں شامل ہیں، اور کیریز <code>gameSessionId</code> جب کمرے میں اسکرپٹ کا پابند سیشن ہوتا ہے۔</li>
+<li><code>{"type":"result","roomId":"&lt;guid&gt;","teamScores":[3,1],"metadata":{...}}</code> - جب میزبان نتیجہ جمع کراتا ہے، یا جب ایک پابند اسکرپٹ واپس کرتا ہے۔</li>
+</ul>
+<h3 id="close-codes">کوڈز بند کریں۔</h3>
+<table>
+<thead>
+<tr>
+<th>کوڈ</th>
+<th>جب</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>NormalClosure</code></td>
+<td>کلائنٹ کی طرف سے شروع بند</td>
+</tr>
+<tr>
+<td><code>MessageTooBig</code></td>
+<td>8 KB (بائنری) / 4 KB (ٹیکسٹ) کیپ سے زیادہ کا فریم</td>
+</tr>
+<tr>
+<td><code>PolicyViolation</code></td>
+<td>شرح کی حد کی خلاف ورزی، نامنظور/غلط کنٹرول فریم، کنکشن کو ایک نئے کے ذریعے ہٹا دیا گیا</td>
+</tr>
+</tbody>
+</table>
+<h2 id="sizing-a-large-room">ایک بڑے کمرے کا سائز</h2>
+<p>ایک کمرے میں 100 کھلاڑی ہوتے ہیں، لیکن عملی حد بینڈوتھ ہے۔ بائنری چینل ہے
+ہوسٹ روٹڈ:</p>
+<ul>
+<li>ہر مہمان کا فریم میزبان کے پاس جاتا ہے۔</li>
+<li>ہر میزبان فریم ہر مہمان کو کاپی کیا جاتا ہے۔</li>
+<li>ہر فریم میں 16 بائٹ بھیجنے والا سابقہ ​​ہوتا ہے۔</li>
+</ul>
+<p>دو چیزیں مندرجہ ذیل ہیں:</p>
+<ul>
+<li><strong>میزبان کا ڈاؤن لوڈ مہمانوں کی تعداد کے ساتھ بڑھتا ہے۔</strong> یہ ہر مہمان کا ان پٹ وصول کرتا ہے۔</li>
+<li><strong>پلیٹ فارم کا اخراج کمرے کے سائز کے مربع کے ساتھ بڑھتا ہے۔</strong> ایک میزبان سنیپ شاٹ جو ہر ایک کی وضاحت کرتا ہے۔
+پلیئر پلیئر کی گنتی کے ساتھ بڑھتا ہے، اور اسے ہر مہمان کو کاپی کیا جاتا ہے۔</li>
+</ul>
+<p>کام کی مثال: 100 کھلاڑی۔ ہر مہمان 32 بائٹس کے 30 ان پٹ/s بھیجتا ہے۔ میزبان 20 بھیجتا ہے۔
+12 بائٹس فی کھلاڑی پر سنیپ شاٹس/s، تقریباً 1.2 KB ہر ایک۔ فی پیغام TLS/TCP/WebSocket اوور ہیڈ ہے۔
+تقریباً 70 بائٹس کے طور پر لیا گیا۔</p>
+<table>
+<thead>
+<tr>
+<th>لنک</th>
+<th>شرح</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ہر مہمان، اپ لوڈ</td>
+<td>~26 kbit/s</td>
+</tr>
+<tr>
+<td>ہر مہمان، ڈاؤن لوڈ</td>
+<td>~0.21 Mbit/s</td>
+</tr>
+<tr>
+<td>میزبان، اپ لوڈ</td>
+<td>~0.21 Mbit/s</td>
+</tr>
+<tr>
+<td><strong>میزبان، ڈاؤن لوڈ</strong></td>
+<td><strong>~2.8 Mbit/s، بطور ~3,000 پیغامات/s</strong></td>
+</tr>
+<tr>
+<td><strong>کمرے کے لیے پلیٹ فارم سے نکلنا</strong></td>
+<td><strong>~23 Mbit/s (~10.5 GB فی گھنٹہ)</strong></td>
+</tr>
+</tbody>
+</table>
+<p>دوسرے سائز میں ایک ہی کھیل پلیٹ فارم کے اخراج میں چوکور ترقی کو ظاہر کرتا ہے:</p>
+<table>
+<thead>
+<tr>
+<th>کھلاڑی</th>
+<th>8</th>
+<th>22</th>
+<th>50</th>
+<th>100</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>پلیٹ فارم سے نکلنا</td>
+<td>~0.4 Mbit/s</td>
+<td>~1.8 Mbit/s</td>
+<td>~6.9 Mbit/s</td>
+<td>~23 Mbit/s</td>
+</tr>
+</tbody>
+</table>
+<p>فی کنکشن کی حدیں بدترین صورت کو پابند کرتی ہیں، عام نہیں۔ 100 کھلاڑیوں کا کمرہ جس میں
+ہر کنکشن 30/s پر 8 KB فریم بھیجتا ہے۔ <strong>390 Mbit/s</strong> پلیٹ فارم سے نکلنے کا۔</p>
+<p>ایک بڑے کمرے کے لیے:</p>
+<ul>
+<li><strong>مہمانوں کے ان پٹ کی شرحیں کم رکھیں</strong> (10-20 ہرٹز)، اور ان پٹ تب بھیجیں جب وہ تبدیل ہوں۔ میزبان
+ہر مہمان کا ان پٹ وصول کرتا ہے، اور فی سیکنڈ ہزاروں پیغامات کو سنبھالنا عموماً مشکل ہوتا ہے۔
+بینڈوڈتھ کے مقابلے براؤزر ہوسٹ کے لیے حد۔</li>
+<li><strong>اسنیپ شاٹس کو چھوٹا رکھیں۔</strong> پوزیشنوں کی مقدار درست کریں، آخری تسلیم شدہ ریاست کے خلاف ڈیلٹا بھیجیں،
+اور ایسی ہستیوں کو پھیلائیں جو شاذ و نادر ہی کئی سنیپ شاٹس میں تبدیل ہوتی ہیں۔ ایک ہی فریم زیادہ سے زیادہ ہے۔
+8 KB، جو 100 کھلاڑیوں پر تقریباً 80 بائٹس فی کھلاڑی چھوڑتا ہے۔</li>
+<li><strong>روم چینل ایک مہمان کو نشانہ نہیں بنا سکتا۔</strong> میزبان فریم ہر کسی کے پاس جاتا ہے، لہذا ہر مہمان کو
+پوری دنیا کو حاصل کرتا ہے۔ اگر آپ کے گیم کو فی کھلاڑی دلچسپی کے انتظام کی ضرورت ہے (صرف قریبی
+کھلاڑی، جنگ کی دھند)، اسے ایک پر چلائیں۔ <a href="/ur/docs/api/container-games.html">کنٹینر گیم سرور</a> اس کے بجائے اے
+کنٹینر انفرادی کھلاڑیوں کے فریموں کو ایڈریس کر سکتا ہے، اور میزبان اب کسی کھلاڑی کا گھر نہیں ہے۔
+کنکشن</li>
+</ul>
+<h2 id="automatic-room-lifecycle">خودکار کمرے کا لائف سائیکل</h2>
+<ul>
+<li>ایک <code>Open</code> کمرہ خود بخود شروع ہو جاتا ہے جب اس کی بیک فل کی آخری تاریخ گزر جاتی ہے۔ خالی نشستیں کمرے تک منفرد طور پر نامزد AI شرکاء بن جاتی ہیں۔ <a href="#backfill-allowance">بیک فل الاؤنس</a>.</li>
+<li>ایک <code>Open</code> کمرہ بھی خود بخود شروع ہو جاتا ہے جیسے ہی ہر سیٹ لی جاتی ہے — انسانوں کے ذریعے، تخلیق کے وقت کنفیگر کیے گئے AI پلیئرز کے ذریعے، یا ایک مرکب — اس آخری تاریخ کا انتظار کیے بغیر۔</li>
+<li>A <code>Playing</code> کمرہ بند ہو جاتا ہے جب اس کے میزبان کے پاس نمبر نہیں ہوتا ہے۔ <code>ws/v1/realtime</code> 60 سیکنڈ سے زیادہ کے لیے کنکشن - جب تک کہ یہ کسی گیم سیشن کا پابند نہ ہو جو اب بھی فعال ہے، ایسی صورت میں میزبان کا کردار اس کے بجائے حرکت میں آتا ہے (نیچے دیکھیں)۔ منسلک مہمانوں کو ایک حتمی روسٹر پش موصول ہوتا ہے جس میں کمرہ بند ہوتا ہے۔</li>
+<li>A <code>Lobby</code> یا <code>Open</code> کمرہ 60 منٹ سے زیادہ کے بعد منسلک شرکاء کے بغیر بند ہو جاتا ہے۔</li>
+</ul>
+<p>ایک شریک جو محض اپنا کنکشن کھو دیتا ہے متاثر نہیں ہوتا: ساکٹ کو دوبارہ جوڑنا (جدید ترین کنکشن ختم ہو جاتا ہے) اور <code>GET /rooms/mine</code> کمرے کے زندہ رہنے تک دونوں کام کرتے رہتے ہیں۔</p>
+<h3 id="the-60-second-host-rule-and-room-bound-sessions">60 سیکنڈ کا میزبان اصول اور کمرے کے پابند سیشن</h3>
+<p><strong>سرور سے چلنے والا میچ اس کے میزبان سے تعلق نہیں رکھتا۔</strong> A <code>Playing</code> کمرہ ایک گیم سیشن کا پابند ہے۔
+اب بھی <code>active</code> اس کے میزبان کے آف لائن ہونے کی وجہ سے کبھی بند نہیں ہوتا: میزبان کا کردار ایک منسلک انسان کی طرف جاتا ہے۔
+اگر ایک ہے، اور دوسری صورت میں کچھ نہیں ہوتا. سیشن کا لائف سائیکل فیصلہ کرتا ہے کہ میچ کب ہے۔
+ختم ہو جاتا ہے، اور کمرے کو بند کر دیتا ہے جب یہ ہوتا ہے۔ نیچے دیے گئے اصول کا اطلاق ہوسٹ روٹ والے کمروں پر ہوتا ہے (کوئی سیشن نہیں) اور
+اس کا سیشن ختم ہونے کے بعد ایک پابند کمرے میں۔</p>
+<p><strong>لہذا ایک کمرے سے منسلک کھیل کو میزبان کے ریئل ٹائم ساکٹ کی ضرورت نہیں ہے۔</strong> ایک میزبان جو اوور کھیلتا ہے۔
+<code>ws/v1/games</code> اور بند ہو جاتا ہے (یا کبھی نہیں کھلتا) <code>ws/v1/realtime</code> سیشن کے دوران کمرے کو بند نہیں کرتا ہے۔
+ہے <code>active</code>; ریئل ٹائم ساکٹ صرف اس صورت میں کھولیں جب آپ کا گیم روسٹر پشز چاہتا ہے۔</p>
+<p><strong>میزبان کے راستے والے کمرے کے لیے، صرف ایک <code>ws/v1/realtime</code> ساکٹ میزبان کے کنکشن کے طور پر شمار ہوتا ہے۔</strong> گھڑی
+میزبان کا آخری ریئل ٹائم ساکٹ بند ہونے پر شروع ہوتا ہے۔ ایک میزبان جو کبھی منسلک نہیں ہوا اس کی پیمائش سے کی جاتی ہے۔
+کمرے کا <code>startedAt</code>.</p>
+<p><strong>ایک کمرے کو بند کرنے سے اس کے کمرے میں بند سیشن ختم نہیں ہوتا ہے۔</strong> ایک پابند کمرہ اب بھی بند ہوسکتا ہے جبکہ اس کا
+سیشن چلتا ہے - اکثر اس وقت جب اس کا آخری انسان ہوتا ہے۔ <a href="#start-seats-leave-result">پتے</a> بغیر ایک کمرہ
+<a href="#join-in-progress">شمولیت میں پیش رفت</a>. اسے بند کرنا (روسٹر پش، ہر سیٹ آزاد، زیر التواء دعوتیں۔
+expired) اور کچھ نہیں کرتا:</p>
+<ul>
+<li>سیشن رہتا ہے۔ <code>active</code>. اس کے کھلاڑی کھیلتے رہ سکتے ہیں۔ <code>ws/v1/games</code>، اور اسکرپٹ برقرار ہے۔
+اس کی ٹک ریٹ پر چل رہا ہے۔</li>
+<li>اگلی دعوت سے، <code>ctx.room.roster</code> ہے <strong>خالی</strong> اور ہر انسان میں <code>ctx.presence</code> ہے
+<code>left: true</code>کیونکہ کمرہ بند کرنے سے ہر سیٹ خالی ہو جاتی ہے۔ <code>online</code> اب بھی عکاسی کرتا ہے <code>ws/v1/games</code>
+ساکٹ ایک اسکرپٹ جو علاج کرتا ہے۔ "سب چلے گئے" جیسا کہ میچ کا اختتام واپس آنا چاہیے۔ <code>result</code> پھر</li>
+<li>اگر اسکرپٹ بعد میں واپس آجائے <code>result</code>، سیشن معمول کے مطابق ختم ہوا، لیکن کمرے کا <code>result</code> رہتا ہے
+<code>null</code>: کمرہ پہلے ہی بند تھا، لہذا نتیجہ صرف سیشن پر محفوظ کیا جاتا ہے۔</li>
+<li>اگر اسکرپٹ کبھی واپس نہیں آتا ہے۔ <code>result</code>، سیشن کسی دوسرے گیم سیشن کی طرح ریٹائر ہو جاتا ہے: 5 منٹ
+آخری کے بعد <code>ws/v1/games</code> ساکٹ بند ہوجاتا ہے، یا 24 گھنٹوں کے بعد بغیر کسی پلیئر ایکشن کے (دیکھیں۔
+<a href="/ur/docs/api/games.html#session-model">گیمز - سیشن ماڈل</a>).</li>
+</ul>
+<p>مختصراً: ایک کمرہ بند میچ اپنے میزبان آف لائن ہونے سے بچ جاتا ہے۔ اگر اسے ختم ہونا چاہئے جب اس کے کھلاڑی
+کمرہ چھوڑیں، اسکرپٹ میں ختم کریں جب <code>ctx.presence</code> سب کو چھوڑ کر دکھاتا ہے۔</p>
+<h2 id="security-summary">سلامتی کا خلاصہ</h2>
+<ul>
+<li>ہر اختتامی نقطہ مکمل JWT کے ساتھ کام کرتا ہے۔ <strong>یا</strong> ایک گیم اسکوپڈ لانچ ٹوکن؛ ایک لانچ ٹوکن <code>game_scope</code> کمرے سے مماثل ہونا چاہئے۔ <code>gameSlug</code>، لہذا دو گیمز کبھی بھی ایک دوسرے کے کمروں کو نہیں دیکھ سکتے اور نہ ہی اس میں شامل ہو سکتے ہیں۔</li>
+<li>ریڈز صرف شریک ہیں (علاوہ زیر التواء مدعو)؛ <code>open</code>, <code>seats</code>, <code>start</code>، اور <code>result</code> صرف میزبان ہیں؛ دعوتیں صرف دوست ہیں۔</li>
+<li>توثیق: سیٹ/ٹیم کیپس، ایک AI شمار جو میزبان کو ہمیشہ ایک سیٹ چھوڑتا ہے، فی صارف ایک فعال کمرہ (دنیا کو چھوڑ کر)، فی سیٹ پر ایک مکین، غیرمعمولی آغاز، رزلٹ سکور 0-50 تک محدود، دعوت نامہ کمرے کے ساتھ ہی ختم ہو جاتا ہے۔</li>
+<li>نقل و حمل: سرور سے ٹیگ شدہ بھیجنے والے آئی ڈیز، رول پر مبنی روٹنگ، فریم سائز کیپس، فی کنکشن کی شرح کی حد، بائنری پے لوڈز کی سرور سائیڈ پارس نہیں ہے۔</li>
+</ul>
+<h2 id="room-bound-sessions">کمرہ بند سیشن</h2>
+<p>سرور پسدید کے ساتھ کھیل کے لیے — a <code>server=</code> اسکرپٹ اس کے مینی فیسٹ میں، یا a <a href="/ur/docs/api/container-games.html">کنٹینر</a> - ایک ریئل ٹائم کمرہ اپنا میچ چلا سکتا ہے۔ <strong>سرور سے مستند</strong> میزبان کلائنٹ کے بجائے۔ ذیل کے نکات اسکرپٹ کے لیے لکھے گئے ہیں۔ ایک کنٹینر اس کے ذریعے ایک ہی فہرست وصول کرتا ہے۔ <code>POST /sessions</code> ctx (<code>room</code>, <code>presence</code>) اور ممبرشپ کے ذریعے تبدیلیاں <code>POST /sessions/{id}/members</code>. یہ کمرے (لابی، دعوتیں، میچ میکنگ، بیک فل) کو سرور سائیڈ سمولیشن، تصدیق شدہ ان پٹس، اور اسکرپٹ کی ملکیت والے نتائج کے ساتھ جوڑتا ہے۔</p>
+<ul>
+<li><strong>کمرے کے آغاز پر سیشن کی تخلیق۔</strong> جب کمرے میں داخل ہوا۔ <code>Playing</code>، پلیٹ فارم ایک این پلیئر بناتا ہے۔ <a href="/ur/docs/api/games.html">کھیل سیشن</a> انسانی شرکاء کے لیے۔ AI سیٹیں صرف اسکرپٹ کا سامنا کرنے والے روسٹر میں موجود ہیں۔ کمرے کا ردعمل اور روسٹر بے نقاب <code>gameSessionId</code> تاکہ کلائنٹس کو معلوم ہو کہ کون سا گیم پلے ساکٹ کھولنا ہے۔</li>
+<li><strong>گیم پلے کی طرف جاتا ہے۔ <code>ws/v1/games</code>.</strong> کلائنٹ سے جڑتے ہیں۔ <code>ws/v1/games?sessionId=&lt;gameSessionId&gt;</code> اور تبادلہ <code>cmd</code>/<code>game</code> اسکرپٹ کے ساتھ فریم، بالکل کسی اسکرپٹڈ گیم کی طرح؛ ریئل ٹائم WS صرف روسٹر/موجودگی کے لیے منسلک رہتا ہے۔ سیشن اس کے اسکرپٹ کے ذریعے درخواست کردہ تائید شدہ شرح پر ٹک کرتا ہے۔ <code>game.tickRateHz</code> - ایک اسکرپٹ جو کچھ بھی نہیں مانگتا ہے اس پر 0.25 ہرٹز پر ٹک نہیں کیا جاتا ہے، جو کوئی ریئل ٹائم گیم نہیں چاہتا، اس لیے اعلان کریں (دیکھیں <a href="/ur/docs/api/game-scripts.html#tick-rate">کھیل ہی کھیل میں سکرپٹ</a>).</li>
+<li><strong>توسیعی اسکرپٹ ctx۔</strong> کمرہ بند سیشن کے لیے ہر درخواست (<code>createSession</code>, <code>onPlayerMessage</code>, <code>onTick</code>) اس کے علاوہ وصول کرتا ہے۔ <code>ctx.room</code> (کمرے کی شناخت، میٹا ڈیٹا، اور منجمد روسٹر — انسان <em>اور</em> AI سیٹیں، ٹیم کے ذریعہ ترتیب دی گئی پھر سلاٹ) اور <code>ctx.presence</code> (<code>{ "&lt;userId&gt;": { online, left } }</code> ہر اس صارف کے لیے جو انسانی شریک ہے یا تھا)۔ تفصیلات میں <a href="/ur/docs/api/game-scripts.html#room-bound-sessions">گیم اسکرپٹس - کمرہ بند سیشن</a>.</li>
+<li><strong>سرور سے مستند کامیابیاں۔</strong> باؤنڈ سیشن کا ہر ہک واپس آ کر کامیابیاں دے سکتا ہے۔ <code>achievements: {userId: [keys]}</code>، بالکل اسی طرح جیسے کسی بھی اسکرپٹڈ گیم میں - بشمول منجانب <code>createSession</code>، جو کمرے کے شروع ہوتے ہی آگ لگا دیتا ہے۔ انلاک کو کمانے والے کھلاڑی کو دھکیل دیا جاتا ہے۔ <code>ws/v1/games</code> کے طور پر <code>{"type":"achievement"}</code> فریم دیکھیں <a href="/ur/docs/api/achievements.html#server-authoritative-game-achievements">کامیابیاں</a>.</li>
+<li><strong>اسکرپٹ میچ کو ختم کرتا ہے۔</strong> جب اسکرپٹ واپس آتا ہے۔ <code>result</code>، پلیٹ فارم سیشن کو ختم کرتا ہے، نتیجہ کو کمرے میں محفوظ کرتا ہے، اور کمرے کو بند کر دیتا ہے (فائنل روسٹر پش بھی شامل ہے)۔ <code>POST /rooms/{id}/result</code> کمرے سے منسلک کھیلوں کے لیے استعمال نہیں کیا جاتا ہے۔</li>
+<li><strong>ناکامیاں شروع کریں۔</strong> اسکرپٹ کی مدد سے چلنے والا کمرہ کسی پابند سیشن کے بغیر شروع ہوسکتا ہے اگر اس کا سیشن تخلیق ناکام ہوجاتا ہے۔ معائنہ <code>gameSessionId</code> گیم پلے ٹرانسپورٹ کا انتخاب کرنے سے پہلے۔ جب اس کا سرور سیشن نہیں بنا سکتا تو کنٹینر سے چلنے والا کمرہ شروع نہیں ہوتا ہے۔ ایک عارضی آغاز کی خرابی پر بیک آف کے ساتھ دوبارہ کوشش کریں؛ اسے میزبان تخروپن میں تبدیل نہ کریں۔</li>
+<li><strong>ایک میزبان روٹڈ گیم سیشن کو مکمل طور پر کامیابیوں کے لیے باندھ سکتا ہے۔</strong> بائنری گیم پلے چینل کو کبھی بھی باؤنڈ سیشن پر گیٹ نہیں کیا جاتا ہے، لہذا ایک گیم جو میزبان کلائنٹ پر نقل کرتا ہے وہ اب بھی بھیج سکتا ہے۔ <code>server=</code> اسکرپٹ جس کا واحد کام مستند کامیابی (اور ایلو) گرانٹ ہے، جبکہ تیز رفتار راستہ بہتا رہتا ہے <code>ws/v1/realtime</code>.</li>
+</ul>
+<h2 id="how-a-game-uses-it">گیم اسے کس طرح استعمال کرتا ہے۔</h2>
+<ol>
+<li><strong>بنائیں</strong>: لابی بنانے والا کال کرتا ہے۔ <code>POST /rooms</code> اس کی ٹیم لے آؤٹ کے ساتھ، ایک مبہم <code>metadata</code> بلاب، اور تاہم بہت سے <code>aiPlayers</code> میچ کے ساتھ شروع ہونا چاہئے، اور میزبان بن جاتا ہے. یہاں AI کے ساتھ ہر دوسری سیٹ کو بھرنا مکمل سولو بمقابلہ کمپیوٹر فلو ہے۔</li>
+<li><strong>دعوت دیں۔</strong>: میزبان دوستوں کی فہرست دیتا ہے (<code>GET /api/v1/me/friends</code>) اور بھیجتا ہے۔ <code>POST /rooms/{id}/invites</code>. پلیٹ فارم ہر مدعو کرنے والے کو مطلع کرتا ہے (<code>game_invite</code> دھکا + <code>GET /api/v1/me/game-invites</code>)، تاکہ وہ آپ کے گیم کو کھلے بغیر ڈیش بورڈ سے قبول کر سکیں۔ کھیل میں پہلے سے مدعو کرنے والے وہی دعوت نامے پولنگ کے ذریعے دیکھتے ہیں۔ <code>GET /rooms/invites</code>. انہیں میزبان ٹیم میں بٹھانا۔</li>
+<li><strong>کھولیں۔</strong>: میزبان کال کرتا ہے۔ <code>POST /rooms/{id}/open</code>. سولو پلیئرز کال کرتے ہیں۔ <code>POST /rooms/quick-join</code> اور سب سے پرانے کھلے کمرے میں مفت نشست کے ساتھ اتریں۔ <code>404</code> وہ اپنا کمرہ بناتے اور کھولتے ہیں)۔</li>
+<li><strong>جڑیں۔</strong>: سب کھلتے ہیں۔ <code>ws/v1/realtime?roomId=…</code> اور گھڑیاں <code>roster</code>/<code>presence</code> سیٹیں بھرتے ہی دھکیلتا ہے۔</li>
+<li><strong>شروع کریں۔</strong>: بیک فل کی آخری تاریخ پر، جیسے ہی ہر نشست لی جاتی ہے، یا جب میزبان فورس شروع ہوتی ہے، باقی خالی نشستیں AI شرکاء بن جاتی ہیں (تک <a href="#backfill-allowance">بیک فل الاؤنس</a>) اور روسٹر جم جاتا ہے۔ <strong>میزبان روٹ گیم</strong>: مہمان بائنری فریم کے طور پر ان پٹ بھیجتے ہیں (وہ صرف میزبان تک پہنچتے ہیں)؛ میزبان سنیپ شاٹس نشر کرتا ہے۔ <strong>کمرہ بند اسکرپٹڈ گیم</strong>: ہر کوئی جوڑتا ہے۔ <code>ws/v1/games?sessionId=&lt;gameSessionId&gt;</code> اور اسکرپٹ کے خلاف کھیلتا ہے۔ <code>cmd</code>/<code>game</code> فریم</li>
+<li><strong>درمیانی میچ چھوڑ دیں۔</strong>: میں a <a href="#join-in-progress">شمولیت میں پیش رفت</a> کمرے میں سیٹ اگلے کھلاڑی کے لیے خالی کر دی گئی ہے۔ بصورت دیگر ایک کھلاڑی جو دوران چھوڑ جاتا ہے۔ <code>Playing</code> اس جگہ کو تبدیل کیا جاتا ہے جہاں وہ ایک AI شرکت کنندہ (وہی نشست، نیا سرور سے تیار کردہ عرفی نام) کے ذریعہ بیٹھے تھے اور فوری طور پر دوبارہ قطار میں لگ سکتے ہیں؛ اگر میزبان چلا جاتا ہے تو، میزبان کا کردار سب سے طویل عرصے تک جوائن کرنے والے بقیہ انسان کو جاتا ہے۔ میزبان کے ذریعے چلنے والی گیم میں، ایک میزبان جو اپنا ریئل ٹائم کنکشن چھوڑ دیتا ہے اس کے پاس میچ بند ہونے سے پہلے دوبارہ جڑنے کے لیے 60 سیکنڈ ہوتے ہیں۔ ایک کمرہ بند میچ اپنے میزبان کے دور ہونے کی وجہ سے کبھی بند نہیں ہوتا۔</li>
+<li><strong>ختم کرنا</strong>: host-routed — میزبان نتیجہ پوسٹ کرتا ہے۔ سرور اسکور کو کلیمپ کرتا ہے، نتیجہ کو اسٹور کرتا ہے، اسے تمام ساکٹوں میں دھکیلتا ہے، اور کمرے کو بند کر دیتا ہے۔ کمرہ بند - اسکرپٹ واپس آتا ہے۔ <code>result</code> اور پلیٹ فارم اسے ذخیرہ کرتا ہے اور کمرے کو بند کر دیتا ہے۔</li>
+</ol>
+<h2 id="see-also">یہ بھی دیکھیں</h2>
+<ul>
+<li><a href="/ur/docs/api/relay.html">ریلے</a> - مبہم بائٹ فین آؤٹ گیم سیشن یا ریئل ٹائم روم روسٹر سے منسلک؛ دستیابی مختلف ہو سکتی ہے</li>
+<li><a href="/ur/docs/api/games.html">گیمز</a> - سرور سے مستند اسکرپٹڈ گیمز</li>
+<li><a href="/ur/docs/api/auth.html">تصدیق</a> - لانچ ٹوکن اور گیم اسکوپ باڑ لگانا</li>
+<li><a href="/ur/docs/api/friends.html">دوستو</a> - دعوت نامہ چننے والے کے ذریعہ استعمال کردہ فرینڈ لسٹ</li>
+</ul>
+<p>دیکھیں <a href="/ur/docs/credentials.html">اسناد کی مطابقت</a> اور <a href="/ur/docs/api/contracts.html">مشین پڑھنے کے قابل معاہدے</a>.</p>
+
+{% endraw %}

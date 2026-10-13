@@ -1,0 +1,423 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Logros"
+source_url: "/docs/api/achievements.html"
+source_path: "docs/api/achievements.md"
+source_hash: "c1d53f838d5142ee2120e5c9dae0320c206922aeea5b05f708503462166883e0"
+translation: "machine"
+permalink: "/es/docs/api/achievements.html"
+---
+{% raw %}
+<h1 id="achievements">Logros</h1>
+<p>Un logro pertenece exactamente a <strong>un dueño</strong>, y el propietario decide quién puede desbloquearlo:</p>
+<table>
+<thead>
+<tr>
+<th>Dueño</th>
+<th>Declarado por</th>
+<th>Desbloqueado por</th>
+<th>Úselo para</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Un juego autorizado</strong></td>
+<td><code>game.achievements</code> en un guión, o <code>achievements</code> de un contenedor <code>/describe</code> — <strong>o por el dueño del juego</strong> a través de <a href="#achievements-created-by-the-games-owner"><code>/me/github-games/{id}/achievements</code></a></td>
+<td><strong>Solo el tiempo de ejecución del servidor del juego.</strong> - servidor autorizado</td>
+<td>Juegos con un <code>server=</code> guión o <code>container.image=</code> backend</td>
+</tr>
+<tr>
+<td><strong>Un título de catálogo</strong> (<code>SoftwareTitle</code>)</td>
+<td>Un editor, a través de <a href="/es/docs/api/publisher.html#achievements">API del editor</a></td>
+<td>El cliente del jugador, a través de <code>POST /api/v1/me/achievements/unlock</code> (derecho requerido)</td>
+<td>Títulos distribuidos cuyo cliente es el único que sabe que el jugador ganó algo.</td>
+</tr>
+</tbody>
+</table>
+<p>Los dos son mutuamente excluyentes y la plataforma impone la división:</p>
+<ul>
+<li><code>POST /api/v1/me/achievements/unlock</code> <strong>rechaza logros relacionados con el juego</strong> – un cliente nunca puede reclamar uno.</li>
+<li>Los puntos finales CRUD del editor también los rechazan. No necesitas un editor para un juego de tu propiedad: como
+su dueño tu <strong>son</strong> su editor, y usted gestiona sus logros a través de
+<a href="#achievements-created-by-the-games-owner">los puntos finales del propietario</a> en cambio.</li>
+</ul>
+<p>URL básica: <code>https://api.starhermit.com</code>. Todas las rutas están bajo <code>/api/v1/...</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Camino</th>
+<th>autenticación</th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/games/{slug}/achievements</code></td>
+<td>Portador</td>
+<td>Los logros de un juego autorizado + el estado de desbloqueo de la persona que llama</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/me/github-games/{id}/achievements</code></td>
+<td>JWT (propietario del juego)</td>
+<td>Cada logro de tu juego, con su <code>origin</code> y desbloquear cuenta</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/me/github-games/{id}/achievements</code></td>
+<td>JWT (propietario del juego)</td>
+<td>Crea un logro para tu juego → <code>201</code></td>
+</tr>
+<tr>
+<td>PONER</td>
+<td><code>/api/v1/me/github-games/{id}/achievements/{achievementId}</code></td>
+<td>JWT (propietario del juego)</td>
+<td>Actualiza uno que creaste</td>
+</tr>
+<tr>
+<td>BORRAR</td>
+<td><code>/api/v1/me/github-games/{id}/achievements/{achievementId}</code></td>
+<td>JWT (propietario del juego)</td>
+<td>Elimina uno que creaste y nadie lo ha desbloqueado → <code>204</code></td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/software/{titleId}/achievements</code></td>
+<td>Anónimo</td>
+<td>Definiciones de logros de un título de catálogo</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/me/achievements?titleId=</code></td>
+<td>JWT</td>
+<td>Desbloqueos de la persona que llama (todos los propietarios o un título)</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/me/achievements/unlock</code></td>
+<td>JWT</td>
+<td>Desbloqueo reclamado por el cliente: <strong>solo títulos de catálogo</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Lea los errores a la defensiva como se describe en <a href="/es/docs/api/conventions.html#requests-and-responses">Convenciones API</a>.
+<code>POST /me/achievements/unlock</code> devuelve su <code>400</code> razón como texto plano.</p>
+<h2 id="server-authoritative-game-achievements">Logros de juegos autorizados por el servidor</h2>
+<p>Este es el mecanismo <strong>cualquier</strong> El juego debe usarse cuando tiene un backend de secuencia de comandos o contenedor. el
+El tiempo de ejecución del servidor es el único escritor. Debe validar que el jugador obtuvo cada desbloqueo; rechazando
+Los envíos directos de API por sí solos no validan los eventos informados por un cliente modificado.</p>
+<h3 id="1-declare-them-in-your-script">1. Declaralos en tu script</h3>
+<p>Agregar una estática <code>achievements</code> matriz a la <code>game</code> objeto - ver
+<a href="/es/docs/api/game-scripts.html#achievements">Guiones del juego: logros</a> para el contrato completo:</p>
+<pre><code class="language-js">globalThis.game = {
+  achievements: [
+    { key: "first-win",  name: "First Win",  description: "Win a match.", points: 10 },
+    { key: "flawless",   name: "Flawless",   description: "Win without conceding.",
+      points: 50, secret: true, icon: "https://cdn.example/flawless.png" }
+  ],
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<p>Se lee la declaración <strong>cuando el juego se publica o actualiza</strong> desde su repositorio. Publique una actualización para aplicar un cambio.</p>
+<h3 id="2-unlock-them-from-any-lifecycle-hook">2. Desbloquéalos de cualquier gancho del ciclo de vida.</h3>
+<p>Devolver un <code>achievements</code> mapa - identificación de usuario → conjunto de claves - desde <code>createSession</code>, <code>onPlayerMessage</code>,
+o <code>onTick</code>:</p>
+<pre><code class="language-js">return {
+  ok: true,
+  sessionState: state,
+  achievements: { [winnerId]: ["first-win", "flawless"] },
+  result: { kind: "win", winner: winnerId }
+};
+</code></pre>
+<p>Los desbloqueos son <strong>idempotente</strong> — Devolver una clave que el jugador ya tiene no es una operación, por lo que un script puede
+Vuelva a afirmar un logro en cada tick sin preocuparse por los duplicados.</p>
+<h3 id="3-the-player-is-notified-over-the-gameplay-socket">3. El jugador recibe una notificación a través del conector del juego.</h3>
+<p>Cada desbloqueo recién otorgado se envía únicamente al jugador que lo obtuvo, el <code>ws/v1/games</code>, como su propio marco
+tipo (verdad de plataforma, no un script transmitido <code>game</code> mensaje):</p>
+<pre><code class="language-json">{
+  "type": "achievement",
+  "data": {
+    "key": "first-win",
+    "name": "First Win",
+    "description": "Win a match.",
+    "icon": null,
+    "points": 10,
+    "unlockedAt": "2026-07-25T09:14:02Z"
+  }
+}
+</code></pre>
+<p>Desbloqueos otorgados desde <code>createSession</code> persisten antes de que alguien tenga un socket, por lo que llegan con
+sin marco: léalos desde el punto final de la lista al cargar.</p>
+<h3 id="container-backends">Backends de contenedores</h3>
+<p>Un contenedor declara los mismos campos de logros en <code>GET /describe</code>, luego envía un
+<code>achievements</code> mensaje en su control WebSocket. La plataforma aplica la misma clave, participante,
+idempotencia y reglas de entrega. Ver <a href="/es/docs/api/container-games.html#control-channel">Servidores de juegos en contenedores</a>.</p>
+<h3 id="get-apiv1gamesslugachievements"><code>GET /api/v1/games/{slug}/achievements</code></h3>
+<p>Cada logro que declara el juego, con el estado de desbloqueo de la persona que llama. <code>404</code> si la babosa no tiene
+definición autorizada del juego (un juego sin script o contenedor backend no tiene propiedad del juego).
+logros - ver <a href="#which-games-can-use-this">¿Qué juegos pueden usar esto?</a>). Los logros secretos están ocultos hasta el
+la persona que llama los desbloquea. Ordenado por creación, luego clave.</p>
+<pre><code class="language-json">[
+  {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "key": "first-win",
+    "name": "First Win",
+    "description": "Win a match.",
+    "icon": null,
+    "secret": false,
+    "points": 10,
+    "unlocked": true,
+    "unlockedAt": "2026-07-25T09:14:02Z"
+  }
+]
+</code></pre>
+<p>Funciona con un JWT de usuario completo o un token de inicio específico para el juego.</p>
+<h3 id="which-games-can-use-this">¿Qué juegos pueden usar esto?</h3>
+<p>El mecanismo está disponible para un juego que declara una <code>server=</code> guión o un
+<code>container.image=</code> backend en <a href="/es/docs/api/github-games.html#the-manifest-starhermittxt"><code>starhermit.txt</code></a>. el
+El tiempo de ejecución del servidor hace que el desbloqueo sea autorizado. Los casos de uso respaldados por scripts incluyen:</p>
+<ul>
+<li><strong>Juegos de plataformas con guión</strong> — desbloquear desde <code>onPlayerMessage</code> / <code>onTick</code> mientras se desarrolla el partido.</li>
+<li><strong>Juegos en tiempo real en salas</strong> — a <a href="/es/docs/api/realtime.html#room-bound-sessions">sala en tiempo real</a> por un
+juego con un <code>server=</code> El script crea una sesión vinculada cuando se inicia, y cada enlace de esa
+La sesión puede otorgar logros.</li>
+<li><strong>Juegos para un jugador y de práctica.</strong> — una sesión contra el asiento de AI
+(<code>POST /api/v1/games/{slug}/sessions/ai</code>) ejecuta el mismo script y la misma ruta de desbloqueo.</li>
+<li><strong>Juegos en tiempo real enrutados por host</strong> - un juego cuya jugabilidad transcurre sobre el
+<a href="/es/docs/api/realtime.html#binary-frames-gameplay">canal binario de sala en tiempo real</a> todavía puede enviar un script de servidor
+puramente como su autoridad de logro: el inicio de la sala crea la sesión vinculada y el guión
+premios de <code>createSession</code> / <code>onTick</code> / duradero <code>cmd</code> mensajes enviados <code>ws/v1/games</code> mientras que el
+El camino rápido sigue fluyendo. <code>ws/v1/realtime</code>.</li>
+</ul>
+<p>Las sesiones respaldadas por contenedores también pueden declarar y otorgar logros a través de su protocolo. un juego
+con <strong>sin backend autorizado</strong> (un juego de navegador puro, o uno construido sólo en el <a href="/es/docs/api/relay.html">relevo entre pares</a>)
+no tiene una ruta de desbloqueo autorizada por el servidor. El desbloqueo reclamado por el cliente está disponible sólo para
+títulos distribuidos por catálogo, a continuación.</p>
+<h3 id="limits-and-rules">Límites y reglas</h3>
+<table>
+<thead>
+<tr>
+<th>Regla</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Logros declarados por juego</td>
+<td>100 (extras ignorados)</td>
+</tr>
+<tr>
+<td>Longitud de la clave de logro</td>
+<td>128 caracteres</td>
+</tr>
+<tr>
+<td>Claves de desbloqueo aceptadas por jugador, por invocación.</td>
+<td>32</td>
+</tr>
+<tr>
+<td><code>points</code></td>
+<td>fijado a 0–10000; por defecto es 0</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>por defecto el <code>key</code> cuando se omite</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Una entrada de declaración con formato incorrecto es <strong>saltado</strong>. Un script que no se evalúa produce un resultado vacío.
+lista; La declaración de un contenedor se lee después de pasar los controles de salud. Verificar con
+<code>GET /api/v1/games/{slug}/achievements</code> después del despliegue.</li>
+<li>Definiciones upsert por <code>key</code>. Se elimina una clave que su backend deja de declarar <strong>solo si nadie tiene
+lo desbloqueé</strong> — la historia ganada nunca se destruye. Logros que el propietario creó a través de la API
+nunca se ven afectados por esto: sólo los declarados se reconcilian.</li>
+<li>Se ignoran los desbloqueos para usuarios que no participan en la sesión y para el puesto de IA.</li>
+</ul>
+<h2 id="achievements-from-other-games">Logros de otros juegos.</h2>
+<p>Un juego puede abrir funciones basadas en lo que el jugador desbloqueó <strong>otro</strong> juego: una secuela en honor
+el original, o juegos de una serie que comparten cosméticos. Hay dos formas de leerlos.</p>
+<h3 id="from-your-server-ctxlinkedachievements-trusted">Desde su servidor: <code>ctx.linkedAchievements</code> (confiable)</h3>
+<p>Nombra los otros juegos en tu guión, junto a tus otras declaraciones:</p>
+<pre><code class="language-js">globalThis.game = {
+  linkedAchievements: ["83fd04b1-3cbe-4b09-a251-3733ad4b9d94"], // other games' slugs (uids)
+  // ...
+};
+</code></pre>
+<p>Un contenedor devuelve lo mismo <code>linkedAchievements</code> matriz de <code>GET /describe</code>. Cada guión
+El ctx de invocación luego lleva las claves desbloqueadas de cada jugador humano en esos juegos:</p>
+<pre><code class="language-js">ctx.linkedAchievements = {
+  "7c9e6679-...": {                                   // player id
+    "83fd04b1-3cbe-4b09-a251-3733ad4b9d94": ["first-win", "checkmate-10"]
+  }
+};
+</code></pre>
+<ul>
+<li>Se vuelve a leer en <strong>cada invocación</strong>, por lo que un desbloqueo obtenido en el otro juego a mitad del partido se ve en
+el siguiente. Un contenedor lo recibe en el ctx de <code>POST /sessions</code>, es decir, en crear y en
+restaurar.</li>
+<li>A lo sumo <strong>8</strong> juegos; entradas que no sean cadenas no vacías, duplicados y slugs superiores a 100
+los personajes se eliminan. Al igual que las demás declaraciones, se lee cuando se publica el juego o
+actualizado.</li>
+<li>Un juego que declara que nada obtiene no. <code>linkedAchievements</code> campo y no paga nada.</li>
+<li>Utilice esta ruta para cualquier cosa que la plataforma deba exigir, como desbloquear el juego u otorgar una
+logro propio.</li>
+</ul>
+<h3 id="from-your-client-get-apiv1gamessluglinked-achievementsotherslug">De su cliente: <code>GET /api/v1/games/{slug}/linked-achievements/{otherSlug}</code></h3>
+<p>El propio autor de la llamada se desbloquea en <code>otherSlug</code>. No necesita declaración, por lo que un juego sólo para navegador sin
+El servidor puede usarlo y funciona con el token de inicio para <code>{slug}</code>: los propios puntos finales del otro juego
+manténgase alejado de esa ficha.</p>
+<pre><code class="language-json">{
+  "game": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "hidden": false,
+  "unlocked": [
+    { "key": "first-win", "unlockedAt": "2026-07-25T09:14:02Z" }
+  ]
+}
+</code></pre>
+<p>Un cliente puede mentir sobre lo que recibió, así que trate esto como una pista para la interfaz de usuario y los cosméticos, no como una prueba.</p>
+<h3 id="what-is-disclosed">lo que se divulga</h3>
+<ul>
+<li><strong>Desbloquea solo el estado del juego que nombraste</strong>: claves y tiempos de desbloqueo, nunca nombres, descripciones o
+la lista de otros juegos que el jugador ha jugado. Un logro secreto que el jugador ha desbloqueado es
+incluido.</li>
+<li>Una babosa que no coincide con las respuestas de ningún juego es como un juego sin nada desbloqueado.</li>
+<li><strong>Se respeta la privacidad.</strong> Un jugador cuyos logros son la privacidad. <code>Private</code> es <strong>oculto</strong>: ausente
+de <code>ctx.linkedAchievements</code>, y <code>"hidden": true</code> con una lista vacía desde el punto final. Oculto
+no es lo mismo que "no tiene ninguno", así que no lo trates como tal. <code>FriendsOnly</code> (el valor predeterminado) se revela,
+porque el lector actúa en nombre del jugador.</li>
+</ul>
+<h2 id="achievements-created-by-the-games-owner">Logros creados por el propietario del juego.</h2>
+<p>Declarar logros en el código no es la única forma de darle algunos a tu juego. Si tienes un juego con un
+<code>server=</code> guión o <code>container.image=</code> backend, también puedes crear logros para él a través del
+API: como lo hace un editor con el título de un catálogo, sin necesidad de cuenta de editor ni permiso.
+Ser propietario del juego es la totalidad de la subvención. Úselo cuando un diseñador quiera agregar o reformular
+logros sin un cambio de código, o cuando su backend otorga claves que no declara.</p>
+<p><strong>Sólo el servidor de tu juego puede desbloquearlos.</strong>, exactamente como los declarados: su script devuelve la clave
+en <code>achievements</code>, o su contenedor lo envía por el canal de control. Nada cambia en el
+lado de desbloqueo: las claves se resuelven contra <em>todo</em> de los logros del juego, declarados y creados.</p>
+<p><code>{id}</code> es la identificación de tu juego de <code>GET /api/v1/me/github-games</code>.</p>
+<h3 id="post-apiv1megithub-gamesidachievements"><code>POST /api/v1/me/github-games/{id}/achievements</code></h3>
+<pre><code class="language-json">{
+  "key": "speedrunner",
+  "name": "Speedrunner",
+  "description": "Finish a level in under a minute.",
+  "icon": "https://cdn.example/speedrunner.png",
+  "secret": false,
+  "points": 25
+}
+</code></pre>
+<p><code>key</code>, <code>name</code> y <code>description</code> son requeridos. Devoluciones <code>201</code>:</p>
+<pre><code class="language-json">{
+  "id": "…",
+  "key": "speedrunner",
+  "name": "Speedrunner",
+  "description": "Finish a level in under a minute.",
+  "icon": "https://cdn.example/speedrunner.png",
+  "secret": false,
+  "points": 25,
+  "origin": "owner",
+  "unlocks": 0,
+  "createdAt": "…",
+  "updatedAt": "…"
+}
+</code></pre>
+<p><code>GET</code> En el mismo camino se enumeran todos los logros del juego de esta forma: <code>origin</code> es <code>declared</code>
+para los que su script o contenedor declara y <code>owner</code> para los creados aquí, y <code>unlocks</code>
+cuenta cuántos jugadores tienen cada uno.</p>
+<p><code>PUT .../achievements/{achievementId}</code> toma cualquiera de <code>name</code>, <code>description</code>, <code>icon</code>, <code>secret</code> y
+<code>points</code>; el <code>key</code> no puede cambiar. <code>DELETE</code> lo elimina.</p>
+<h3 id="rules">Normas</h3>
+<table>
+<thead>
+<tr>
+<th>Regla</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Llave</td>
+<td>1–128 caracteres: letras, dígitos, <code>.</code>, <code>_</code>, <code>-</code>, comenzando con una letra o dígito</td>
+</tr>
+<tr>
+<td><code>name</code> / <code>description</code></td>
+<td>requerido; como máximo 200/2000 caracteres</td>
+</tr>
+<tr>
+<td><code>points</code></td>
+<td>0–10000; por defecto es 0</td>
+</tr>
+<tr>
+<td>Logros creados por el propietario por juego</td>
+<td>200 (aparte de los hasta 100 declarados)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Un logro declarado sigue siendo el de tu código.</strong> Creando una clave el juego ya tiene devuelve <code>409</code>,
+y también lo hace editar o eliminar un <code>declared</code> uno: la próxima actualización lo devolverá como su código
+lo declara. Cámbialo en tu script o <code>/describe</code> en cambio.</li>
+<li><strong>Si su código luego declara una clave que creó aquí</strong>, la declaración toma ese logro
+encima (<code>origin</code> se convierte <code>declared</code>). Los jugadores que lo obtuvieron se lo quedan.</li>
+<li><strong>Un logro que alguien ha desbloqueado no se puede eliminar.</strong> (<code>409</code>).</li>
+<li><code>404</code> significa que el juego no es tuyo; <code>409</code> en cualquiera de estas rutas con un mensaje sobre un servidor
+backend significa que el juego no tiene ninguno: un juego solo para navegador no tiene nada que pueda desbloquear un
+logro.</li>
+</ul>
+<p>Paso a paso: <a href="/es/docs/tutorials/game-leaderboards-achievements.html">Tutorial: tablas de clasificación y logros para tu juego</a>.</p>
+<h2 id="catalog-title-achievements">Logros del título del catálogo</h2>
+<p>Para software distribuido a través del catálogo, donde el cliente es lo único que observa las
+condición de desbloqueo. Las definiciones se leen de forma anónima; el desbloqueo requiere un JWT y un no revocado
+derecho al título.</p>
+<h3 id="get-apiv1softwaretitleidachievements"><code>GET /api/v1/software/{titleId}/achievements</code></h3>
+<p><code>AchievementDto[]</code>. Los logros secretos están ocultos a menos que la persona que llama los desbloquee (y sus
+<code>criteria</code> se retiene hasta entonces). Los logros relacionados con el juego nunca aparecen aquí.</p>
+<pre><code class="language-json">[
+  {
+    "id": "…",
+    "key": "…",
+    "name": "…",
+    "description": "…",
+    "icon": "…",
+    "secret": false,
+    "points": 10,
+    "visibility": "…",
+    "criteria": "…"
+  }
+]
+</code></pre>
+<h3 id="post-apiv1meachievementsunlock"><code>POST /api/v1/me/achievements/unlock</code></h3>
+<pre><code class="language-json">{ "achievementDefinitionId": "…" }
+</code></pre>
+<p>Devoluciones <code>204</code>. Devoluciones <code>400</code> cuando el logro no existe, cuando la persona que llama no tiene derecho
+al título (ver <a href="/es/docs/api/catalog.html">catalog.md</a>), o cuando el logro es <strong>ámbito del juego</strong> - esos son
+otorgado únicamente por el script autorizado o el backend del contenedor. Volver a desbloquear algo que ya se tiene regresa <code>204</code>.</p>
+<p>La gestión por parte del editor (definir, actualizar y eliminar logros de títulos) reside en
+<a href="/es/docs/api/publisher.html#achievements">publisher.md</a>.</p>
+<h2 id="get-apiv1meachievements"><code>GET /api/v1/me/achievements</code></h2>
+<p>La persona que llama se desbloquea como <code>UserAchievementDto[]</code>. <strong>sin <code>titleId</code> esto devuelve cada desbloqueo
+retenciones del usuario, tanto en el ámbito del juego como en el del título</strong>; aprobar <code>?titleId=</code> para limitarlo a un título de catálogo.</p>
+<pre><code class="language-json">[
+  {
+    "id": "…",
+    "achievementDefinitionId": "…",
+    "key": "…",
+    "name": "…",
+    "description": "…",
+    "icon": "…",
+    "points": 10,
+    "unlockedAt": "…"
+  }
+]
+</code></pre>
+<p>Para la pantalla de logros propia de un juego, prefiera <code>GET /api/v1/games/{slug}/achievements</code>, que también
+devuelve las definiciones que tiene el jugador <em>no</em> aún desbloqueado.</p>
+<p>Compartido <a href="/es/docs/api/conventions.html">Convenciones API</a> Describe el análisis de respuestas, las marcas de tiempo, la paginación y los reintentos.</p>
+<p>Ver <a href="/es/docs/credentials.html">compatibilidad de credenciales</a> y <a href="/es/docs/api/contracts.html">contratos legibles por máquina</a>.</p>
+
+{% endraw %}

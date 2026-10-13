@@ -1,0 +1,365 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "Catalogue de logiciels"
+source_url: "/docs/api/catalog.html"
+source_path: "docs/api/catalog.md"
+source_hash: "0dc7378c084cb717711091cd651d3fc514625f8737814c055edb6ab2fe19467a"
+translation: "machine"
+permalink: "/fr/docs/api/catalog.html"
+---
+{% raw %}
+<h1 id="software-catalog">Catalogue de logiciels</h1>
+<p>Le catalogue de logiciels couvre la navigation et la revendication de titres, la création de listes, le téléchargement, les sauvegardes dans le cloud, la liste de souhaits et les évaluations. Les lectures sont anonymes&#160;; les écritures nécessitent un JWT.</p>
+<p>URL de base&#160;: <code>https://api.starhermit.com</code>. Tous les itinéraires sont sous <code>/api/v1/...</code>.</p>
+<h2 id="browsing-and-claiming-titles">Parcourir et revendiquer des titres</h2>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Chemin</th>
+<th>Authentification</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/software</code></td>
+<td>Anonyme</td>
+<td>Rechercher et paginer le catalogue</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/software/{id}</code></td>
+<td>Anonyme</td>
+<td>Obtenez un titre, ou 404</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/software/{id}/builds?page=&amp;pageSize=</code></td>
+<td>Anonyme</td>
+<td>Liste paginée des builds pour un titre</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/software/{id}/claim</code></td>
+<td>JWT</td>
+<td>Réclamer soi-même un titre gratuit, accordant un droit</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/software/{id}/launch</code></td>
+<td>JWT</td>
+<td>Démarrer une session de lancement (nécessite un droit)</td>
+</tr>
+</tbody>
+</table>
+<p><code>GET /api/v1/software</code> accepte les paramètres de requête <code>q</code> (texte intégral), <code>category</code>, <code>tag</code>, <code>publisherId</code>, <code>platform</code>, <code>releaseStatus</code>, <code>sort</code>, <code>page</code>, et <code>pageSize</code>. Valide <code>sort</code> valeurs: <code>name</code>, <code>name_desc</code>, <code>created</code>, <code>created_desc</code>, <code>updated</code>, <code>updated_desc</code>. Il renvoie un <code>PagedResult</code>:</p>
+<pre><code class="language-json">{
+  "items": [
+    {
+      "id": "…",
+      "name": "…",
+      "description": "…",
+      "publisherId": "…",
+      "category": "…",
+      "platform": "…",
+      "releaseStatus": "…",
+      "tags": ["…"],
+      "priceCents": 0,
+      "createdAt": "…",
+      "updatedAt": "…"
+    }
+  ],
+  "totalCount": 1,
+  "page": 1,
+  "pageSize": 20
+}
+</code></pre>
+<p><code>GET /api/v1/software/{id}/builds</code> renvoie un <code>PagedResult</code> de <code>SoftwareBuild</code>:</p>
+<pre><code class="language-json">{
+  "items": [
+    {
+      "id": "…",
+      "titleId": "…",
+      "version": "…",
+      "releaseDate": "…",
+      "releaseNotes": "…",
+      "metadata": "…",
+      "createdAt": "…",
+      "updatedAt": "…"
+    }
+  ],
+  "totalCount": 1,
+  "page": 1,
+  "pageSize": 20
+}
+</code></pre>
+<p><code>POST /api/v1/software/{id}/claim</code> fonctionne uniquement pour les titres gratuits (<code>priceCents == 0</code>); il accorde à l'appelant un droit et renvoie 204. Pour les titres payants, il renvoie 402 avec&#160;:</p>
+<pre><code class="language-json">{"error": "purchasing is not available yet"}
+</code></pre>
+<p><code>POST /api/v1/software/{id}/launch</code> nécessite un droit (403 sinon) et renvoie un <code>LaunchSession</code>:</p>
+<pre><code class="language-json">{
+  "launchId": "…",
+  "startTime": "…"
+}
+</code></pre>
+<p>Il enregistre une activité de lancement, qui est masquée si les paramètres de confidentialité de l'utilisateur le prévoient (voir <a href="/fr/docs/api/profile.html">profile.md</a>). Terminez la séance avec <code>POST /api/v1/activity/launches/{id}/end</code> - voir <a href="/fr/docs/api/activity.html">activity.md</a>. Les droits d'un utilisateur sont répertoriés via <code>GET /api/v1/me/entitlements</code> (voir <a href="/fr/docs/api/profile.html">profile.md</a>).</p>
+<h2 id="downloads">Téléchargements</h2>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Chemin</th>
+<th>Authentification</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/software/{id}/download</code></td>
+<td>JWT</td>
+<td>Obtenez une URL de téléchargement signée (nécessite un droit)</td>
+</tr>
+</tbody>
+</table>
+<p>Nécessite un droit (403 sinon). Retours&#160;:</p>
+<pre><code class="language-json">{
+  "downloadUrl": "…"
+}
+</code></pre>
+<p>L'URL cible la première ressource téléchargeable de la dernière version. L'appel enregistre une activité de téléchargement.
+La distribution binaire du catalogue est actuellement un aperçu&#160;; les URL renvoyées ne sont pas garanties en production
+téléchargements. Voir <a href="/fr/docs/availability.html">disponibilité des fonctionnalités</a> avant de s’appuyer sur ce flux de publication.</p>
+<h2 id="cloud-saves">Sauvegardes cloud</h2>
+<p>Un emplacement par jeu, la dernière écriture gagne. Tous les itinéraires nécessitent un JWT&#160;: un jeton d'utilisateur complet ou un jeton de jeu.
+jeton de lancement pour le propre emplacement de ce jeu (ci-dessous).</p>
+<p>La limite de 10&#160;Mo (10&#160;485&#160;760&#160;octets) s'applique au <strong>sauvegarde décodée</strong>, pas la demande. <code>PUT</code> prend le
+sauvegarde codée en base64 en JSON, de sorte que le corps est environ un tiers plus grand que la sauvegarde – environ 14 Mo à
+le plafond - et l'API l'accepte.</p>
+<table>
+<thead>
+<tr>
+<th>Limite (par compte)</th>
+<th>Défaut</th>
+<th>Refus</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Une sauvegarde, décodée</td>
+<td>10 Mo</td>
+<td><code>413 cloud_save_too_large</code></td>
+</tr>
+<tr>
+<td>Jeux avec sauvegarde</td>
+<td>200</td>
+<td><code>409 cloud_save_slots_exhausted</code> (une sauvegarde pour un nouveau jeu)</td>
+</tr>
+<tr>
+<td>Tous les sauvegardes ensemble</td>
+<td>1 Go</td>
+<td><code>507 cloud_save_quota_exceeded</code>, avec <code>used</code></td>
+</tr>
+<tr>
+<td>Téléchargements</td>
+<td>30 par minute</td>
+<td><code>429</code>, avec <code>Retry-After</code></td>
+</tr>
+</tbody>
+</table>
+<p>Chaque refus nomme le numéro en vigueur comme <code>limit</code>. Le total est mesuré sur la durée du compte <em>autre</em>
+enregistre, de sorte qu'un emplacement peut toujours être écrasé par quelque chose de pas plus gros. Les opérateurs peuvent modifier n'importe lequel des
+ceux-ci pour un seul compte.</p>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Chemin</th>
+<th>Authentification</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}/info</code></td>
+<td>JWT</td>
+<td>Enregistrer les métadonnées&#160;: <code>{ exists, sizeBytes, updatedAt? }</code></td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}</code></td>
+<td>JWT</td>
+<td><code>application/zip</code> octets, 404 si aucun</td>
+</tr>
+<tr>
+<td>METTRE</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}</code></td>
+<td>JWT</td>
+<td>Téléchargez une sauvegarde (sauvegarde décodée ≤ 10 Mo, <code>gameKey</code> ≤ 300 caractères)</td>
+</tr>
+</tbody>
+</table>
+<p>METTRE le corps&#160;:</p>
+<pre><code class="language-json">{
+  "dataBase64": "…"
+}
+</code></pre>
+<p>Réponse PUT&#160;:</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "sizeBytes": 0,
+  "updatedAt": "…"
+}
+</code></pre>
+<h3 id="saving-from-inside-a-game-launch-token">Sauvegarde depuis l'intérieur d'un jeu (jeton de lancement)</h3>
+<p>Un jeu exécuté avec son jeton de lancement peut lire et écrire la sauvegarde du joueur pendant <strong>ce jeu</strong>.
+Votre jeu s'enregistre partout où il est exécuté&#160;: un navigateur ou l'application de bureau StarHermit, qui s'exécute
+jeux hébergés également dans un navigateur – de sorte que la sauvegarde suit le joueur entre eux.</p>
+<p>La clé est <code>game:&lt;gameId&gt;</code>, où <code>&lt;gameId&gt;</code> est l'identifiant de votre jeu - la même valeur que son slug, son
+<code>&lt;gameId&gt;.starhermit.com</code> l'adresse, et le <code>game_scope</code> revendication du jeton de lancement&#160;:</p>
+<pre><code class="language-js">const key = `game:${gameScope}`;            // e.g. "game:3fa85f64-5717-4562-b3fc-2c963f66afa6"
+
+// Load on startup — 404 means no save yet.
+const res = await fetch(`/api/v1/me/cloud-saves/${key}`, { headers: { Authorization: `Bearer ${launchToken}` } });
+if (res.status !== 404 &amp;&amp; !res.ok) throw new Error(`Save load failed: ${res.status}`);
+const save = res.status === 404 ? null : new Uint8Array(await res.arrayBuffer());
+const etag = res.headers.get("ETag");
+if (save &amp;&amp; !etag) throw new Error("Save version unavailable; do not overwrite it.");
+// Validate/decode your own save format before adopting it or enabling uploads.
+
+// Save at checkpoints, not every frame.
+const written = await fetch(`/api/v1/me/cloud-saves/${key}`, {
+  method: "PUT",
+  headers: {
+    Authorization: `Bearer ${launchToken}`, "Content-Type": "application/json",
+    ...(etag ? { "If-Match": etag } : { "If-None-Match": "*" }),
+  },
+  body: JSON.stringify({ dataBase64: base64(zipBytes) }), // Your ZIP encoder and bytes.
+});
+if (written.status === 412) throw new Error("Another device saved. Reload before writing again.");
+if (!written.ok) throw new Error(`Save write failed: ${written.status}`);
+const acknowledgement = await written.json(); // Retain acknowledgement.etag for your next write.
+</code></pre>
+<ul>
+<li><strong>Seulement cette clé exacte.</strong> Toute autre clé&#160;: celle d'un autre jeu, celle d'un jeu en magasin ou une orthographe différente
+de la vôtre (majuscules, l'identifiant nu) - est <code>403</code> pour un jeton de lancement. Cela comprend <code>github:&lt;gameId&gt;</code>,
+l'emplacement séparé que l'application de bureau utilise lorsqu'un joueur synchronise un dossier de sauvegarde local pour votre jeu, donc
+cette synchronisation ne peut jamais écraser la sauvegarde écrite par votre jeu.</li>
+<li><strong>N'importe quel format.</strong> La plateforme n'ouvre jamais la sauvegarde ; stockez tout ce que votre jeu peut lire (c'est
+servi de <code>application/zip</code> indépendamment de). Jusqu'à 10 Mo.</li>
+<li><strong>Les écritures inconditionnelles sont les dernières victoires d'écriture</strong>, sans historique. Utiliser les écritures conditionnelles pour détecter
+deux onglets/appareils économisant en même temps. Chargez au démarrage et enregistrez aux points de contrôle au premier plan. Sortie de page
+les téléchargements s'effectuent au mieux et sont soumis à des limites de taille de navigateur&#160;; voir <a href="/fr/docs/tutorials/cloud-save-sync.html">la recette pour sauver en toute sécurité</a>.</li>
+<li><strong>Chaque sauvegarde a une version.</strong> C'est <code>ETag</code> est en téléchargement, sur <code>/info</code> (aussi comme <code>etag</code>) et sur
+le <code>PUT</code> réponse. Renvoyez-le comme <code>If-Match</code> et l'écriture n'a lieu que si personne n'a sauvegardé
+depuis; sinon <code>412 {"error":"precondition_failed","etag":"&lt;current&gt;"}</code> vous indique la version à
+charge. <code>If-Match: *</code> nécessite une sauvegarde existante&#160;; <code>If-None-Match: *</code> n'écrit que lorsqu'il n'y en a pas.
+Sans en-tête <code>PUT</code> est inconditionnel&#160;: la dernière écriture l'emporte. UN <code>GET</code> avec
+<code>If-None-Match: &lt;etag&gt;</code> réponses <code>304</code> lorsque vous détenez déjà la sauvegarde la plus récente.</li>
+<li>Un jeu sans liste hébergée (un jeu fourni par l'opérateur) n'a pas d'emplacement.</li>
+</ul>
+<p>Les petites préférences qui changent fréquemment appartiennent à <a href="/fr/docs/api/games.html#per-player-game-settings">paramètres par joueur</a>
+plutôt; ils sont également accessibles avec le jeton de lancement et prennent en charge les mises à jour partielles.</p>
+<h2 id="wishlist">Liste de souhaits</h2>
+<p>Tous les itinéraires nécessitent un JWT.</p>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Chemin</th>
+<th>Authentification</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/me/wishlist</code></td>
+<td>JWT</td>
+<td><code>{ titleIds: guid[] }</code></td>
+</tr>
+<tr>
+<td>METTRE</td>
+<td><code>/api/v1/me/wishlist/{titleId}</code></td>
+<td>JWT</td>
+<td>Ajouter à la liste de souhaits, 204 (idempotent)</td>
+</tr>
+<tr>
+<td>SUPPRIMER</td>
+<td><code>/api/v1/me/wishlist/{titleId}</code></td>
+<td>JWT</td>
+<td>Supprimer de la liste de souhaits, 204</td>
+</tr>
+</tbody>
+</table>
+<h2 id="ratings">Notes</h2>
+<p>Tous les itinéraires nécessitent un JWT. La clé de jeu uniforme est un guide de catalogue, ou <code>"provider:externalId"</code> pour les jeux externes (voir <a href="/fr/docs/api/external-libraries.html">external-libraries.md</a>).</p>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Chemin</th>
+<th>Authentification</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>METTRE</td>
+<td><code>/api/v1/me/ratings</code></td>
+<td>JWT</td>
+<td>Augmenter ma note pour un jeu</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/ratings/query</code></td>
+<td>JWT</td>
+<td>Résumés des évaluations par lots</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/ratings/reviews?key=&amp;top=</code></td>
+<td>JWT</td>
+<td>Critiques d'un jeu (<code>top</code> par défaut 10)</td>
+</tr>
+</tbody>
+</table>
+<p>METTRE le corps&#160;:</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "stars": 4,
+  "review": "…"
+}
+</code></pre>
+<p><code>stars</code> est compris entre 0 et 5&#160;; <code>review</code> est facultatif. La réponse est un <code>RatingSummaryDto</code>:</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "average": 4.5,
+  "count": 12,
+  "myStars": 4
+}
+</code></pre>
+<p><code>POST /api/v1/ratings/query</code> corps et réponse :</p>
+<pre><code class="language-json">{
+  "keys": ["…", "…"]
+}
+</code></pre>
+<p>retours <code>RatingSummaryDto[]</code>. <code>GET /api/v1/ratings/reviews</code> retours <code>GameReviewDto[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "userId": "…",
+    "username": "…",
+    "stars": 4,
+    "review": "…",
+    "timestamp": "…"
+  }
+]
+</code></pre>
+<p>Voir <a href="/fr/docs/api/conventions.html#requests-and-responses">Conventions API</a> pour l'analyse des erreurs. En rapport: <a href="/fr/docs/api/achievements.html">achievements.md</a>, <a href="/fr/docs/api/leaderboards.html">leaderboards.md</a>.</p>
+<p>Voir <a href="/fr/docs/credentials.html">compatibilité des informations d'identification</a> et <a href="/fr/docs/api/contracts.html">contrats lisibles par machine</a>.</p>
+
+{% endraw %}

@@ -1,0 +1,423 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "成就"
+source_url: "/docs/api/achievements.html"
+source_path: "docs/api/achievements.md"
+source_hash: "c1d53f838d5142ee2120e5c9dae0320c206922aeea5b05f708503462166883e0"
+translation: "machine"
+permalink: "/zh-CN/docs/api/achievements.html"
+---
+{% raw %}
+<h1 id="achievements">成就</h1>
+<p>一项成就完全属于 <strong>一位业主</strong>，所有者决定谁可以解锁它：</p>
+<table>
+<thead>
+<tr>
+<th>所有者</th>
+<th>声明者</th>
+<th>解锁者</th>
+<th>用它来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>一款权威的游戏</strong></td>
+<td><code>game.achievements</code> 在脚本中，或者 <code>achievements</code> 从容器的 <code>/describe</code> — <strong>或由游戏所有者</strong> 通过 <a href="#achievements-created-by-the-games-owner"><code>/me/github-games/{id}/achievements</code></a></td>
+<td><strong>仅游戏的服务器运行时</strong> — 服务器权威</td>
+<td>游戏与 <code>server=</code> 脚本或 <code>container.image=</code> 后端</td>
+</tr>
+<tr>
+<td><strong>目录标题</strong> (<code>SoftwareTitle</code>)</td>
+<td>出版商通过 <a href="/zh-CN/docs/api/publisher.html#achievements">发布者API</a></td>
+<td>玩家的客户端，通过 <code>POST /api/v1/me/achievements/unlock</code> （需要权利）</td>
+<td>分布式游戏，其客户端是唯一知道玩家赢得某些东西的人</td>
+</tr>
+</tbody>
+</table>
+<p>两者是互斥的，平台强制拆分：</p>
+<ul>
+<li><code>POST /api/v1/me/achievements/unlock</code> <strong>拒绝游戏范围内的成就</strong> — 客户永远无法认领。</li>
+<li>发布者 CRUD 端点也拒绝它们。您不需要为您拥有的游戏寻找发行商：
+它的主人你 <strong>是</strong> 它的出版商，您可以通过以下方式管理其成就
+<a href="#achievements-created-by-the-games-owner">所有者端点</a> 反而。</li>
+</ul>
+<p>基本网址： <code>https://api.starhermit.com</code>。所有路线均在 <code>/api/v1/...</code>.</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/achievements</code></td>
+<td>承载者</td>
+<td>权威游戏成就+调用方解锁状态</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/github-games/{id}/achievements</code></td>
+<td>JWT（游戏所有者）</td>
+<td>您游戏中的每一项成就，及其 <code>origin</code> 并解锁计数</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/me/github-games/{id}/achievements</code></td>
+<td>JWT（游戏所有者）</td>
+<td>为您的游戏创建成就 → <code>201</code></td>
+</tr>
+<tr>
+<td>放</td>
+<td><code>/api/v1/me/github-games/{id}/achievements/{achievementId}</code></td>
+<td>JWT（游戏所有者）</td>
+<td>更新您创建的一个</td>
+</tr>
+<tr>
+<td>删除</td>
+<td><code>/api/v1/me/github-games/{id}/achievements/{achievementId}</code></td>
+<td>JWT（游戏所有者）</td>
+<td>删除您创建的且无人解锁的 → <code>204</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/software/{titleId}/achievements</code></td>
+<td>匿名的</td>
+<td>目录标题的成就定义</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/achievements?titleId=</code></td>
+<td>智威汤逊</td>
+<td>调用者的解锁（所有所有者，或一个头衔）</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/me/achievements/unlock</code></td>
+<td>智威汤逊</td>
+<td>客户声称解锁—— <strong>仅目录标题</strong></td>
+</tr>
+</tbody>
+</table>
+<p>防御性地读取错误，如中所述 <a href="/zh-CN/docs/api/conventions.html#requests-and-responses">API约定</a>.
+<code>POST /me/achievements/unlock</code> 返回其 <code>400</code> 原因为纯文本。</p>
+<h2 id="server-authoritative-game-achievements">服务器权威游戏成就</h2>
+<p>这就是机制 <strong>任何</strong> 当游戏有脚本或容器后端时应该使用。的
+服务器运行时是唯一的编写者。它必须验证玩家是否获得了每个解锁；拒绝
+直接 API 提交本身并不能验证修改后的客户端报告的事件。</p>
+<h3 id="1-declare-them-in-your-script">1. 在脚本中声明它们</h3>
+<p>添加静态 <code>achievements</code> 数组到 <code>game</code> 对象——参见
+<a href="/zh-CN/docs/api/game-scripts.html#achievements">游戏脚本——成就</a> 对于完整合同：</p>
+<pre><code class="language-js">globalThis.game = {
+  achievements: [
+    { key: "first-win",  name: "First Win",  description: "Win a match.", points: 10 },
+    { key: "flawless",   name: "Flawless",   description: "Win without conceding.",
+      points: 50, secret: true, icon: "https://cdn.example/flawless.png" }
+  ],
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<p>声明已读 <strong>游戏发布或更新时</strong> 从它的存储库中。发布更新以应用更改。</p>
+<h3 id="2-unlock-them-from-any-lifecycle-hook">2.从任何生命周期挂钩中解锁它们</h3>
+<p>返回一个 <code>achievements</code> 地图 — 用户 ID → 键数组 — 来自 <code>createSession</code>, <code>onPlayerMessage</code>，
+或者 <code>onTick</code>:</p>
+<pre><code class="language-js">return {
+  ok: true,
+  sessionState: state,
+  achievements: { [winnerId]: ["first-win", "flawless"] },
+  result: { kind: "win", winner: winnerId }
+};
+</code></pre>
+<p>解锁有 <strong>幂等的</strong> — 返回玩家已持有的密钥是无操作的，因此脚本可以
+在每次勾选时重新声明一项成就，而不必担心重复。</p>
+<h3 id="3-the-player-is-notified-over-the-gameplay-socket">3. 通过游戏套接字通知玩家</h3>
+<p>每个新授予的解锁仅推送给赚钱的玩家， <code>ws/v1/games</code>，作为它自己的框架
+类型（平台真相，不是脚本中继 <code>game</code> 信息）：</p>
+<pre><code class="language-json">{
+  "type": "achievement",
+  "data": {
+    "key": "first-win",
+    "name": "First Win",
+    "description": "Win a match.",
+    "icon": null,
+    "points": 10,
+    "unlockedAt": "2026-07-25T09:14:02Z"
+  }
+}
+</code></pre>
+<p>解锁授予自 <code>createSession</code> 在任何人拥有套接字之前就被持久化，因此它们到达时带有
+无框架 - 在加载时从列表端点读取它们。</p>
+<h3 id="container-backends">容器后端</h3>
+<p>容器在中声明相同的成就字段 <code>GET /describe</code>，然后发送一个
+<code>achievements</code> 其控件 WebSocket 上的消息。平台应用相同的密钥、参与者、
+幂等性和传递规则。看 <a href="/zh-CN/docs/api/container-games.html#control-channel">容器游戏服务器</a>.</p>
+<h3 id="get-apiv1gamesslugachievements"><code>GET /api/v1/games/{slug}/achievements</code></h3>
+<p>游戏声明的每项成就都带有调用者的解锁状态。 <code>404</code> 如果蛞蝓没有
+权威的游戏定义（没有脚本或容器后端的游戏没有游戏拥有的
+成就——见 <a href="#which-games-can-use-this">哪些游戏可以用这个</a>）。秘密成就将被隐藏，直到
+呼叫者解锁它们。按创建排序，然后按密钥排序。</p>
+<pre><code class="language-json">[
+  {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "key": "first-win",
+    "name": "First Win",
+    "description": "Win a match.",
+    "icon": null,
+    "secret": false,
+    "points": 10,
+    "unlocked": true,
+    "unlockedAt": "2026-07-25T09:14:02Z"
+  }
+]
+</code></pre>
+<p>与完整用户 JWT 或游戏范围的启动令牌配合使用。</p>
+<h3 id="which-games-can-use-this">哪些游戏可以用这个</h3>
+<p>该机制可用于声明以下任一者的游戏： <code>server=</code> 脚本或
+<code>container.image=</code> 后端在 <a href="/zh-CN/docs/api/github-games.html#the-manifest-starhermittxt"><code>starhermit.txt</code></a>。的
+服务器运行时使解锁具有权威性。脚本支持的用例包括：</p>
+<ul>
+<li><strong>脚本化平台游戏</strong> — 解锁自 <code>onPlayerMessage</code> / <code>onTick</code> 随着比赛的进行。</li>
+<li><strong>房间内实时游戏</strong> — a <a href="/zh-CN/docs/api/realtime.html#room-bound-sessions">实时房间</a> 对于一个
+游戏与 <code>server=</code> 脚本在启动时创建一个绑定会话，并且该会话的每个钩子
+会议可以授予成就。</li>
+<li><strong>单人游戏和练习游戏</strong> ——一场针对人工智能席位的会议
+（<code>POST /api/v1/games/{slug}/sessions/ai</code>）运行相同的脚本和相同的解锁路径。</li>
+<li><strong>主机路由的实时游戏</strong> — 游戏玩法贯穿于
+<a href="/zh-CN/docs/api/realtime.html#binary-frames-gameplay">实时房间二进制通道</a> 仍然可以发送服务器脚本
+纯粹作为其成就权限：房间开始创建绑定会话，并且脚本
+奖项来自 <code>createSession</code> / <code>onTick</code> / 耐用的 <code>cmd</code> 已发送的消息 <code>ws/v1/games</code> 而
+快速路径不断流过 <code>ws/v1/realtime</code>.</li>
+</ul>
+<p>容器支持的会话还可以通过其协议声明和授予成就。一场比赛
+与 <strong>无权威后台</strong> （一款纯粹的浏览器游戏，或者仅基于 <a href="/zh-CN/docs/api/relay.html">对等中继</a>）
+没有服务器权威的解锁路径。客户声称的解锁仅适用于
+目录分发的标题，如下。</p>
+<h3 id="limits-and-rules">限制和规则</h3>
+<table>
+<thead>
+<tr>
+<th>规则</th>
+<th>价值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>每场比赛宣布的成就</td>
+<td>100（忽略额外）</td>
+</tr>
+<tr>
+<td>成就密钥长度</td>
+<td>128 个字符</td>
+</tr>
+<tr>
+<td>解锁每个玩家每次调用接受的密钥</td>
+<td>32</td>
+</tr>
+<tr>
+<td><code>points</code></td>
+<td>钳位至 0–10000；默认为 0</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>默认为 <code>key</code> 当省略时</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>格式错误的声明条目是 <strong>跳过</strong>。无法评估的脚本会产生空值
+清单；容器的声明在通过健康检查后被读取。验证与
+<code>GET /api/v1/games/{slug}/achievements</code> 部署后。</li>
+<li>定义更新插入者 <code>key</code>。您的后端停止声明的密钥已被删除 <strong>除非没有人有
+解锁它</strong> ——赢得的历史永远不会被摧毁。所有者通过 API 创建的成就
+永远不会被这一点所触及：只有声明的才会被协调。</li>
+<li>不属于会话参与者的用户以及 AI 席位的解锁将被忽略。</li>
+</ul>
+<h2 id="achievements-from-other-games">其他游戏的成就</h2>
+<p>游戏可以根据玩家解锁的内容来打开功能 <strong>其他</strong> 游戏：续集荣誉
+原版或共享化妆品系列中的游戏。有两种阅读它们的方法。</p>
+<h3 id="from-your-server-ctxlinkedachievements-trusted">从您的服务器： <code>ctx.linkedAchievements</code> （值得信赖）</h3>
+<p>在其他声明旁边命名脚本中的其他游戏：</p>
+<pre><code class="language-js">globalThis.game = {
+  linkedAchievements: ["83fd04b1-3cbe-4b09-a251-3733ad4b9d94"], // other games' slugs (uids)
+  // ...
+};
+</code></pre>
+<p>容器返回相同的结果 <code>linkedAchievements</code> 数组来自 <code>GET /describe</code>。每个脚本
+然后，调用的 ctx 携带这些游戏中每个人类玩家的解锁密钥：</p>
+<pre><code class="language-js">ctx.linkedAchievements = {
+  "7c9e6679-...": {                                   // player id
+    "83fd04b1-3cbe-4b09-a251-3733ad4b9d94": ["first-win", "checkmate-10"]
+  }
+};
+</code></pre>
+<ul>
+<li>已重读 <strong>每次调用</strong>，因此在另一场比赛中获得的解锁显示在
+下一张。容器在 ctx 中接收它 <code>POST /sessions</code>，即在创建时和在
+恢复。</li>
+<li>最多 <strong>8</strong> 游戏；非空字符串、重复项和超过 100 条的条目
+字符被丢弃。与其他声明一样，它会在游戏发布或发布时读取
+已更新。</li>
+<li>一款不声明任何内容的游戏将不会获得任何结果 <code>linkedAchievements</code> 领域并且不支付任何费用。</li>
+<li>使用此路径执行平台必须强制执行的任何操作，例如解锁游戏玩法或授予
+自己的成就。</li>
+</ul>
+<h3 id="from-your-client-get-apiv1gamessluglinked-achievementsotherslug">来自您的客户： <code>GET /api/v1/games/{slug}/linked-achievements/{otherSlug}</code></h3>
+<p>调用者自己的解锁 <code>otherSlug</code>。它不需要声明，因此纯浏览器游戏没有
+服务器可以使用它，并且它与启动令牌一起使用 <code>{slug}</code>：其他游戏自己的端点
+远离该令牌。</p>
+<pre><code class="language-json">{
+  "game": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "hidden": false,
+  "unlocked": [
+    { "key": "first-win", "unlockedAt": "2026-07-25T09:14:02Z" }
+  ]
+}
+</code></pre>
+<p>客户可能会对收到的内容撒谎，因此请将其视为 UI 和外观的提示，而不是证据。</p>
+<h3 id="what-is-disclosed">披露了什么</h3>
+<ul>
+<li><strong>仅解锁您指定的游戏状态</strong>：钥匙和解锁时间，绝不是名称、描述或
+玩家玩过的其他游戏的列表。玩家解锁的秘密成就是
+包括在内。</li>
+<li>与任何游戏答案都不匹配的slug就像没有解锁任何内容的游戏一样。</li>
+<li><strong>隐私受到尊重。</strong> 成就隐私受到保护的玩家 <code>Private</code> 是 <strong>隐</strong>: 缺席
+来自 <code>ctx.linkedAchievements</code>， 和 <code>"hidden": true</code> 端点的空列表。隐藏
+不等于 "没有"，所以不要这样对待它。 <code>FriendsOnly</code> （默认）已披露，
+因为读者是在为玩家行事。</li>
+</ul>
+<h2 id="achievements-created-by-the-games-owner">游戏所有者创造的成就</h2>
+<p>在代码中声明成就并不是为游戏提供成就的唯一方法。如果您拥有一款游戏
+<code>server=</code> 脚本或 <code>container.image=</code> 后台，您还可以通过以下方式为其创建成就
+API — 出版商处理目录标题的方式，无需出版商帐户或权限。
+拥有该游戏就是全部赠款。当设计师想要添加或改写时使用此功能
+无需更改代码即可取得成就，或者当您的后端授予它未声明的密钥时。</p>
+<p><strong>只有您的游戏服务器才能解锁它们</strong>，与声明的完全一样：您的脚本返回密钥
+在 <code>achievements</code>，或者您的容器在控制通道上发送它。上没有任何变化
+解锁方 — 密钥被解析 <em>全部</em> 宣布和创建的游戏成就。</p>
+<p><code>{id}</code> 你的游戏 ID 是来自 <code>GET /api/v1/me/github-games</code>.</p>
+<h3 id="post-apiv1megithub-gamesidachievements"><code>POST /api/v1/me/github-games/{id}/achievements</code></h3>
+<pre><code class="language-json">{
+  "key": "speedrunner",
+  "name": "Speedrunner",
+  "description": "Finish a level in under a minute.",
+  "icon": "https://cdn.example/speedrunner.png",
+  "secret": false,
+  "points": 25
+}
+</code></pre>
+<p><code>key</code>, <code>name</code> 和 <code>description</code> 是必需的。退货 <code>201</code>:</p>
+<pre><code class="language-json">{
+  "id": "…",
+  "key": "speedrunner",
+  "name": "Speedrunner",
+  "description": "Finish a level in under a minute.",
+  "icon": "https://cdn.example/speedrunner.png",
+  "secret": false,
+  "points": 25,
+  "origin": "owner",
+  "unlocks": 0,
+  "createdAt": "…",
+  "updatedAt": "…"
+}
+</code></pre>
+<p><code>GET</code> 在同一路径上以这种形式列出了游戏的每个成就： <code>origin</code> 是 <code>declared</code>
+对于您的脚本或容器声明的内容和 <code>owner</code> 对于在这里创建的那些，以及 <code>unlocks</code>
+计算有多少玩家持有每一张。</p>
+<p><code>PUT .../achievements/{achievementId}</code> 采取任何 <code>name</code>, <code>description</code>, <code>icon</code>, <code>secret</code> 和
+<code>points</code>;这 <code>key</code> 无法改变。 <code>DELETE</code> 将其删除。</p>
+<h3 id="rules">规则</h3>
+<table>
+<thead>
+<tr>
+<th>规则</th>
+<th>价值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>钥匙</td>
+<td>1–128 个字符：字母、数字、 <code>.</code>, <code>_</code>, <code>-</code>，以字母或数字开头</td>
+</tr>
+<tr>
+<td><code>name</code> / <code>description</code></td>
+<td>必需的;最多 200 / 2000 个字符</td>
+</tr>
+<tr>
+<td><code>points</code></td>
+<td>0–10000；默认为 0</td>
+</tr>
+<tr>
+<td>每场比赛所有者创造的成就</td>
+<td>200个（已申报的最多100个除外）</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>已声明的成就仍属于您的代码。</strong> 创建游戏已返回的密钥 <code>409</code>,
+编辑或删除也是如此 <code>declared</code> 一个 - 下一次更新会将其放回您的代码
+声明它。在您的脚本中更改它或 <code>/describe</code> 反而。</li>
+<li><strong>如果您的代码稍后声明您在此处创建的密钥</strong>，该宣言取得了这一成就
+超过（<code>origin</code> 变成 <code>declared</code>）。赢得它的玩家会保留它。</li>
+<li><strong>某人已解锁的成就无法删除</strong> (<code>409</code>).</li>
+<li><code>404</code> 表示该游戏不是您的； <code>409</code> 在任何这些路由上带有有关服务器的消息
+后端意味着游戏没有后端——纯浏览器游戏没有任何可以解锁的内容。
+成就。</li>
+</ul>
+<p>逐步： <a href="/zh-CN/docs/tutorials/game-leaderboards-achievements.html">教程：游戏的排行榜和成就</a>.</p>
+<h2 id="catalog-title-achievements">目录标题成就</h2>
+<p>对于通过目录分发的软件，客户端是唯一观察该目录的人
+解锁条件。定义是匿名阅读的；解锁需要 JWT 和不可撤销的
+获得头衔的权利。</p>
+<h3 id="get-apiv1softwaretitleidachievements"><code>GET /api/v1/software/{titleId}/achievements</code></h3>
+<p><code>AchievementDto[]</code>。秘密成就是隐藏的，除非被调用者（及其他们的
+<code>criteria</code> 直到那时为止）。游戏范围的成就永远不会出现在这里。</p>
+<pre><code class="language-json">[
+  {
+    "id": "…",
+    "key": "…",
+    "name": "…",
+    "description": "…",
+    "icon": "…",
+    "secret": false,
+    "points": 10,
+    "visibility": "…",
+    "criteria": "…"
+  }
+]
+</code></pre>
+<h3 id="post-apiv1meachievementsunlock"><code>POST /api/v1/me/achievements/unlock</code></h3>
+<pre><code class="language-json">{ "achievementDefinitionId": "…" }
+</code></pre>
+<p>退货 <code>204</code>。退货 <code>400</code> 当成就不存在时，当调用者没有权利时
+到标题（参见 <a href="/zh-CN/docs/api/catalog.html">catalog.md</a>），或者当成就是 <strong>游戏范围的</strong> ——那些是
+仅由游戏的权威脚本或容器后端授予。重新解锁已持有的东西会返回 <code>204</code>.</p>
+<p>出版商端管理——定义、更新和删除标题成就——存在于
+<a href="/zh-CN/docs/api/publisher.html#achievements">publisher.md</a>.</p>
+<h2 id="get-apiv1meachievements"><code>GET /api/v1/me/achievements</code></h2>
+<p>呼叫者解锁为 <code>UserAchievementDto[]</code>. <strong>没有 <code>titleId</code> 这将返回每个解锁
+用户持有，游戏范围和标题范围都一样</strong>;经过 <code>?titleId=</code> 将其缩小为一个目录标题。</p>
+<pre><code class="language-json">[
+  {
+    "id": "…",
+    "achievementDefinitionId": "…",
+    "key": "…",
+    "name": "…",
+    "description": "…",
+    "icon": "…",
+    "points": 10,
+    "unlockedAt": "…"
+  }
+]
+</code></pre>
+<p>对于游戏本身的成就屏幕更喜欢 <code>GET /api/v1/games/{slug}/achievements</code>，这也
+返回玩家拥有的定义 <em>不是</em> 尚未解锁。</p>
+<p>共享 <a href="/zh-CN/docs/api/conventions.html">API约定</a> 描述响应解析、时间戳、分页和重试。</p>
+<p>看 <a href="/zh-CN/docs/credentials.html">凭证兼容性</a> 和 <a href="/zh-CN/docs/api/contracts.html">机器可读的合同</a>.</p>
+
+{% endraw %}

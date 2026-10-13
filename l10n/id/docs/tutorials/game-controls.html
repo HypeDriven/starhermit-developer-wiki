@@ -1,0 +1,254 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Tutorial: tambahkan kontrol ke game Anda"
+source_url: "/docs/tutorials/game-controls.html"
+source_path: "docs/tutorials/game-controls.md"
+source_hash: "e0d2b7612fbd90ee6e1e21734aca934295d32197bc56b43449da00dd637601bf"
+translation: "machine"
+permalink: "/id/docs/tutorials/game-controls.html"
+---
+{% raw %}
+<h1 id="tutorial-add-controls-to-your-game">Tutorial: tambahkan kontrol ke game Anda</h1>
+<p>StarHermit dapat menyimpan <strong>pengikatan kunci</strong> untuk game Anda: Anda mendeklarasikan tindakan dan kunci defaultnya,
+dan setiap pemain dapat mengikatnya kembali. Pilihan mereka mengikuti mereka ke mesin mana pun tempat mereka masuk. permainanmu
+membaca binding pemain dari API kontrol dan dapat menawarkan binding miliknya sendiri "mengikat ulang kunci" layar.</p>
+<p>Jika game Anda memanggil API kontrol dan mendapatkan ini:</p>
+<pre><code class="language-text">404 {"error":"This game declares no controls."}
+</code></pre>
+<p>platform memilikinya <strong>tidak ada tindakan yang diumumkan</strong> untuk bangunan yang dilayaninya. Tidak ada yang Anda kirim ke API yang bisa
+perbaiki itu: kontrol dideklarasikan di game Anda <a href="/id/docs/starhermit-txt.html"><code>starhermit.txt</code></a> dan membaca kapan
+permainan tersebut diterbitkan. Halaman ini menunjukkan cara mendeklarasikannya, mempublikasikannya, memeriksa apakah sudah sampai,
+dan menggunakannya dari klien Anda.</p>
+<ol>
+<li><a href="#1-declare-the-actions">Nyatakan tindakannya</a></li>
+<li><a href="#2-publish-them">Publikasikan mereka</a></li>
+<li><a href="#3-check-they-arrived">Periksa mereka tiba</a></li>
+<li><a href="#4-use-them-in-your-game">Gunakan mereka dalam permainan Anda</a></li>
+<li><a href="#troubleshooting">Pemecahan masalah</a></li>
+</ol>
+<h2 id="1-declare-the-actions">1. Nyatakan tindakannya</h2>
+<p>Tambahkan satu <code>control.&lt;action&gt;=</code> baris per tindakan ke <code>starhermit.txt</code>:</p>
+<pre><code class="language-text">name=Space Hopper
+launch=index.html
+
+control.left=KeyA+ArrowLeft | Move left
+control.right=KeyD+ArrowRight | Move right
+control.jump=Space+KeyW | Jump
+control.fire=KeyJ | Fire
+control.pause=Escape | Pause
+</code></pre>
+<p>Setiap baris memiliki tiga bagian:</p>
+<pre><code class="language-text">control.&lt;action&gt;=&lt;code&gt;[+&lt;code&gt;...][ | &lt;label&gt;]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Bagian</th>
+<th>Aturan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;action&gt;</code></td>
+<td>Nama game Anda untuk aksi: 1–32 karakter huruf kecil, angka, dan <code>_</code> (<code>move_left</code>, bukan <code>move-left</code>). Unik per manifes.</td>
+</tr>
+<tr>
+<td><code>&lt;code&gt;</code></td>
+<td>A <a href="https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_code_values"><code>KeyboardEvent.code</code></a> nilai, seperti <code>KeyA</code>, <code>ArrowLeft</code>, <code>Space</code>, <code>Digit1</code>, <code>ShiftLeft</code>, <code>Enter</code> atau <code>Escape</code>. Gabungkan 1–4 kode untuk tindakan yang sama dengan <code>+</code>.</td>
+</tr>
+<tr>
+<td><code>&lt;label&gt;</code></td>
+<td>Opsional. Ditampilkan di layar rebinding; paling banyak 64 karakter. Defaultnya adalah nama tindakan.</td>
+</tr>
+</tbody>
+</table>
+<p>Hal yang perlu diketahui:</p>
+<ul>
+<li><strong>Menggunakan <code>code</code>, bukan <code>key</code>.</strong> Menulis <code>KeyA</code>, bukan <code>a</code>, Dan <code>Space</code>, bukan <code>" "</code>. Kode memberi nama fisik
+kuncinya, sehingga pengikatannya berfungsi pada tata letak keyboard apa pun. Platform hanya memeriksa apakah kodenya 1–32
+huruf dan angka, jadi <code>a</code> atau <code>space</code> diterima tetapi tidak ada kunci yang memproduksinya. Ejaan dan kasus
+harus sama persis.</li>
+<li><strong>Sebuah kunci milik satu tindakan.</strong> Kode yang sudah digunakan oleh baris sebelumnya akan dijadikan baris berikutnya
+tidak valid.</li>
+<li><strong>Hingga 32 tindakan</strong> per permainan. Garis setelah tanggal 32 diabaikan.</li>
+<li><strong>Pesanan disimpan.</strong> Tindakan muncul dari API dalam urutan nyata, jadi cantumkan caranya
+layar pengaturan Anda akan menampilkannya.</li>
+<li><strong>Baris yang tidak valid dilewati secara diam-diam.</strong> Game ini masih diterbitkan. Jika setiap baris tidak valid,
+permainan tidak memiliki kontrol dan jawaban API <code>404</code>. <a href="#3-check-they-arrived">Periksa setelah diterbitkan</a>.</li>
+</ul>
+<h2 id="2-publish-them">2. Publikasikan</h2>
+<p>Deklarasi dibacakan <strong>saat game tersebut diterbitkan</strong>. Mengedit <code>starhermit.txt</code> di repositori Anda
+atau pada disk tidak mengubah apa pun sampai Anda menerbitkan build yang memuatnya:</p>
+<table>
+<thead>
+<tr>
+<th>Bagaimana game Anda dipublikasikan</th>
+<th>Apa yang membuat kontrol baru aktif</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dari repositori GitHub</td>
+<td>Penerapan Anda selanjutnya. Dorong perubahan, lalu terapkan versi terbaru (<strong>Perbarui versi yang diterapkan</strong> di dasbor, atau <code>PUT /api/v1/me/github-games/{id}/deployment</code>).</td>
+</tr>
+<tr>
+<td>Folder atau bundel yang diunggah</td>
+<td>Unggah bangunan baru (<code>POST /api/v1/me/github-games/{id}/bundle</code>, atau <code>ws/v1/game-upload</code>) yang <code>starhermit.txt</code> memiliki garis.</td>
+</tr>
+<tr>
+<td>Menambahkan permainan baru</td>
+<td>Unggahan atau kiriman pertama langsung membacanya.</td>
+</tr>
+</tbody>
+</table>
+<p>Upload pengganti menampilkan kembali kontrol Anda dari manifesnya sendiri. Hapus setiap <code>control.*</code> garis dan
+permainan tidak memilikinya. A <a href="/id/docs/api/github-games.html#partial-updates-modemerge"><code>?mode=merge</code></a> tambal itu
+tidak membawa <code>starhermit.txt</code> mempertahankan kontrol saat ini.</p>
+<p><strong>Rebinding milik pemain bertahan dalam build baru.</strong> Pengikatan tersimpan pemain untuk tindakan yang tidak
+yang lebih lama ada diabaikan.</p>
+<h2 id="3-check-they-arrived">3. Periksa apakah mereka sudah sampai</h2>
+<p>Setiap titik akhir di bawah berfungsi dengan token pengguna penuh atau token peluncuran game Anda. <code>{slug}</code> adalah milikmu
+siput permainan: token peluncuran <code>game_scope</code> klaim, atau <code>gameSlug</code> di dalam
+<code>GET /api/v1/me/github-games</code>.</p>
+<pre><code class="language-bash">curl -s "https://api.starhermit.com/api/v1/games/$SLUG/controls" \
+  -H "Authorization: Bearer $TOKEN" | jq
+</code></pre>
+<pre><code class="language-json">{
+  "actions": [
+    { "action": "left",  "label": "Move left",  "defaultCodes": ["KeyA", "ArrowLeft"],  "codes": ["KeyA", "ArrowLeft"] },
+    { "action": "right", "label": "Move right", "defaultCodes": ["KeyD", "ArrowRight"], "codes": ["KeyD", "ArrowRight"] },
+    { "action": "jump",  "label": "Jump",       "defaultCodes": ["Space", "KeyW"],      "codes": ["Space", "KeyW"] },
+    { "action": "fire",  "label": "Fire",       "defaultCodes": ["KeyJ"],               "codes": ["KeyJ"] },
+    { "action": "pause", "label": "Pause",      "defaultCodes": ["Escape"],             "codes": ["Escape"] }
+  ]
+}
+</code></pre>
+<p>Tindakan yang hilang berarti barisnya tidak valid; bandingkan dengan aturan di atas. A <code>404</code>
+berarti tidak ada yang selamat, atau build yang menyatakannya belum dipublikasikan.</p>
+<h2 id="4-use-them-in-your-game">4. Gunakan mereka dalam game Anda</h2>
+<p><code>codes</code> adalah pengikatan efektif pemain: penggantiannya jika disetel, jika tidak, default Anda.
+Buat pencarian darinya dan cocokkan <code>event.code</code>:</p>
+<pre><code class="language-js">const auth = { Authorization: `Bearer ${launchToken}` };
+
+// Your built-in defaults, in the same shape the API returns.
+const DEFAULT_ACTIONS = [
+  { action: "left", label: "Move left", codes: ["KeyA", "ArrowLeft"] },
+  { action: "jump", label: "Jump", codes: ["Space", "KeyW"] },
+  /* ... */
+];
+
+function toControls(actions) {
+  const byCode = new Map();
+  for (const a of actions) for (const code of a.codes) byCode.set(code, a.action);
+  return { actions, byCode };
+}
+
+async function loadControls(slug) {
+  try {
+    const res = await fetch(`/api/v1/games/${slug}/controls`, { headers: auth });
+    if (res.ok) return toControls((await res.json()).actions);
+  } catch { /* offline: fall through */ }
+  return toControls(DEFAULT_ACTIONS);                   // 404, error, or outside StarHermit
+}
+
+let controls = await loadControls(gameScope);
+
+window.addEventListener("keydown", (e) =&gt; {
+  const action = controls.byCode.get(e.code);   // e.code, never e.key
+  if (action) { e.preventDefault(); onAction(action, true); }
+});
+window.addEventListener("keyup", (e) =&gt; {
+  const action = controls.byCode.get(e.code);
+  if (action) onAction(action, false);
+});
+</code></pre>
+<p>Default bawaan membuat game dapat dimainkan secara offline, di luar StarHermit, atau jika kontrolnya
+permintaan gagal. Jaga agar mereka sejalan dengan Anda <code>control.*</code> garis.</p>
+<p><strong>Layar yang mengikat ulang.</strong> Daftar <code>actions</code> dengan mereka <code>label</code>. Simpan peta override yang lengkap, atau
+membaca dan mempertahankan peta efektif saat ini sebelum mengubah satu tindakan:</p>
+<pre><code class="language-js">async function saveBinding(slug, action, codes) {
+  const current = await fetch(`/api/v1/games/${slug}/controls`, { headers: auth });
+  if (!current.ok) throw new Error(`Controls read failed: ${current.status}`);
+  const bindings = Object.fromEntries((await current.json()).actions.map(a =&gt; [a.action, a.codes]));
+  bindings[action] = codes;
+  const res = await fetch(`/api/v1/games/${slug}/controls`, {
+    method: "PUT",
+    headers: { ...auth, "Content-Type": "application/json" },
+    body: JSON.stringify({ bindings }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error);   // e.g. a key already in use
+  return res.json();                                         // the new effective map
+}
+</code></pre>
+<p><code>PUT</code> mengganti penggantian pemain dengan tindakan yang Anda kirim, jadi sertakan setiap tindakan pemain
+telah berubah, bukan hanya yang terbaru. Sisanya tetap pada default Anda. <code>DELETE</code> di jalur yang sama
+mengatur ulang semuanya ke default.</p>
+<p>Buat serial perubahan dari layar Anda; dua pembacaan/penulisan secara bersamaan masih dapat saling menimpa.
+SDK browser <code>setControl()</code> membuat serial perubahannya sendiri dan mempertahankan peta efektif saat ini.
+Mengirimkan peta efektif menyematkan nilai-nilai tersebut sebagai penggantian; menggunakan <code>DELETE</code> untuk kembali ke default manifes.</p>
+<p>Platform menolak penyimpanan (<code>400</code>) yang akan menyisakan satu kunci pada dua tindakan <strong>setelah</strong> milik pemain
+perubahan digabungkan dengan default Anda. Misalnya mengikat <code>jump</code> ke <code>KeyJ</code> ketika <code>fire</code> masih
+menggunakan defaultnya <code>KeyJ</code> ditolak. Tunjukkan kesalahannya, atau pindahkan tindakan yang bertentangan ke dalamnya
+simpan.</p>
+<h2 id="troubleshooting">Pemecahan masalah</h2>
+<table>
+<thead>
+<tr>
+<th>Tanggapan</th>
+<th>Menyebabkan</th>
+<th>Memperbaiki</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>404</code> "Game ini menyatakan tidak ada kontrol."</td>
+<td>Tidak valid <code>control.*</code> garis di <strong>diterbitkan</strong> membangun.</td>
+<td>Tambahkan baris ke <code>starhermit.txt</code>, periksa mereka <a href="#1-declare-the-actions">aturan</a>, Dan <a href="#2-publish-them">menerbitkan bangunan baru</a>.</td>
+</tr>
+<tr>
+<td><code>404</code> "Tidak ada permainan dengan siput itu."</td>
+<td>Siputnya salah, atau gamenya tidak ada siputnya.</td>
+<td>Gunakan token peluncuran <code>game_scope</code> atau <code>gameSlug</code> dari <code>GET /me/github-games</code>. Setiap game yang ditambahkan dari folder lokal dan setiap game repositori yang ditambahkan oleh pemilik terverifikasi memiliki slug, hanya browser atau tidak. Hanya penyerahan repositori yang pemiliknya tidak terverifikasi tidak memilikinya; <a href="/id/docs/tutorials/claim-existing-game.html">mengklaimnya</a> untuk mendapatkannya.</td>
+</tr>
+<tr>
+<td><code>403</code> "Token ini tercakup dalam permainan '…'."</td>
+<td>Token peluncuran yang digunakan dengan slug game lain.</td>
+<td>Panggil dengan siput di token <code>game_scope</code>.</td>
+</tr>
+<tr>
+<td><code>400</code> "Tindakan tidak diketahui '…' — tidak dinyatakan dalam manifes game."</td>
+<td><code>PUT</code> menamai suatu tindakan yang tidak dideklarasikan oleh manifes.</td>
+<td>Menggunakan <code>action</code> nilai dari <code>GET …/controls</code>.</td>
+</tr>
+<tr>
+<td><code>400</code> "'…' terikat pada '…' dan '…'."</td>
+<td>Setelah digabungkan dengan default Anda, satu kunci akan memicu dua tindakan.</td>
+<td>Pindahkan tindakan lainnya ke dalam hal yang sama <code>PUT</code>, atau pilih kunci lain.</td>
+</tr>
+<tr>
+<td><code>400</code> "'…' bukan nilai KeyboardEvent.code yang valid."</td>
+<td>Kode dengan spasi atau tanda baca.</td>
+<td>Mengirim <code>event.code</code> nilai-nilai.</td>
+</tr>
+<tr>
+<td><code>400</code> "Tindakan '…' harus mengikat 1–4 kode."</td>
+<td>Daftar kosong, atau lebih dari empat.</td>
+<td>Kirim 1–4 kode; <code>DELETE</code> untuk mengatur ulang.</td>
+</tr>
+<tr>
+<td>Ada tindakan yang hilang dari respons</td>
+<td>Barisnya tidak valid: huruf besar atau <code>-</code> dalam nama tindakan, <code>,</code> alih-alih <code>+</code>, lebih dari 4 kode, satu kode sudah digunakan, atau melewati tindakan ke-32.</td>
+<td>Perbaiki baris tersebut dan publikasikan lagi.</td>
+</tr>
+<tr>
+<td>Ikatan tidak pernah menyala</td>
+<td>Kode diterima tetapi tidak ada kunci yang menghasilkannya, misalnya <code>a</code> atau <code>space</code>.</td>
+<td>Gunakan tepat <code>KeyboardEvent.code</code> ejaan: <code>KeyA</code>, <code>Space</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Lihat juga: <a href="/id/docs/api/games.html#per-player-control-bindings">Games API — Pengikatan kontrol per pemain</a>,
+<a href="/id/docs/starhermit-txt.html#controls"><code>starhermit.txt</code></a>.</p>
+
+{% endraw %}

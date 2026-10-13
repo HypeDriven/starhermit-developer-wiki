@@ -1,0 +1,597 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Salas en tiempo real"
+source_url: "/docs/api/realtime.html"
+source_path: "docs/api/realtime.md"
+source_hash: "9ba1c7babc144fc3452532ed6c2cfd2092bc5ad1db8ee2ea833b22fabcc8fffe"
+translation: "machine"
+permalink: "/es/docs/api/realtime.html"
+---
+{% raw %}
+<h1 id="realtime-rooms">Salas en tiempo real</h1>
+<p>Las salas en tiempo real son vestíbulos generalizados para juegos multijugador de ritmo rápido: creación de salas, invitaciones de amigos, emparejamiento rápido, jugadores de IA a pedido más relleno de asientos de IA y un transporte en tiempo real con reconocimiento de roles (<code>ws/v1/realtime</code>). El subsistema es deliberadamente independiente del juego: las salas tienen un alcance por slug de juego, la sala <code>metadata</code> es un blob JSON opaco por juego, y <code>teamCount = 1</code> modelos de juegos gratuitos para todos.</p>
+<p>Un partido se desarrolla de dos maneras:</p>
+<ul>
+<li><strong>Enrutado por host (predeterminado)</strong> — el servidor de la plataforma es un transporte inteligente, no un simulador: el cliente del creador de la sala es el <strong>anfitrión</strong> y ejecuta la simulación de juego autorizada; otros clientes (invitados) envían entradas al host y reciben las instantáneas del host. El servidor impone enrutamiento, roles, capacidad, límites de velocidad e identidad: los clientes no pueden falsificarse entre sí y solo el host asignado por el servidor puede transmitir.</li>
+<li><strong>Sesión limitada a sala (servidor autorizado)</strong> - para juegos que incluyen un <code>server=</code> guión o un <a href="/es/docs/api/container-games.html">recipiente</a>: cuando comienza la sala, la plataforma crea una sesión vinculada de N jugadores (<a href="/es/docs/api/game-scripts.html#room-bound-sessions">guionizado</a> o contenedor) que ejecuta la simulación del lado del servidor. El juego luego fluye <code>ws/v1/games</code> y el WS en tiempo real se usa solo para lobby/lista. Ver <a href="#room-bound-sessions">el puente</a> abajo.</li>
+</ul>
+<p>Contrasta esto con el <a href="/es/docs/api/relay.html">relevo entre pares</a> (despliegue opaco vinculado a una lista de sala/sesión existente, deshabilitado de forma predeterminada) y simple <a href="/es/docs/api/games.html">juegos con guión</a> (servidor autorizado, con sesiones de emparejamiento e invitaciones, pero sin sala de lobby). Las salas en tiempo real son <strong>habilitado por defecto</strong>.</p>
+<p>Todos los puntos finales REST requieren autenticación y funcionan tanto con un token de usuario completo como con un token de inicio específico del juego. Los cuerpos de error varían; ver <a href="/es/docs/api/conventions.html#requests-and-responses">Convenciones API</a>.</p>
+<p><img src="/docs/images/es/multiplayer-routing.svg" alt="Las salas enrutadas por el host envían entradas al host y devuelven instantáneas. Las salas autorizadas por el servidor crean una sesión de juego separada utilizando la toma de juegos."></p>
+<h2 id="data-model">modelo de datos</h2>
+<p><strong>Habitación</strong> ciclo vital: <code>Lobby</code> → <code>Open</code> (emparejamiento) → <code>Playing</code> (lista congelada, asientos vacíos ocupados con IA hasta el límite de la sala) → <code>Closed</code>. Una habitación creada con <a href="#join-in-progress"><code>joinInProgress</code></a> sigue tomando jugadores mientras <code>Playing</code>.</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "hostUserId": "&lt;guid&gt;",
+  "status": "Lobby",
+  "gameSessionId": null,
+  "config": {
+    "teamCount": 2,
+    "seatsPerTeam": 5,
+    "backfillAfterSeconds": 30,
+    "aiPlayers": 0,
+    "backfillAiPlayers": null,
+    "joinInProgress": false,
+    "metadata": { "map": "arena" }
+  },
+  "participants": [
+    {
+      "id": "&lt;guid&gt;",
+      "userId": "&lt;guid&gt;",
+      "username": "ada",
+      "isAi": false,
+      "isHost": true,
+      "team": 0,
+      "slot": 0,
+      "joinedAt": "2026-07-22T07:00:00Z",
+      "leftAt": null
+    }
+  ],
+  "name": "Friday night",
+  "joinCode": "K7MP2X",
+  "isVisible": false,
+  "revision": 1,
+  "createdAt": "2026-07-22T07:00:00Z",
+  "openedAt": null,
+  "startedAt": null,
+  "closedAt": null,
+  "result": null
+}
+</code></pre>
+<ul>
+<li><code>config.metadata</code> es un blob JSON opaco que la plataforma nunca interpreta. Él, y un presentado
+metadatos del resultado, puede tener como máximo 16 KB (<code>413</code>), y una sala tiene como máximo 100 asientos; un operador puede
+cambiar cualquiera de los dos por un juego.</li>
+<li><code>config.aiPlayers</code> es con cuántos jugadores de IA el creador pidió que comenzara la partida; están sentados cuando se crea la sala (ver <a href="#ai-players">abajo</a>). Registra la solicitud; el <code>participants</code> La lista tiene autoridad para determinar quién ocupa realmente un asiento.</li>
+<li>Los participantes de IA tienen <code>userId: null</code>, <code>isAi: true</code>y un apodo aleatorio generado por el servidor, único dentro de la sala.</li>
+<li><code>(team, slot)</code> es la coordenada del asiento de un participante; los humanos están sentados en orden conjunto.</li>
+<li><code>gameSessionId</code> es la sesión de juego vinculada, establecida cuando se inicia la sala para un juego con un servidor backend: un <code>server=</code> guión o un <a href="/es/docs/api/container-games.html">recipiente</a> (ver <a href="#room-bound-sessions">el puente</a>); <code>null</code> de lo contrario. También se incluye en los empujes de lista.</li>
+<li><code>result</code> es el resultado, establecido cuando se cierra la sala: enviado por el host para juegos enrutados por el host, devuelto por script para sesiones limitadas a la sala.</li>
+<li><code>joinCode</code> son seis caracteres (se eliminan los pares de lectura similar). Es la invitación para <code>join-by-code</code>. Los listados nunca lo incluyen.</li>
+<li><code>isVisible</code> enumera la habitación en <code>GET /rooms</code>. Estar abierto (de unión rápida) y estar incluido en la lista son independientes.</li>
+<li><code>revision</code> salta solo cuando el host edita la configuración (<code>PATCH</code>), nunca cuando se llena un asiento. Pasalo como <code>expectedRevision</code> en <code>PATCH</code> para comparar e intercambiar (<code>409</code> sobre el conflicto).</li>
+</ul>
+<p><strong>Invitar</strong>: <code>{ "id", "roomId", "gameSlug", "fromUserId", "fromUsername", "toUserId", "status", "createdAt", "notified" }</code> con <code>status</code> uno de <code>pending</code> | <code>accepted</code> | <code>declined</code> | <code>expired</code> (las invitaciones caducan cuando la sala se cierra o comienza antes de que sean respondidas). <code>notified</code> aparece en la respuesta a <code>POST /rooms/{id}/invites</code> e informa si la notificación del invitado alcanzó una conexión en vivo; es <code>null</code> al cotizar.</p>
+<h2 id="rest-endpoints">Puntos finales de descanso</h2>
+<p>Base: <code>https://api.starhermit.com/api/v1/realtime</code> - entonces
+<code>POST /rooms</code> a continuación está <code>POST /api/v1/realtime/rooms</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Camino</th>
+<th>OMS</th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms</code></td>
+<td>alguien</td>
+<td>Crea un lobby, opcionalmente con jugadores de IA; la persona que llama se convierte en anfitrión</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/rooms?gameSlug=[&amp;includeInProgress=true]</code></td>
+<td>alguien</td>
+<td>Explore las salas abiertas y enumeradas que todavía tienen un asiento y, cuando se le solicite, ejecute salas para unirse en progreso (sin código, sin lista; máximo 50)</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms/join-by-code</code></td>
+<td>alguien</td>
+<td>Tome asiento con el código de unión de la sala (funciona en salas no listadas o en el lobby)</td>
+</tr>
+<tr>
+<td>PARCHE</td>
+<td><code>/rooms/{id}</code></td>
+<td>anfitrión</td>
+<td>Cambiar nombre, listar/eliminar lista, reemplazar metadatos, cambiar <code>joinInProgress</code>, establezca la asignación de reposición (<code>expectedRevision</code> CAS)</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms/{id}/matchmake</code></td>
+<td>anfitrión, lobby</td>
+<td>Poner en cola a toda la plantilla como un solo grupo/equipo</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/rooms/{id}</code></td>
+<td>participantes + invitados</td>
+<td>Sala + lista</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/realtime/connection-tickets</code></td>
+<td>alguien</td>
+<td>una sola vez <code>?ticket=</code> para los sockets en tiempo real (y otros)</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms/{id}/invites</code></td>
+<td>participantes</td>
+<td>Invita a un amigo; les notifica (<code>409</code> en duplicado)</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/rooms/invites</code></td>
+<td>alguien</td>
+<td>Invitaciones a salas pendientes de la persona que llama (juego cruzado)</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms/invites/{inviteId}/accept</code></td>
+<td>invitado</td>
+<td>Unirse a la sala (asiento asignado)</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms/invites/{inviteId}/decline</code></td>
+<td>invitado</td>
+<td>Rechazar (<code>204</code>)</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms/{id}/open</code></td>
+<td>anfitrión</td>
+<td>Abierto al emparejamiento; inicia la cuenta regresiva de reabastecimiento</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms/quick-join</code></td>
+<td>alguien</td>
+<td>Únase a la sala abierta más antigua con un asiento gratuito para el juego, opcionalmente haciendo coincidir filtros</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms/{id}/start</code></td>
+<td>anfitrión</td>
+<td>Rellenar asientos vacíos con IA, estado → <code>Playing</code></td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms/{id}/leave</code></td>
+<td>participantes</td>
+<td>Dejar; en Lobby/Abierto, el asiento se elimina; en Jugar, el asiento se convierte en un participante de IA o, en una sala de participación en progreso, queda vacante.</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms/{id}/seats</code></td>
+<td>anfitrión</td>
+<td>Reequilibrar los asientos antes de que comience el partido</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms/{id}/result</code></td>
+<td>anfitrión</td>
+<td>Enviar el resultado; habitación → <code>Closed</code></td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/rooms/mine</code></td>
+<td>alguien</td>
+<td>Sala activa de la persona que llama, si la hay (reconectar)</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/rooms/joined[?gameSlug=]</code></td>
+<td>alguien</td>
+<td>Cada habitación en la que la persona que llama tiene un asiento, mundos incluidos (una lista vacía cuando no hay ninguna)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-room--post-rooms">Crear una habitación - <code>POST /rooms</code></h3>
+<pre><code class="language-json">{ "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "teamCount": 2, "seatsPerTeam": 5, "backfillAfterSeconds": 30, "aiPlayers": 0, "backfillAiPlayers": 4, "name": "Friday night", "isVisible": false, "metadata": { "map": "arena" } }
+</code></pre>
+<ul>
+<li><code>gameSlug</code> es necesario para tokens de usuario completos. Con una ficha de lanzamiento con alcance de juego, la babosa se toma del token <code>game_scope</code> (un valor corporal que no coincide se rechaza con <code>403</code>).</li>
+<li>Gorras: <code>teamCount</code> 1–2, <code>seatsPerTeam</code> 1–100, asientos totales ≤ 100 (un equipo de 100 o dos de 50). <code>backfillAfterSeconds</code> por defecto es <code>30</code> y debe ser
+al menos <code>1</code> (<code>400</code> de lo contrario); hay <strong>sin máximo</strong> más allá del tamaño de un entero de 32 bits. un largo
+Sin embargo, la cuenta regresiva solo se mantiene mientras alguien permanece conectado: una <code>Open</code> habitación sin nadie encendido
+<code>ws/v1/realtime</code> cierra después de 60 minutos (ver <a href="#automatic-room-lifecycle">Ciclo de vida automático de la habitación</a>),
+por lo tanto, solo se alcanza una cuenta regresiva más larga si un participante mantiene un enchufe abierto.
+Las salas grandes están limitadas al ancho de banda, no a los asientos: los fotogramas de cada invitado van al anfitrión y cada fotograma del anfitrión se copia a cada invitado; consulte <a href="#sizing-a-large-room">Dimensionar una habitación grande</a>.</li>
+<li><code>aiPlayers</code> por defecto es <code>0</code>. Rango <code>0</code>–<code>(teamCount × seatsPerTeam) − 1</code> — el anfitrión siempre necesita un asiento, por lo que una sala completamente con IA es una <code>400</code>.</li>
+<li><code>backfillAiPlayers</code> limita el número de asientos que aún están vacíos cuando comienza el partido y se entregan a la IA; consulte <a href="#backfill-allowance">Asignación de reposición</a>. Omitido o <code>null</code> los llena a todos.</li>
+<li><code>joinInProgress</code> (por defecto <code>false</code>) mantiene la sala aceptando jugadores después de que comienza; consulte <a href="#join-in-progress">Unirse en progreso</a>.</li>
+<li>Una sala activa por usuario: crear o unirse mientras estás en cualquier sala que no sea<code>Closed</code> devoluciones de habitaciones <code>409</code>.</li>
+<li>El creador se convierte en el anfitrión, sentado en el equipo 0, espacio 0. Devuelve la sala.</li>
+</ul>
+<h4 id="ai-players">jugadores de IA</h4>
+<p><code>aiPlayers</code> dice cuántos jugadores de IA el <strong>el partido debe comenzar con</strong>. No son una promesa que se canjea más tarde: el servidor los coloca inmediatamente, por lo que la sala que recuperas ya los contiene:</p>
+<ul>
+<li>Son participantes ordinarios (<code>isAi: true</code>, <code>userId: null</code>, apodo único) y aparecen en la lista y en cada <code>roster</code> empujar desde el momento en que existe la habitación.</li>
+<li>Ellos <strong>ocupar asientos</strong>, por lo que reducen la capacidad que queda para los humanos: las invitaciones y las uniones rápidas llenan solo lo que queda, y <code>POST /rooms/invites/{id}/accept</code> regresa <code>409</code> una vez que no quede ningún asiento libre. Obtienes exactamente la cantidad de IA que solicitaste, nunca más gracias al emparejamiento.</li>
+<li>La colocación llena el <strong>equipo más vacío primero</strong> (los empates van al índice de equipo más bajo), puesto libre más bajo. entonces un <code>teamCount: 2, seatsPerTeam: 1</code> habitación con <code>aiPlayers: 1</code> coloca la IA frente al anfitrión y las habitaciones más grandes se mantienen equilibradas. Vuelva a colocarlos como desee con <code>POST /rooms/{id}/seats</code> antes de que comience el partido.</li>
+<li>Están separados del reabastecimiento a la hora de inicio, que llena los asientos que nadie ocupó cuando comienza la sala, hasta el final de la sala. <a href="#backfill-allowance">asignación de reposición</a>.</li>
+</ul>
+<h4 id="backfill-allowance">Asignación de reposición</h4>
+<p>Cuando comienza una sala (en la fecha límite de reabastecimiento, tan pronto como se llena o cuando el anfitrión fuerza el inicio)
+Los asientos que nadie ocupó se otorgan a los jugadores de IA. <code>backfillAiPlayers</code> decide cuantos:</p>
+<table>
+<thead>
+<tr>
+<th><code>backfillAiPlayers</code></th>
+<th>Al principio</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>omitido / <code>null</code> (por defecto)</td>
+<td>cada asiento vacío se convierte en un jugador de IA</td>
+</tr>
+<tr>
+<td><code>0</code></td>
+<td>sin IA: el partido comienza con los asientos vacíos dejados vacíos</td>
+</tr>
+<tr>
+<td><code>n</code></td>
+<td>a lo sumo <code>n</code> los asientos vacíos se convierten en IA; Cualquier cosa más allá de eso permanece vacía.</td>
+</tr>
+</tbody>
+</table>
+<p>La IA limitada va al <strong>equipo más vacío primero</strong> (vínculos con el índice más bajo del equipo), por lo que un <code>2 × 3</code> habitación con
+un anfitrión y <code>backfillAiPlayers: 3</code> comienza 2 contra 2. Rango <code>0</code>–<code>teamCount × seatsPerTeam</code>, demás <code>400</code>.
+El anfitrión puede cambiarlo antes del partido con <code>PATCH /rooms/{id}</code> (<code>"backfillAiPlayers": 2</code>), o
+volver a llenar cada asiento con <code>"backfillAllEmptySeats": true</code>. No afecta <code>aiPlayers</code>,
+que están sentados cuando se crea la sala.</p>
+<p>Si su juego está destinado a ser jugado con poca gente, un todos contra todos está bien con seis de ocho
+jugadores - usar <code>0</code> y deja que tu juego se encargue de los asientos vacíos. De forma predeterminada, una sala nunca comienza
+con un asiento vacío.</p>
+<p><strong>Jugar solo contra la computadora</strong> Por lo tanto, son dos llamadas: cree la sala con cada dos asientos como IA y luego iníciela:</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms
+{ "gameSlug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94", "teamCount": 2, "seatsPerTeam": 1, "aiPlayers": 1 }
+
+POST /api/v1/realtime/rooms/{id}/start
+</code></pre>
+<p>Los asientos de IA son identidades y reservas de asientos, no un servicio de bot; nada en la plataforma los reproduce por usted. Un juego enrutado por el host los impulsa en su propia simulación; un juego con un <code>server=</code> el script los encuentra en <code>ctx.room.roster</code> marcado <code>ai: true</code> y los reproduce dentro del guión (ver <a href="/es/docs/api/game-scripts.html#room-bound-sessions">Guiones de juego</a>).</p>
+<h3 id="invites">invita</h3>
+<p><code>POST /rooms/{id}/invites</code> con <code>{ "toUserId": "&lt;guid&gt;" }</code>. Las invitaciones son <strong>solo amigos</strong> (<code>403</code> de lo contrario; la misma regla de amistad que las invitaciones a juegos), solo participantes, y solo mientras la sala se une: en <code>Lobby</code>/<code>Open</code>, o <code>Playing</code> con <a href="#join-in-progress"><code>joinInProgress</code></a>. <code>409</code> si el usuario ya está en la sala o ya tiene una invitación pendiente; <code>400</code> al invitarte a ti mismo. Devuelve la invitación.</p>
+<p><strong>El invitado recibe una notificación por usted.</strong> Al enviar una invitación a una sala se emite un <a href="/es/docs/api/chat.html#game_invite-one-event-for-both-invite-systems"><code>game_invite</code> empujar</a> en el socket de chat del invitado y agrega la invitación a <code>GET /api/v1/me/game-invites</code>, por lo que un amigo que esté en el panel de StarHermit (o en cualquier lugar que no sea tu juego) aún se enterará. Tú haces <strong>no</strong> También debe enviar una invitación a la API de juegos, lo que le notificará dos veces. la respuesta <code>notified</code> le indica si el envío alcanzó una conexión activa; <code>false</code> solo significa que el invitado no está conectado en este momento y verá la invitación desde su bandeja de entrada.</p>
+<p>Debido a que una notificación cubre ambos sistemas de invitación, su carga útil lleva <code>kind: "room"</code> más <code>roomId</code> y el <code>acceptPath</code>/<code>declinePath</code> para <strong>este</strong> invitar. Responda una invitación a una sala en los puntos finales en tiempo real que aparecen a continuación: una identificación de invitación a una sala no es válida en <code>/games/{slug}/invites/...</code> y viceversa.</p>
+<p><code>GET /rooms/invites</code> enumera las invitaciones a salas pendientes de la persona que llama en todos los juegos (los tokens de lanzamiento solo ven los de sus propios juegos). Úselo como bandeja de entrada de invitación a la sala para las encuestas de un cliente de juego. La bandeja de entrada de invitaciones unificada en <code>GET /api/v1/me/game-invites</code> devuelve estos también.</p>
+<p><code>POST /rooms/invites/{inviteId}/accept</code> sienta a la persona que llama y regresa a la habitación. <strong>fijación de fiesta</strong>: las uniones por invitación se realizan en el equipo del anfitrión mientras dure el espacio y luego se desbordan a otros equipos. <code>409</code> si la sala está llena, ya iniciada/cerrada, o la persona que llama está en otra sala activa (<a href="#worlds-do-not-count-as-your-room">mundos</a> exceptuado). Aceptar una invitación a una sala en la que ya se encuentra la persona que llama simplemente la acepta.</p>
+<p><code>POST /rooms/invites/{inviteId}/decline</code> → <code>204</code>.</p>
+<h3 id="matchmaking">Casamentero</h3>
+<p><code>POST /rooms/{id}/open</code> (solo anfitrión): <code>Lobby</code> → <code>Open</code>, conjuntos <code>openedAt</code>y comienza la cuenta regresiva de reabastecimiento. Idempotente mientras ya <code>Open</code>; <code>409</code> una vez <code>Playing</code>/<code>Closed</code>.</p>
+<p>Un <code>Open</code> la habitación no espera su cuenta regresiva una vez <strong>cada asiento está ocupado</strong> – por humanos o por jugadores de IA configurados en el momento de la creación. Comienza allí y entonces, por lo que la respuesta a <code>open</code> (o a la unión que llenó el último asiento) ya puede ser un <code>Playing</code> habitación con <code>startedAt</code> colocar. Una sala creada con IA en cada asiento pero, por lo tanto, el del anfitrión comienza en el momento en que se abre.</p>
+<p><code>GET /rooms?gameSlug=</code> explora las salas enumeradas abiertas de ese juego que todavía tienen un asiento, la más antigua abierta primero, con un límite de 50. Cada fila tiene nombre, nombre del anfitrión, recuentos de jugadores/capacidad, <code>freeSeats</code>, metadatos, <code>startedAt</code> y <code>joinInProgress</code> — <strong>sin código de unión ni lista</strong>. Agregar <code>includeInProgress=true</code> para enumerar también en ejecución <a href="#join-in-progress">unirse en progreso</a> Salas con un asiento vacante, después de que todas las salas aún se llenen.</p>
+<p><code>POST /rooms/join-by-code</code> con <code>{ "joinCode": "K7MP2X" }</code> toma asiento. Los códigos no distinguen entre mayúsculas y minúsculas y espacios en blanco. A diferencia de la unión rápida, esto funciona en una sala no listada que todavía está en la lista. <code>Lobby</code>. El código se libera cuando se cierra la sala.</p>
+<p><code>PATCH /rooms/{id}</code> (anfitrión): <code>{ "name", "isVisible", "metadata", "joinInProgress", "backfillAiPlayers", "backfillAllEmptySeats", "expectedRevision" }</code>. Los campos omitidos se dejan solos; enviar <code>name: ""</code> para limpiar el nombre. A <code>Playing</code> La sala aún se puede cambiar de nombre, incluir o no enumerar, reemplazar sus metadatos y cambiar <code>joinInProgress</code>; Se rechaza la configuración de reposición (<code>409</code>) una vez iniciado el partido.</p>
+<p><code>POST /rooms/{id}/matchmake</code> (anfitrión, <code>Lobby</code> solamente) pone en cola la sala <strong>humano</strong> lista como uno
+partido/equipo; Los participantes de AI presentados no son miembros del partido. Con la política predeterminada, el tamaño del partido
+debe ser igual a la cola seleccionada <code>teamSize</code>. con un <a href="/es/docs/starhermit-txt.html#starting-matchmaking-before-every-human-seat-is-filled">fecha límite de inicio del manifiesto</a>,
+un grupo más pequeño puede ocupar un equipo más grande cuando llegue la fecha límite; Los asientos restantes se convierten en IA hasta el
+el límite configurado del juego y luego permanece vacío. Los grupos permanecen juntos y los boletos no se combinan en un solo equipo.</p>
+<p>Usar <code>?queue=duos</code> para una forma o repetir <code>?queues=</code> para permitir un subconjunto, como en la API de juegos:</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms/{id}/matchmake?queues=duos&amp;queues=trios
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<p>Devuelve el <a href="/es/docs/api/games.html#post-apiv1gamesslugmatchmaking">boleto de emparejamiento</a>, incluido <code>status</code> y
+<code>sessionId</code> cuando coincide. Las encuestas anfitrionas <code>GET /api/v1/games/{slug}/matchmaking</code> y cancela con
+<code>DELETE</code> en ese camino. Una sala que ya está en cola o una fiesta que no se ajusta a ninguna de las formas permitidas.
+regresa <code>409</code>. Este flujo de emparejamiento autorizado es independiente de abrir una sala para unirse rápidamente.
+y su cuenta regresiva de reabastecimiento a nivel de habitación.</p>
+<p><code>POST /rooms/quick-join</code> con <code>{ "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "seats": 1 }</code> coloca a la persona que llama en el <strong>sala abierta más antigua con un asiento libre</strong> para ese juego: los asientos de IA cuentan como ocupados, por lo que se omite una sala cuyos asientos restantes sean todos de IA. <code>404</code> cuando ninguna habitación califica, el cliente debe crear su propia habitación y abrirla. Solo se admite la unión rápida de un solo usuario (<code>seats</code> debe ser <code>1</code>).</p>
+<p><strong>Filtros.</strong> Agregue cualquiera de estos para unirse solo a una habitación que encaje; cada filtro dado debe aguantar, y
+Ninguno dado es el comportamiento anterior:</p>
+<pre><code class="language-json">{ "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "seats": 1, "teamCount": 2, "seatsPerTeam": 4, "metadata": { "mode": "ranked", "map": "arena" }, "includeInProgress": true }
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Filtrar</th>
+<th>Combina con una habitación cuyo…</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>teamCount</code></td>
+<td>el recuento del equipo es exactamente este</td>
+</tr>
+<tr>
+<td><code>seatsPerTeam</code></td>
+<td>Los asientos por equipo son exactamente esto.</td>
+</tr>
+<tr>
+<td><code>metadata</code></td>
+<td>los metadatos contienen <strong>cada</strong> propiedad dada, de igual valor. Las propiedades que no nombras se ignoran, por lo que <code>{"mode":"ranked"}</code> partidos <code>{"mode":"ranked","map":"desert"}</code>. Los valores se comparan como JSON: números por valor (<code>1</code> es igual <code>1.0</code>), objetos independientemente del orden de las claves, matrices en orden. Debe ser un objeto (<code>400</code> de lo contrario).</td>
+</tr>
+</tbody>
+</table>
+<p><code>includeInProgress: true</code> también considera listado, en ejecución <a href="#join-in-progress">unirse en progreso</a> habitaciones con asiento libre; las habitaciones que aún se llenan son lo primero en ambos sentidos. Sin él, nunca se une a una partida en curso, por lo que un cliente que es anterior a la unión en progreso nunca aterriza en una. A <code>metadata</code> El filtro que lleva una identificación que su juego puso en los metadatos de la sala es la forma en que un cliente se une. <strong>uno en particular</strong> habitación listada, ya que los listados no incluyen ningún código de inscripción.</p>
+<p>Gana la sala abierta más antigua y con un asiento libre. Cuando ninguno coincide, el <code>404</code> dice
+<code>"No open room with free seats matches those filters."</code> — la señal habitual para crear y abrir una habitación
+con esos metadatos usted mismo, para que la conexión rápida filtrada del siguiente jugador los encuentre.</p>
+<h3 id="start-seats-leave-result">Inicio, asientos, salida, resultado.</h3>
+<p><code>POST /rooms/{id}/start</code> (solo anfitrión): llena <strong>todavía vacío</strong> asientos: todos o hasta el número total de la sala <a href="#backfill-allowance">asignación de reposición</a> — con participantes de IA (<code>isAi: true</code>, <code>userId: null</code>, apodo aleatorio único): los jugadores de IA sentados en la creación conservan su identificación, apodo y asiento; congela la lista, establece <code>status: "Playing"</code>y devuelve la lista congelada. Si el juego tiene un servidor backend (un <code>server=</code> script o un contenedor), esto también crea la sesión limitada a la sala (consulte <a href="#room-bound-sessions">el puente</a>); la habitación devuelta y el roster push carry <code>gameSessionId</code>. A <strong>recipiente</strong> La sesión que no se puede crear (en la mayoría de los casos, una implementación que aún se activa desde el estado inactivo) deja la sala sin iniciar: <code>start</code> responde a ese error (vuelve a intentarlo) y una habitación llena o el barrido de relleno vuelve a intentarlo en su siguiente pasada. Una falla en el script aún inicia la sala enrutada por el host. <strong>idempotente</strong> — iniciando un <code>Playing</code> room devuelve la lista nuevamente. Una sala puede iniciarse automáticamente cuando pase la fecha límite para reabastecerse.</p>
+<p><code>POST /rooms/{id}/seats</code> (solo anfitrión, <code>Lobby</code>/<code>Open</code> únicamente) reasienta a los participantes:</p>
+<pre><code class="language-json">{ "seats": [ { "participantId": "&lt;guid&gt;", "team": 1, "slot": 0 } ] }
+</code></pre>
+<p><code>400</code> para asientos fuera de los límites del equipo/espacio de la sala o participantes desconocidos; <code>409</code> si dos participantes compartieran asiento.</p>
+<p><code>POST /rooms/{id}/leave</code> se comporta según el estado de la habitación:</p>
+<ul>
+<li><strong>Vestíbulo/Abierto</strong>: se retira el asiento. si el <strong>anfitrión</strong> se va, el papel de anfitrión se transfiere al participante humano restante con más años de servicio; Si no quedan humanos, la habitación está <code>Closed</code>.</li>
+<li><strong>Jugando, <a href="#join-in-progress">unirse en progreso</a> habitación</strong>: el asiento es <strong>desocupado</strong> (no entregado a la IA), el jugador es eliminado de la sesión vinculada (su <code>ws/v1/games</code> los enchufes se cierran) y se cuenta el juego. Cuando el último humano se va y la sesión vinculada todavía está activa, la sala se <strong>no</strong> cerrado: el mundo permanece listado y se puede unir, y el primer jugador que regresa asume el rol de anfitrión.</li>
+<li><strong>Jugando (adquisición de IA)</strong>: el partido continúa: el asiento del que sale se convierte en un asiento de IA: <code>isAi: true</code>, <code>userId: null</code>, con un apodo nuevo y único y el mismo participante <code>id</code>, <code>team</code>, <code>slot</code>, y <code>joinedAt</code>. El que sale es liberado inmediatamente (la regla de una sala activa ya no los cuenta, por lo que pueden crear o unirse a otra sala) mientras que el envío de lista le dice a cada cliente que una IA ahora ocupa ese asiento. Si el que sale es el <strong>anfitrión</strong> y al menos otro humano permanece, el rol de anfitrión se transfiere al humano que permaneció unido por más tiempo y la habitación permanece <code>Playing</code> (La migración del host del lado del cliente es la preocupación del juego); Si no quedan humanos, la habitación está <code>Closed</code>.</li>
+</ul>
+<p>Devuelve la habitación.</p>
+<p><code>POST /rooms/{id}/result</code> (solo anfitrión, <code>Playing</code> solamente) registra el resultado, cierra la sala y distribuye el resultado a través del WebSocket. <strong>Solo juegos enrutados por host</strong> — una sala con una sesión con guión vinculada finaliza cuando regresa el guión <code>result</code>, que cierra la habitación automáticamente (ver <a href="#room-bound-sessions">el puente</a>).</p>
+<pre><code class="language-json">{ "teamScores": [3, 1], "metadata": { "durationSeconds": 360 } }
+</code></pre>
+<p><code>teamScores</code> debe tener exactamente una entrada por equipo; cada puntuación tiene una cordura limitada de 0 a 50. El resultado fijado se almacena en la memoria de la habitación. <code>result</code> y empujado a los participantes conectados como un <code>{"type":"result"}</code> marco de control.</p>
+<p><code>GET /rooms/mine</code> devuelve la información no actual de la persona que llama.<code>Closed</code> sala (para reconexiones), o <code>404</code>. un jugador
+quien también pertenece a <a href="#worlds-do-not-count-as-your-room">mundos</a> obtiene la habitación que los ocupa, de lo contrario el
+mundo al que se unieron más recientemente.</p>
+<p><code>GET /rooms/joined</code> liza <strong>cada</strong> habitación en la que la persona que llama ocupa un asiento, lo más nuevo primero: sus mundos como
+así como la única sala que las ocupa, como salas completas (lista y código de inscripción incluidos). un lanzamiento
+el token sólo ve sus propias salas de juego; con una ficha llena, <code>?gameSlug=</code> lo estrecha. Responde un vacío
+lista, no una <code>404</code>, para que un cliente pueda preguntar en cada inicio sin que se registre un error.</p>
+<h3 id="join-in-progress">Unirse en progreso</h3>
+<p>Una habitación creada (o <code>PATCH</code>ed) con <code>"joinInProgress": true</code> sigue tomando jugadores después <code>start</code>.
+invita, <code>join-by-code</code> y unirse rápidamente con <code>includeInProgress: true</code> luego trabajar en un <code>Playing</code> habitación
+con un <strong>vacante</strong> asiento, nadie en él, ni una IA, por lo que una sala de este tipo normalmente se inicia con
+<code>"backfillAiPlayers": 0</code>. Sin la bandera, una sala iniciada rechaza todas las uniones, como antes.</p>
+<ul>
+<li><strong>El juego decide.</strong> Si la sala está vinculada a una sesión de juego, el recién llegado es admitido en esa sesión.
+sesión antes de que se mantenga el asiento: la plataforma solicita un guión <code>game.onMembershipChange(ctx)</code> o un
+contenedores <a href="/es/docs/api/container-games.html#post-sessionssessionidmembers"><code>POST /sessions/{id}/members</code></a>. un juego
+que se niega (o no tiene ninguna de las dos cosas) obtiene el asiento hacia atrás y la unión es una <code>409</code>; una invitación aceptada se queda
+pendiente. Una vez admitido, el jugador es un jugador de sesión en todos los sentidos, válido en <code>ws/v1/games</code>,
+en restaura y reconecta.</li>
+<li><strong>Al salir se deja libre el asiento</strong> y elimina al jugador de la sesión, y se cuenta el juego.</li>
+<li><strong>El mundo sobrevive a sus visitantes.</strong> Cuando el último humano se va y la sesión sigue activa,
+la sala permanece abierta, listada y a la que se puede acceder; el primer jugador que regresa se convierte en anfitrión. Una habitación atada a un
+La sesión activa tampoco se cierra porque su host se desconecta (consulte
+<a href="#the-60-second-host-rule-and-room-bound-sessions">la regla del anfitrión de 60 segundos</a>). La propia sesión
+El ciclo de vida decide cuándo termina: un <a href="/es/docs/tutorials/persistent-sessions.html">persistente</a> el juego se detiene
+en lugar de terminar, y la habitación se cierra con él.</li>
+<li><strong>Encontrar uno.</strong> <code>GET /rooms?includeInProgress=true</code> enumera las salas de unión en progreso en ejecución con una vacante
+asiento; <code>POST /rooms/quick-join</code> con <code>includeInProgress: true</code> se une a uno (añade un <code>metadata</code> filtrar a
+elegir una habitación en particular). La conexión rápida pasa por las salas en las que ya se encuentra la persona que llama.</li>
+</ul>
+<h4 id="worlds-do-not-count-as-your-room">Los mundos no cuentan como tu habitación.</h4>
+<p>Un jugador puede estar en <strong>una habitación activa a la vez</strong>: crear, unirse por código, unirse rápidamente o
+aceptar una invitación es un <code>409 "You are already in an active room."</code> mientras ocupan un asiento en otro
+habitación que no está cerrada. Un asiento en un <strong>mundo</strong> no cuenta: un <code>Playing</code>, <code>joinInProgress</code> atado a la habitación
+a una sesión activa de un <a href="/es/docs/tutorials/persistent-sessions.html">persistente</a> juego. Un mundo dura tanto
+como su sesión y su sala permanecen abiertas después de que se vaya el último visitante, un asiento en una es membresía,
+no es un lobby en el que está sentado el jugador; pueden pertenecer a varios mundos, en cualquier juego, y aún así usar
+una habitación ordinaria. Una partida de unión en progreso que no es persistente todavía cuenta: termina, y mientras
+se ejecuta, el reproductor está en él. Se rechaza un segundo asiento en la misma habitación (<code>409</code>) en cada camino. Listar un
+mundos del jugador con <a href="#start-seats-leave-result"><code>GET /rooms/joined</code></a>.</p>
+<h2 id="websocket-wsv1realtime">WebSocket: <code>ws/v1/realtime</code></h2>
+<p>Conéctate a <code>wss://api.starhermit.com/ws/v1/realtime?roomId=&lt;guid&gt;</code> con un JWT a través del <code>Authorization</code> encabezamiento, <code>?ticket=</code> de <code>POST /api/v1/realtime/connection-tickets</code>, o <code>?access_token=</code>. Prefiere el billete: es de un solo uso y de segunda vida. <strong>Sólo participantes</strong> (<code>403</code> de lo contrario); un token de lanzamiento <code>game_scope</code> debe ser igual al de la habitación <code>gameSlug</code>. La conexión más nueva reemplaza a la anterior del usuario: el socket anterior se cierra con <code>PolicyViolation</code> ("Reemplazado por una conexión más nueva").</p>
+<h3 id="binary-frames-gameplay">Marcos binarios (jugabilidad)</h3>
+<p>Los fotogramas binarios son el canal de juego para <strong>enrutado por host</strong> juegos (las sesiones con guión en la sala se reproducen durante <code>ws/v1/games</code> en cambio - ver <a href="#room-bound-sessions">el puente</a>). el servidor <strong>nunca analiza</strong> sus cargas útiles (la autoridad del anfitrión es el contrato del juego) pero impone el enrutamiento y la identidad:</p>
+<ul>
+<li>el servidor <strong>antepone cada cuadro con la identificación de participante de 16 bytes del remitente</strong> (el GUID del participante en orden de bytes .NET). Los clientes deben eliminar los primeros 16 bytes y nunca deben confiar en una identificación de remitente dentro de la carga útil.</li>
+<li><strong>Anfitrión → habitación</strong>: los fotogramas del anfitrión se distribuyen en abanico para todos los demás participantes conectados (instantáneas).</li>
+<li><strong>Invitado → solo anfitrión</strong>: los fotogramas de un invitado se entregan al anfitrión y a nadie más (entradas).</li>
+<li>Tapa del tamaño del marco: <strong>8 KB</strong>. Límite de tarifa: <strong>30 mensajes/segundo por conexión</strong>, cubo de fichas con un margen de explosión de 2× durante 1 segundo. Una infracción cierra el enchufe con <code>PolicyViolation</code>.</li>
+</ul>
+<h3 id="json-text-control-frames">Marcos de control de texto JSON</h3>
+<p>Marcos JSON pequeños (≤ <strong>4 KB</strong>) llevar eventos de lobby y partidos:</p>
+<pre><code class="language-json">{ "type": "ready" }
+{ "type": "chat", "text": "Ready to race" }
+{ "type": "event", "kind": "countdown", "goInMs": 3000 }
+</code></pre>
+<ul>
+<li>El <strong>anfitrión</strong> puede enviar <code>event</code>, <code>chat</code>, y <code>ready</code>; Los fotogramas se transmiten a todos los demás participantes.</li>
+<li><strong>Huéspedes</strong> sólo puede enviar <code>ready</code> y <code>chat</code> (también transmitido), tarifa limitada a <strong>10 por minuto</strong>.</li>
+<li>el servidor <strong>vuelve a etiquetar cada marco de control</strong> con la identificación del participante del remitente: una proporcionada por el cliente <code>from</code> es despojado y reemplazado con <code>"from": "&lt;participantId&gt;"</code>.</li>
+<li>Un marco imposible de analizar, una incógnita. <code>type</code>, o un tipo que la función del remitente no puede enviar cierra el socket con <code>PolicyViolation</code>.</li>
+</ul>
+<h3 id="server-pushes">Empujes del servidor</h3>
+<p>El servidor envía marcos de texto JSON por sí solo:</p>
+<ul>
+<li><code>{"type":"presence","userId":"&lt;guid&gt;","online":true|false}</code> — en cada conexión/desconexión.</li>
+<li><code>{"type":"roster","roomId":"&lt;guid&gt;","status":"Playing","participants":[ ... ]}</code> — al enchufe de conexión, y a toda la habitación en las uniones, hojas, cambios de asiento, aperturas y arranques. El roster empuja después <code>start</code> es la lista de partidos congelada, asientos de IA incluidos, y lleva <code>gameSessionId</code> cuando la sala tiene una sesión con guión vinculada.</li>
+<li><code>{"type":"result","roomId":"&lt;guid&gt;","teamScores":[3,1],"metadata":{...}}</code> — cuando el anfitrión envía el resultado, o cuando un script vinculado devuelve uno.</li>
+</ul>
+<h3 id="close-codes">Cerrar códigos</h3>
+<table>
+<thead>
+<tr>
+<th>Código</th>
+<th>Cuando</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>NormalClosure</code></td>
+<td>Cierre iniciado por el cliente</td>
+</tr>
+<tr>
+<td><code>MessageTooBig</code></td>
+<td>Marco sobre el límite de 8 KB (binario) / 4 KB (texto)</td>
+</tr>
+<tr>
+<td><code>PolicyViolation</code></td>
+<td>Violación del límite de velocidad, marco de control no permitido/no válido, conexión reemplazada por una más nueva</td>
+</tr>
+</tbody>
+</table>
+<h2 id="sizing-a-large-room">Dimensionar una habitación grande</h2>
+<p>Una sala tiene capacidad para 100 jugadores, pero el límite práctico es el ancho de banda. El canal binario es
+enrutado por host:</p>
+<ul>
+<li>cada cuadro de invitado va al anfitrión;</li>
+<li>cada cuadro del anfitrión se copia a cada invitado;</li>
+<li>cada trama lleva un prefijo de remitente de 16 bytes.</li>
+</ul>
+<p>Siguen dos cosas:</p>
+<ul>
+<li><strong>La descarga del anfitrión crece con el número de invitados.</strong> Recibe las aportaciones de cada huésped.</li>
+<li><strong>La salida de la plataforma crece con el cuadrado del tamaño de la habitación.</strong> Una instantánea del host que describe cada
+El jugador crece con el número de jugadores y se copia a cada invitado.</li>
+</ul>
+<p>Ejemplo resuelto: 100 jugadores. Cada invitado envía 30 entradas/s de 32 bytes. El anfitrión envía 20
+instantáneas/s a 12 bytes por reproductor, aproximadamente 1,2 KB cada una. La sobrecarga de TLS/TCP/WebSocket por mensaje es
+tomado como unos 70 bytes.</p>
+<table>
+<thead>
+<tr>
+<th>Enlace</th>
+<th>Tasa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cada invitado, sube</td>
+<td>~26 kbit/s</td>
+</tr>
+<tr>
+<td>Cada invitado, descargar</td>
+<td>~0,21 Mbit/s</td>
+</tr>
+<tr>
+<td>Anfitrión, subir</td>
+<td>~0,21 Mbit/s</td>
+</tr>
+<tr>
+<td><strong>Anfitrión, descargar</strong></td>
+<td><strong>~2,8 Mbit/s, como ~3.000 mensajes/s</strong></td>
+</tr>
+<tr>
+<td><strong>Salida de plataforma para la habitación.</strong></td>
+<td><strong>~23 Mbit/s (~10,5 GB por hora)</strong></td>
+</tr>
+</tbody>
+</table>
+<p>El mismo juego en otros tamaños muestra el crecimiento cuadrático en la salida de la plataforma:</p>
+<table>
+<thead>
+<tr>
+<th>Jugadores</th>
+<th>8</th>
+<th>22</th>
+<th>50</th>
+<th>100</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Salida de la plataforma</td>
+<td>~0,4 Mbit/s</td>
+<td>~1,8 Mbps</td>
+<td>~6,9 Mbps</td>
+<td>~23Mbps</td>
+</tr>
+</tbody>
+</table>
+<p>Los límites por conexión limitan el peor de los casos, no el típico. Una sala de 100 jugadores en la que
+cada conexión envía tramas de 8 KB a 30/s es aproximadamente <strong>390Mbps</strong> de salida de la plataforma.</p>
+<p>Para una habitación grande:</p>
+<ul>
+<li><strong>Mantenga bajas las tarifas de entrada de los huéspedes</strong> (10–20 Hz) y envía entradas solo cuando cambian. el anfitrión
+recibe las aportaciones de cada huésped y manejar miles de mensajes por segundo suele ser más difícil
+límite para un host de navegador que el ancho de banda.</li>
+<li><strong>Mantenga las instantáneas pequeñas.</strong> Cuantizar posiciones, enviar deltas contra el último estado reconocido,
+y entidades dispersas que rara vez cambian en varias instantáneas. Un solo cuadro es como máximo
+8 KB, lo que deja unos 80 bytes por jugador a 100 jugadores.</li>
+<li><strong>El canal de la habitación no puede dirigirse a un solo huésped.</strong> Los cuadros de anfitrión van para todos, por lo que cada invitado
+recibe el mundo entero. Si tu juego necesita gestión de intereses por jugador (solo cerca
+jugadores, niebla de guerra), ejecútelo en un <a href="/es/docs/api/container-games.html">servidor de juegos de contenedores</a> en cambio. un
+El contenedor puede dirigir marcos a jugadores individuales, y el anfitrión ya no es el hogar de un jugador.
+conexión.</li>
+</ul>
+<h2 id="automatic-room-lifecycle">Ciclo de vida automático de la habitación</h2>
+<ul>
+<li>Un <code>Open</code> la sala se inicia automáticamente cuando pasa la fecha límite de reabastecimiento; Los asientos vacíos se convierten en participantes de IA con nombres únicos, hasta el nivel de la sala. <a href="#backfill-allowance">asignación de reposición</a>.</li>
+<li>Un <code>Open</code> La sala también comienza automáticamente tan pronto como se ocupa cada asiento (por humanos, por jugadores de IA configurados en la creación o una combinación) sin esperar esa fecha límite.</li>
+<li>A <code>Playing</code> la sala se cierra cuando su anfitrión no tiene <code>ws/v1/realtime</code> conexión durante más de 60 segundos, a menos que esté vinculado a una sesión de juego que aún esté activa, en cuyo caso el rol de anfitrión se mueve (ver más abajo). Los invitados conectados reciben un último empujón en la lista que muestra la sala cerrada.</li>
+<li>A <code>Lobby</code> o <code>Open</code> La sala se cierra después de más de 60 minutos sin participantes conectados.</li>
+</ul>
+<p>Un participante que simplemente pierde su conexión no se ve afectado: volver a conectar el enchufe (la conexión más reciente reemplaza) y <code>GET /rooms/mine</code> ambos siguen trabajando mientras la habitación está viva.</p>
+<h3 id="the-60-second-host-rule-and-room-bound-sessions">La regla del anfitrión de 60 segundos y las sesiones limitadas a la sala</h3>
+<p><strong>Una coincidencia ejecutada por el servidor no pertenece a su anfitrión.</strong> A <code>Playing</code> sala vinculada a una sesión de juego que es
+todavía <code>active</code> nunca se cierra porque su anfitrión está fuera de línea: el rol de anfitrión pasa a ser un humano conectado
+si lo hay, y en caso contrario no pasa nada. El ciclo de vida de la sesión decide cuándo se produce la coincidencia.
+y cierra la habitación cuando lo hace. La siguiente regla se aplica a salas enrutadas por el host (sin sesión) y
+a una sala delimitada una vez finalizada su sesión.</p>
+<p><strong>Por lo tanto, un juego limitado a una sala no necesita el conector en tiempo real del anfitrión.</strong> Un anfitrión que juega
+<code>ws/v1/games</code> y se cierra (o nunca se abre) <code>ws/v1/realtime</code> no cierra la sala durante la sesión
+es <code>active</code>; Abre el conector en tiempo real solo si tu juego quiere mejoras en la lista.</p>
+<p><strong>Para una sala enrutada por el host, solo un <code>ws/v1/realtime</code> El socket cuenta como la conexión del host.</strong> el reloj
+comienza cuando se cierra el último socket en tiempo real del host; un host que nunca se conectó se mide desde el
+habitación <code>startedAt</code>.</p>
+<p><strong>Cerrar una sala no finaliza su sesión limitada a la sala.</strong> Una habitación limitada aún puede cerrarse mientras está
+La sesión se ejecuta, más a menudo cuando su último humano <a href="#start-seats-leave-result">hojas</a> una habitación sin
+<a href="#join-in-progress">unirse en progreso</a>. Cerrándolo (empuje de lista, todos los asientos liberados, invitaciones pendientes)
+caducado) no hace nada más:</p>
+<ul>
+<li>La sesion queda <code>active</code>. Sus jugadores pueden seguir jugando. <code>ws/v1/games</code>, y el guión sigue
+corriendo a su velocidad de tictac.</li>
+<li>A partir de la siguiente invocación, <code>ctx.room.roster</code> es <strong>vacío</strong> y cada ser humano en <code>ctx.presence</code> tiene
+<code>left: true</code>, porque cerrar la sala libera todos los asientos. <code>online</code> todavía refleja <code>ws/v1/games</code>
+enchufes. Un guión que trata "todos se fueron" ya que el final del partido debería regresar <code>result</code> entonces.</li>
+<li>Si el guión regresa más tarde <code>result</code>, la sesión termina como de costumbre, pero la sala <code>result</code> corsé
+<code>null</code>: la sala ya estaba cerrada, por lo que el resultado se almacena solo en la sesión.</li>
+<li>Si el guión nunca regresa <code>result</code>, la sesión se retira como cualquier otra sesión de juego: 5 minutos
+despues del ultimo <code>ws/v1/games</code> el enchufe se cierra, o después de 24 horas sin acción del jugador (ver
+<a href="/es/docs/api/games.html#session-model">Juegos: modelo de sesión</a>).</li>
+</ul>
+<p>En resumen: una partida limitada a una sala sobrevive a que su anfitrión se desconecte; si debe terminar cuando sus jugadores
+salir de la habitación, terminarlo en el guión cuando <code>ctx.presence</code> muestra que todos se fueron.</p>
+<h2 id="security-summary">Resumen de seguridad</h2>
+<ul>
+<li>Cada punto final funciona con un JWT completo <strong>o</strong> un token de lanzamiento con ámbito de juego; un token de lanzamiento <code>game_scope</code> debe coincidir con el de la habitación <code>gameSlug</code>, por lo que dos juegos nunca pueden verse ni unirse a las salas del otro.</li>
+<li>Las lecturas son sólo para participantes (más los invitados pendientes); <code>open</code>, <code>seats</code>, <code>start</code>, y <code>result</code> son solo de host; las invitaciones son solo para amigos.</li>
+<li>Validación: límites de asientos/equipo, un recuento de IA que siempre deja un asiento al anfitrión, una sala activa por usuario (excepto mundos), un ocupante por asiento, inicio idempotente, puntuaciones de resultados fijadas entre 0 y 50, las invitaciones caducan con la sala.</li>
+<li>Transporte: identificadores de remitente etiquetados por el servidor, enrutamiento basado en roles, límites de tamaño de trama, límites de velocidad por conexión, sin análisis de cargas binarias del lado del servidor.</li>
+</ul>
+<h2 id="room-bound-sessions">Sesiones en sala</h2>
+<p>Para un juego con un servidor backend: un <code>server=</code> script en su manifiesto, o un <a href="/es/docs/api/container-games.html">recipiente</a> — una sala en tiempo real puede ejecutar su partido <strong>servidor con autoridad</strong> en lugar de en el cliente host. Los puntos siguientes están escritos para guiones; un contenedor recibe la misma lista a través de su <code>POST /sessions</code> ctx (<code>room</code>, <code>presence</code>) y cambios de membresía a través de <code>POST /sessions/{id}/members</code>. Esto combina salas (lobby, invitaciones, emparejamiento, backfill) con simulación del lado del servidor, entradas validadas y resultados propios del script.</p>
+<ul>
+<li><strong>Creación de sesión al inicio de la sala.</strong> Cuando entra la habitación <code>Playing</code>, la plataforma crea un N-jugador <a href="/es/docs/api/games.html">sesión de juego</a> para los participantes humanos. Los asientos de IA solo existen en la lista de guiones. La respuesta de la sala y los impulsos del roster se exponen <code>gameSessionId</code> para que los clientes sepan qué socket de juego abrir.</li>
+<li><strong>El juego pasa a <code>ws/v1/games</code>.</strong> Los clientes se conectan a <code>ws/v1/games?sessionId=&lt;gameSessionId&gt;</code> e intercambiar <code>cmd</code>/<code>game</code> fotogramas con el guión, exactamente como cualquier juego con guión; el WS en tiempo real permanece conectado solo para la lista/presencia. La sesión funciona a la velocidad admitida solicitada por su script a través de <code>game.tickRateHz</code> — un script que no solicita nada está marcado en 0,25 Hz, lo que ningún juego en tiempo real quiere, así que declara uno (ver <a href="/es/docs/api/game-scripts.html#tick-rate">Guiones de juego</a>).</li>
+<li><strong>Guión extendido ctx.</strong> Cada invocación para una sesión limitada a la sala (<code>createSession</code>, <code>onPlayerMessage</code>, <code>onTick</code>) recibe además <code>ctx.room</code> (identificación de la sala, metadatos y la lista congelada: humanos <em>y</em> Asientos AI, ordenados por equipo y luego por espacio) y <code>ctx.presence</code> (<code>{ "&lt;userId&gt;": { online, left } }</code> para cada usuario que es o fue un participante humano). Detalles en <a href="/es/docs/api/game-scripts.html#room-bound-sessions">Guiones de juegos: sesiones limitadas a la sala</a>.</li>
+<li><strong>Logros autorizados por el servidor.</strong> Cada gancho de una sesión vinculada puede otorgar logros al regresar <code>achievements: {userId: [keys]}</code>, exactamente como en cualquier juego con guión, incluso desde <code>createSession</code>, que se activa en el momento en que comienza la habitación. Los desbloqueos se envían al jugador que los gana. <code>ws/v1/games</code> como <code>{"type":"achievement"}</code> marcos. Ver <a href="/es/docs/api/achievements.html#server-authoritative-game-achievements">Logros</a>.</li>
+<li><strong>El guión pone fin al partido.</strong> Cuando el guión regresa <code>result</code>, la plataforma finaliza la sesión, almacena el resultado en la sala y cierra la sala (incluido el envío final de la lista). <code>POST /rooms/{id}/result</code> no se utiliza para juegos en la sala.</li>
+<li><strong>Fallos de inicio.</strong> Una sala respaldada por scripts puede iniciarse sin una sesión vinculada si falla la creación de la sesión; inspeccionar <code>gameSessionId</code> antes de elegir un transporte de juego. Una sala respaldada por contenedores permanece sin iniciarse cuando su servidor no puede crear la sesión. Reintentar con retroceso ante un error de inicio temporal; no lo cambie a la simulación de host.</li>
+<li><strong>Un juego enrutado por host puede vincular una sesión únicamente para obtener logros.</strong> El canal de juego binario nunca está cerrado en una sesión vinculada, por lo que un juego que simula en el cliente anfitrión aún puede enviar un <code>server=</code> guión cuyo único trabajo es otorgar subvenciones por logros (y elo), mientras que el camino rápido sigue fluyendo <code>ws/v1/realtime</code>.</li>
+</ul>
+<h2 id="how-a-game-uses-it">Cómo lo usa un juego</h2>
+<ol>
+<li><strong>Crear</strong>: el creador del lobby llama <code>POST /rooms</code> con su diseño de equipo, un opaco <code>metadata</code> blob, y por muchos <code>aiPlayers</code> El partido debería comenzar y se convierte en anfitrión. Llenar cada dos asientos con IA aquí es todo el flujo de un solo versus una computadora.</li>
+<li><strong>Invitar</strong>: el anfitrión enumera amigos (<code>GET /api/v1/me/friends</code>) y envía <code>POST /rooms/{id}/invites</code>. La plataforma notifica a cada invitado (<code>game_invite</code> empujar + <code>GET /api/v1/me/game-invites</code>), para que puedan aceptar desde el tablero sin tener el juego abierto; los invitados que ya están en el juego ven las mismas invitaciones mediante encuestas <code>GET /rooms/invites</code>. Aceptar los ubica en el equipo del anfitrión.</li>
+<li><strong>Abierto</strong>: el anfitrión llama <code>POST /rooms/{id}/open</code>. Los jugadores en solitario llaman <code>POST /rooms/quick-join</code> y aterrizar en la sala abierta más antigua con un asiento libre (en <code>404</code> crean y abren su propia habitación).</li>
+<li><strong>Conectar</strong>: todos abren <code>ws/v1/realtime?roomId=…</code> y relojes <code>roster</code>/<code>presence</code> empuja mientras los asientos se llenan.</li>
+<li><strong>Comenzar</strong>: en la fecha límite de reposición, tan pronto como se toman todos los asientos, o cuando comienza la fuerza del anfitrión, los asientos vacíos restantes se convierten en participantes de la IA (hasta el <a href="#backfill-allowance">asignación de reposición</a>) y la lista se congela. <strong>Juego enrutado por host</strong>: los invitados envían entradas como marcos binarios (solo llegan al anfitrión); el anfitrión transmite instantáneas. <strong>Juego con guión limitado a una habitación</strong>: todos se conectan <code>ws/v1/games?sessionId=&lt;gameSessionId&gt;</code> y juega contra el guión con <code>cmd</code>/<code>game</code> marcos.</li>
+<li><strong>Salir a mitad del partido</strong>: en un <a href="#join-in-progress">unirse en progreso</a> sala, el asiento queda libre para el siguiente jugador. De lo contrario, un jugador que se vaya durante <code>Playing</code> es reemplazado donde estaban sentados por un participante de IA (mismo asiento, nuevo apodo generado por el servidor) y puede volver a hacer cola inmediatamente; si el anfitrión se va, el rol de anfitrión pasa al humano restante que lleva más tiempo unido. En un juego enrutado por un anfitrión, un anfitrión que interrumpe su conexión en tiempo real tiene 60 segundos para volver a conectarse antes de que se cierre el partido; un partido limitado a una sala nunca se cierra porque su anfitrión no está.</li>
+<li><strong>Finalizar</strong>: enrutado por el host: el host envía el resultado; el servidor sujeta las puntuaciones, almacena el resultado, lo envía a todos los enchufes y cierra la sala. Atado a la habitación: el guión regresa <code>result</code> y la plataforma lo almacena y cierra la habitación.</li>
+</ol>
+<h2 id="see-also">Ver también</h2>
+<ul>
+<li><a href="/es/docs/api/relay.html">Relé</a> — despliegue de bytes opacos vinculado a una sesión de juego o lista de sala en tiempo real; la disponibilidad puede variar</li>
+<li><a href="/es/docs/api/games.html">Juegos</a> — juegos con script autorizados por el servidor</li>
+<li><a href="/es/docs/api/auth.html">Autenticación</a> — fichas de lanzamiento y vallado del alcance del juego</li>
+<li><a href="/es/docs/api/friends.html">Amigos</a> — la lista de amigos utilizada por el selector de invitaciones</li>
+</ul>
+<p>Ver <a href="/es/docs/credentials.html">compatibilidad de credenciales</a> y <a href="/es/docs/api/contracts.html">contratos legibles por máquina</a>.</p>
+
+{% endraw %}

@@ -1,0 +1,152 @@
+---
+layout: "wiki"
+lang: "hi"
+title: "सत्र, दुनिया और पुनर्प्राप्ति"
+source_url: "/docs/session-lifecycle.html"
+source_path: "docs/session-lifecycle.md"
+source_hash: "ce490b04789602ff10857e6496e4e3847230ac0bd33619cb5beb61051dc65c85"
+translation: "machine"
+permalink: "/hi/docs/session-lifecycle.html"
+---
+{% raw %}
+<h1 id="sessions-worlds-and-recovery">सत्र, दुनिया और पुनर्प्राप्ति</h1>
+<p>एक आधिकारिक सत्र मंगनी, आमंत्रण स्वीकृति, अभ्यास या शुरुआत के माध्यम से बनाया जाता है
+सर्वर बैकएंड के साथ एक रीयलटाइम रूम का। एक कमरा सीटों वाली एक लॉबी है; इसका <code>gameSessionId</code> पहचानता है
+गेमप्ले चलाने वाला अलग सत्र। देखना <a href="/hi/docs/api/games.html">खेल</a> और <a href="/hi/docs/api/realtime.html">रीयलटाइम कमरे</a>.</p>
+<h2 id="lifecycle">जीवन चक्र</h2>
+<p><img src="/docs/images/hi/session-lifecycle.svg" alt="सत्र सक्रिय से रुके हुए और पीछे की ओर बढ़ते हैं, या परिणाम, स्पष्ट रूप से छोड़ने, मालिक की कार्रवाई, या अवधारण समाप्ति के माध्यम से समाप्त होते हैं।"></p>
+<p><code>status</code> है <code>active</code> या <code>finished</code>. रुकना तीसरी स्थिति का परिचय नहीं देता: <code>pausedAt</code> निशान ए
+लगातार सत्र रोका गया। एक समाप्त सत्र दोबारा नहीं खेला जा सकता. यदि सक्षम किया गया है, तो रिप्ले पढ़ा जाता है
+अपने स्वयं के समापन बिंदुओं के माध्यम से।</p>
+<table>
+<thead>
+<tr>
+<th>आयोजन</th>
+<th>साधारण मेल</th>
+<th>लगातार सत्र</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>अंतिम गेमप्ले सॉकेट डिस्कनेक्ट हो जाता है</td>
+<td>लगभग 5 मिनट बाद बिना वापसी के समाप्त हो जाता है</td>
+<td>लगभग 15 सेकंड के बाद रुक जाता है</td>
+</tr>
+<tr>
+<td>24 घंटे तक कोई खिलाड़ी गतिविधि नहीं</td>
+<td>सेवानिवृत्त किया जा सकता है</td>
+<td>निष्क्रियता के लिए समाप्त होने के बजाय रुकता है</td>
+</tr>
+<tr>
+<td>खिलाड़ी दूसरे सत्र का अनुरोध करता है</td>
+<td>एक खाली पुराने मैच को रिटायर कर सकते हैं</td>
+<td>उनकी पार्क की गई दुनिया रिटायर नहीं होती है</td>
+</tr>
+<tr>
+<td>प्लेयर पुनः कनेक्ट होता है</td>
+<td>केवल अभी भी सक्रिय रहते हुए</td>
+<td>पहले आदेश से पहले फिर से शुरू करें</td>
+</tr>
+<tr>
+<td>बैकएंड एक परिणाम देता है</td>
+<td>खत्म</td>
+<td>खत्म</td>
+</tr>
+<tr>
+<td>स्वामी सत्र समाप्त करता है</td>
+<td>विजेता/रेटिंग परिवर्तन के बिना समाप्त</td>
+<td>वही</td>
+</tr>
+</tbody>
+</table>
+<p>समय और पुनर्प्राप्ति सीमाएँ परिनियोजन के अनुसार भिन्न-भिन्न हो सकती हैं। रुकी हुई दुनिया प्रति खिलाड़ी के हिसाब से गिनी जाती है
+समवर्ती-सत्र सीमा. दुनिया को स्पष्ट रूप से छोड़ने या समाप्त करने का एक तरीका प्रदान करें।</p>
+<h2 id="disconnecting-and-leaving-are-different">संबंध विच्छेद करना और छोड़ना अलग-अलग है</h2>
+<p>सॉकेट बंद करने से सदस्यता सुरक्षित रहती है ताकि खिलाड़ी वापस लौट सके। एक स्पष्ट <strong>संसार छोड़ो</strong> देता है
+सदस्यता और इसके गेमप्ले सॉकेट तक पहुंच।</p>
+<p>लगातार सत्र के लिए <strong>बिना कमरे के</strong>:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/sessions/{sessionId}/leave
+Authorization: Bearer &lt;player-token&gt;
+</code></pre>
+<p>कोई अनुरोध निकाय नहीं है. सफलता है <code>204</code>. खेल को सदस्यता परिवर्तन और के बारे में सूचित किया जाता है
+लीवर के गेमप्ले सॉकेट बंद हो जाते हैं। जब अंतिम मानव सदस्य चला जाता है, तो दुनिया समाप्त हो जाती है
+<code>players_left</code>. <code>404</code> मतलब कोई सत्र नहीं, <code>403</code> मतलब सदस्य नहीं, <code>410</code> मतलब पहले ही ख़त्म हो चुका है, और
+<code>409</code> इसका मतलब यह है कि यह एक स्थायी दुनिया नहीं है या यह एक कमरे से संबंधित है।</p>
+<p>एक के लिए <strong>कमरे में बंद सत्र</strong>, उपयोग <code>POST /api/v1/realtime/rooms/{roomId}/leave</code>. ए में
+जॉइन-इन-प्रोग्रेस रूम इससे सीट खाली हो जाती है और सत्र सदस्यता समाप्त हो जाती है। एक निश्चित-रोस्टर मैच में,
+सीट एआई बन जाती है और सत्र अपनी मूल सदस्यता बरकरार रख सकता है। कमरे के नियमों का पालन करें;
+स्टैंडअलोन सेशन-लीव एंडपॉइंट को कॉल न करें।</p>
+<p>एक चल रही जॉइन-इन-प्रोग्रेस दुनिया अपने अंतिम आगंतुक के चले जाने के बाद भी सूचीबद्ध रह सकती है। ए का एक सदस्य
+परसिस्टेंट वर्ल्ड किसी अन्य साधारण लॉबी का भी उपयोग कर सकता है। के माध्यम से वर्तमान सदस्यता खोजें
+<code>GET /api/v1/realtime/rooms/joined</code>, न सिर्फ <code>/rooms/mine</code>.</p>
+<h2 id="read-recovery-information">पुनर्प्राप्ति जानकारी पढ़ें</h2>
+<p>सत्र में खिलाड़ी और गेम का मालिक कॉल कर सकते हैं:</p>
+<pre><code class="language-http">GET /api/v1/games/{slug}/sessions/{sessionId}/recovery
+Authorization: Bearer &lt;player-or-owner-token&gt;
+</code></pre>
+<p>प्रतिक्रिया इस सत्र की प्रभावी पुनर्प्राप्ति और परिवहन सीमाओं का वर्णन करती है:</p>
+<table>
+<thead>
+<tr>
+<th>खेत</th>
+<th>अर्थ/इकाई</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sessionId</code>, <code>status</code>, <code>runtime</code>, <code>persistent</code></td>
+<td>सत्र की पहचान और प्रकार; रनटाइम है <code>script</code> या <code>container</code></td>
+</tr>
+<tr>
+<td><code>pausedAt</code>, <code>pausedMillis</code></td>
+<td>प्रारंभ आईएसओ टाइमस्टैम्प रोकें; संचित रुका हुआ समय मिलीसेकेंड में</td>
+</tr>
+<tr>
+<td><code>snapshotBytes</code>, <code>stateBudgetBytes</code>, <code>lastSnapshotAt</code></td>
+<td>पुनर्प्राप्ति दस्तावेज़ का आकार/बजट बाइट्स में और नवीनतम स्नैपशॉट आईएसओ समय</td>
+</tr>
+<tr>
+<td><code>snapshotIntervalSeconds</code>, <code>maxSnapshotPushHz</code></td>
+<td>कंटेनर चेकपॉइंट ताल और पुश सीलिंग; <code>null</code> स्क्रिप्ट के लिए</td>
+</tr>
+<tr>
+<td><code>maxRestoreStalenessSeconds</code></td>
+<td>कंटेनर मिलान की अधिकतम स्नैपशॉट आयु; <code>null</code> जहां लागू नहीं है, जिसमें लगातार दुनिया भी शामिल है</td>
+</tr>
+<tr>
+<td><code>maxRestores</code>, <code>restoreWindowMinutes</code>, <code>restoreCount</code></td>
+<td>पुनर्प्राप्ति प्रयास भत्ता, इसकी विंडो, और रिपोर्ट की गई पुनर्स्थापना गणना</td>
+</tr>
+<tr>
+<td><code>retentionDays</code>, <code>recoveryDataExpiresAt</code></td>
+<td>रुका हुआ-विश्व प्रतिधारण; <code>0</code> और <code>null</code> मतलब कोई कॉन्फ़िगर समाप्ति नहीं</td>
+</tr>
+<tr>
+<td><code>transport.maxMessageBytes</code>, <code>transport.maxRealtimeInputsPerSecond</code></td>
+<td>गेमप्ले फ्रेम/इनपुट सीमाएँ</td>
+</tr>
+<tr>
+<td><code>transport.tickRateHz</code>, <code>transport.pacingRateHz</code></td>
+<td>हर्ट्ज़ में प्रभावी टिक और परिवहन गति दरें</td>
+</tr>
+</tbody>
+</table>
+<p>अनिश्चितकालीन अवधारण या निश्चित क्रैश-रिवाइंड विंडो का वादा करने के बजाय इन मूल्यों को पढ़ें। ए
+सकारात्मक <code>retentionDays</code> रुकी हुई दुनिया को समाप्त होने की अनुमति देता है। प्रदर्शन <code>recoveryDataExpiresAt</code> जब सेट हो;
+समाप्ति के साथ सत्र समाप्त होता है <code>retention_expired</code>.</p>
+<h2 id="restoring-client-and-server-state">क्लाइंट और सर्वर स्थिति को पुनर्स्थापित करना</h2>
+<p>सॉकेट रीकनेक्ट पर, अपने गेम के पूर्ण-राज्य संदेश का अनुरोध करें। पर <code>resumed</code>, प्रक्षेप को त्यागें
+और पूर्व स्थिति पर आधारित भविष्यवाणी; <code>lostMs</code> पुनर्प्राप्ति अंतर की रिपोर्ट करता है। कोई कदम न उठाएं
+जिसकी पावती खो गई है उसे पुनः भेजना सुरक्षित है।</p>
+<p>स्क्रिप्ट संपूर्ण राज्य दस्तावेज़ लौटाती हैं। कंटेनरों को स्नैपशॉट से पूरे सत्र का पुनर्निर्माण करना होगा
+और वर्तमान रोस्टर, जिसमें पहले स्नैपशॉट के बाद से भर्ती किए गए खिलाड़ी भी शामिल हैं। इसके बाद चौकियों को पुश करें
+महत्वपूर्ण घटनाएँ, रिपोर्ट की गई सीमा के भीतर। एक विराम एक कंटेनर के लाइव सत्र और बाद को हटा देता है
+इसे अपने सहेजे गए स्नैपशॉट से पुनः बनाता है। रुके हुए खेल समय का उपयोग कर सकते हैं <code>ctx.now - ctx.pausedMs</code>.</p>
+<p>एक असफल बायोडाटा दुनिया को रोक देता है और एक त्रुटि के बाद सॉकेट बंद कर देता है; पीछे हटें और पुनः प्रयास करें।
+एक असफल पुनर्प्राप्ति इसके बजाय एक सत्र समाप्त कर सकती है। टर्मिनल <code>abandoned</code> कारणों में शामिल हैं <code>players_left</code>,
+<code>idle_no_players</code>, <code>superseded</code>, <code>server_failure</code>, <code>restore_failed</code>, <code>operator_ended</code>, और
+<code>retention_expired</code>. कारण बताएं और पुनः कनेक्ट करना बंद करें. परित्याग से कोई विजेता या एलो परिवर्तन नहीं मिलता है।</p>
+<p>देखना <a href="/hi/docs/tutorials/persistent-sessions.html">लगातार सत्र</a> सर्वर कोड के लिए और
+<a href="/hi/docs/troubleshooting.html#websockets">समस्या निवारण</a> पुन: कनेक्ट निर्णयों के लिए.</p>
+
+{% endraw %}

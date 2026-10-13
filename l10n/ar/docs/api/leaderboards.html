@@ -1,0 +1,251 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "المتصدرين"
+source_url: "/docs/api/leaderboards.html"
+source_path: "docs/api/leaderboards.md"
+source_hash: "8dc804e92e296ca450fe1e537cab9b10deabd2f397a82763791d66544f8a5eff"
+translation: "machine"
+permalink: "/ar/docs/api/leaderboards.html"
+---
+{% raw %}
+<h1 id="leaderboards">المتصدرين</h1>
+<p>تعريفات وإدخالات المتصدرين. القراءات مجهولة المصدر. يتطلب تقديم النتيجة JWT.</p>
+<p>عنوان URL الأساسي: <code>https://api.starhermit.com</code>. جميع الطرق تحت <code>/api/v1/...</code>.</p>
+<table>
+<thead>
+<tr>
+<th>طريقة</th>
+<th>طريق</th>
+<th>مصادقة</th>
+<th>وصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/leaderboards</code></td>
+<td>مجهول</td>
+<td>تعريفات القائمة (الاستعلام <code>scope</code>, <code>region</code>, <code>titleId</code>)</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/leaderboards/{id}</code></td>
+<td>مجهول</td>
+<td>احصل على تعريف واحد</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/leaderboards/{id}/entries?scope=&amp;region=&amp;friendsOnly=&amp;page=&amp;pageSize=</code></td>
+<td>مجهول</td>
+<td>إدخالات مقسمة إلى صفحات؛ <code>friendsOnly=true</code> يتطلب المصادقة</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/leaderboards/{id}/submit</code></td>
+<td>JWT</td>
+<td>إرسال النتيجة (لوحات الكتالوج فقط)</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/leaderboards</code></td>
+<td>حامل</td>
+<td>اللوحات النشطة الخاصة بلعبتك (يتم قبول رمز الإطلاق المميز)</td>
+</tr>
+<tr>
+<td>الحصول على/النشر</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards</code></td>
+<td>JWT (مالك اللعبة)</td>
+<td>قائمة / إنشاء لوحات اللعبة الخاصة بك</td>
+</tr>
+<tr>
+<td>وضع/حذف</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards/{leaderboardId}</code></td>
+<td>JWT (مالك اللعبة)</td>
+<td>تحديث/حذف واحد</td>
+</tr>
+</tbody>
+</table>
+<p>التعريفات هي <code>LeaderboardDefinitionDto[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "id": "…",
+    "softwareTitleId": "…",
+    "gameDefinitionId": null,
+    "key": null,
+    "name": "…",
+    "scoreType": "…",
+    "sortDirection": "…",
+    "resetSchedule": "weekly",
+    "currentPeriodStartedAt": "2026-10-12T00:00:00+00:00",
+    "nextResetAt": "2026-10-19T00:00:00+00:00",
+    "minScore": 0,
+    "maxScore": 100,
+    "scope": "…",
+    "region": "…",
+    "isActive": true,
+    "createdAt": "…",
+    "updatedAt": "…"
+  }
+]
+</code></pre>
+<p>استجابة الإدخالات:</p>
+<pre><code class="language-json">{
+  "items": [
+    {
+      "id": "…",
+      "userId": "…",
+      "username": "…",
+      "score": 1500,
+      "rank": 1,
+      "region": "…",
+      "submittedAt": "…"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 20
+}
+</code></pre>
+<p>إرسال الجسم:</p>
+<pre><code class="language-json">{
+  "score": 1500
+}
+</code></pre>
+<p>يتم التحقق من صحة النتيجة مقابل التعريف <code>minScore</code>/<code>maxScore</code> وقواعد الناشر؛ الرد هو نتيجة الإدخال.</p>
+<h2 id="authoritative-games-and-elo">الألعاب الرسمية وإيلو</h2>
+<p>تحتوي كل لعبة موثوقة على لوحة صدارة elo؛ هويته تأتي من <code>GET /api/v1/games/{slug}</code> → <code>leaderboardId</code> (يرى <a href="/ar/docs/api/games.html">games.md</a>). تتم كتابة النتائج فقط بواسطة النظام الأساسي من البرنامج النصي <code>eloUpdates</code> أو قناة التحكم في الحاوية - تم رفض الإرسال المباشر. يقوم عملاء اللعبة بقراءة الإدخالات من خلال نقطة النهاية المقسمة إلى صفحات القياسية؛ على سبيل المثال، طلبات تنفيذ مرجع الشطرنج:</p>
+<pre><code>GET /api/v1/leaderboards/{leaderboardId}/entries?friendsOnly=true&amp;page=1&amp;pageSize=10
+</code></pre>
+<p>قد تقرأ رموز الإطلاق المميزة على مستوى اللعبة لوحة المتصدرين الخاصة باللعبة. لوحة المتصدرين من جانب الناشر CRUD موجودة <a href="/ar/docs/api/publisher.html">publisher.md</a>.</p>
+<h3 id="resetting-a-players-rating">إعادة تعيين تصنيف اللاعب</h3>
+<p>يمكن لمالك اللعبة إعادة تقييم لاعب واحد إلى البداية <strong>1200</strong> — سنفور، معزز
+حساب، أو تقييم خطأ تالف:</p>
+<pre><code>DELETE /api/v1/me/github-games/{id}/players/{userId}/elo      → 200 { "userId": "…", "elo": 1200 }
+</code></pre>
+<p>يقوم بإعادة تعيين أزواج التوفيق بين التصنيف، ويزيل صف اللاعب من لوحة elo (يُرجع
+مع المطابقة المقدرة التالية)، ويحدد رقمًا رقميًا عالي المستوى <strong><code>elo</code></strong> في مستند مشغل البرنامج النصي الخاص بك
+إلى 1200 - لأن البرنامج النصي الخاص بك يحسب التصنيف التالي من المستند الخاص به، ويعيد تعيين فقط
+سيتم التراجع عن نسخة النظام الأساسي في المباراة التالية. كل شيء آخر في الوثيقة (الانتصارات، التاريخ)
+ترك وحده. إذا احتفظ البرنامج النصي الخاص بك بتصنيفه تحت أي اسم آخر، فهو كذلك <strong>لا</strong> إعادة كتابتها: الاحتفاظ بها
+فيه <code>playerStates[id].elo</code> للحصول على إعادة التعيين مجانًا. قد تستمر المباراة الجارية بالفعل في الإبلاغ عن أ
+التصنيف المحسوب قبل إعادة التعيين. <code>404</code> عندما لا تكون اللعبة ملكًا لك أو عندما لا يكون لدى اللاعب أي تقييم فيها
+ذلك. التصنيف يخضع أيضًا لـ <a href="/ar/docs/api/games.html#limits">قواعد إيلو</a>.</p>
+<h2 id="reset-schedules">إعادة تعيين الجداول الزمنية</h2>
+<p>يمكن لأي لوحة صدارة - لوحة خاصة باللعبة، أو عنوان كتالوج - أن تبدأ من جديد وفقًا لجدول زمني:</p>
+<table>
+<thead>
+<tr>
+<th><code>resetSchedule</code></th>
+<th>يبدأ من جديد</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>daily</code></td>
+<td>كل يوم الساعة 00:00 بالتوقيت العالمي</td>
+</tr>
+<tr>
+<td><code>weekly</code></td>
+<td>كل يوم اثنين الساعة 00:00 بالتوقيت العالمي</td>
+</tr>
+<tr>
+<td><code>monthly</code></td>
+<td>في الأول من كل شهر الساعة 00:00 بالتوقيت العالمي</td>
+</tr>
+<tr>
+<td>محذوفة، <code>null</code> أو <code>"never"</code></td>
+<td>أبداً</td>
+</tr>
+</tbody>
+</table>
+<p>أي قيمة أخرى هي أ <code>400</code>. تقارير التعريف <code>currentPeriodStartedAt</code> و <code>nextResetAt</code> (كلاهما
+<code>null</code> للوحة لا تتم إعادة ضبطها مطلقًا)، حتى يتمكن العميل من العرض "إعادة تعيين في 2 أيام".</p>
+<p>يتم تطبيق إعادة التعيين عندما تكون اللوحة كذلك <strong>يقرأ</strong>: تظهر نقطة نهاية الإدخالات الدرجات المقدمة فقط منذ ذلك الحين
+بدأت الفترة الحالية، ويتم احتساب الرتب ضمن الفترة. لا يتم حذف أي شيء في
+الحدود، وبالتالي فإن إعادة التعيين تصبح سارية في تمام الساعة 00:00 بالتوقيت العالمي المنسق. وهذا يعني أيضًا أنه يمكن تغيير الجدول الزمني
+في أي وقت - فهو يغير الإدخالات التي يتم عرضها، وليس التي يتم الاحتفاظ بها. الفترات السابقة ليست كذلك
+قابلة للقراءة من خلال API.</p>
+<h2 id="your-games-own-leaderboards">المتصدرين الخاصة باللعبة الخاصة بك</h2>
+<p>بجانب لوحة إيلو، توجد لعبة ذات أ <code>server=</code> البرنامج النصي أو <code>container.image=</code> الخلفية يمكن أن يكون
+لوحات صدارة خاصة بها - درجة عالية، وأسرع لفة، ومعظم عمليات القتل - تم إنشاؤها بواسطة <strong>مالك اللعبة</strong>.
+لا تحتاج إلى حساب ناشر: فامتلاك اللعبة يجعلك ناشرًا لها.</p>
+<p>مثل لوحة إيلو، <strong>فقط خادم لعبتك يكتب لهم.</strong> يعود البرنامج النصي الخاص بك
+<code>scores: { "&lt;key&gt;": { "&lt;userId&gt;": score } }</code> من أي خطاف (انظر
+<a href="/ar/docs/api/game-scripts.html#leaderboards">مخطوطات اللعبة - المتصدرين</a>)، أو ترسل الحاوية الخاصة بك ملف
+<a href="/ar/docs/api/container-games.html#control-channel"><code>scores</code> رسالة التحكم</a>. <code>POST /leaderboards/{id}/submit</code> هو
+تم رفضه، لذلك لا يمكن للعميل المعدل نشر النتيجة.</p>
+<h3 id="create-one--post-apiv1megithub-gamesidleaderboards">إنشاء واحدة — <code>POST /api/v1/me/github-games/{id}/leaderboards</code></h3>
+<pre><code class="language-json">{
+  "key": "high-score",
+  "name": "High score",
+  "scoreType": "integer",
+  "sortDirection": "desc",
+  "minScore": 0,
+  "maxScore": 1000000,
+  "isActive": true
+}
+</code></pre>
+<p>المرتجعات <code>201</code> مع أ <code>LeaderboardDefinitionDto</code> لمن <code>gameDefinitionId</code> و <code>key</code> تم تعيينها.</p>
+<table>
+<thead>
+<tr>
+<th>مجال</th>
+<th>معنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>key</code></td>
+<td><strong>مطلوب.</strong> الاسم الذي يرسله خادمك تحت: 1–64 حرفًا ورقمًا و <code>.</code>, <code>_</code>, <code>-</code>. فريدة لكل لعبة.</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td><strong>مطلوب.</strong> اسم العرض، بحد أقصى 200 حرف.</td>
+</tr>
+<tr>
+<td><code>scoreType</code></td>
+<td><code>integer</code> (تقصير)، <code>decimal</code>، أو <code>time-ms</code> (عدد صحيح غير سالب من المللي ثانية)</td>
+</tr>
+<tr>
+<td><code>sortDirection</code></td>
+<td><code>desc</code> (الافتراضي — الأعلى هو الأفضل) أو <code>asc</code> (الأقل هو الأفضل، على سبيل المثال أوقات الدورة)</td>
+</tr>
+<tr>
+<td><code>minScore</code> / <code>maxScore</code></td>
+<td>الحدود الاختيارية؛ يتم تجاهل النتيجة خارجهم</td>
+</tr>
+<tr>
+<td><code>isActive</code></td>
+<td>تقصير <code>true</code>. لا تقبل اللوحة غير النشطة أي نتائج ولا يتم إدراجها للاعبين.</td>
+</tr>
+<tr>
+<td><code>resetSchedule</code></td>
+<td>خياري: <code>daily</code>, <code>weekly</code> أو <code>monthly</code> - يرى <a href="#reset-schedules">إعادة تعيين الجداول الزمنية</a>. الافتراضي: لا تتم إعادة التعيين مطلقًا.</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>key</code>, <code>scoreType</code> و <code>sortDirection</code> لا يمكن أن يتغير بعد الخلق</strong>: يرسل الخادم الخاص بك عن طريق المفتاح،
+وتم اختيار الدرجات المخزنة بالفعل من قبل الاثنين الآخرين. هل تحتاج إلى واحدة مختلفة؟ إنشاء لوحة جديدة.
+<code>PUT .../leaderboards/{leaderboardId}</code> يقبل <code>name</code>, <code>minScore</code>, <code>maxScore</code>, <code>isActive</code> و
+<code>resetSchedule</code> (يرسل <code>"never"</code> لإيقاف إعادة الضبط)؛ <code>DELETE</code> يزيل اللوحة <strong>ومداخلها</strong> -
+تعيين <code>isActive: false</code> لتقاعدها والاحتفاظ بها. قد يكون هناك لعبة على الأكثر <strong>2048</strong> لوحات.</p>
+<h3 id="how-scores-are-kept">كيف يتم الاحتفاظ بالنتائج</h3>
+<ul>
+<li><strong>دخول واحد لكل لاعب: أفضل ما لديهم.</strong> "أفضل" يتبع المجلس <code>sortDirection</code>. تقديم أ
+النتيجة الأسوأ لا تغير شيئًا، لذا قم بالإبلاغ بعد كل مباراة دون التحقق أولاً. على اللوح مع
+جدول إعادة التعيين، هو الأفضل <strong>هذه الفترة</strong>: النتيجة الأولى بعد إعادة التعيين تحتسب دائمًا،
+مهما كانت نتيجة اللاعب جيدة الفترة الماضية.</li>
+<li>يمكن فقط تسجيل اللاعبين في الجلسة؛ يتم تجاهل مقعد الذكاء الاصطناعي وأي شخص آخر.</li>
+<li>النتيجة التي تنتهك قواعد اللوحة (خارج النطاق، وكسر على <code>integer</code> المجلس، سلبي
+<code>time-ms</code>) يتم تجاهله، كما هو الحال مع المفتاح الذي لا يحتوي على لوحة نشطة. لا يتم الإبلاغ عن أي شيء إلى الخادم الخاص بك.</li>
+</ul>
+<h3 id="show-them-in-your-game">أظهرهم في لعبتك</h3>
+<p><code>GET /api/v1/games/{slug}/leaderboards</code> يسرد اللوحات النشطة للعبة مع <code>id</code> و <code>key</code>,
+ويعمل مع رمز إطلاق اللعبة. قراءة الإدخالات ذات نقطة النهاية القياسية المقسمة إلى صفحات أعلاه —
+<code>GET /api/v1/leaderboards/{id}/entries</code> - والتي قد يصل إليها رمز الإطلاق أيضًا لهذه اللوحات.</p>
+<p>خطوة بخطوة: <a href="/ar/docs/tutorials/game-leaderboards-achievements.html">البرنامج التعليمي: المتصدرين والإنجازات التي حققتها لعبتك</a>.</p>
+<p>يرى <a href="/ar/docs/api/conventions.html#requests-and-responses">اتفاقيات API</a> لتحليل الخطأ.</p>
+<p>يرى <a href="/ar/docs/credentials.html">التوافق الاعتماد</a> و <a href="/ar/docs/api/contracts.html">العقود المقروءة آليا</a>.</p>
+
+{% endraw %}

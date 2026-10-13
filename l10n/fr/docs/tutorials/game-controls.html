@@ -1,0 +1,254 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "Tutoriel : ajouter des contrôles à votre jeu"
+source_url: "/docs/tutorials/game-controls.html"
+source_path: "docs/tutorials/game-controls.md"
+source_hash: "e0d2b7612fbd90ee6e1e21734aca934295d32197bc56b43449da00dd637601bf"
+translation: "machine"
+permalink: "/fr/docs/tutorials/game-controls.html"
+---
+{% raw %}
+<h1 id="tutorial-add-controls-to-your-game">Tutoriel&#160;: ajouter des contrôles à votre jeu</h1>
+<p>StarHermit peut stocker <strong>raccourcis clavier</strong> pour votre jeu : vous déclarez les actions et leurs touches par défaut,
+et chaque joueur peut les relier. Leur choix les suit jusqu’à n’importe quelle machine sur laquelle ils se connectent. Votre jeu
+lit les liaisons du lecteur à partir de l'API des contrôles et peut proposer les siennes "relier les clés" écran.</p>
+<p>Si votre jeu appelle l'API des contrôles et obtient ceci&#160;:</p>
+<pre><code class="language-text">404 {"error":"This game declares no controls."}
+</code></pre>
+<p>la plateforme a <strong>aucune action déclarée</strong> pour la construction qu'il sert. Rien de ce que vous envoyez à l'API ne peut
+corrigez cela&#160;: les contrôles sont déclarés dans le fichier de votre jeu <a href="/fr/docs/starhermit-txt.html"><code>starhermit.txt</code></a> et lis quand
+le jeu est publié. Cette page montre comment les déclarer, les publier, vérifier leur arrivée,
+et utilisez-les auprès de votre client.</p>
+<ol>
+<li><a href="#1-declare-the-actions">Déclarer les actions</a></li>
+<li><a href="#2-publish-them">Publiez-les</a></li>
+<li><a href="#3-check-they-arrived">Vérifiez qu'ils sont arrivés</a></li>
+<li><a href="#4-use-them-in-your-game">Utilisez-les dans votre jeu</a></li>
+<li><a href="#troubleshooting">Dépannage</a></li>
+</ol>
+<h2 id="1-declare-the-actions">1. Déclarer les actions</h2>
+<p>Ajoutez-en un <code>control.&lt;action&gt;=</code> ligne par action à <code>starhermit.txt</code>:</p>
+<pre><code class="language-text">name=Space Hopper
+launch=index.html
+
+control.left=KeyA+ArrowLeft | Move left
+control.right=KeyD+ArrowRight | Move right
+control.jump=Space+KeyW | Jump
+control.fire=KeyJ | Fire
+control.pause=Escape | Pause
+</code></pre>
+<p>Chaque ligne comporte trois parties&#160;:</p>
+<pre><code class="language-text">control.&lt;action&gt;=&lt;code&gt;[+&lt;code&gt;...][ | &lt;label&gt;]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Partie</th>
+<th>Règles</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;action&gt;</code></td>
+<td>Le nom de votre jeu pour l'action&#160;: 1 à 32&#160;caractères de lettres minuscules, de chiffres et <code>_</code> (<code>move_left</code>, pas <code>move-left</code>). Unique par manifeste.</td>
+</tr>
+<tr>
+<td><code>&lt;code&gt;</code></td>
+<td>A <a href="https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_code_values"><code>KeyboardEvent.code</code></a> valeur, comme <code>KeyA</code>, <code>ArrowLeft</code>, <code>Space</code>, <code>Digit1</code>, <code>ShiftLeft</code>, <code>Enter</code> ou <code>Escape</code>. Joignez 1 à 4 codes pour la même action avec <code>+</code>.</td>
+</tr>
+<tr>
+<td><code>&lt;label&gt;</code></td>
+<td>Facultatif. Affiché dans les écrans de reliure&#160;; au maximum 64 caractères. La valeur par défaut est le nom de l'action.</td>
+</tr>
+</tbody>
+</table>
+<p>Choses à savoir :</p>
+<ul>
+<li><strong>Utiliser <code>code</code>, pas <code>key</code>.</strong> Écrire <code>KeyA</code>, pas <code>a</code>, et <code>Space</code>, pas <code>" "</code>. Les codes nomment le physique
+clé, de sorte que les liaisons fonctionnent sur n’importe quelle disposition de clavier. La plateforme vérifie uniquement qu'un code est compris entre 1 et 32
+des lettres et des chiffres, donc <code>a</code> ou <code>space</code> est accepté mais aucune clé ne le produit jamais. Orthographe et casse
+doit correspondre exactement.</li>
+<li><strong>Une clé appartient à une action.</strong> Un code déjà utilisé par une ligne précédente rend la ligne suivante
+invalide.</li>
+<li><strong>Jusqu'à 32 actions</strong> par match. Les lignes après le 32 sont ignorées.</li>
+<li><strong>La commande est conservée.</strong> Les actions reviennent de l'API dans l'ordre manifeste, alors listez-les de la manière
+votre écran de paramètres devrait les afficher.</li>
+<li><strong>Une ligne invalide est ignorée silencieusement.</strong> Le jeu est toujours publié. Si chaque ligne est invalide,
+le jeu n'a aucun contrôle et l'API répond <code>404</code>. <a href="#3-check-they-arrived">Vérifier après la publication</a>.</li>
+</ul>
+<h2 id="2-publish-them">2. Publiez-les</h2>
+<p>Les déclarations sont lues <strong>quand le jeu est publié</strong>. Édition <code>starhermit.txt</code> dans votre dépôt
+ou sur le disque ne change rien jusqu'à ce que vous publiiez une build qui le contient&#160;:</p>
+<table>
+<thead>
+<tr>
+<th>Comment votre jeu est publié</th>
+<th>Qu'est-ce qui rend les nouveaux contrôles actifs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Depuis un dépôt GitHub</td>
+<td>Votre prochain déploiement. Poussez le changement, puis déployez la dernière version (<strong>Mettre à jour la version déployée</strong> dans le tableau de bord, ou <code>PUT /api/v1/me/github-games/{id}/deployment</code>).</td>
+</tr>
+<tr>
+<td>Dossier ou bundle téléchargé</td>
+<td>Téléchargez une nouvelle version (<code>POST /api/v1/me/github-games/{id}/bundle</code>, ou <code>ws/v1/game-upload</code>) dont <code>starhermit.txt</code> a les lignes.</td>
+</tr>
+<tr>
+<td>Ajouter un nouveau jeu</td>
+<td>Le premier téléchargement ou soumission les lit immédiatement.</td>
+</tr>
+</tbody>
+</table>
+<p>Un téléchargement de remplacement reformule vos contrôles à partir de son propre manifeste. Supprimer chaque <code>control.*</code> ligne et
+le jeu n'en a pas. UN <a href="/fr/docs/api/github-games.html#partial-updates-modemerge"><code>?mode=merge</code></a> patcher ça
+ne porte pas <code>starhermit.txt</code> conserve les contrôles actuels.</p>
+<p><strong>Les propres reliures des joueurs survivent à une nouvelle construction.</strong> La liaison enregistrée d'un joueur pour une action qui ne
+existe plus est ignoré.</p>
+<h2 id="3-check-they-arrived">3. Vérifiez qu'ils sont arrivés</h2>
+<p>Chaque point de terminaison ci-dessous fonctionne avec un jeton d'utilisateur complet ou le jeton de lancement de votre jeu. <code>{slug}</code> est votre
+slug du jeu&#160;: le jeton de lancement <code>game_scope</code> réclamation, ou <code>gameSlug</code> dans
+<code>GET /api/v1/me/github-games</code>.</p>
+<pre><code class="language-bash">curl -s "https://api.starhermit.com/api/v1/games/$SLUG/controls" \
+  -H "Authorization: Bearer $TOKEN" | jq
+</code></pre>
+<pre><code class="language-json">{
+  "actions": [
+    { "action": "left",  "label": "Move left",  "defaultCodes": ["KeyA", "ArrowLeft"],  "codes": ["KeyA", "ArrowLeft"] },
+    { "action": "right", "label": "Move right", "defaultCodes": ["KeyD", "ArrowRight"], "codes": ["KeyD", "ArrowRight"] },
+    { "action": "jump",  "label": "Jump",       "defaultCodes": ["Space", "KeyW"],      "codes": ["Space", "KeyW"] },
+    { "action": "fire",  "label": "Fire",       "defaultCodes": ["KeyJ"],               "codes": ["KeyJ"] },
+    { "action": "pause", "label": "Pause",      "defaultCodes": ["Escape"],             "codes": ["Escape"] }
+  ]
+}
+</code></pre>
+<p>Les actions manquantes signifient que leurs lignes n'étaient pas valides&#160;; comparez-les aux règles ci-dessus. UN <code>404</code>
+signifie qu'aucun n'a survécu ou que la version qui les déclare n'a pas encore été publiée.</p>
+<h2 id="4-use-them-in-your-game">4. Utilisez-les dans votre jeu</h2>
+<p><code>codes</code> est la liaison effective du joueur&#160;: sa priorité s'il en définit une, sinon votre valeur par défaut.
+Créez une recherche à partir de celui-ci et faites correspondre <code>event.code</code>:</p>
+<pre><code class="language-js">const auth = { Authorization: `Bearer ${launchToken}` };
+
+// Your built-in defaults, in the same shape the API returns.
+const DEFAULT_ACTIONS = [
+  { action: "left", label: "Move left", codes: ["KeyA", "ArrowLeft"] },
+  { action: "jump", label: "Jump", codes: ["Space", "KeyW"] },
+  /* ... */
+];
+
+function toControls(actions) {
+  const byCode = new Map();
+  for (const a of actions) for (const code of a.codes) byCode.set(code, a.action);
+  return { actions, byCode };
+}
+
+async function loadControls(slug) {
+  try {
+    const res = await fetch(`/api/v1/games/${slug}/controls`, { headers: auth });
+    if (res.ok) return toControls((await res.json()).actions);
+  } catch { /* offline: fall through */ }
+  return toControls(DEFAULT_ACTIONS);                   // 404, error, or outside StarHermit
+}
+
+let controls = await loadControls(gameScope);
+
+window.addEventListener("keydown", (e) =&gt; {
+  const action = controls.byCode.get(e.code);   // e.code, never e.key
+  if (action) { e.preventDefault(); onAction(action, true); }
+});
+window.addEventListener("keyup", (e) =&gt; {
+  const action = controls.byCode.get(e.code);
+  if (action) onAction(action, false);
+});
+</code></pre>
+<p>Les paramètres par défaut intégrés permettent de jouer au jeu hors ligne, en dehors de StarHermit ou si les commandes
+la demande échoue. Gardez-les en phase avec votre <code>control.*</code> lignes.</p>
+<p><strong>Un écran de reliure.</strong> Liste <code>actions</code> avec leur <code>label</code>. Conservez la carte de remplacement complète, ou
+lisez et conservez la carte effective actuelle avant de modifier une action&#160;:</p>
+<pre><code class="language-js">async function saveBinding(slug, action, codes) {
+  const current = await fetch(`/api/v1/games/${slug}/controls`, { headers: auth });
+  if (!current.ok) throw new Error(`Controls read failed: ${current.status}`);
+  const bindings = Object.fromEntries((await current.json()).actions.map(a =&gt; [a.action, a.codes]));
+  bindings[action] = codes;
+  const res = await fetch(`/api/v1/games/${slug}/controls`, {
+    method: "PUT",
+    headers: { ...auth, "Content-Type": "application/json" },
+    body: JSON.stringify({ bindings }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error);   // e.g. a key already in use
+  return res.json();                                         // the new effective map
+}
+</code></pre>
+<p><code>PUT</code> remplace les remplacements du joueur par les actions que vous envoyez, incluez donc chaque action du joueur
+a changé, pas seulement le dernier. Le reste reste sur vos valeurs par défaut. <code>DELETE</code> sur le même chemin
+réinitialise tout aux valeurs par défaut.</p>
+<p>Sérialisez les modifications depuis votre écran&#160;; deux lectures/écritures simultanées peuvent toujours s'écraser.
+Les SDK du navigateur <code>setControl()</code> sérialise ses propres modifications et préserve la carte effective actuelle.
+L'envoi de la carte effective épingle ces valeurs en tant que remplacements&#160;; utiliser <code>DELETE</code> pour revenir aux valeurs par défaut du manifeste.</p>
+<p>La plateforme refuse une sauvegarde (<code>400</code>) cela laisserait une clé sur deux actions <strong>après</strong> celui du joueur
+les modifications sont fusionnées avec vos valeurs par défaut. Par exemple, la liaison <code>jump</code> à <code>KeyJ</code> alors que <code>fire</code> encore
+utilise sa valeur par défaut <code>KeyJ</code> est refusé. Afficher l'erreur ou déplacer l'action en conflit dans le même
+sauvegarder.</p>
+<h2 id="troubleshooting">Dépannage</h2>
+<table>
+<thead>
+<tr>
+<th>Réponse</th>
+<th>Cause</th>
+<th>Réparer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>404</code> "Ce jeu ne déclare aucun contrôle."</td>
+<td>Non valide <code>control.*</code> ligne dans le <strong>publié</strong> construire.</td>
+<td>Ajouter des lignes à <code>starhermit.txt</code>, comparez-les <a href="#1-declare-the-actions">les règles</a>, et <a href="#2-publish-them">publier une nouvelle version</a>.</td>
+</tr>
+<tr>
+<td><code>404</code> "Pas de jeu avec cette limace."</td>
+<td>Le slug est faux, ou le jeu n'a pas de slug.</td>
+<td>Utilisez le jeton de lancement <code>game_scope</code> ou <code>gameSlug</code> depuis <code>GET /me/github-games</code>. Chaque jeu ajouté à partir d'un dossier local et chaque jeu de référentiel ajouté par un propriétaire vérifié a un slug, navigateur uniquement ou non. Seule une soumission de référentiel dont le propriétaire n'est pas vérifié n'en a pas&#160;; <a href="/fr/docs/tutorials/claim-existing-game.html">revendiquez-le</a> pour en obtenir un.</td>
+</tr>
+<tr>
+<td><code>403</code> "Ce jeton est limité au jeu «…»."</td>
+<td>Un jeton de lancement utilisé avec le slug d'un autre jeu.</td>
+<td>Appelez avec le slug dans le jeton <code>game_scope</code>.</td>
+</tr>
+<tr>
+<td><code>400</code> "Action inconnue '…' — non déclarée dans le manifeste du jeu."</td>
+<td><code>PUT</code> nommé une action que le manifeste ne déclare pas.</td>
+<td>Utiliser <code>action</code> valeurs de <code>GET …/controls</code>.</td>
+</tr>
+<tr>
+<td><code>400</code> "'…' est lié à la fois à '…' et à '…'."</td>
+<td>Après avoir fusionné avec vos valeurs par défaut, une touche déclencherait deux actions.</td>
+<td>Déplacez l'autre action dans le même <code>PUT</code>, ou choisissez une autre clé.</td>
+</tr>
+<tr>
+<td><code>400</code> "'…' n'est pas une valeur KeyboardEvent.code valide."</td>
+<td>Un code avec des espaces ou des signes de ponctuation.</td>
+<td>Envoyer <code>event.code</code> valeurs.</td>
+</tr>
+<tr>
+<td><code>400</code> "L'action «…» doit lier 1 à 4 codes."</td>
+<td>Une liste vide, ou plus de quatre.</td>
+<td>Envoyez 1 à 4 codes&#160;; <code>DELETE</code> pour réinitialiser.</td>
+</tr>
+<tr>
+<td>Une action est manquante dans la réponse</td>
+<td>Sa ligne n'était pas valide : une lettre majuscule ou <code>-</code> dans le nom de l'action, <code>,</code> au lieu de <code>+</code>, plus de 4 codes, un code déjà utilisé, ou passé la 32ème action.</td>
+<td>Corrigez la ligne et publiez à nouveau.</td>
+</tr>
+<tr>
+<td>Une liaison ne se déclenche jamais</td>
+<td>Le code est accepté mais aucune clé ne le produit, comme par exemple <code>a</code> ou <code>space</code>.</td>
+<td>Utiliser exactement <code>KeyboardEvent.code</code> orthographe: <code>KeyA</code>, <code>Space</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Voir aussi : <a href="/fr/docs/api/games.html#per-player-control-bindings">API de jeux&#160;– Liaisons de contrôle par joueur</a>,
+<a href="/fr/docs/starhermit-txt.html#controls"><code>starhermit.txt</code></a>.</p>
+
+{% endraw %}

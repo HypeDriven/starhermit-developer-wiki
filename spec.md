@@ -15,6 +15,25 @@ routing, client publication, and session lifecycle, and remain viewable in sourc
 document links, API contracts, helpers and examples; `npm run test:browser` checks the runnable
 quickstart. Pushing the repository publishes it through GitHub Pages.
 
+The header language dropdown covers English plus Simplified Chinese (Mandarin), Hindi, Spanish,
+Modern Standard Arabic, French, Bengali, Portuguese, Indonesian, and Urdu, selected by total first-
+and second-language speakers in the Ethnologue 2026 ranking. English remains at its existing URLs;
+the nine other locales have static pages at `/<language>/` and `/<language>/docs/...html`, generated
+under `l10n/`. All 45 public documents, navigation labels, accessibility labels, and six SVG diagrams
+are translated. Arabic and Urdu use right-to-left layouts; code remains left-to-right. Heading IDs,
+code examples, API identifiers, downloadable examples, and contracts retain their original values.
+Links and the language selector keep readers on the corresponding page and preserve section anchors.
+The selected language persists; revisiting the English landing page restores it, while deep links
+retain their explicit language. Static links also support readers without JavaScript.
+
+Translations are labeled as machine translations and link to the English original. `_data/localization-overrides.json`
+contains reviewed interface and terminology overrides. `_data/locales.json`
+holds locale/UI strings, and `_data/localization.json` tracks English source hashes and the ranking
+source. `npm run localize` regenerates HTML/SVG offline from the committed translation cache;
+`npm run localize:refresh` sends changed public prose to Google Translate and refreshes the cache.
+Code is excluded from translation. `npm test` checks complete coverage, source freshness, unchanged
+code/anchors, and localized links; `npm run test:wiki` checks the responsive language selector and RTL.
+
 It documents the *public contract* of `../starhermit`: an integration guide for **any** game or external
 client targeting the platform, not a description of the backend's internals. The reference example used
 throughout is `HypeDriven/starhermit-chess` (`../starhermit-chess`) — one concrete implementation of the

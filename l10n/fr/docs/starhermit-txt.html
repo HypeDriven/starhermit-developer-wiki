@@ -1,0 +1,523 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "Le starhermit.txt Manifeste"
+source_url: "/docs/starhermit-txt.html"
+source_path: "docs/starhermit-txt.md"
+source_hash: "38da20ba901e3ed0e8f6bde30e7b48f3d55c06efc0c8800aa7bd175be7fc0788"
+translation: "machine"
+permalink: "/fr/docs/starhermit-txt.html"
+---
+{% raw %}
+<h1 id="the-starhermittxt-manifest">Le <code>starhermit.txt</code> Manifeste</h1>
+<p><code>starhermit.txt</code> est un petit fichier en texte brut qui indique à StarHermit comment s'appelle votre jeu, comment
+lancez-le et quel type de serveur (le cas échéant) il exécute. C'est le seul fichier que la plateforme recherche dans
+tout ce que vous publiez.</p>
+<p><strong>Il appartient à la racine de ce que vous téléchargez</strong> — à la fois pour les fichiers clients d'un jeu et pour un fichier dédié
+serveur.</p>
+<p>Vous n’êtes pas obligé de créer le fichier vous-même. Le client Windows et le tableau de bord Web
+montrer le manifeste comme <strong>champs modifiables</strong>&#160;: quel que soit votre build, il le préremplit, et
+tout ce qu'ils contiennent lorsque vous appuyez sur Télécharger est écrit dans le bundle en tant que manifeste. Donc une construction avec
+non <code>starhermit.txt</code> est toujours publiable, et un <code>.tar</code> - que vous ne pouvez pas modifier sur place - est comme
+modifiable sous forme de dossier. Envoyer le fichier dans votre build vaut toujours la peine&#160;: il voyage avec le
+artefact, donc les valeurs seront correctes la prochaine fois que quelqu'un le téléchargera.</p>
+<h2 id="the-rule-that-surprises-people">La règle qui surprend les gens</h2>
+<blockquote>
+<p><strong>Tout ce qui se trouve à côté du manifeste est téléchargé.</strong></p>
+</blockquote>
+<p>Le dossier que vous choisissez n'est pas un répertoire de projet dans lequel la plateforme fouille pour une build - le dossier
+contenu <strong>sont</strong> le jeu publié, copié tel quel. Chaque fichier et chaque sous-dossier adjacent à
+<code>starhermit.txt</code>, à n'importe quelle profondeur, monte et est servi aux joueurs.</p>
+<p>Alors choisis ton <strong>sortie de build distribuable</strong>, pas votre arborescence source. Télécharger un répertoire de travail
+signifie expédier votre source, vos notes, vos actifs non minés et vos expériences à moitié terminées à
+chaque joueur, et en brûlant l'espace disque de votre jeu sur des fichiers que personne ne charge.</p>
+<p>Une poignée de noms sont toujours ignorés, car ils ne font jamais partie d'un jeu publié&#160;:
+<code>.git</code>, <code>node_modules</code>, <code>.DS_Store</code>, <code>Thumbs.db</code>. Tout le reste est un jeu équitable, y compris
+<code>README.md</code>, <code>.env</code> des fichiers, <code>*.psd</code> sources et <code>*.map</code> fichiers. Si vous ne le remettez pas à un joueur,
+ne le laissez pas à côté du manifeste.</p>
+<p><img src="/docs/images/fr/publish-build.svg" alt="Créez un dossier client distribuable avec starhermit.txt à sa racine, publiez-le et diffusez son contenu dans le sous-domaine du jeu."></p>
+<h2 id="where-it-goes">Où ça va</h2>
+<h3 id="a-game-client">Un client de jeu</h3>
+<pre><code class="language-text">my-game-dist/
+  starhermit.txt        &lt;- belongs at this level
+  index.html            &lt;- your launch file
+  game.js
+  assets/
+    sprites.png
+    music.ogg
+</code></pre>
+<p>Prendre <code>my-game-dist/</code>. Le contenu devient le jeu, servi à
+<code>https://&lt;slug&gt;.starhermit.com/</code>, et <code>index.html</code> c'est ce qu'un joueur charge.</p>
+<p><strong>Ou choisissez-en un seul <code>.tar</code> exactement cette disposition</strong> — "Ajouter à partir de .tar" dans le client de bureau, le
+<code>.tar</code> champ dans le tableau de bord. Le client lit les entrées de l'archive, les réintègre dans le bundle
+pour vous, et préremplit les champs du manifeste à partir d'un <code>starhermit.txt</code> à l'intérieur. Utiliser <code>--format=ustar</code>:</p>
+<pre><code class="language-bash">tar --format=ustar -cf my-game.tar -C my-game-dist .
+</code></pre>
+<p>Les archives utilisant le nom long GNU ou les en-têtes étendus PAX sont refusées. Ces formats stockent le réel d'une entrée
+chemin dans un <em>séparé</em> bloc de métadonnées, donc les réhéberger signifie réécrire les métadonnées - et les obtenir
+subtilement faux publierait un jeu corrompu. Si votre build atteint les limites du chemin ustar (100 octets pour un
+nom, 155 pour son préfixe de répertoire), raccourcissez les noms de dossier les plus profonds ou téléchargez le dossier à la place.</p>
+<h3 id="a-dedicated-server">Un serveur dédié</h3>
+<pre><code class="language-text">my-server-dist/
+  starhermit.txt        &lt;- belongs at this level
+  image.tar            &lt;- docker save output of your server image
+</code></pre>
+<p>Prendre <code>my-server-dist/</code> — <strong>ou choisir <code>image.tar</code> tout seul</strong>, puisque le manifeste peut provenir du
+champs de la boîte de dialogue à la place. Contrairement au dossier client, une distribution serveur a exactement deux dossiers significatifs.
+fichiers&#160;: le manifeste et l'image du conteneur produite par</p>
+<pre><code class="language-bash">docker save my-server:latest &gt; image.tar
+</code></pre>
+<p>Tout le reste dans un dossier de serveur est laissé de côté plutôt que téléchargé&#160;: la plateforme exécute votre
+conteneur, donc l'image contient déjà les fichiers de votre serveur. Garder le manifeste ici signifie de toute façon
+une version de serveur est auto-descriptive et peut être re-téléchargée d'elle-même.</p>
+<h2 id="format">Format</h2>
+<p>Lignes de <code>key=value</code>. Les lignes vides sont ignorées, <code>#</code> commence un commentaire et des espaces autour des touches et
+les valeurs sont tronquées. Les noms de clés ne sont pas sensibles à la casse, sauf que les chemins de dossier dans <code>cache.&lt;folder&gt;</code> sont sensibles à la casse&#160;; les clés inconnues sont ignorées, donc une faute de frappe échoue silencieusement —
+vérifiez votre orthographe par rapport aux tableaux ci-dessous.</p>
+<pre><code class="language-text"># My Game - browser-only
+name=My Game
+launch=index.html
+</code></pre>
+<h3 id="keys-every-game-may-set">Clés que chaque jeu peut définir</h3>
+<table>
+<thead>
+<tr>
+<th>Clé</th>
+<th>Alias</th>
+<th>Signification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>—</td>
+<td>Le nom d’affichage que les joueurs voient. Obligatoire sauf si vous transmettez un nom d'affichage dans le formulaire de téléchargement.</td>
+</tr>
+<tr>
+<td><code>launch</code></td>
+<td><code>launch_path</code>, <code>html</code></td>
+<td>Chemin d'accès à l'entrée <code>.html</code>, par rapport au manifeste. La valeur par défaut est <code>index.html</code> lorsqu'un fichier de ce nom se trouve à la racine.</td>
+</tr>
+<tr>
+<td><code>cover</code></td>
+<td><code>cover_art</code>, <code>coverart</code></td>
+<td>Illustration sur la vignette de la bibliothèque du jeu. Un chemin relatif au fichier de lancement (<code>cover.png</code>, <code>art/box.jpg</code>) ou un absolu <code>https://</code> URL. Facultatif&#160;: sans cela, la vignette affiche le favicon. Une mauvaise valeur est abandonnée plutôt que de refuser la partie.</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>—</td>
+<td>Le texte de la page du magasin que les joueurs lisent sur votre jeu. Une ligne&#160;; écrire <code>\n</code> pour un saut de ligne. Ou utiliser <code>description.file</code> pour le conserver dans un fichier. Voir <a href="#description-and-release-notes">Description et notes de version</a>.</td>
+</tr>
+<tr>
+<td><code>release_notes</code></td>
+<td><code>releasenotes</code></td>
+<td>Ce qui a changé dans cette version. Mêmes règles que <code>description</code>; <code>release_notes.file</code> pointe vers un fichier à la place.</td>
+</tr>
+<tr>
+<td><code>owner</code></td>
+<td><code>username</code>, <code>user</code></td>
+<td><strong>Flux de référentiel uniquement.</strong> Le propriétaire StarHermit <strong>ID utilisateur (UUID)</strong> depuis <code>GET /api/v1/me</code>, pas un nom d'utilisateur. Vous permet <a href="/fr/docs/tutorials/claim-existing-game.html">revendiquer une annonce ajoutée par quelqu'un d'autre</a> en prouvant que vous contrôlez le référentiel. Ignoré lors d'un téléchargement&#160;– voir <a href="#who-owns-an-uploaded-game">À qui appartient un jeu téléchargé</a>.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="description-and-release-notes">Description et notes de version</h3>
+<p>Deux morceaux de texte facultatifs affichés à côté de votre jeu&#160;: un <strong>description</strong> (c'est quoi le jeu) et
+<strong>notes de version</strong> (ce qui a changé dans la version que vous publiez). Chacun peut être écrit dans le
+se manifester ou être conservé dans son propre dossier.</p>
+<p><strong>En ligne</strong>, pour un texte court. Le manifeste comporte une ligne par clé, alors écrivez <code>\n</code> partout où tu veux un
+saut de ligne (et <code>\\</code> pour une barre oblique inverse littérale)&#160;:</p>
+<pre><code class="language-text">name=Asteroid Garden
+launch=index.html
+description=Tend a garden on a drifting asteroid.\nPlant, water, and dodge the meteor showers.
+release_notes=- New: night cycle\n- Fixed: seeds vanishing after a reload
+</code></pre>
+<p><strong>A partir d'un fichier</strong>, pour toute période plus longue — c'est le formulaire à utiliser pour les vraies notes de version&#160;:</p>
+<pre><code class="language-text">name=Asteroid Garden
+launch=index.html
+description.file=DESCRIPTION.md
+release_notes.file=CHANGELOG.md
+</code></pre>
+<pre><code class="language-text">my-game-dist/
+  starhermit.txt
+  DESCRIPTION.md
+  CHANGELOG.md
+  index.html
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Clé</th>
+<th>Alias</th>
+<th>Signification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>description</code></td>
+<td>—</td>
+<td>Texte de description, en ligne.</td>
+</tr>
+<tr>
+<td><code>description.file</code></td>
+<td>—</td>
+<td>Chemin vers un <code>.md</code>, <code>.markdown</code> ou <code>.txt</code> fichier contenant la description.</td>
+</tr>
+<tr>
+<td><code>release_notes</code></td>
+<td><code>releasenotes</code></td>
+<td>Texte des notes de version, en ligne.</td>
+</tr>
+<tr>
+<td><code>release_notes.file</code></td>
+<td><code>releasenotes.file</code></td>
+<td>Chemin vers un <code>.md</code>, <code>.markdown</code> ou <code>.txt</code> fichier contenant les notes de version.</td>
+</tr>
+</tbody>
+</table>
+<p>Les règles :</p>
+<ul>
+<li><strong>Les chemins de fichiers sont relatifs à <code>starhermit.txt</code></strong> (la racine du référentiel pour un jeu de référentiel), pas
+au fichier de lancement. Non <code>..</code>, pas de leader <code>/</code>, et seulement <code>.md</code>, <code>.markdown</code> ou <code>.txt</code>; tout autre chemin
+est ignoré plutôt que de refuser le jeu. Le fichier doit être <em>à l'intérieur</em> ce que vous publiez, c'est ainsi
+servi aux joueurs comme tous les autres fichiers à côté du manifeste. N'y mettez rien vous
+ne les montrerait pas.</li>
+<li><strong>Un fichier l'emporte sur la ligne en ligne.</strong> Déclarez les deux et le texte en ligne n'est qu'une solution de secours, utilisée
+lorsque le fichier est introuvable.</li>
+<li><strong>Le texte est relu à chaque fois que le manifeste est</strong>&#160;: chaque téléchargement ou push contenant un
+manifeste et chaque déploiement de référentiel (à partir du commit en cours de déploiement). Supprimez les deux lignes et le
+le texte est effacé. Un fichier déclaré mais manquant, sans solution de secours en ligne, laisse le texte
+le jeu avait déjà.</li>
+<li><strong>Pourquoi un fichier et non un texte multiligne dans le manifeste ?</strong> Une clé sur deux est lue ligne par ligne. Si un
+Un paragraphe des notes de version pourrait se trouver à l'intérieur du manifeste, une note qui disait
+<code>owner=someone</code> serait lu comme un <code>owner=</code> doubler.</li>
+<li><strong>Taille</strong>: une description est coupée à 4 000 caractères et les notes de version à 20 000. Un texte plus long est
+raccourci, pas refusé. Les fins de ligne sont normalisées et les lignes vierges de début et de fin sont coupées.</li>
+<li><strong>Formatage</strong>: le texte est stocké exactement tel qu'il est écrit. Markdown est un choix judicieux, mais que ce soit
+il est rendu ou affiché sous forme de texte brut, c'est au client de l'afficher.</li>
+<li><strong>Les notes de version remplacent et ne s'accumulent pas.</strong> Chaque publication contient les notes pour <em>que</em> construire. Garder
+votre historique complet dans votre propre journal des modifications et publiez la pièce dont les joueurs ont besoin.</li>
+</ul>
+<p>Les clients lisent la description de la liste du jeu et les notes de version de
+<a href="/fr/docs/api/github-games.html#description-and-release-notes"><code>GET /api/v1/github-games/{id}/release-notes</code></a>.</p>
+<h3 id="browser-asset-caching">Mise en cache des actifs du navigateur</h3>
+<p>Utiliser <code>cache.&lt;folder&gt;=&lt;seconds&gt;</code> définir <code>Cache-Control: public, max-age=&lt;seconds&gt;</code> sur statique hébergé
+fichiers. Les durées sont des nombres entiers <strong>0–31536000</strong> (un an):</p>
+<pre><code class="language-ini">cache..=0
+cache.audio=31536000
+cache.audio/live=0
+cache.assets/textures=604800
+</code></pre>
+<p>Ici <code>cache..</code> définit la valeur par défaut de l'ensemble du site à zéro (revalidation lors de la réutilisation), <code>audio/</code> cache pendant un an,
+<code>audio/live/</code> revalide, et <code>assets/textures/</code> cache pendant une semaine. Utilisez des noms de fichiers hachés avec le contenu pour
+des atouts à long terme&#160;: le redéploiement n'invalide pas les copies déjà mises en cache dans les navigateurs des joueurs.</p>
+<p>Les chemins sont sensibles à la casse, par rapport à la racine hébergée (racine du référentiel ou <code>client/</code>
+répertoire) et faire correspondre des dossiers entiers, y compris les descendants. <code>audio</code> ne correspond pas <code>audiobooks</code>.
+Une barre oblique finale est facultative&#160;; le dossier le plus spécifique l'emporte et le dernier doublon l'emporte. Utiliser <code>.</code>
+uniquement pour la racine par défaut&#160;; chemins absolus, segments vides, <code>.</code>/<code>..</code> segments, barres obliques inverses, <code>%</code>, <code>?</code>,
+<code>#</code>, <code>:</code> et les caractères de contrôle sont refusés. Sans règle de correspondance, il n'y a pas de statique explicite
+<code>Cache-Control</code> en-tête. Les appels d'API, les WebSockets et les solutions de secours pour les actifs manquants diffusés en externe sont
+non affecté.</p>
+<h3 id="allowing-another-website-to-access-your-hosted-game">Autoriser un autre site Web à accéder à votre jeu hébergé</h3>
+<p>Pour un client navigateur sur une autre origine, déclarez jusqu'à <strong>cinq</strong> origines HTTP/HTTPS exactes&#160;:</p>
+<pre><code class="language-ini">cors.origins=https://example.com,https://play.example.org,http://localhost:5173
+</code></pre>
+<p>Par exemple, après avoir publié ce manifeste, une page de développement sur <code>http://localhost:5173</code> peut récupérer
+un atout de votre jeu hébergé&#160;:</p>
+<pre><code class="language-js">const response = await fetch('https://YOUR_GAME_UID.starhermit.com/assets/levels.json');
+if (!response.ok) throw new Error(`Asset request failed: ${response.status}`);
+const levels = await response.json();
+</code></pre>
+<p>Chaque origine est un schéma, un nom d'hôte exact et un port facultatif. Caractères génériques, domaines nus, informations d'identification,
+chemins (même un sentier <code>/</code>), les requêtes et les fragments sont refusés. Le schéma et le port doivent correspondre&#160;;
+les sous-domaines ne sont pas implicitement inclus. Répété <code>cors.origins</code> lignes se combinent, avec au plus cinq
+entrées dans le manifeste (les doublons comptent également). Omettez la clé pour ne permettre aucune origine supplémentaire&#160;;
+une valeur vide n'est pas valide.</p>
+<p>Cela s'applique aux actifs statiques, aux ressources de secours manquantes et aux <code>/api/</code> demandes sur <strong>l'hôte de votre jeu</strong>.
+Les origines autorisées reçoivent des en-têtes CORS accrédités&#160;; Les contrôles en amont OPTIONS permettent GET, HEAD, POST, PUT,
+PATCH, DELETE et OPTIONS avec les en-têtes demandés. Authentification et autorisation API toujours
+appliquer. Cela ne configure pas CORS sur <code>api.starhermit.com</code>, modifier les règles d'origine WebSocket ou élargir
+les URL de retour autorisées par la connexion au jeu par navigateur. Un jeu fonctionnant sur sa propre origine hébergée n'a pas besoin
+déclaration CORS supplémentaire.</p>
+<h3 id="publishing-cache-and-cors-settings">Cache de publication et paramètres CORS</h3>
+<p>Les deux stratégies sont publiées avec les fichiers clients. Les déploiements de référentiel lisent le commit épinglé.
+En paquets, racine <code>starhermit.txt</code> a la priorité sur <code>client/starhermit.txt</code>.
+Un téléchargement de fusion sans manifeste conserve les politiques existantes&#160;; un manifeste fourni les remplace
+(omettre un paramètre l'efface). Un remplacement complet sans manifeste efface les deux politiques.
+Les paramètres non valides rejettent la publication avant de remplacer les fichiers actifs (<code>422</code> pour les téléchargements&#160;; un échec
+déploiement du référentiel). Voir <a href="/fr/docs/api/github-games.html#partial-updates-modemerge">mises à jour groupées</a>.</p>
+<h3 id="controls">Contrôles</h3>
+<p>Déclarez les actions du clavier utilisées par votre jeu, avec les touches par défaut que les joueurs peuvent relier&#160;:</p>
+<pre><code class="language-text">control.left=KeyA+ArrowLeft | Move left
+control.jump=Space+KeyW | Jump
+</code></pre>
+<p><code>control.&lt;action&gt;=&lt;code&gt;[+&lt;code&gt;...][ | &lt;label&gt;]</code>&#160;: les identifiants d'action sont des lettres minuscules, des chiffres et
+<code>_</code>; les codes sont <code>KeyboardEvent.code</code> valeurs (<code>KeyA</code>, <code>Space</code>, <code>ArrowLeft</code>), jusqu'à 4 par action rejointe
+avec <code>+</code>; au maximum 32 actions, et aucune clé sur deux actions. Les lignes invalides sont ignorées silencieusement et un
+un jeu sans ligne valide n'a pas de contrôles - ses réponses API de contrôles
+<code>404 "This game declares no controls."</code>. Ils prennent effet lorsque vous publiez une build les contenant.
+Voir <a href="/fr/docs/tutorials/game-controls.html">Tutoriel&#160;: ajouter des contrôles à votre jeu</a>.</p>
+<h3 id="keys-for-a-game-with-server-logic">Clés pour un jeu avec logique serveur</h3>
+<p>Prendre <strong>un</strong> façon serveur. Déclarer les deux <code>server=</code> et <code>container.image=</code> est refusé.</p>
+<p>Ceux-ci fonctionnent dans un <strong>dossier téléchargé</strong> ainsi qu'un référentiel. UN <code>server=</code> le script voyage à l'intérieur du
+dossier que vous téléchargez et sa source est lue directement à partir de l'archive, donc un jeu faisant autorité
+les règles n'ont besoin d'aucun référentiel. Si la déclaration ne peut être honorée — le script est manquant,
+pointe en dehors du dossier, ou demande un conteneur pour lequel vous n'êtes pas autorisé à exécuter - l'intégralité du téléchargement est
+refusé plutôt que de créer un jeu à moitié configuré.</p>
+<table>
+<thead>
+<tr>
+<th>Clé</th>
+<th>Signification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server</code> (alias <code>server_script</code>)</td>
+<td>Chemin d'accès à un fichier JavaScript qui s'exécute en tant que serveur faisant autorité dans le bac à sable de StarHermit. Voir <a href="/fr/docs/api/game-scripts.html">Scripts de jeu</a>.</td>
+</tr>
+<tr>
+<td><code>container.image</code></td>
+<td>A <strong>résumé épinglé</strong> image (<code>name@sha256:&lt;64 hex&gt;</code>) pour s'exécuter en tant que serveur. Les tags sont refusés. Voir <a href="/fr/docs/api/container-games.html">Serveurs de jeux de conteneurs</a>.</td>
+</tr>
+<tr>
+<td><code>container.port</code></td>
+<td>Port sur lequel votre conteneur écoute.</td>
+</tr>
+<tr>
+<td><code>container.memory_mb</code></td>
+<td>Mémoire demandée en MiB, limitée aux limites de l'opérateur.</td>
+</tr>
+<tr>
+<td><code>container.cpu</code></td>
+<td>Limite de CPU pour le conteneur.</td>
+</tr>
+<tr>
+<td><code>container.health</code></td>
+<td>Cheminez vers la plate-forme pour vérifier qu'elle est prête.</td>
+</tr>
+<tr>
+<td><code>container.env.&lt;NAME&gt;</code></td>
+<td>Une variable d'environnement transmise à votre conteneur.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="starting-matchmaking-before-every-human-seat-is-filled">Commencer le matchmaking avant que chaque siège humain ne soit pourvu</h3>
+<p>Ces paramètres s'appliquent à un jeu faisant autorité utilisant le matchmaking StarHermit, avec soit un
+Serveur JavaScript ou conteneur&#160;:</p>
+<pre><code class="language-ini">matchmaking.max_wait_seconds=30
+matchmaking.ai_players=2
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Clé</th>
+<th>Signification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>matchmaking.max_wait_seconds</code></td>
+<td>Entier <strong>0–86400</strong>. Démarrez une correspondance sous-remplie lorsque le ticket sélectionné le plus ancien a attendu ce nombre de secondes. <code>0</code> démarre immédiatement. Omettre pour conserver le comportement par défaut de correspondance ou d'expiration humaine complète.</td>
+</tr>
+<tr>
+<td><code>matchmaking.ai_players</code></td>
+<td>Entier <strong>0–31</strong>, défaut <strong>0</strong>. À la date limite, remplissez autant de sièges vacants avec l’IA&#160;; laisser tous les autres sièges vacants vides. Nécessite <code>matchmaking.max_wait_seconds</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>La capacité de la file d'attente provient de celle d'un script <code>game.queues</code>; sans déclaration, c'est 1v1.
+Le conteneur actuel <code>/describe</code> le lecteur n'importe pas <code>queues</code>, donc le matchmaking de conteneurs utilise
+la forme implicite 1v1. Par exemple, dans une file d'attente de huit places déclarée par le script avec trois humains en attente,
+les paramètres ci-dessus commencent avec trois humains, deux joueurs IA et trois sièges vides. Un humain à part entière
+le match peut commencer avant la date limite et ne reçoit aucune IA. Définir l'IA sur <code>0</code> permet une correspondance uniquement humaine
+avec des sièges vides, y compris un seul humain si le jeu le permet.</p>
+<p>La plateforme vérifie lors de la mise en file d'attente et lors des vérifications périodiques de mise en relation (par défaut tous les <strong>5 secondes</strong>),
+ainsi, un démarrage peut suivre la date limite jusqu'à un intervalle de balayage sous charge normale. Compatibilité Elo
+et le sous-ensemble de file d'attente autorisé pour chaque ticket s'applique toujours. Les groupes restent ensemble au sein d’une seule équipe&#160;; à la
+date limite, un groupe plus petit ou un joueur solo peut occuper une équipe plus grande, avec les sièges restants
+disponible pour l’IA ou laissé vide. Les billets ne sont pas regroupés en une seule équipe.</p>
+<p><strong>Votre serveur de jeu doit accepter les correspondances sous-remplies et implémenter le comportement de l'IA.</strong> Marques StarHermit
+les joueurs IA ; cela ne génère pas leurs mouvements. Une session rejetée annule les tickets sélectionnés.
+La disposition des sièges gelés est fournie comme <code>ctx.matchmaking</code>, et les sièges occupés apparaissent dans <code>ctx.players</code>;
+voir <a href="/fr/docs/api/game-scripts.html#matchmaking-seat-layout">le contexte du serveur</a>. Les sièges vides ne sont pas automatiquement
+rempli par des jointures tardives.</p>
+<p>Les redéploiements et téléchargements de référentiel appliquent ces paramètres. Un manifeste fourni sans les clés réinitialisées
+eux&#160;; un patch sans manifeste les préserve. Les valeurs invalides sont refusées (upload <code>422</code>, ou un échec
+déploiement du référentiel). Ces paramètres n'affectent pas les jeux d'entraînement explicites ou les salles en temps réel.
+jointure/remplissage rapide.</p>
+<h2 id="how-to-create-one">Comment en créer un</h2>
+<ol>
+<li>Ouvrez un éditeur de texte brut&#160;: Notepad, TextEdit, VS Code, n'importe quoi. Pas Word.</li>
+<li>Tapez les touches dont votre jeu a besoin, une par ligne (commencez par un exemple ci-dessous).</li>
+<li>Enregistrez-le sous <code>starhermit.txt</code> dans le dossier que vous allez télécharger, codé en UTF-8.</li>
+</ol>
+<p>Sous Windows, le Bloc-notes "Documents texte" le type de sauvegarde ajoute <code>.txt</code> à tout ce que vous tapez, donc nommer le
+fichier <code>starhermit.txt</code> rendements <code>starhermit.txt.txt</code>. Soit choisir <strong>Tous les fichiers</strong> dans la boîte de dialogue d'enregistrement, ou
+activez l'explorateur de fichiers <strong>Extensions de nom de fichier</strong> visualisez-le et renommez-le ensuite. Un fichier nommé
+<code>starhermit.txt.txt</code> n'est pas trouvé et le téléchargement est refusé.</p>
+<p>Le nom est exact : tout en minuscules, sans espaces. <code>Starhermit.txt</code> et <code>starhermit.TXT</code> travailler parce que le
+la recherche n'est pas sensible à la casse, mais <code>starhermit.text</code>, <code>starhermit.cfg</code> et <code>manifest.txt</code> ne pas.</p>
+<h2 id="examples">Exemples</h2>
+<h3 id="browser-only-game">Jeu sur navigateur uniquement</h3>
+<pre><code class="language-text">name=Asteroid Garden
+launch=index.html
+</code></pre>
+<h3 id="game-with-cover-art">Jeu avec pochette</h3>
+<pre><code class="language-text">name=Asteroid Garden
+launch=index.html
+cover=art/cover.png
+</code></pre>
+<p>Un chemin relatif est résolu par rapport au fichier de lancement (non <code>..</code>, pas de leader <code>/</code>, pas de chaîne de requête) et
+doit se terminer par <code>.png</code>, <code>.jpg</code>/<code>.jpeg</code>, <code>.gif</code>, <code>.webp</code> ou <code>.svg</code>. Une URL absolue doit être <code>https://</code> —
+<code>http://</code> est supprimé - et les octets sont reniflés, donc l'URL elle-même n'a besoin d'aucune extension d'image.</p>
+<p>La ligne est relue à chaque déploiement, donc la changer change le couvercle et le retirer supprime le
+couverture. Une image définie à partir de <strong>Gérer → Couverture</strong> dans le tableau de bord web (ou par un opérateur StarHermit)
+le remplace&#160;: ce choix réside en dehors de la construction, donc un redéploiement ne l'annule jamais. Suppression du
+le téléchargement revient à nouveau à cette ligne.</p>
+<h4 id="library-tiles">Tuiles de bibliothèque</h4>
+<p>La pochette est une affiche : les deux bibliothèques <strong>redimensionnez-le pour remplir la tuile et recadrez-le au centre</strong> quoi qu'il arrive
+pas adapté. Les carreaux n'ont pas la même forme.</p>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Tuile</th>
+<th>Recadrer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Client Windows</td>
+<td>Portrait 96×128 (3:4)</td>
+<td>Remplit le portrait ; l'art au sens large perd ses côtés</td>
+</tr>
+<tr>
+<td>Tableau de bord Web</td>
+<td>Carré</td>
+<td>Remplit le carré&#160;; l'art plus grand perd le haut et le bas</td>
+</tr>
+</tbody>
+</table>
+<p>Gardez le sujet dans le <strong>centre</strong>. Un portrait 3:4 dont le carré du milieu est la composition, ou un
+carré dont la bande centrale 3:4 est, survit aux deux récoltes. La boîte aux lettres n'est jamais appliquée - vide
+les marges que vous ajoutez autour de l’illustration sont coupées avec tout le reste.</p>
+<p>Les couvertures SVG s'affichent sur la bibliothèque Web. Le client Windows n'a pas de décodeur SVG, donc cette tuile revient
+au favicon tandis que la vignette Web affiche toujours la couverture. Préférez PNG, JPEG ou WEBP quand vous le souhaitez
+la même tuile sur les deux.</p>
+<h3 id="game-with-a-description-and-release-notes">Jeu avec une description et des notes de version</h3>
+<pre><code class="language-text">name=Asteroid Garden
+launch=index.html
+description=Tend a garden on a drifting asteroid.
+release_notes.file=CHANGELOG.md
+</code></pre>
+<h3 id="static-site-whose-entry-point-is-not-at-the-root">Site statique dont le point d'entrée n'est pas à la racine</h3>
+<pre><code class="language-text">name=Tower Rush
+launch=public/game.html
+</code></pre>
+<h3 id="game-with-a-sandboxed-javascript-server">Jeu avec un serveur JavaScript en bac à sable</h3>
+<pre><code class="language-text">name=Correspondence Chess
+launch=index.html
+server=server.js
+</code></pre>
+<h3 id="game-with-a-container-server">Jeu avec un serveur conteneur</h3>
+<pre><code class="language-text">name=Voxel Skirmish
+launch=index.html
+container.image=ghcr.io/octocat/voxel-server@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+container.port=8080
+container.memory_mb=512
+container.health=/healthz
+container.env.LOG_LEVEL=info
+</code></pre>
+<h3 id="claiming-a-listing-you-own--repository-games-only">Revendiquer une annonce que vous possédez&#160;–&#160;jeux de référentiel uniquement</h3>
+<p>Ensemble <code>owner</code> à l'ID utilisateur immuable StarHermit renvoyé comme <code>id</code> par <code>GET /api/v1/me</code>-pas le
+nom d'utilisateur ou pseudo du profil&#160;:</p>
+<pre><code class="language-text">name=My Game
+launch=index.html
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6
+</code></pre>
+<h2 id="who-owns-an-uploaded-game">À qui appartient un jeu téléchargé</h2>
+<p><strong>Le compte qui le télécharge.</strong> Toujours, et il n'y a rien à configurer.</p>
+<p>Un téléchargement n'a aucun référentiel derrière lui, donc personne ne peut prouver son contrôle&#160;:
+la plateforme enregistre le compte de téléchargement en tant que demandeur et laisse le champ du propriétaire GitHub vide, donc
+aucune revendication ne pourra jamais correspondre à la ligne. Un <code>owner=</code> La ligne dans une version téléchargée est ignorée et les clients le font
+ne pas offrir de champ pour cela - mettre un jeu au nom d'une autre personne lui attribuerait la responsabilité
+pour le contenu qu'ils n'ont pas publié, ce qu'un formulaire de téléchargement ne devrait pas pouvoir faire.</p>
+<p>Remettre un jeu que vous possédez déjà à quelqu'un d'autre est une action distincte et délibérée à partir de son menu Gérer.
+après coup, pas une décision prise lors de son ajout.</p>
+<h2 id="publishing-from-a-github-repository-instead">Publier à partir d'un référentiel GitHub à la place</h2>
+<p>Si votre jeu vit dans un <code>github.com</code> référentiel, mettre <code>starhermit.txt</code> à la <strong>racine du référentiel</strong> et
+soumettez l'URL du dépôt - la plate-forme lit le manifeste directement à partir du dépôt et aucun téléchargement n'est effectué.
+impliqué. Tout ce qui précède s'applique sans changement, sauf que "tout ce qui est adjacent" signifie tout dans
+le référentiel, ce qui est une bonne raison de conserver la sortie et les sources de la build dans des dépôts séparés (ou d'utiliser
+le dossier de téléchargement pour votre sortie construite).</p>
+<p>Voir <a href="/fr/docs/api/github-games.html">Jeux GitHub</a> pour le flux du référentiel, et
+<a href="/fr/docs/api/github-games.html#add-a-game-from-a-local-folder">Ajouter un jeu à partir d'un dossier local</a> pour le téléchargement
+points de terminaison que les clients appellent.</p>
+<h2 id="limits">Limites</h2>
+<p>Un jeu peut occuper <strong>2 Go</strong> sur starhermit.com (l'allocation peut varier selon le déploiement), et c'est
+également le plafond pour un seul téléchargement de remplacement. UN <a href="/fr/docs/api/github-games.html#partial-updates-modemerge"><code>?mode=merge</code></a>
+Le patch est délimité par l'arborescence résultante, donc un petit téléchargement qui ferait en sorte que le jeu en direct dépasse le
+l'indemnité est refusée. Profondément
+les chemins imbriqués sont refusés : le format d'archive limite un chemin à 100 caractères pour le nom du fichier plus 155
+pour son préfixe de répertoire, raccourcissez donc les très longues chaînes de dossiers.</p>
+<h2 id="troubleshooting">Dépannage</h2>
+<table>
+<thead>
+<tr>
+<th>Ce que tu vois</th>
+<th>Pourquoi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Le client dit que votre build n'a pas de manifeste</td>
+<td>Non <code>starhermit.txt</code> à la racine de ce que vous avez choisi (une copie plus profonde à l'intérieur ne compte pas). Il s'agit d'une invite, pas d'un refus : remplissez les champs de la boîte de dialogue et une est rédigée pour vous.</td>
+</tr>
+<tr>
+<td>Ton <code>.tar</code> est refusé car "en-têtes étendus"</td>
+<td>Le <em>client</em> emballeur qui héberge un seul <code>.tar</code> dans <code>client/</code> refuse toujours les blocs de nom long GNU et PAX (la réécriture de ces blocs de métadonnées est la façon dont l'entrée suivante est nommée). <code>git archive</code> et <code>tar -czf .</code> sont acceptés par la plateforme elle-même. Recréer avec <code>tar --format=ustar</code>, ou téléchargez le dossier.</td>
+</tr>
+<tr>
+<td>Vous avez modifié un champ mais l'ancienne valeur est active</td>
+<td>Le manifeste à l’intérieur de votre build est inchangé&#160;; seul le paquet a reçu le nouveau. Mettez à jour le fichier dans votre build afin que le prochain téléchargement démarre à partir des bonnes valeurs.</td>
+</tr>
+<tr>
+<td>"Un nom d'affichage est requis"</td>
+<td>Non <code>name=</code> ligne et aucun nom d'affichage saisi dans le formulaire.</td>
+</tr>
+<tr>
+<td>"Un chemin de lancement est requis"</td>
+<td>Non <code>launch=</code> ligne et non <code>index.html</code> à la racine du dossier.</td>
+</tr>
+<tr>
+<td>"Les fichiers du téléchargement ne contiennent pas le fichier de lancement"</td>
+<td><code>launch=</code> nomme un fichier qui ne se trouve pas dans le dossier. Vérifiez l'orthographe et qu'elle est relative au manifeste et non absolue.</td>
+</tr>
+<tr>
+<td>Votre jeu est publié mais il manque des fichiers</td>
+<td>Ces fichiers n'étaient pas adjacents au manifeste. Le téléchargement commence dans le dossier contenant <code>starhermit.txt</code>; rien au-dessus n’est inclus.</td>
+</tr>
+<tr>
+<td>La vignette de la bibliothèque affiche le favicon, pas votre couverture</td>
+<td><code>cover=</code> est manquant, n'est pas un chemin d'image utilisable/<code>https://</code> URL, ou le fichier ne se trouve pas à côté du fichier de lancement. Les mauvaises valeurs sont supprimées silencieusement – ​​le jeu est toujours publié. SVG apparaît uniquement dans la bibliothèque Web&#160;; la vignette Windows revient au favicon. Une image de <strong>Gérer → Couverture</strong> remplace le manifeste jusqu'à ce que vous le supprimiez ici.</td>
+</tr>
+<tr>
+<td>Votre description ou vos notes de version n'apparaissent pas</td>
+<td>La clé est mal orthographiée (les clés inconnues sont ignorées), le <code>*.file</code> le chemin n'est pas un <code>.md</code>/<code>.markdown</code>/<code>.txt</code> fichier relatif à <code>starhermit.txt</code>, ou le fichier ne figurait pas dans ce que vous avez publié. Un fichier manquant conserve le texte précédent.</td>
+</tr>
+<tr>
+<td>Vos notes de version affichent <code>\n</code> littéralement</td>
+<td>Seul le formulaire en ligne devient <code>\n</code> dans un saut de ligne. Texte lu d'un <code>*.file</code> est utilisé exactement tel qu’écrit.</td>
+</tr>
+<tr>
+<td><code>container.image</code> refusé</td>
+<td>Il n’est pas épinglé dans un résumé. Utiliser <code>name@sha256:&lt;64 hex&gt;</code>, pas une balise.</td>
+</tr>
+<tr>
+<td>L'API des contrôles dit "Ce jeu ne déclare aucun contrôle."</td>
+<td>Non valide <code>control.*</code> ligne dans la version en direct. Vérifiez les lignes par rapport <a href="#controls">Contrôles</a> et publier une nouvelle version - voir <a href="/fr/docs/tutorials/game-controls.html">Tutoriel&#160;: ajouter des contrôles à votre jeu</a>.</td>
+</tr>
+</tbody>
+</table>
+
+{% endraw %}

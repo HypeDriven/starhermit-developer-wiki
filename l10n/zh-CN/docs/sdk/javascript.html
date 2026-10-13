@@ -1,0 +1,345 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "JavaScript SDK（浏览器游戏）"
+source_url: "/docs/sdk/javascript.html"
+source_path: "docs/sdk/javascript.md"
+source_hash: "4d041431633ef4a5afd148d1259d70f562c53aa7ae80afaf101ba1b9e35320a5"
+translation: "machine"
+permalink: "/zh-CN/docs/sdk/javascript.html"
+---
+{% raw %}
+<h1 id="javascript-sdk-browser-games">JavaScript SDK（浏览器游戏）</h1>
+<p><a href="/docs/sdk/starhermit-sdk.js"><code>starhermit-sdk.js</code></a> 是一个单文件、无依赖的浏览器游戏客户端
+发表在《星隐者》上。它读取启动令牌，保持更新，并为常见问题提供帮助。
+游戏范围的启动令牌 API：身份、云保存、每个玩家的设置和控制，
+邀请、配对、会话和游戏套接字、成就、排行榜、重播、聊天、
+语音和实时房间。</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>文件</td>
+<td><a href="/docs/sdk/starhermit-sdk.js"><code>docs/sdk/starhermit-sdk.js</code></a> — 将其原封不动地复制到您的游戏中</td>
+</tr>
+<tr>
+<td>全球的</td>
+<td><code>window.StarHermit</code> （还 <code>module.exports</code> 在 Node 下，用于测试）</td>
+</tr>
+<tr>
+<td>依赖关系</td>
+<td>无 — 它使用浏览器自己的 <code>fetch</code>, <code>WebSocket</code> 和（读取压缩保存） <code>DecompressionStream</code></td>
+</tr>
+<tr>
+<td>API基线</td>
+<td>REST v1 和 WebSocket v1，仅启动令牌表面</td>
+</tr>
+</tbody>
+</table>
+<p>SDK 是一个客户端，而不是平台的第二个实现。分数和成就解锁
+仅由游戏服务器写入（脚本结果或容器控制消息）-客户端
+永远不能发布它们，并且 SDK 只能读取它们。其他一切都保持服务器权威
+完全按照记录 <a href="/zh-CN/#api-reference">API页面</a>.</p>
+<p><strong>如果没有启动令牌，经过身份验证的助手不会发出 API 请求。</strong> 阅读一般可以解决
+到 <code>null</code>, <code>[]</code>，或一张空地图；写入可能会解决 <code>null</code>/<code>false</code> 并且去抖动保存不会立即生效
+返回值。套接字保持断开状态。如果玩家选择，则在内存中保留独立进度
+未跟踪的播放。称呼 <code>signOut()</code> 在从帐户游戏切换到该模式之前，更新会停止。</p>
+<h2 id="install">安装</h2>
+<p>将文件复制到游戏的其他静态脚本旁边（无论您的构建将其运送到何处）并加载
+它位于您自己的代码之前：</p>
+<pre><code class="language-html">&lt;script src="starhermit-sdk.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  StarHermit.init();          // as early as possible: it reads and strips the token from the URL fragment
+&lt;/script&gt;
+</code></pre>
+<p>称呼 <code>init()</code> 在任何路由器接触之前一次 <code>location.hash</code>。选项：
+<code>init({ base, gameId, autoRefresh, launcherUrl })</code> — <code>base</code> 将 REST 调用指向授权来源
+在本地开发期间（平台托管的游戏使用同源）。 <code>gameId</code>，如果提供，必须匹配
+用于登录的托管 UUID；本地/外部页面不是有效的游戏登录返回源。 <code>autoRefresh: false</code> 将代币更新留给游戏
+经营自己的连锁店，并且 <code>launcherUrl</code> 覆盖哪里 <code>relaunch()</code> 发送玩家（默认
+<code>https://dashboard.starhermit.com/</code>).</p>
+<h2 id="sign-in-and-identity">登录和身份</h2>
+<table>
+<thead>
+<tr>
+<th>需要</th>
+<th>称呼</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>玩家是否已登录？</td>
+<td><code>StarHermit.signedIn</code>, <code>StarHermit.userId</code>, <code>StarHermit.slug</code></td>
+</tr>
+<tr>
+<td>对登录/注销/过期做出反应</td>
+<td><code>StarHermit.on('auth', ({ signedIn, reason }) =&gt; …)</code></td>
+</tr>
+<tr>
+<td>显示一个 <strong>登入</strong> 按钮</td>
+<td>仅当 <code>StarHermit.canSignIn()</code> （在没有令牌的游戏 UUID 子域上为 true）；点击时 <code>StarHermit.signIn()</code></td>
+</tr>
+<tr>
+<td>玩家姓名/头像</td>
+<td><code>await StarHermit.profile()</code> → <code>{ userId, username, nickname, displayName }</code>; <code>StarHermit.avatarUrl()</code></td>
+</tr>
+<tr>
+<td>朋友们</td>
+<td><code>await StarHermit.friends()</code></td>
+</tr>
+</tbody>
+</table>
+<p>SDK 可以处理两种启动形状 — <code>#game_token=&lt;jwt&gt;[&amp;session_id=…]</code> 从图书馆或
+邀请，并且 <code>#access_token=&lt;jwt&gt;</code> 从直接登录返回 - 并通过更新令牌
+<code>POST /api/v1/games/{slug}/launch-token</code> 在过期之前（参见
+<a href="/zh-CN/docs/api/auth.html">启动代币</a>）。显示名称是个人资料 <code>nickname</code>; <code>/api/v1/me</code> 不是
+可通过启动令牌访问。</p>
+<h2 id="cloud-saves">云存档</h2>
+<p>游戏的槽位是 <code>game:&lt;slug&gt;</code> (<a href="/zh-CN/docs/api/catalog.html">目录：从游戏内部保存</a>）；软件开发工具包
+构建路径，压缩有效负载并处理 <code>/info</code> 查看。</p>
+<pre><code class="language-js">const remote = await StarHermit.loadJSON();          // null: empty slot, signed out — or a failed read
+if (StarHermit.saveLoadFailed()) showSyncError();    // tell those apart when it matters
+else if (remote &amp;&amp; isNewer(remote, local)) adopt(remote);
+
+StarHermit.saveJSON(state);                          // debounced (2 s) checkpoint upload
+addEventListener('pagehide', () =&gt; StarHermit.flushSave(true));   // keepalive flush
+StarHermit.on('saved', ok =&gt; setSyncIndicator(ok));
+</code></pre>
+<p><strong>保存之前加载。</strong> 在任何可能到达的写入之前比较并采用云副本
+<code>saveJSON</code> — 包括设置、昵称或启动时写入的检查点 — 或者过时的本地副本可以
+覆盖在另一台设备上进行的较新的保存。保留早期保存，直到启动负载稳定。</p>
+<p>SDK 保护了比赛的另一半：当读取失败时（网络或服务器错误，如
+与空槽相反）它设置 <code>saveLoadFailed()</code>，发出 <code>saveerror</code>，并拒绝写入，直到
+<code>/info</code> 确认插槽为空或稍后 <code>loadSave()</code> 成功了。拒绝写入解决
+<code>false</code> 并发出 <code>saved</code> 和 <code>false</code>.</p>
+<p><strong>加载后的写入是有条件的。</strong> SDK 会记住版本（<code>ETag</code>）最后保存
+读取或写入并将其发送回，因此写入仅落在其所基于的保存上 - 或者，对于插槽
+那是空的，只是在它仍然存在的时候。当中间保存另一个设备时，写入被拒绝
+（<code>412</code>): SDK 发出 <code>saveconflict</code>， 套 <code>saveConflicted()</code>，并拒绝进一步写入，直到
+<code>loadSave()</code> 让游戏合并或采用更新的保存。一个永远不会加载写入的游戏
+无条件地，像以前一样。</p>
+<pre><code class="language-js">StarHermit.on('saveconflict', async () =&gt; {
+  const remote = await StarHermit.loadJSON();       // lifts the block
+  StarHermit.saveJSON(merge(remote, local));        // conditional on the version just loaded
+});
+</code></pre>
+<p>较低级别： <code>loadSave()</code> / <code>writeSave(text)</code> 对于原始字符串， <code>saveInfo()</code> 为了
+<code>{ exists, sizeBytes, updatedAt, etag }</code>.</p>
+<h2 id="crash-and-bug-reports">崩溃和错误报告</h2>
+<p>玩家可以在游戏内反馈问题；业主通过以下方式对他们进行分类
+<a href="/zh-CN/docs/api/reports.html">报告API</a>.</p>
+<pre><code class="language-js">await StarHermit.reportBug('Score did not save', 'Finished level 3, score shows 0', {
+  clientVersion: '1.4.2',
+  attachments: [{ fileName: 'state.json', contentType: 'application/json', data: JSON.stringify(state) }],
+});
+StarHermit.captureCrashes({ clientVersion: '1.4.2' });   // opt-in: uncaught errors become crash reports
+const mine = await StarHermit.myReports();               // [{ id, kind, status, title, ... }]
+</code></pre>
+<p><code>report(kind, title, description, opts)</code> 是一般形式（<code>reportBug</code> 和 <code>reportCrash</code> 修复
+种）。 <code>captureCrashes</code> 每个不同的消息最多文件一个报告，每个页面加载最多三个文件，因此
+崩溃循环不能用完玩家的每日津贴（默认每场游戏 20 个）。之前询问玩家
+附加任何个人的东西。</p>
+<h2 id="settings-and-controls">设置和控制</h2>
+<table>
+<thead>
+<tr>
+<th>需要</th>
+<th>称呼</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>每个玩家的偏好（音量、图形预设、语言、辅助功能……）</td>
+<td><code>getSettings()</code>, <code>getSetting(key)</code>, <code>setSetting(key, value)</code>, <code>patchSettings({…})</code> (a <code>null</code> 值删除键）， <code>deleteSetting(key)</code>, <code>clearSettings()</code></td>
+</tr>
+<tr>
+<td>声明的键盘绑定 <code>starhermit.txt</code> 作为 <code>control.&lt;action&gt;=…</code></td>
+<td><code>await loadBindings(defaults)</code> → <code>{ action: codes[] }</code> 应用了玩家的覆盖</td>
+</tr>
+<tr>
+<td>重新绑定屏幕</td>
+<td><code>getControls()</code>, <code>setControl(action, codes)</code>, <code>setControls(bindings)</code>, <code>resetControls()</code></td>
+</tr>
+</tbody>
+</table>
+<p>路线 <code>keydown</code> 通过 <code>event.code</code> 以及来自的绑定 <code>loadBindings</code>。看
+<a href="/zh-CN/docs/tutorials/game-controls.html">向您的游戏添加控件</a> 和
+<a href="/zh-CN/docs/starhermit-txt.html"><code>starhermit.txt</code> 显现</a>.</p>
+<p>对于图形菜单， <a href="/docs/sdk/graphics-options.js"><code>graphics-options.js</code></a> 位于设置调用之上：
+它会自动检测质量预设，保留玩家的选择 <code>localStorage</code> 以及他们的每场比赛
+设置，并提供现成的面板。看
+<a href="/zh-CN/docs/tutorials/graphics-options.html">具有自动检测质量的图形选项</a>.</p>
+<p>有关音频部分，请参阅 <a href="/zh-CN/docs/tutorials/audio-options.html">具有自动检测声音限制的音频选项</a>:
+推荐的音量和语音控制，纯净 <a href="/docs/sdk/audio-options.js"><code>audio-options.js</code></a> 帮手，
+以及由混音器强制执行的播放上限。</p>
+<h2 id="multiplayer-invites-and-social">多人游戏、邀请和社交</h2>
+<p>会话游戏、配对、游戏成就、排行榜和重播需要服务器
+（<a href="/zh-CN/docs/api/game-scripts.html">脚本</a> 或者 <a href="/zh-CN/docs/api/container-games.html">容器</a>）。实时房间和
+朋友没有。会话聊天和语音需要相应的会话成员资格。</p>
+<table>
+<thead>
+<tr>
+<th>区域</th>
+<th>通话</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>会议</td>
+<td><code>mySessions()</code>, <code>getSession(id)</code>, <code>sessionRecovery(id)</code>, <code>leaveSession(id)</code>, <code>startAiSession()</code>; <code>StarHermit.launchSessionId</code> 邀请启动后</td>
+</tr>
+<tr>
+<td>游戏插座</td>
+<td><code>const conn = connect(sessionId, { onGame, onError, onPresence, onAchievement, onResumed, onAbandoned, onOpen, onClose, onAuthLost })</code>， 然后 <code>conn.send(data)</code>;通过退避重新连接，首先更新令牌，并在正常/策略/超大关闭 (1000/1008/1009)、4403/4404 或更新被拒绝时停止（请参阅 <a href="#reconnecting-and-expired-tokens">重新连接</a>)</td>
+</tr>
+<tr>
+<td>对接会</td>
+<td><code>queues()</code>, <code>joinQueue([keys])</code>, <code>matchStatus()</code>, <code>cancelMatch()</code>, <code>waitForMatch(opts)</code></td>
+</tr>
+<tr>
+<td>邀请</td>
+<td><code>sendInvite(toUserId[, sessionId])</code> （有一个 <code>sessionId</code> 朋友加入该跑步会话）， <code>invites()</code>, <code>acceptInvite(id)</code>, <code>declineInvite(id)</code>; <code>inviteLink(query)</code> 分享链接</td>
+</tr>
+<tr>
+<td>将跑步发布到您的排行榜</td>
+<td><code>submitScores({ boardKey: number })</code> → 接受的密钥（参见 <a href="#single-player-leaderboards">单人排行榜</a>)</td>
+</tr>
+<tr>
+<td>成就和排行榜（只读）</td>
+<td><code>achievements()</code>, <code>linkedAchievements(otherSlug)</code>, <code>leaderboards()</code>, <code>leaderboard(key, opts)</code>, <code>leaderboardEntries(boardId, opts)</code>;通过解锁吐司 <code>on('achievement', …)</code></td>
+</tr>
+<tr>
+<td>重播</td>
+<td><code>myReplays(limit)</code>, <code>getReplay(id)</code></td>
+</tr>
+<tr>
+<td>会话聊天</td>
+<td><code>chatMessages(id)</code>, <code>sendChat(id, text)</code>, <code>pollChat(id, onMessages, intervalMs)</code> — REST 和轮询仅适用于启动代币</td>
+</tr>
+<tr>
+<td>语音/实时房间</td>
+<td><code>StarHermit.voice.*</code> （REST；WebRTC 信号留给游戏）， <code>StarHermit.realtime.*</code> （房间加 <code>ws/v1/realtime</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>任何未包装的内容只需一通电话即可： <code>StarHermit.api(path, { method, body })</code> 发送一个
+经过身份验证的 JSON 请求（解析 <code>null</code> 在 404/204 上或注销时，拒绝
+<code>{ status, message }</code> 如果出现其他故障，则在 401 上更新一次）。</p>
+<h2 id="single-player-leaderboards">单人排行榜</h2>
+<p>客户端永远无法发布分数——只有游戏的服务器可以——所以单人游戏需要一个
+拥有其主板的小平台脚本。 <a href="/docs/sdk/score-script.js"><code>score-script.js</code></a> 是一：复制下一个
+在你的游戏中声明它 <a href="/zh-CN/docs/starhermit-txt.html"><code>starhermit.txt</code></a> 作为 <code>server=score-script.js</code>, 和
+仅编辑其 <code>BOARDS</code> 块，其中列出了您所选择的每个板
+<a href="/zh-CN/docs/tutorials/game-leaderboards-achievements.html#1-create-the-leaderboards">创建它</a>:</p>
+<pre><code class="language-js">var BOARDS = {
+  "high-score": { "name": "High score", "scoreType": "integer", "sortDirection": "desc", "minScore": 0, "maxScore": 1000000 }
+};
+</code></pre>
+<p>当跑步结束时，将其发布并显示玩家的位置：</p>
+<pre><code class="language-js">const accepted = await StarHermit.submitScores({ 'high-score': total });   // [] when signed out or refused
+if (accepted.includes('high-score')) {
+  const board = await StarHermit.leaderboard('high-score', { pageSize: 100 });
+  const me = board.items.find(e =&gt; e.userId === StarHermit.userId);
+  showRank(me &amp;&amp; me.rank);
+}
+</code></pre>
+<p><code>submitScores</code> 打开练习课（<code>POST .../sessions/ai</code>), 发送 <code>{type:'result', scores}</code> 上
+游戏套接字，并解析脚本接受的棋盘键；它还发出 <code>scores</code> 与
+那个清单。脚本丢弃的分数不是棋盘类型的数字或超出其范围
+<code>minScore</code>/<code>maxScore</code>，通过其发布其余部分 <code>scores</code> 返回，并结束会话。客户
+仍然报告结果。范围内的发明分数可以通过；这些板适合休闲
+玩。对于竞赛，请在授予奖项之前验证脚本或容器中的运行。致谢
+列出脚本接受的键；这并不能证明每个板块都处于活跃状态，也不能证明新的个人最佳成绩
+被存储。看 <a href="/zh-CN/docs/availability.html#what-makes-a-result-trustworthy">信任和可用性</a>.</p>
+<h2 id="reconnecting-and-expired-tokens">重新连接和过期令牌</h2>
+<p>套接字在其 URL 中携带启动令牌，并且之前使用过期令牌的握手会被拒绝
+升级 - 浏览器仅报告关闭代码 <code>1006</code>，就像网络丢弃一样。所以失败了
+重新连接可能会导致身份验证失败，并且重试相同的 URL 永远无法恢复。仅更新工程
+当前令牌有效且在最初发布后 12 小时内；之后只有
+启动器可以铸造一个新的代币。</p>
+<p><code>connect()</code> 自己处理这个问题：在每次重新连接之前，它都会通过以下方式更新令牌
+<code>POST /api/v1/games/{slug}/launch-token</code> （除非套接字打开后已更新）并重新打开
+与新的。续订时出现网络或服务器错误会退出并再次续订 - 永远不会
+重新打开旧网址。当续订被拒绝或令牌已过期时，SDK 会注销（<code>auth</code> 和
+<code>reason: 'expired'</code>），停止重新连接并调用 <code>onAuthLost()</code>:</p>
+<pre><code class="language-js">const conn = StarHermit.connect(sessionId, {
+  onGame, onClose,
+  onAuthLost: () =&gt; showReconnectPanel(),   // e.g. "Session expired — Back to StarHermit"
+});
+backButton.onclick = () =&gt; StarHermit.relaunch();
+</code></pre>
+<p><code>relaunch()</code> 将玩家送回以获取新的启动令牌：在游戏打开时通过登录
+那样（<code>StarHermit.launchKind === 'sign-in'</code>)，否则发送给启动器。在启动器内
+它导航顶部窗口的游戏框架，浏览器仅允许通过用户手势进行操作，因此将其称为
+通过点击；它返回 <code>false</code> 当导航被拒绝时。</p>
+<p>浏览器可以隐藏已完成的会话、术语、成员身份或构建失败，例如 <code>1006</code>。之前
+自动重试， <code>connect()</code> 通过 REST 检查会话状态，当 <code>opts.build</code> 供应，
+将其与游戏信息进行比较。 <code>onUnavailable(error)</code> 收到永久 REST 失败或结束
+会议； <code>onTermsRequired(body)</code> 要求接受明确的条款。之后创建新连接
+解决这些。 <code>onClose(1008)</code> 表示连接已被取代或违反政策；不
+自动重新打开它。</p>
+<p>您的游戏会自行打开套接字（<code>realtime.socketUrl(roomId)</code>, <code>voice.socketUrl(roomId)</code>）需要
+同样的规则。在重新开放之前，请致电 <code>renewForReconnect()</code> 并对其结果采取行动：</p>
+<pre><code class="language-js">async function reopen() {
+  const r = await StarHermit.renewForReconnect();
+  if (r === 'renewed') ws = new WebSocket(StarHermit.realtime.socketUrl(roomId)); // fresh token in the URL
+  else if (r === 'retry') setTimeout(reopen, backoff());                         // renewal itself failed
+  else if (r === 'terms-required') showTermsPanel();                              // explicit acceptance
+  else showReconnectPanel();                                                     // 'relaunch'
+}
+</code></pre>
+<p>并发续订共享一个请求。 <code>terms-required</code> 保留玩家令牌并发出
+<code>termsrequired</code>;展示 <code>getTerms()</code> 并打电话 <code>acceptTerms(displayed.hash)</code> 仅在玩家的
+接受操作，然后重试。您的游戏管理的套接字还需要对已结束的资源进行 REST 检查
+并且必须在保单关闭时停止。看 <a href="/zh-CN/docs/troubleshooting.html#websockets">故障排除</a>.</p>
+<h2 id="events">活动</h2>
+<p><code>StarHermit.on(type, fn)</code> 返回取消订阅函数； <code>off(type, fn)</code> 也有效。</p>
+<table>
+<thead>
+<tr>
+<th>事件</th>
+<th>有效载荷</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>auth</code></td>
+<td><code>{ signedIn, userId }</code> 登录时； <code>{ signedIn: false, reason }</code> 注销或到期时（<code>reason: 'expired'</code> 当续订被拒绝时 - 提供 <code>relaunch()</code>)</td>
+</tr>
+<tr>
+<td><code>saved</code></td>
+<td><code>true</code> / <code>false</code> 每次云写入后</td>
+</tr>
+<tr>
+<td><code>saveerror</code></td>
+<td><code>{ op: 'load' }</code> 读取失败后； <code>{ op: 'write', blocked: true }</code> 对于拒绝写入</td>
+</tr>
+<tr>
+<td><code>achievement</code></td>
+<td>游戏套接字上推送的解锁</td>
+</tr>
+<tr>
+<td><code>scores</code></td>
+<td>接受的板键 <code>submitScores</code> (<code>[]</code> 当没有发布任何内容时）</td>
+</tr>
+<tr>
+<td><code>saveconflict</code></td>
+<td><code>{ etag }</code> 当另一台设备更改保存时；合并/保存之前重新加载</td>
+</tr>
+<tr>
+<td><code>termsrequired</code></td>
+<td>更新启动令牌返回的条款错误；保留令牌并请求同意</td>
+</tr>
+</tbody>
+</table>
+<h2 id="keeping-your-copy-current">保持您的副本最新</h2>
+<p>将文件视为已提供的文件：将其原封不动地复制，切勿编辑您的副本，并在以下情况下批量替换它：
+此页面的文件发生更改。确保您的构建或打包步骤与游戏一起发布
+其他静态文件。</p>
+
+{% endraw %}

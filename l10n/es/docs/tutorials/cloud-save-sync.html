@@ -1,0 +1,125 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Cargue y guarde el progreso de forma segura"
+source_url: "/docs/tutorials/cloud-save-sync.html"
+source_path: "docs/tutorials/cloud-save-sync.md"
+source_hash: "3d1bef0f13bb54f639d96ca6ff1c5607c172a4d25d7707062b404cba46d5de83"
+translation: "machine"
+permalink: "/es/docs/tutorials/cloud-save-sync.html"
+---
+{% raw %}
+<h1 id="load-and-save-progress-safely">Cargue y guarde el progreso de forma segura</h1>
+<p>Utilice los guardados en la nube para el progreso propiedad del cliente de un jugador que haya iniciado sesión. La opción para un jugador sin firmar
+mantiene el progreso en la memoria y no lee ni escribe los guardados de la cuenta. Las preferencias pertenecen a
+<a href="/es/docs/api/games.html#per-player-game-settings">configuración del juego</a>, no el documento de progreso.</p>
+<p>Un token de lanzamiento puede acceder exactamente <code>game:&lt;gameId&gt;</code>, dónde <code>gameId</code> es su <code>game_scope</code>. la plataforma
+almacena bytes opacos, con un guardado por ranura. Valida el formato que espera tu juego. Ver
+<a href="/es/docs/api/catalog.html#cloud-saves">Guardados en la nube</a> para cuotas y encabezados condicionales.</p>
+<p><img src="/docs/images/es/cloud-save-flow.svg" alt="Cargar y validar antes de escribir. Lecturas fallidas bloquean cargas; las escrituras condicionales preservan los guardados más recientes y muestran conflictos."></p>
+<h2 id="a-small-complete-json-recipe">Una pequeña receta JSON completa</h2>
+<p>Copiar <a href="/docs/sdk/cloud-save-store.js"><code>cloud-save-store.js</code></a> en tu construcción. Este ejemplo almacena raw
+UTF-8 bytes JSON; la plataforma les sirve con <code>application/zip</code> pero no requiere un formato ZIP.
+Utilice un lector diferente para guardar archivos ZIP, incluido el <a href="/es/docs/sdk/javascript.html#cloud-saves">El ZIP del SDK del navegador guarda</a>.
+No cambie formatos sin un plan de migración para los reproductores existentes.</p>
+<pre><code class="language-js">import { CloudSaveStore } from './cloud-save-store.js';
+
+const store = new CloudSaveStore({
+  gameId: StarHermit.slug,
+  token: () =&gt; StarHermit.token, // Always obtain the current renewed token.
+});
+const valid = value =&gt; value?.version === 1 &amp;&amp; Number.isSafeInteger(value.points) &amp;&amp; value.points &gt;= 0;
+let progress = { version: 1, points: 0 };
+let saving = false;
+
+async function startAccountGame() {
+  // Keep gameplay/saving disabled until this resolves.
+  const remote = await store.load(valid);
+  progress = remote ?? { version: 1, points: 0 };
+  render(progress);
+}
+
+async function saveCheckpoint() {
+  if (saving) return; // Coalesce checkpoints; do not issue overlapping writes.
+  saving = true;
+  showSync('Saving…');
+  try {
+    await store.save(progress);
+    showSync('Saved');
+  } catch (error) {
+    if (error.status === 412) {
+      // Keep local progress in memory. Offer Reload cloud or an explicit merge.
+      showConflict(() =&gt; startAccountGame());
+    } else showSync('Save failed; retry after resolving the error');
+  } finally {
+    saving = false;
+  }
+}
+</code></pre>
+<p><code>render</code>, <code>showSync</code>, y <code>showConflict</code> son su interfaz de usuario. Esperar <code>startAccountGame()</code> antes de habilitar
+jugar o guardar. En caso de falla de carga, conserva el estado local actual del reproductor, muestra la falla,
+y mantener las cargas bloqueadas. A <code>404</code> es el caso de la ranura vacía; <code>401</code>, <code>403</code>, <code>5xx</code>, JSON con formato incorrecto,
+o una versión guardada no compatible no son espacios vacíos.</p>
+<p>La receta no renueva las credenciales. El SDK del navegador renueva los tokens de lanzamiento mientras permanecen
+válido. Resuelva los términos pendientes o vuelva a autenticarse a través del flujo de entrada del juego antes de volver a intentar una lectura.</p>
+<h2 id="conditions-and-conflicts">Condiciones y conflictos</h2>
+<table>
+<thead>
+<tr>
+<th>que fue cargado</th>
+<th>Encabezado en la siguiente escritura</th>
+<th>Si otro dispositivo escribe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Guardar existente con ETag</td>
+<td><code>If-Match: &lt;etag&gt;</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>Sin guardar (<code>404</code>)</td>
+<td><code>If-None-Match: *</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>Nada se cargó correctamente</td>
+<td>no escribir</td>
+<td>Sigue reintentando la lectura o deja que el reproductor permanezca en reproducción sin seguimiento</td>
+</tr>
+</tbody>
+</table>
+<p>Utilice la versión del <strong>datos que cargaste</strong>, no una verificación posterior de metadatos. Conservar la nueva ETag devuelta
+por cada escritura exitosa. A <code>412</code> bloquea más guardados hasta que el juego carga la versión actual y
+el jugador lo adopta o lo fusiona. No elimine silenciosamente la condición y sobrescriba otro dispositivo.
+La API no ofrece un historial de guardado para deshacer esa sobrescritura.</p>
+<p>Si dos dispositivos deben actualizar contadores o inventario de forma independiente, un único documento que se escribe en último lugar gana
+Puede que no se ajuste al juego. Utilice el estado autorizado del servidor y defina en su lugar comandos de juego validados.</p>
+<h2 id="save-format-and-migration">Guardar formato y migración</h2>
+<p>Incluya una versión de formato y valide tipos, rangos y campos obligatorios antes de adoptar control remoto.
+progreso. Escriba una migración para versiones anteriores compatibles. Mantenga intacta una versión desconocida más nueva;
+no lo restablezca a los valores predeterminados ni lo cargue sobre él. Los datos de la nube están controlados por el cliente, así que nunca los trate
+como prueba de una puntuación competitiva o de un derecho remunerado.</p>
+<p>El límite predeterminado para guardar archivos decodificados es 10 MiB. Base64 agrega aproximadamente un tercio al cuerpo de la solicitud.
+<code>413 cloud_save_too_large</code>, <code>409 cloud_save_slots_exhausted</code>, y <code>507 cloud_save_quota_exceeded</code>
+son diferentes fallas de capacidad; inspeccionar <code>code</code> y <code>limit</code>. Honor <code>Retry-After</code> en <code>429</code>.</p>
+<h2 id="checkpoints-and-page-exit">Puntos de control y salida de página.</h2>
+<p>Guarde en puntos de control significativos y ofrezca una acción de guardar visible. Antirrebote de cambios rápidos y serialización
+escribe para que cada uno use la última versión reconocida. Mantenga un indicador sucio hasta que se reconozca.
+Una solicitud fallida no es un guardado confirmado; después de una escritura ambigua, recarga antes de otra escritura.</p>
+<p>Una carga al salir de la página es el mejor esfuerzo. Navegador <code>fetch(..., { keepalive: true })</code> comparte un pequeño vuelo
+asignación corporal, comúnmente 64 KiB; un ahorro de 10 MiB no puede depender de ello. Una pestaña puede cerrarse antes de cualquier solicitud.
+acabados. Utilice guardados de primer plano normales para mayor durabilidad y no etiquete el progreso no reconocido como
+salvado. El inicio rápido guarda su pequeño documento en cada punto de colección.</p>
+<h2 id="verify-in-your-game">Verifica en tu juego</h2>
+<ol>
+<li>Comience con una ranura vacía; recopile el progreso, guarde, vuelva a cargar y confirme que regresa.</li>
+<li>Rechazar lecturas con un error de red, <code>403</code>, o datos no válidos; Confirme que no se realiza ninguna carga.</li>
+<li>Abra dos pestañas en una versión. Salvo en A, luego B: B debe sacar a la luz un conflicto y preservar su estado local.</li>
+<li>Pruebe un formato más antiguo o más nuevo y una confirmación faltante sin sobrescribir datos desconocidos.</li>
+<li>Ingrese al modo para un jugador sin seguimiento y verifique que el juego no realice solicitudes de guardado en la nube.</li>
+</ol>
+<p>Ver <a href="/es/docs/tutorials/browser-quickstart.html">el inicio rápido ejecutable</a>, <a href="/es/docs/api/conventions.html">Convenciones API</a>, y
+<a href="/es/docs/troubleshooting.html#game-setup-and-storage">solución de problemas</a>.</p>
+
+{% endraw %}

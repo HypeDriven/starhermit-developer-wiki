@@ -1,0 +1,512 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "教程：构建多人卡丁车赛车"
+source_url: "/docs/tutorials/kart-racer.html"
+source_path: "docs/tutorials/kart-racer.md"
+source_hash: "d1191e3e810a9f7c888152161e331f2cebb8c39f3e6d39661e4cde37fd39c340"
+translation: "machine"
+permalink: "/zh-CN/docs/tutorials/kart-racer.html"
+---
+{% raw %}
+<h1 id="tutorial-build-a-multiplayer-kart-racer">教程：构建多人卡丁车赛车</h1>
+<p>本教程构建街机卡丁车赛车的多人游戏层 - 最多八辆卡丁车，私人
+与朋友一起大厅，与陌生人快速加入，CPU 驱动程序填充空网格槽，倒计时，
+圈数、完成顺序和成就 — 在 StarHermit API 上。它涵盖了网络代码合约
+以及平台调用；您的引擎、赛道艺术和操控模型都是您自己的。</p>
+<p>这里的一切都是游戏特定的—— <code>grand-prix</code> 队列，二进制框架布局，项目按钮，
+物理常数 - 是一个示例值。仅端点、帧包络线和限制是
+平台行为，以及每个链接到其参考页面。</p>
+<h2 id="1-pick-an-architecture">1. 选择一个架构</h2>
+<p>对于服务器预算来说，赛车是最难的游戏形式：卡丁车移动速度快、碰撞，并且
+玩家会感觉到 50 毫秒的转向滞后。 StarHermit 为您提供了两种运行它的方法，都从
+<a href="/zh-CN/docs/api/realtime.html">实时房间</a>:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><strong>A. 主机路由</strong></th>
+<th><strong>B. 服务器权威脚本</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>谁模拟</td>
+<td>房间主人的客户，无论如何它喜欢（60 Hz+）</td>
+<td>你的 <code>server=</code> 脚本，最多 <strong>30赫兹</strong></td>
+</tr>
+<tr>
+<td>运输</td>
+<td>二进制帧打开 <code>ws/v1/realtime</code></td>
+<td>JSON <code>cmd</code>/<code>game</code> 帧打开 <code>ws/v1/games</code></td>
+</tr>
+<tr>
+<td>作弊</td>
+<td>楼主值得信赖</td>
+<td>客户零权限</td>
+</tr>
+<tr>
+<td>Elo、脚本成就</td>
+<td>否（主机发布固定结果）</td>
+<td>是的 - <code>eloUpdates</code>, <code>achievements</code>, 重播</td>
+</tr>
+<tr>
+<td>最适合</td>
+<td>与朋友一起休闲竞赛，全保真物理</td>
+<td>通过简单的街机物理进行排名赛车</td>
+</tr>
+</tbody>
+</table>
+<p>开始于 <strong>A</strong> 除非你需要排位赛；第 7 节显示了哪些变化 <strong>B</strong>. A
+<a href="/zh-CN/docs/api/container-games.html">容器服务器</a> 还可以跑八辆卡丁车 <strong>房间限制</strong> 种族和
+权威地以 60 Hz 进行模拟。其直接 Games API 匹配当前使用隐式 1v1
+队列，因此请为更大的网格使用实时房间。该平台不会步进容器的循环。</p>
+<h2 id="2-manifest">2. 清单</h2>
+<p>以此发布可分发的构建文件夹 <code>starhermit.txt</code> 从根本上来说（参见
+<a href="/zh-CN/docs/starhermit-txt.html">清单</a>）。这 <code>control.*</code> 线条为玩家提供了重新绑定的 UI，并且您的
+客户a <a href="/zh-CN/docs/api/games.html#per-player-control-bindings">控制API</a> 从以下位置读取绑定：</p>
+<pre><code class="language-ini">name=Turbo Hermits
+launch=index.html
+cover=art/cover.png
+control.accelerate=KeyW+ArrowUp | Accelerate
+control.brake=KeyS+ArrowDown | Brake / reverse
+control.left=KeyA+ArrowLeft | Steer left
+control.right=KeyD+ArrowRight | Steer right
+control.drift=ShiftLeft+ShiftRight | Drift
+control.item=Space | Use item
+</code></pre>
+<p>路径 A 有 <strong>不</strong> <code>server=</code> 线。如果游戏发布脚本，则启动房间会创建绑定会话
+只有脚本才能结束比赛——主持人的 <code>POST .../result</code> 不再是比赛结束的方式
+（第 7 节）。</p>
+<h2 id="3-sign-in-and-read-the-basics">3. 登录并阅读基础知识</h2>
+<p>平台托管的游戏打开方式为 <code>#game_token=&lt;jwt&gt;</code> 在 URL 中 — 读取一次，然后将其剥离
+<code>history.replaceState</code>，并在 60 分钟到期前刷新（详细信息见
+<a href="/zh-CN/docs/tutorials/chess-walkthrough.html#3-launch-and-authentication">国际象棋演练</a> 和
+<a href="/zh-CN/docs/api/auth.html">授权</a>）。你的 slug 就是令牌的 <code>game_scope</code> 索赔（或 <code>location.hostname</code>的
+第一个标签）；永远不要对其进行硬编码。</p>
+<p>加载时，获取菜单所需的内容：</p>
+<pre><code class="language-http">GET /api/v1/games/{slug}/controls     # effective key bindings (manifest defaults + overrides)
+GET /api/v1/games/{slug}/settings     # camera, volume, last chosen kart — your own keys
+GET /api/v1/realtime/rooms/mine       # 200 → the player is still in a race; rejoin it
+</code></pre>
+<p>保存菜单选择 <code>PATCH /api/v1/games/{slug}/settings</code> (<code>{"settings":{"kart":"hermit-crab"}}</code>）。
+设置跟随玩家跨机器，无需声明。</p>
+<h2 id="4-the-lobby">4. 大堂</h2>
+<p>大奖赛是免费的，所以房间里有一组八个座位。赛道、圈数和引擎
+类进入不透明状态 <code>metadata</code>:</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms
+Authorization: Bearer &lt;launch token&gt;
+
+{ "teamCount": 1, "seatsPerTeam": 8, "backfillAfterSeconds": 45,
+  "aiPlayers": 0, "name": "Friday cup", "isVisible": true,
+  "metadata": { "track": "coral-loop", "laps": 3, "cc": 150 } }
+</code></pre>
+<p>有了启动令牌，房间的游戏就来自令牌，所以 <code>gameSlug</code> 可以省略。创造者
+主持人在座位上吗 <code>(0, 0)</code>。从这里到大堂就是普通房间的流程：</p>
+<ul>
+<li><strong>朋友们</strong> — <code>POST /rooms/{id}/invites</code> 和 <code>{"toUserId": ...}</code>。平台通知他们；
+接受他们的座位。显示六字 <code>joinCode</code> 所以朋友们也可以输入
+<code>POST /rooms/join-by-code</code>.</li>
+<li><strong>陌生人</strong> — 主持人打电话 <code>POST /rooms/{id}/open</code>。没有房间呼叫的玩家
+<code>POST /rooms/quick-join</code> 和 <code>{"seats": 1}</code> 并且，关于 <code>404</code>，创建并打开自己的。</li>
+<li><strong>跟踪投票/主持人改变主意</strong> — <code>PATCH /rooms/{id}</code> 与新的 <code>metadata</code> 和房间的
+<code>revision</code> 作为 <code>expectedRevision</code>.</li>
+<li><strong>单人对抗 CPU</strong> — 创建与 <code>"aiPlayers": 7</code>， 然后 <code>POST /rooms/{id}/start</code>.</li>
+</ul>
+<p>当所有八个座位都坐满或 <code>backfillAfterSeconds</code> 通过；主机
+还可以 <code>POST /rooms/{id}/start</code>。每个仍然空着的座位都成为人工智能参与者——那些是你的
+CPU驱动程序。</p>
+<h2 id="5-the-race-socket-host-routed">5. 竞赛套接字（主机路由）</h2>
+<h3 id="connect">连接</h3>
+<p>每个参与者都使用一次性票据打开实时套接字：</p>
+<pre><code class="language-js">const { ticket } = await api.post("/api/v1/realtime/connection-tickets"); // { ticket, expiresIn }
+const ws = new WebSocket(
+  `wss://api.starhermit.com/ws/v1/realtime?roomId=${roomId}&amp;ticket=${encodeURIComponent(ticket)}`);
+ws.binaryType = "arraybuffer";
+</code></pre>
+<p>文本框架是JSON推送和控制框架；二进制框架是游戏玩法。这 <code>roster</code> 推是
+你的网格：开始后它被冻结，包括AI座位。对于一支车队来说，卡丁车的发车位就是它的发车位
+参与者的 <code>slot</code>.</p>
+<pre><code class="language-js">ws.onmessage = (e) =&gt; {
+  if (typeof e.data === "string") return onControl(JSON.parse(e.data)); // roster, presence, event, ready, chat, result
+  const bytes = new Uint8Array(e.data);
+  const sender = guidFromDotNet(bytes.subarray(0, 16)); // server-stamped, trustworthy
+  onGameplay(sender, new DataView(e.data, 16));          // your payload starts at byte 16
+};
+
+// The server prefixes the sender's participant id in .NET GUID byte order:
+// the first three groups are little-endian.
+function guidFromDotNet(b) {
+  const h = (i) =&gt; b[i].toString(16).padStart(2, "0");
+  return `${h(3)}${h(2)}${h(1)}${h(0)}-${h(5)}${h(4)}-${h(7)}${h(6)}-` +
+         `${h(8)}${h(9)}-${h(10)}${h(11)}${h(12)}${h(13)}${h(14)}${h(15)}`;
+}
+</code></pre>
+<p>切勿将玩家 ID 放入您自己的有效负载中并信任它 — 16 字节前缀是唯一的身份
+服务器保证。</p>
+<h3 id="routing-and-budget">路线和预算</h3>
+<p>该平台强制执行主机路由游戏的形式：</p>
+<ul>
+<li>A <strong>客人的</strong> 二进制帧到达 <strong>仅主机</strong> ——那是输入通道。</li>
+<li>这 <strong>主人的</strong> 二进制帧到达 <strong>每位客人</strong> ——那是快照通道。</li>
+<li>每帧最多 <strong>8KB</strong>;每个连接可以发送 <strong>30 条消息/秒</strong> （1 次爆发 2 次
+第二）。关闭套接字 <code>PolicyViolation</code>.</li>
+</ul>
+<p>因此主机以任何感觉合适的速率进行模拟（典型值为 60 Hz），但是 <strong>发送</strong> 快照于
+20 Hz，访客以 20 Hz 发送输入。这为偶尔的控制框架留下了空间。</p>
+<h3 id="frame-layouts-example">框架布局（示例）</h3>
+<p>输入，访客 → 主机，7 字节：</p>
+<table>
+<thead>
+<tr>
+<th>抵消</th>
+<th>类型</th>
+<th>场地</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>u8</td>
+<td><code>1</code> = 输入</td>
+</tr>
+<tr>
+<td>1</td>
+<td>u16</td>
+<td><code>seq</code> — 每次发送都会增加</td>
+</tr>
+<tr>
+<td>3</td>
+<td>i8</td>
+<td>转向，-127…127</td>
+</tr>
+<tr>
+<td>4</td>
+<td>u8</td>
+<td>油门，0…255</td>
+</tr>
+<tr>
+<td>5</td>
+<td>u8</td>
+<td>位：0 刹车，1 漂移</td>
+</tr>
+<tr>
+<td>6</td>
+<td>u8</td>
+<td><code>itemPresses</code> — 一个计数器，而不是一个标志</td>
+</tr>
+</tbody>
+</table>
+<p><code>itemPresses</code> 是项目按钮按下的运行计数。在 20 Hz 频率下，按下时间短于 50 ms 将
+否则落在样品之间；使用计数器，主机每次增量都会触发一个项目，但是
+压力机落地。</p>
+<p>快照，主机 → 访客，每辆卡丁车 4 + 22 字节（完整网格为 176 字节）：</p>
+<table>
+<thead>
+<tr>
+<th>抵消</th>
+<th>类型</th>
+<th>场地</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>u8</td>
+<td><code>2</code> = 快照</td>
+</tr>
+<tr>
+<td>1</td>
+<td>u16</td>
+<td>主机蜱</td>
+</tr>
+<tr>
+<td>3</td>
+<td>u8</td>
+<td>卡丁车计数</td>
+</tr>
+<tr>
+<td>每辆卡丁车</td>
+<td>u8, f32 ×4, u8, u16, u8, u8</td>
+<td>插槽、x、z、航向、速度、圈数、检查点、项目、标志</td>
+</tr>
+</tbody>
+</table>
+<p>客人渲染其他卡丁车 <strong>过去约 100 毫秒</strong>，在两个快照之间进行插值
+括起来，并根据他们的输入在本地预测他们自己的卡丁车，逐渐趋向主机的
+当他们不同意时的立场。包括最后的输入 <code>seq</code> 主持人申请每辆卡丁车的时间为 <code>flags</code> 或一个
+如果您想要精确的对账，则需要额外的字段。</p>
+<h3 id="countdown-race-events-finish">倒计时、比赛项目、终点</h3>
+<p>控制帧是 JSON，最多 4 KB，服务器标记 <code>from</code> 与发送者的参与者 ID：</p>
+<ul>
+<li>客人送 <code>{"type":"ready"}</code> 一旦曲目加载完毕。</li>
+<li>主机等待每个连接的人准备好（或超时），然后发送
+<code>{"type":"event","kind":"countdown","goInMs":3000}</code>。客人开始当地倒计时
+收据 — 此精度不需要时钟同步。</li>
+<li>其他比赛节拍也 <code>event</code> 帧： <code>{"kind":"lap","slot":3,"lap":2}</code>,
+<code>{"kind":"finished","slot":3,"place":1,"timeMs":94210}</code>.</li>
+<li><code>chat</code> 每个人都可以使用，但访客每分钟只能使用 10 个控制帧 — 足够了
+<code>ready</code> 和一些 "gg"s，不用于游戏。</li>
+</ul>
+<p>当最后一个人越线时（或获胜者用完后的计时器），主持人提交
+结果，关闭房间并推动 <code>{"type":"result"}</code> 致大家：</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms/{id}/result
+
+{ "teamScores": [0],
+  "metadata": { "track": "coral-loop",
+                "order": [ { "slot": 3, "timeMs": 94210 }, { "slot": 0, "timeMs": 95002 } ],
+                "bestLapMs": 30112 } }
+</code></pre>
+<p><code>teamScores</code> 每个团队只需要一个条目（限制为 0-50），这在比赛中没有任何用处。
+自由混战；整理订单位于 <code>metadata</code>。团体赛是在同一个房间进行的
+<code>teamCount: 2</code> 以及每支球队的得分 <code>teamScores</code>.</p>
+<h3 id="cpu-drivers-leavers-and-host-changes">CPU 驱动程序、离开者和主机变更</h3>
+<ul>
+<li><strong>AI 座椅由您驾驶。</strong> 平台预留座位并指定司机；主机的
+模拟引导它（一条通过检查站的赛车线，有一些橡皮筋）。</li>
+<li><strong>比赛中途离开的嘉宾</strong> (<code>POST /rooms/{id}/leave</code>）让他们的卡丁车保持在网格上：名册
+推送显示同一参与者 <code>id</code> 现在 <code>isAi: true</code>，主机的 CPU 接管了那辆卡丁车。</li>
+<li><strong>一位掉落的客人</strong> 还在房间里；保持他们的卡丁车滑行并让他们重新连接 -
+最新的套接字取代了旧的套接字。</li>
+<li><strong>如果主人离开</strong>，主机角色传递给加入时间最长的剩余人类，并且
+名册推送显示新内容 <code>isHost</code>。每个客人都已经持有最新的完整快照，所以新的
+主机从中恢复模拟并开始发送快照；访客输入现在路由到他们。
+主机迁移是您代码的工作——平台仅移动角色。</li>
+<li><strong>如果主机刚刚断开连接</strong>，房间在没有主机套接字的情况下 60 秒后关闭。</li>
+</ul>
+<h2 id="6-around-the-race">6. 比赛周边</h2>
+<ul>
+<li><strong>语音和聊天。</strong> 每个客人都可以 <code>chat</code> 在实时套接字上；对于语音，请参见
+<a href="/zh-CN/docs/api/voice.html">嗓音</a>.</li>
+<li><strong>复赛。</strong> 房间在结果出来后关闭。让主持人创建一个新房间并邀请
+先前名册上的人员，或将所有人送回快速加入。</li>
+<li><strong>单圈时间排行榜。</strong> 游戏的平台排行榜是其 elo 板，仅由服务器编写
+运行时。发布商定义的排行榜接受 <code>POST /api/v1/leaderboards/{id}/submit</code>，但是那个
+分数由客户索取——对于友谊赛计时赛来说没问题，但对于任何有奖品的事情都没有好处。</li>
+</ul>
+<h2 id="7-variant-b-server-authoritative-racing">7. 变体B：服务器权威竞速</h2>
+<p>对于排名游戏，将模拟移至脚本中。大堂没有变化；添加脚本并
+清单的匹配设置：</p>
+<pre><code class="language-ini">server=server.js
+matchmaking.max_wait_seconds=20
+matchmaking.ai_players=7
+</code></pre>
+<p>现在有两件事会产生竞争： <strong>开始一个房间</strong> 为其人类创建一个房间限制的会话，并且
+<strong>牵线搭桥</strong> (<code>POST /api/v1/games/{slug}/matchmaking?queue=grand-prix</code>) 当 8 时创建 1
+找到玩家 - 或者，使用上述设置，20 秒后 CPU 最多有 7 个空
+座位。大厅的朋友可以一起排队 <code>POST /realtime/rooms/{id}/matchmake</code>.</p>
+<p>无论哪种方式，客户都采取 <code>sessionId</code> （房间的 <code>gameSessionId</code>，或匹配的票证）和
+重玩 <code>ws/v1/games?sessionId=…</code>。实时套接字（如果有）仅为名册保留。</p>
+<h3 id="the-script">剧本</h3>
+<p>整个模拟运行在 <code>onTick</code> 在 30 Hz 上限。每次调用都是一个新的沙箱
+得到 <code>sessionState</code> 输入并将其返回，因此请保持该状态较小 - 它会在每个时钟周期内被序列化。</p>
+<pre><code class="language-js">const TRACK = { laps: 3, radius: 14,
+  checkpoints: [[0, 0], [120, 0], [160, 60], [120, 120], [0, 120], [-40, 60]] };
+
+globalThis.game = {
+  tickRateHz: 30,
+  replays: true,
+  queues: [{ key: "grand-prix", teams: 8, teamSize: 1 }],
+  achievements: [
+    { key: "chequered-flag", name: "Chequered Flag", description: "Win a race.", points: 10 }
+  ],
+
+  createSession(ctx) {
+    const karts = racers(ctx).map((r, i) =&gt; ({
+      id: r.id, name: r.name, ai: r.ai, x: -8 * (i % 2), z: -6 * i, heading: 0, speed: 0,
+      cp: 1, lap: 0, boost: 0, boosts: 1, input: {}, ack: 0, finishedAt: null
+    }));
+    return { ok: true, sessionState: { t: ctx.now, goAt: ctx.now + 4000, karts, order: [] } };
+  },
+
+  onPlayerMessage(ctx) {                       // durable commands: discrete actions
+    const s = copy(ctx.sessionState);
+    const k = s.karts.find((k) =&gt; k.id === ctx.message.from);
+    if (ctx.message.data?.type === "use-item" &amp;&amp; k &amp;&amp; k.boosts &gt; 0 &amp;&amp; ctx.now &gt;= s.goAt) {
+      k.boosts--; k.boost = 1.2;
+    }
+    return { ok: true, sessionState: s };
+  },
+
+  onTick(ctx) {
+    const s = copy(ctx.sessionState);
+    const dt = Math.min(Math.max((ctx.now - s.t) / 1000, 0), 0.1);
+    s.t = ctx.now;
+    for (const i of ctx.inputs || []) {        // latest realtime input per player since last tick
+      const k = s.karts.find((k) =&gt; k.id === i.from);
+      if (k) { k.input = i.data; k.ack = Math.max(k.ack, Math.floor(+i.data.seq) || 0); }
+    }
+    if (ctx.now &gt;= s.goAt) {
+      for (const k of s.karts) {
+        if (k.finishedAt) continue;
+        move(k, k.ai ? aiInput(k) : k.input, dt);   // pure motion — shared with the client
+        progress(k, s, ctx);                        // checkpoints, laps, finish — server only
+      }
+    }
+    const snap = s.karts.map((k) =&gt;
+      [k.id, r2(k.x), r2(k.z), r3(k.heading), r2(k.speed), r2(k.boost), k.lap, k.cp, k.ack]);
+    const out = { ok: true, sessionState: s,
+      broadcast: [{ to: "all", data: { type: "snap", t: s.t, goAt: s.goAt, karts: snap } }] };
+    if (raceOver(s, ctx)) Object.assign(out, finish(s, ctx));
+    return out;
+  }
+};
+</code></pre>
+<p>助手是普通的游戏代码。平台关心的部分：</p>
+<ul>
+<li><strong><code>racers(ctx)</code></strong> 从会话开始时读取网格： <code>ctx.room.roster</code> 对于一个
+房间（AI座位有 <code>userId: null</code>，所以给他们 id 像 <code>ai-0-5</code>), <code>ctx.matchmaking.seats</code> 对于一个
+配对比赛（跳过座位 <code>id: null</code>）， 别的 <code>ctx.players</code>.</li>
+<li><strong><code>move(k, input, dt)</code></strong> 必须 <strong>钳位每个输入值</strong> — <code>steer</code> 到−1…1， <code>throttle</code> 到 0…1 —
+因为 <code>ctx.inputs[].data</code> 是客户端发送的任何内容。仅有的 <code>from</code> 是值得信赖的。保持纯粹——
+不 <code>ctx</code>，没有会话状态 - 因此客户端也可以运行它（请参阅
+<a href="#client-side-prediction">客户端预测</a>).</li>
+<li><strong>随机性和时间</strong> 来自 <code>ctx.random</code> 和 <code>ctx.now</code>;没有 <code>Date</code> 或者 <code>Math.random</code>.</li>
+<li><strong><code>finish(s, ctx)</code></strong> 回报 <code>result</code> （结束会话，对于房间，关闭它），
+<code>achievements</code> 对于获胜者（如果是人类），以及 <code>eloUpdates</code> 对于人类赛车手——例如成对
+elo 跨越整理顺序，读取并写回 <code>ctx.playerStates</code>。 AI座位不能
+接收玩家状态、评级或成就。</li>
+<li><strong><code>raceOver</code></strong> 也应该结束无人能完成的比赛——每个人都按照
+<code>ctx.presence</code> （房间），或硬性时间限制。</li>
+<li><strong>重播</strong> 只保留 <em>最终的</em> <code>sessionState</code>。保持紧凑的单圈时间表和终点
+其中的订单，而不是每个报价位置日志。</li>
+</ul>
+<h3 id="the-client">客户</h3>
+<p>每个刻度发送转向作为实时输入，并将离散操作作为持久命令发送：</p>
+<pre><code class="language-js">// ~30 Hz: latest-wins, batched into the next onTick
+send({ type: "cmd", data: { type: "input", realtime: true, seq: ++seq,
+                            steer, throttle, brake, drift } });
+
+// on key press: a durable command, runs onPlayerMessage immediately
+send({ type: "cmd", data: { type: "use-item" } });
+</code></pre>
+<p>项目 <strong>必须</strong> 通过持久的命令。实时输入是报价之间的最新胜利，并且
+平台仅保留一次性字段 <code>pass</code>, <code>tackle</code> 和 <code>shoot</code> 当较新的样本
+替换旧按钮 - 实时输入中的任何其他按钮都可以在勾选之前被覆盖
+看到它。</p>
+<p><code>achievement</code> 帧到达同一个套接字；读 <code>GET /api/v1/games/{slug}/achievements</code> 上
+加载在打开之前授予的任何内容。</p>
+<h3 id="client-side-prediction">客户端预测</h3>
+<p>仅渲染服务器发送的内容会让卡丁车感觉像是在泥泞中行驶。一个转向
+更改必须到达服务器，等待下一个时钟周期（30 Hz 时最多 33 毫秒），然后返回
+<code>snap</code> — 在 80 毫秒 ping 时，卡丁车转弯前超过 100 毫秒。预测隐藏了：客户
+动作 <strong>自己的卡丁车</strong> 立即并治疗每个 <code>snap</code> 作为更正，而不是图片。</p>
+<h4 id="share-the-motion-code">分享动作代码</h4>
+<p>按照上面脚本的方式拆分模拟：纯 <code>move(k, input, dt)</code> 用于处理，以及
+仅服务器 <code>progress</code> 检查站、圈数和终点。公开运动代码 <code>server.js</code>
+作为第二个全局——国际象棋使用的模式 <code>globalThis.chessRules</code> - 并加载相同的文件
+浏览器：</p>
+<pre><code class="language-js">// server.js — shared by the platform's sandbox and the browser
+function move(k, input, dt) { /* clamp input, integrate speed, heading, x, z, boost */ }
+globalThis.kartPhysics = { move, TRACK };
+globalThis.game = { /* ... as above ... */ };
+</code></pre>
+<pre><code class="language-html">&lt;script src="server.js"&gt;&lt;/script&gt;  &lt;!-- defines kartPhysics; the client never calls game.* --&gt;
+</code></pre>
+<p>客户预测 <strong>仅运动</strong>。圈数、位置、项目和完成顺序保留在服务器上
+打电话。不要期望相同的结果：沙箱和浏览器可能在最后几位上不一致
+<code>Math.sin</code>/<code>Math.cos</code>，以及职位 <code>snap</code> 是圆形的。和解可以吸收这种漂移。</p>
+<h4 id="step-at-the-servers-rhythm">跟上服务器的节奏</h4>
+<p>服务器不会针对每个输入运行一个步骤。每个刻度都会应用 <strong>最新的</strong> 它保存的输入
+那辆卡丁车，一直使用它，直到有新的卡丁车到达，并自发布以来实时集成
+上一个刻度。因此，镜像该形状而不是按显示帧速率步进：</p>
+<pre><code class="language-js">const pending = [];                              // inputs the server hasn't acknowledged yet
+let seq = 0, predicted, previous;               // { x, z, heading, speed, boost }, seeded from the first snap
+let error = { x: 0, z: 0, heading: 0 };          // visual offset, decays in render()
+
+setInterval(() =&gt; {                              // 30 Hz, the script's tickRateHz
+  if (!predicted || serverNow() &lt; goAt) return;  // the server ignores movement before goAt
+  const input = { steer: readSteer(), throttle: readThrottle(), brake: held("brake"), drift: held("drift") };
+  const entry = { seq: ++seq, input, dt: 1 / 30 };
+  send({ type: "cmd", data: { type: "input", realtime: true, seq: entry.seq, ...input } });
+  pending.push(entry);
+  previous = { ...predicted };
+  kartPhysics.move(predicted, input, entry.dt);  // the kart responds now, not a round trip later
+}, 1000 / 30);
+</code></pre>
+<p>发送速度快于滴答率是浪费的——仅使用每个滴答的最新输入——并且
+平台将实时输入降低到其每个连接上限之上。</p>
+<h4 id="reconcile-on-every-snap">协调每个 <code>snap</code></h4>
+<p>脚本回响 <code>ack</code>, 最高 <code>seq</code> 它已应用于每辆卡丁车。在每个 <code>snap</code>，倒回你的
+kart 到服务器的状态并重放服务器尚未看到的内容：</p>
+<pre><code class="language-js">function onSnap(snap) {
+  const [, x, z, heading, speed, boost, lap, cp, ack] = snap.karts.find((k) =&gt; k[0] === myId);
+  while (pending.length &amp;&amp; pending[0].seq &lt;= ack) pending.shift();   // applied or superseded
+
+  const corrected = { x, z, heading, speed, boost };
+  for (const p of pending) kartPhysics.move(corrected, p.input, p.dt);
+
+  if (!predicted) { predicted = corrected; previous = { ...corrected }; return; } // first snap
+  error.x += predicted.x - corrected.x;          // what the player would see jump
+  error.z += predicted.z - corrected.z;
+  error.heading += predicted.heading - corrected.heading;
+  if (Math.hypot(error.x, error.z) &gt; 3) error = { x: 0, z: 0, heading: 0 }; // wall hit, bump: snap
+  predicted = corrected;
+  hud.lap = lap; hud.checkpoint = cp;            // progress is never predicted
+}
+</code></pre>
+<p>丢弃一切直到 <code>ack</code> 即使最新的胜利跳过了一些输入，也是正确的：
+输入在服务器启动之前被取代，因此它也不会影响服务器的卡丁车。</p>
+<h4 id="smooth-corrections-render-at-frame-rate">平滑校正，以帧速率渲染</h4>
+<p>小的修正应该是不可见的。在预测位置加上衰减绘制卡丁车
+误差偏移，并在最后两个 30 Hz 预测步骤之间进行插值，以便显示 60 或 144 Hz
+移动顺利：</p>
+<pre><code class="language-js">function render(frameDt) {
+  const decay = Math.exp(-frameDt / 0.1);        // ~100 ms to absorb a correction
+  error.x *= decay; error.z *= decay; error.heading *= decay;
+  const a = sinceLastStep() * 30;                // 0…1 between prediction steps
+  drawKart(lerp(previous.x, predicted.x, a) + error.x,
+           lerp(previous.z, predicted.z, a) + error.z,
+           lerpAngle(previous.heading, predicted.heading, a) + error.heading);
+}
+</code></pre>
+<p>调整捕捉阈值而不是衰减：大于卡丁车长度的校正是真实的
+事件（您没有预料到的碰撞）并且快速快照比慢速幻灯片读起来更好。</p>
+<h4 id="know-what-not-to-predict">知道什么不该预测</h4>
+<ul>
+<li><strong>其他卡丁车。</strong> 它们是在过去大约 100 毫秒绘制的（缓冲区 <code>snap</code>s 并在之间进行插值
+两个那个括号 <code>serverNow() - 100</code>），因此预测针对它们的碰撞是与
+他们在哪里 <em>是</em>。预测墙壁和轨道——它们不会移动——然后让服务器解析
+卡丁车与卡丁车之间的颠簸。修正在一个往返内到达。如果缓冲区耗尽，则推断
+从速度和航向持续约 100 毫秒，然后保持。</li>
+<li><strong>项目。</strong> <code>use-item</code> 是一个持久的命令，所以它运行在 <code>onPlayerMessage</code> 一旦到达——
+无需勾选等待。按下按键时播放火焰和声音；让速度到达
+和解，因为 <code>boost</code> 是在 <code>snap</code>。如果服务器拒绝（不剩任何费用），则下一步
+<code>snap</code> 将其回滚。</li>
+<li><strong>种族状态。</strong> 圈数、位置和终点来自 <code>snap</code> 并且仅您的脚本的广播。</li>
+</ul>
+<h4 id="estimate-the-server-clock">估计服务器时钟</h4>
+<p><code>snap.t</code> 和 <code>goAt</code> 是服务器时间（<code>ctx.now</code>）。与观察到的最小间隙保持一定的偏移量，
+过滤掉缓慢的交付：</p>
+<pre><code class="language-js">let offset = Infinity;
+function noteSnap(snap) { offset = Math.min(offset, performance.now() - snap.t); }
+const serverNow = () =&gt; performance.now() - offset;
+</code></pre>
+<p>开始倒计时 <code>goAt</code>，并像上面的循环一样对它进行门预测。会移动的卡丁车
+之前 <code>goAt</code> 本地通过第一个橡皮筋回到网格 <code>snap</code> 开始后。</p>
+<p>要调整所有这些，请在开发中添加人为延迟（延迟 <code>send</code> 和 <code>onSnap</code> 100–200 毫秒）
+并记录每次修正的大小——稳定的大修正意味着 <code>move</code> 已经偏离了
+服务器的副本，或者输入字段的每一侧都被不同地夹紧。</p>
+<h2 id="checklist">清单</h2>
+<ul>
+<li>[ ] <code>starhermit.txt</code> 在构建输出的根部， <code>control.*</code> 用于卡丁车动作。</li>
+<li>[ ] 启动从哈希中读取的令牌，剥离，刷新；蛞蝓来自 <code>game_scope</code>.</li>
+<li>[ ] <code>GET /realtime/rooms/mine</code> 正在加载以重新加入正在进行的比赛。</li>
+<li>[ ] 一队房间，追踪 <code>metadata</code>;邀请、加入代码、开放 + 快速加入、独奏 <code>aiPlayers</code>.</li>
+<li>[ ] 使用连接票证打开套接字； 16 字节发送者前缀被剥离并用作身份。</li>
+<li>[ ] 主机快照和访客输入，每个 ≤ 20 Hz，帧 ≤ 8 KB；项目按下作为计数器。</li>
+<li>[ ] 准备→倒计时→比赛事件作为控制框；结果顺序为 <code>metadata</code>.</li>
+<li>[ ] 主持人驾驶AI座椅和离场卡丁车；新主机从最后一个快照恢复。</li>
+<li>[ ] 变体 B： <code>tickRateHz: 30</code>，固定输入，项目作为持久命令， <code>result</code> + <code>eloUpdates</code>.</li>
+<li>[ ] 变体 B：自己的卡丁车与共享的卡丁车预测 <code>move</code>, 调和于 <code>ack</code>，修正平滑；
+之前没有任何动静 <code>goAt</code>;其他卡丁车落后了约 100 毫秒。</li>
+</ul>
+<h2 id="see-also">参见</h2>
+<ul>
+<li><a href="/zh-CN/docs/api/realtime.html">实时房间</a> — 大厅、座位、 <code>ws/v1/realtime</code> 合同</li>
+<li><a href="/zh-CN/docs/api/game-scripts.html">游戏脚本</a> — 滴答率、实时输入、房间限制会话</li>
+<li><a href="/zh-CN/docs/api/games.html">游戏</a> — 匹配、控制、设置、游戏套接字</li>
+<li><a href="/zh-CN/docs/starhermit-txt.html"><code>starhermit.txt</code></a> — 控制、匹配截止日期、AI 席位</li>
+</ul>
+
+{% endraw %}

@@ -1,0 +1,357 @@
+---
+layout: "wiki"
+lang: "bn"
+title: "ইন্টিগ্রেশন ওয়াকথ্রু: StarHermit-এ একটি গেম তৈরি করা"
+source_url: "/docs/tutorials/chess-walkthrough.html"
+source_path: "docs/tutorials/chess-walkthrough.md"
+source_hash: "7821c7dca4a5960c279cb38770c02c54213ef04443d3147dac75b7d222022dec"
+translation: "machine"
+permalink: "/bn/docs/tutorials/chess-walkthrough.html"
+---
+{% raw %}
+<h1 id="integration-walkthrough-building-a-game-on-starhermit">ইন্টিগ্রেশন ওয়াকথ্রু: StarHermit-এ একটি গেম তৈরি করা</h1>
+<p>এই পৃষ্ঠাটি StarHermit-এর সাথে একটি গেমকে একীভূত করার সম্পূর্ণ জীবনচক্রের মধ্য দিয়ে চলে, ধাপে ধাপে — প্রকাশ, লঞ্চ, মেনু, ম্যাচমেকিং, খেলা, চ্যাট, ভয়েস, রেটিং, রিপ্লে। দেখানো সবকিছু প্রযোজ্য <strong>যেকোনো</strong> গেম: আপনার গেমটি তার নিজস্ব স্লাগ, নিজস্ব কমান্ড এবং নিজস্ব নিয়ম স্ক্রিপ্ট প্রতিস্থাপন করে।</p>
+<p>চলমান উদাহরণ হল ওপেন সোর্স দাবা রেফারেন্স বাস্তবায়ন, <a href="https://github.com/HypeDriven/starhermit-chess">starhermit-দাবা</a>: ভ্যানিলা HTML/JS/CSS-এ নো-বিল্ড স্ট্যাটিক ব্রাউজার গেম হিসাবে তৈরি একটি চিঠিপত্র-দাবা খেলা (24 ঘন্টা প্রতি মুভ, এলো-রেটেড)। প্রতিটি ধাপের জন্য ওয়াকথ্রু একটি গেম ক্লায়েন্ট যে কলগুলি করে এবং রেফারেন্স রেপোতে যে ফাইলটি করে তা দেখায়। যেখানেই দাবা-নির্দিষ্ট মান প্রদর্শিত হয় — রেফারেন্স গেমের UUID, কমান্ড সরান, বোর্ড এনকোডিং, "hal" AI, 24-ঘন্টা সরানোর সময়সীমা — এগুলি উদাহরণ মান যা আপনার নিজের গেমটি নিজের স্ক্রিপ্টে নিজের জন্য সংজ্ঞায়িত করে।</p>
+<p>এটি লিঙ্ক করা API রেফারেন্স পৃষ্ঠাগুলির পাশাপাশি এটি পড়ুন। শেষের চেকলিস্টটি আপনার নিজের গেমের প্রতিলিপি করার জন্য যা প্রয়োজন তার মধ্যে সবকিছুকে ঘনীভূত করে।</p>
+<h2 id="1-anatomy-of-a-platform-hosted-game">1. একটি প্ল্যাটফর্ম-হোস্ট করা গেমের অ্যানাটমি</h2>
+<p>একটি স্ক্রিপ্টেড প্ল্যাটফর্ম গেম হল একটি প্লেইন স্ট্যাটিক সাইট প্লাস ওয়ান রুলস ফাইল। দাবা রেফারেন্স বাস্তবায়ন, উদাহরণস্বরূপ, কোন বান্ডলার নেই, কোন কাঠামো নেই, কোন বিল্ড স্টেপ নেই:</p>
+<table>
+<thead>
+<tr>
+<th>ফাইল</th>
+<th>ভূমিকা</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index.html</code></td>
+<td>পুরো পৃষ্ঠা: বোর্ড, মেনু, চ্যাট এবং ভয়েস UI</td>
+</tr>
+<tr>
+<td><code>app.js</code></td>
+<td>অ্যাপ বুটস্ট্র্যাপ, প্রধান মেনু, ম্যাচমেকিং, আমন্ত্রণ, রিপ্লে, প্রোফাইল</td>
+</tr>
+<tr>
+<td><code>net.js</code></td>
+<td>HTTP স্তর: স্কোপড গেম পাথ, লঞ্চ টোকেন, টোকেন রিফ্রেশ</td>
+</tr>
+<tr>
+<td><code>game.js</code></td>
+<td>ইন-গেম কন্ট্রোলার: গেমপ্লে ওয়েবসকেট, চ্যাট, ভয়েস</td>
+</tr>
+<tr>
+<td><code>ui.js</code></td>
+<td>বোর্ড এবং মেনু রেন্ডারিং</td>
+</tr>
+<tr>
+<td><code>style.css</code></td>
+<td>শৈলী</td>
+</tr>
+<tr>
+<td><code>server.js</code></td>
+<td>নিয়ম - নীচে দেখুন</td>
+</tr>
+<tr>
+<td><code>starhermit.txt</code></td>
+<td>ম্যানিফেস্ট প্রকাশ করুন</td>
+</tr>
+</tbody>
+</table>
+<p>রেফারেন্স বাস্তবায়নে, <code>server.js</code> বিশেষ মনোযোগ প্রাপ্য। এটা <strong>উভয়</strong> একযোগে জিনিস:</p>
+<ul>
+<li>দ <strong>সার্ভার-অনুমোদিত স্ক্রিপ্ট</strong> প্ল্যাটফর্মটি এক্সিকিউট করে (তার জিন্ট হোস্টের মাধ্যমে) এক্সপোজ করে <code>globalThis.game</code>. প্রতিটি পদক্ষেপ এখানে, সার্ভারে, চুক্তি অনুযায়ী বৈধ করা হয় <a href="/bn/docs/api/game-scripts.html">game-scripts.md</a>.</li>
+<li>ক্লায়েন্ট এর <strong>শেয়ার করা নিয়ম ইঞ্জিন</strong>, হিসাবে উদ্ভাসিত <code>globalThis.chessRules</code>, যা ব্রাউজার বোর্ড রেন্ডারিং, মুভ প্রিভিউ এবং প্লেব্যাক রিপ্লে করার জন্য ব্যবহার করে।</li>
+</ul>
+<p>একটি ফাইল, সত্যের একটি উৎস, <strong>ক্লায়েন্টের উপর শূন্য নিয়মের কর্তৃত্ব</strong>. এই প্যাটার্ন অনুসরণকারী একটি গেম ক্লায়েন্ট কখনই সিদ্ধান্ত নেয় না যে একটি পদক্ষেপ বৈধ কিনা - এটি সার্ভার সম্প্রচার করে তা রেন্ডার করে। এটি একটি স্ক্রিপ্টেড প্ল্যাটফর্ম গেমের একক সবচেয়ে গুরুত্বপূর্ণ স্থাপত্য ধারণা এবং রেফারেন্স বাস্তবায়ন এটি প্রদর্শন করে।</p>
+<h2 id="2-publishing-your-game">2. আপনার গেম প্রকাশ করা হচ্ছে</h2>
+<p>যেকোন খেলা প্রকাশের মাধ্যমে শুরু হয় <code>starhermit.txt</code> রেপো রুটে প্রকাশিত। এটা খেলা ঘোষণা করে <code>name</code>, <code>launch</code> প্রবেশ বিন্দু, <code>owner</code>, এবং <code>server</code> স্ক্রিপ্ট ঐচ্ছিক <code>cover=</code> লাইব্রেরির টাইলের আর্টওয়ার্ক - দেখুন <a href="/bn/docs/starhermit-txt.html#game-with-cover-art">দ <code>starhermit.txt</code> প্রকাশ</a>. রেফারেন্স বাস্তবায়নের ম্যানিফেস্ট, উদাহরণস্বরূপ:</p>
+<pre><code class="language-text">name=StarHermit Chess
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6  # StarHermit user ID, not username/nickname
+server=server.js
+</code></pre>
+<p>অপরিবর্তনীয় ব্যবহার করুন <code>id</code> থেকে <code>GET /api/v1/me</code> জন্য <code>owner</code>; ব্যবহারকারীর নাম এবং ডাকনাম প্রদর্শন করা হয়
+মান এবং ম্যানিফেস্ট মালিকানা শনাক্তকারী হিসাবে ব্যবহার করা উচিত নয়।</p>
+<p>প্ল্যাটফর্মটি রেপো ক্লোন করে, স্ট্যাটিক ফাইলগুলিকে পরিবেশন করে <code>&lt;slug&gt;.starhermit.com</code> — স্লাগ হল সেই uid যা প্ল্যাটফর্ম গেমটি বরাদ্দ করে, কখনোই আপনার পছন্দের নাম নয়; রেফারেন্স গেম এর <code>83fd04b1-3cbe-4b09-a251-3733ad4b9d94</code>, তাই এটা লাইভ খেলার যোগ্য <a href="https://83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com">83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com</a> — এবং প্রক্সি <code>/api</code> এবং <code>/ws</code> ব্যাকএন্ডে <strong>একই-উৎস</strong>. সেই একটি সিদ্ধান্ত কাজের একটি সম্পূর্ণ বিভাগকে সরিয়ে দেয়: কোনও CORS নেই, কোনও API-বেস কনফিগারেশন নেই, কোনও পরিবেশ সনাক্তকরণ নেই — গেম ক্লায়েন্টরা কেবল আপেক্ষিক পাথ ব্যবহার করে।</p>
+<p>সম্পূর্ণ প্রবাহ: <a href="/bn/docs/api/github-games.html">github-games.md</a> এবং <a href="/bn/docs/api/publisher.html">publisher.md</a>.</p>
+<h2 id="3-launch-and-authentication">3. লঞ্চ এবং প্রমাণীকরণ</h2>
+<p>দাবা রেফারেন্স ফ্লো প্ল্যাটফর্ম লঞ্চার থেকে শংসাপত্র গ্রহণ করে:</p>
+<ol>
+<li>লঞ্চার ডাকে <code>POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/launch-token</code> ব্যবহারকারীর সম্পূর্ণ প্ল্যাটফর্ম JWT-এর সাথে (রেফারেন্স গেমের UUID দিয়ে দেখানো হয়েছে; আপনার নিজের বিকল্প করুন)।</li>
+<li>এটি স্বল্প সময়ের জন্য ফিরে আসে, <strong>খেলার ব্যাপ্তি</strong> টোকেন:</li>
+</ol>
+<pre><code class="language-json">{ "token": "&lt;jwt&gt;", "expiresInSeconds": 3600 }
+</code></pre>
+<ol start="3">
+<li>এটা খেলা খোলে <code>index.html#game_token=&lt;jwt&gt;</code>, ঐচ্ছিকভাবে সঙ্গে <code>&amp;session_id=&lt;guid&gt;</code> আমন্ত্রণ গভীর লিঙ্কের জন্য যুক্ত করা হয়েছে।</li>
+</ol>
+<p>রেফারেন্স বাস্তবায়নে, ক্লায়েন্ট হ্যাশ পড়ে <strong>একবার</strong>, তারপর এটি দিয়ে রেখাচিত্রমালা <code>history.replaceState</code> তাই টোকেন কখনই ইউআরএল বার বা ইতিহাসে থাকে না (<code>app.js</code>, <code>App.init</code>) এটি দুটি দাবির জন্য JWT পেলোড ডিকোড করে:</p>
+<ul>
+<li><code>sub</code> - ব্যবহারকারীর আইডি</li>
+<li><code>game_scope</code> — খেলা স্লাগ</li>
+</ul>
+<p>এই দ্বিতীয় দাবিটি গুরুত্বপূর্ণ: <strong>একটি গেম ক্লায়েন্ট কখনই তার স্লাগকে হার্ড-কোড করা উচিত নয়</strong>. রেফারেন্স বাস্তবায়ন প্রতিটি API URL হিসাবে তৈরি করে <code>/api/v1/games/&lt;slug&gt;</code> প্লাস একটি প্রত্যয় (<code>net.js</code>, <code>Net.gamePath</code>), তাই একই কোড যেকোনো গেম, যেকোনো স্লাগ, যেকোনো স্থাপনার জন্য কাজ করে।</p>
+<p><strong>রিফ্রেশ</strong> স্কোপড টোকেন পুনরায় কল করার অনুমতি দেওয়া হয় <code>launch-token</code> নিজের খেলার জন্য, তাই ক্লায়েন্টরা সাধারণত পর্যায়ক্রমে রিফ্রেশ করে — রেফারেন্স বাস্তবায়ন প্রতি 45 মিনিটে রিফ্রেশ করে (<code>net.js</code>, <code>Net.startRefresh</code>, 60 মিনিটের জীবনকালের মধ্যে আরামদায়ক।</p>
+<p>একটি খেলা সরাসরি খোলা পরিবর্তে অফার করতে পারেন <a href="/bn/docs/api/auth.html#sign-in-from-a-directly-opened-browser-game">ব্রাউজার সাইন ইন</a>,
+যা ফিরে আসে <code>#access_token</code> বরং লঞ্চারের চেয়ে <code>#game_token</code>. উভয় প্রবেশ পথ হ্যান্ডেল যদি
+আপনি উভয় সমর্থন. ফিরে আসা জীবনকাল ব্যবহার করে পুনর্নবীকরণ করুন এবং ডিফল্ট 12-ঘন্টা পুনর্নবীকরণ-চেইনকে সম্মান করুন
+সিলিং ক <code>403 terms_acceptance_required</code> খেলোয়াড়ের প্রয়োজন <a href="/bn/docs/api/profile.html#terms-acceptance">তাদের অ্যাকাউন্টের মাধ্যমে গ্রহণ করুন</a>;
+অথবা খেলার শর্তাবলী প্রদর্শন করুন এবং প্লেয়ার লঞ্চ টোকেন সহ গ্রহণ করুন। আবার সাইন ইন করা হয় না
+রেকর্ড গ্রহণ।</p>
+<p>প্রমাণ রেফারেন্স: <a href="/bn/docs/api/auth.html">auth.md</a>, <a href="/bn/docs/api/games.html">games.md</a>.</p>
+<h2 id="4-loading-the-main-menu">4. প্রধান মেনু লোড হচ্ছে</h2>
+<p>একটি গেমের মেনু সাধারণত তার নিজস্ব স্লাগের বিরুদ্ধে GET-এর একটি ছোট ব্যাচ দিয়ে খোলে। রেফারেন্স বাস্তবায়ন এই হয় <code>refreshMenu</code> মধ্যে <code>app.js</code>:</p>
+<p><strong>গেমের তথ্য + আমার পরিসংখ্যান:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94
+</code></pre>
+<pre><code class="language-json">{
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "name": "StarHermit Chess",
+  "enabled": true,
+  "leaderboardId": "&lt;guid&gt;",
+  "maxConcurrentSessionsPerPlayer": 20,
+  "me": {
+    "userId": "&lt;guid&gt;",
+    "elo": 1420,
+    "wins": 31,
+    "losses": 18,
+    "draws": 4,
+    "activeSessionCount": 3
+  }
+}
+</code></pre>
+<p>দ <code>me</code> ব্লক হল পুরো প্লেয়ার কার্ড — ইলো, রেকর্ড এবং কতগুলি অনুমোদিত সমসাময়িক সেশন ব্যবহার করা হচ্ছে (দাবা উদাহরণে 20)।</p>
+<p><strong>আমার সেশন:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/mine
+</code></pre>
+<pre><code class="language-json">[
+  {
+    "sessionId": "&lt;guid&gt;",
+    "status": "active",
+    "players": [ /* ... */ ],
+    "createdAt": "…",
+    "finishedAt": null,
+    "myTurn": true,
+    "deadline": 1784642591000
+  }
+]
+</code></pre>
+<p><code>myTurn</code> এবং <code>deadline</code> যা একটি চিঠিপত্র গেমের সেশন তালিকাকে উপযোগী করে তোলে — প্লেয়ার এক নজরে দেখেন কোন গেমগুলি তাদের জন্য অপেক্ষা করছে এবং প্রতিটি পদক্ষেপ কখন শেষ হবে।</p>
+<p><strong>বন্ধুদের লিডারবোর্ড:</strong></p>
+<pre><code class="language-http">GET /api/v1/leaderboards/{leaderboardId}/entries?friendsOnly=true&amp;page=1&amp;pageSize=10
+</code></pre>
+<p>ব্যবহার করে <code>leaderboardId</code> গেম-তথ্য প্রতিক্রিয়া থেকে।</p>
+<p><strong>সাম্প্রতিক রিপ্লে:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/mine?limit=10
+</code></pre>
+<p><strong>মুলতুবি আমন্ত্রণ:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites
+</code></pre>
+<p>তথ্যসূত্র: <a href="/bn/docs/api/games.html">games.md</a>, <a href="/bn/docs/api/leaderboards.html">leaderboards.md</a>.</p>
+<h2 id="5-getting-players-into-a-session--three-ways">5. খেলোয়াড়দের একটি সেশনে প্রবেশ করানো — তিনটি উপায়</h2>
+<p>এই ওয়াকথ্রু সেশন তৈরি করতে ম্যাচমেকিং, আমন্ত্রণ গ্রহণ এবং এআই অনুশীলন ব্যবহার করে। একটি লবি প্রয়োজন যে গেম ব্যবহার করতে পারেন <a href="/bn/docs/api/realtime.html">রিয়েলটাইম রুম</a>, যার শুরু প্রবাহ একটি আবদ্ধ কর্তৃত্বমূলক অধিবেশন তৈরি করতে পারে।</p>
+<h3 id="a-matchmaking">ক ম্যাচমেকিং</h3>
+<p>রেফারেন্স বাস্তবায়নে, <code>App.startMatchmaking</code> মধ্যে <code>app.js</code>:</p>
+<pre><code class="language-http">POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking
+</code></pre>
+<p>প্রতিক্রিয়া হয় একটি টিকিট:</p>
+<pre><code class="language-json">{ "ticketId": "&lt;guid&gt;", "status": "queued" }
+</code></pre>
+<p>অথবা একটি তাৎক্ষণিক ম্যাচ:</p>
+<pre><code class="language-json">{ "status": "matched", "sessionId": "&lt;guid&gt;" }
+</code></pre>
+<p>সারিবদ্ধ থাকাকালীন, ক্লায়েন্টরা ম্যাচমেকিং এন্ডপয়েন্ট - রেফারেন্স বাস্তবায়ন পোল পোল করে <code>GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking</code> প্রতি 3 সেকেন্ড, এবং <code>DELETE /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking</code> টিকিট বাতিল করে। রেফারেন্স ক্লায়েন্ট এটাও নিশ্চিত করে যে প্লেয়ার কখনই স্পিনারের দিকে তাকিয়ে আটকে থাকবে না: 30 সেকেন্ডের পর অতুলনীয়, একটি <strong>"হালের বিপক্ষে খেলা"</strong> বোতাম প্রদর্শিত হয় ("hal" দাবা উদাহরণের অন্তর্নির্মিত AI প্রতিপক্ষ — দেখুন §12), এবং <code>POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/ai</code> রিটার্ন <code>{ "sessionId" }</code>.</p>
+<h3 id="b-friend-invite">খ. বন্ধু আমন্ত্রণ</h3>
+<p>রেফারেন্স বাস্তবায়নে, <code>App.inviteFriend</code> মধ্যে <code>app.js</code>. প্রথম তালিকার বন্ধু - এই শেষ পয়েন্টটি গেম-স্কোপড টোকেনগুলির জন্য স্পষ্টভাবে অনুমোদিত:</p>
+<pre><code class="language-http">GET /api/v1/me/friends
+</code></pre>
+<p>তারপর আমন্ত্রণ পাঠান:</p>
+<pre><code class="language-http">POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites
+{ "toUserId": "&lt;guid&gt;" }
+</code></pre>
+<p>প্রাপক তাদের নিজস্ব ক্লায়েন্টের কাছ থেকে গ্রহণ (বা অস্বীকার) করে:</p>
+<pre><code class="language-http">POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/{id}/accept   → { "sessionId": "&lt;guid&gt;" }
+POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/{id}/decline  → 204
+</code></pre>
+<p>গ্রহণ করাই সেশন তৈরি করে। দ <code>&amp;session_id=</code> লঞ্চ-হ্যাশ ডিপ-লিংক (§3) আমন্ত্রিত প্লেয়ারকে সরাসরি এটিতে ফেলে দেয়।</p>
+<p>বন্ধু আমন্ত্রণ শুধুমাত্র সেই ব্যক্তিদের কাছে পৌঁছায় যারা ইতিমধ্যেই বন্ধু। এমন কাউকে টেনে আনতে যিনি নন (বা একেবারেই প্ল্যাটফর্মে নেই), রেফারেন্স বাস্তবায়নও একটি প্রস্তাব দেয় <strong>আমন্ত্রণ লিঙ্ক শেয়ার করুন</strong> বোতাম (<code>App.shareInviteLink</code>): স্ট্রিং বিল্ডিংয়ের এক লাইন যা কপি করে</p>
+<pre><code>https://dashboard.starhermit.com/game-invite/&lt;Net.userId&gt;/&lt;slug&gt;
+</code></pre>
+<p>ক্লিপবোর্ডে। ওয়েব ড্যাশবোর্ড প্রাপকের প্রয়োজনীয় সমস্ত কিছু পরিচালনা করে — সাইন-ইন, বন্ধুর অনুরোধ, একটি ডাকনাম, গেমটি চালু করা — এবং তারপর শেয়ারারের কাছে খেলার আমন্ত্রণ ফেরত পাঠায়, তাই এটি একই আমন্ত্রণ তালিকায় ল্যান্ড করে৷ দেখুন <a href="/bn/docs/api/games.html#share-links-invite-by-url">লিঙ্ক শেয়ার করুন</a> সম্পূর্ণ চুক্তির জন্য।</p>
+<h3 id="c-the-rule">গ. নিয়ম</h3>
+<p>ম্যাচমেকিং, আমন্ত্রণ-গ্রহণের মাধ্যমে সেশন তৈরি করা হয়, <code>sessions/ai</code>, অথবা এর সাথে একটি রিয়েলটাইম রুম শুরু করা
+একটি সার্ভার ব্যাকএন্ড। আসন সহ একটি লবির জন্য, ব্যবহার করুন <a href="/bn/docs/api/realtime.html">রিয়েলটাইম রুম API</a>.</p>
+<h2 id="6-playing-over-the-gameplay-websocket">6. গেমপ্লে WebSocket উপর খেলা</h2>
+<p>খেলার লুপ প্রতিটি স্ক্রিপ্ট করা গেমের জন্য একই: সেশন আনুন, সকেট খুলুন, সম্প্রচার রেন্ডার করুন, কমান্ড পাঠান। রেফারেন্স বাস্তবায়নের মধ্যে এটি বাস করে <code>game.js</code>, <code>GameController</code>.</p>
+<p><strong>সেশন আনুন:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/{sessionId}
+</code></pre>
+<pre><code class="language-json">{
+  "sessionId": "&lt;guid&gt;",
+  "status": "active",
+  "players": [ /* ... */ ],
+  "createdAt": "…",
+  "finishedAt": null,
+  "chatConversationId": "&lt;guid&gt;",
+  "result": null
+}
+</code></pre>
+<p>দ্রষ্টব্য <code>chatConversationId</code> — আপনার চ্যাট (§7) এবং ভয়েস (§8) এর জন্য এটির প্রয়োজন হবে।</p>
+<p><strong>গেমপ্লে সকেট সংযোগ করুন:</strong></p>
+<pre><code class="language-text">ws(s)://&lt;host&gt;/ws/v1/games?sessionId=&lt;id&gt;&amp;access_token=&lt;token&gt;
+</code></pre>
+<p>চালু <code>open</code>, ক্লায়েন্ট অবিলম্বে একটি সিঙ্ক কমান্ড পাঠায়:</p>
+<pre><code class="language-json">{ "type": "cmd", "data": { "type": "sync" } }
+</code></pre>
+<p>যেকোনো সংযোগ বিচ্ছিন্ন হলে এটি 1 সেকেন্ড থেকে 30-সেকেন্ডের সিলিং পর্যন্ত সূচকীয় ব্যাকঅফের সাথে পুনরায় সংযোগ করে এবং <strong>প্রতিটি খোলাতে সিঙ্ক পুনরায় পাঠায়</strong>. সিঙ্ক কমান্ড পুনঃসংযোগকে স্টেটলেস এবং অদম্য করে তোলে: ক্লায়েন্ট যা কিছু মিস করে না কেন, সার্ভার পুনরায় সম্প্রচার করে।</p>
+<p><strong>খাম।</strong> প্রতিটি ফ্রেম একটি পাতলা JSON খাম:</p>
+<ul>
+<li>ক্লায়েন্ট → সার্ভার: <code>{"type":"cmd","data":&lt;command&gt;}</code></li>
+<li>সার্ভার → ক্লায়েন্ট: <code>{"type":"game","data":…}</code>, <code>{"type":"error","error":…}</code>, <code>{"type":"presence","userId","online"}</code></li>
+</ul>
+<p><strong>গেম কমান্ড আপনার নিজস্ব নিয়ম স্ক্রিপ্ট দ্বারা সংজ্ঞায়িত করা হয়.</strong> দাবা উদাহরণের আদেশ, উদাহরণস্বরূপ ( <code>data</code> a এর পেলোড <code>cmd</code> ফ্রেম):</p>
+<pre><code class="language-json">{ "type": "sync" }
+{ "type": "move", "from": "e2", "to": "e4", "promo": "q" }
+{ "type": "resign" }
+{ "type": "offer-draw" }
+{ "type": "accept-draw" }
+{ "type": "decline-draw" }
+</code></pre>
+<p>দাবা উদাহরণে, <code>promo</code> শুধুমাত্র পদোন্নতির জন্য উপস্থিত।</p>
+<p><strong>সম্প্রচার একইভাবে স্ক্রিপ্ট-সংজ্ঞায়িত করা হয়।</strong> দাবা উদাহরণের সম্প্রচার ( <code>data</code> a এর পেলোড <code>game</code> ফ্রেম):</p>
+<ul>
+<li><code>state</code> - সম্পূর্ণ স্ন্যাপশট:</li>
+</ul>
+<pre><code class="language-json">{
+  "type": "state",
+  "white": "&lt;userId&gt;",
+  "black": "&lt;userId&gt;",
+  "ratings": { "white": 1420, "black": 1388 },
+  "board": "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr",
+  "turn": "w",
+  "moves": [ { "from": "e2", "to": "e4", "promo": null, "san": "e4", "at": "…" } ],
+  "status": "active",
+  "result": null,
+  "deadline": 1784642591000,
+  "drawOfferBy": null,
+  "ai": false,
+  "aiName": null
+}
+</code></pre>
+<p>দ <code>board</code> একটি 64-অক্ষরের স্ট্রিং, <code>index = rank * 8 + file</code> সঙ্গে <code>a1 = 0</code>, ব্যবহার করে <code>PNBRQK</code> সাদা জন্য, <code>pnbrqk</code> কালো জন্য, <code>.</code> খালি স্কোয়ারের জন্য - একটি দাবা-নির্দিষ্ট এনকোডিং; আপনার খেলা তার নিজস্ব রাষ্ট্র আকৃতি সংজ্ঞায়িত করে.</p>
+<ul>
+<li><code>moved</code> - একটি একক পদক্ষেপ প্রয়োগ করা হয়েছিল।</li>
+<li><code>draw-offered</code> / <code>draw-declined</code>.</li>
+<li><code>game-over</code> — <code>{ "result": { "kind", "reason", "at" }, "view" }</code>, কোথায় <code>reason</code> মান স্ক্রিপ্ট-সংজ্ঞায়িত করা হয়; দাবা উদাহরণ ব্যবহার করে <code>checkmate</code>, <code>stalemate</code>, <code>threefold-repetition</code>, <code>fifty-move-rule</code>, <code>insufficient-material</code>, <code>resignation</code>, <code>agreement</code>, <code>timeout</code>, <code>timeout-no-moves</code>.</li>
+</ul>
+<p><strong>পরিচয় কখনোই পেলোড থেকে নেওয়া হয় না।</strong> ক্লায়েন্ট কোন ইউজার আইডি ছাড়াই কমান্ড পাঠায় এবং স্ক্রিপ্ট কখনই তারের একটিকে বিশ্বাস করে না — প্ল্যাটফর্মটি প্রমাণীকৃত প্রেরককে স্ক্রিপ্টে পাঠায়। ফাঁকি দেওয়ার কিছু নেই।</p>
+<p>দেখুন <a href="/bn/docs/api/game-scripts.html">game-scripts.md</a> এই সব পিছনে স্ক্রিপ্ট চুক্তি জন্য.</p>
+<h2 id="7-in-game-chat">7. ইন-গেম চ্যাট</h2>
+<p>প্রতিটি অধিবেশন একটি বহন করে <code>chatConversationId</code> (§6) যেটি গেম ক্লায়েন্টরা ইন-গেম চ্যাটের জন্য ব্যবহার করতে পারে। রেফারেন্স বাস্তবায়নে, <code>initChat</code> মধ্যে <code>game.js</code> এটি এই মত ব্যবহার করুন:</p>
+<pre><code class="language-http">GET  /api/v1/chat/conversations/{id}/messages?page=1&amp;pageSize=50
+POST /api/v1/chat/conversations/{id}/messages
+     { "content": "good luck!" }
+</code></pre>
+<p>রিয়েল-টাইম চ্যাট সকেট <code>ws/v1/chat</code> হয় <strong>গেম-স্কোপড টোকেনের জন্য অবরুদ্ধ</strong>. রেফারেন্স ক্লায়েন্ট এটি একবার চেষ্টা করে, প্রত্যাখ্যান করে, এবং প্রতি 5 সেকেন্ডে REST এন্ডপয়েন্টে পোলিং করতে ফিরে আসে — আপনার নিজের গেমের শুরু থেকেই পোলিং করার পরিকল্পনা করুন।</p>
+<p>চ্যাট কাজ করে যদিও দুই খেলোয়াড় বন্ধু নাও হতে পারে: সেশন কথোপকথন (টাইপ <code>"game"</code>) উভয় খেলোয়াড়কে অংশগ্রহণকারী হিসাবে তৈরি করা হয়েছে, তাই স্বাভাবিক চ্যাট অনুমতি নিয়ম ইতিমধ্যেই সন্তুষ্ট।</p>
+<p>তথ্যসূত্র: <a href="/bn/docs/api/chat.html">chat.md</a>.</p>
+<h2 id="8-voice">8. ভয়েস</h2>
+<p>ভয়েস অপ্ট-ইন হয়, এবং গেম ক্লায়েন্টরা সাধারণত এটি রাখে <strong>ডিফল্টরূপে বন্ধ</strong>. রেফারেন্স বাস্তবায়ন এটি পরিচালনা করে <code>game.js</code>, <code>VoiceController</code>. যখন একজন খেলোয়াড় এটি সক্ষম করে:</p>
+<ol>
+<li>সেশনের কথোপকথনের সাথে আবদ্ধ রুমটি খুঁজুন বা তৈরি করুন:</li>
+</ol>
+<pre><code class="language-http">GET  /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;
+POST /api/v1/voice/rooms
+     { "conversationId": "&lt;chatConversationId&gt;" }
+</code></pre>
+<ol start="2">
+<li>এতে যোগ দিন:</li>
+</ol>
+<pre><code class="language-http">POST /api/v1/voice/rooms/{roomId}/join
+</code></pre>
+<ol start="3">
+<li>ভয়েস সকেট সংযোগ করুন:</li>
+</ol>
+<pre><code class="language-text">ws(s)://&lt;host&gt;/ws/v1/voice?roomId=&lt;id&gt;&amp;access_token=&lt;token&gt;
+</code></pre>
+<p>মিডিয়া হল <strong>নিখুঁত আলোচনার সাথে WebRTC পিয়ার-টু-পিয়ার</strong>; সকেট শুধুমাত্র সংকেত এবং নিয়ন্ত্রণ বহন করে:</p>
+<ul>
+<li>সংকেত: <code>{"type":"rtc","to":&lt;userId&gt;,"payload":{"sdp":…}}</code> বা <code>{"type":"rtc","to":&lt;userId&gt;,"payload":{"ice":…}}</code></li>
+<li>নিয়ন্ত্রণ: <code>{"type":"mute","muted":…}</code>, <code>{"type":"speaking","speaking":…}</code></li>
+<li>সার্ভার ইভেন্ট: <code>voice.roster</code>, <code>voice.participant_joined</code>, <code>voice.participant_left</code>, <code>voice.mute_changed</code>, <code>voice.speaking</code>, <code>voice.rtc</code></li>
+</ul>
+<p>যদি P2P ব্যর্থ হয়, ফলব্যাক হল সার্ভার-রিলেড অপাস বাইনারি ফ্রেম: একটি 16-বাইট প্রেরক আইডি এবং অডিও পেলোড অনুসরণ করে৷</p>
+<p>ভয়েস হল <strong>এআই গেমগুলিতে অক্ষম</strong> - রেফারেন্স ক্লায়েন্ট চেক করে <code>view.ai</code> রাষ্ট্রীয় সম্প্রচার থেকে এবং কখনই টগল অফার করে না।</p>
+<p>তথ্যসূত্র: <a href="/bn/docs/api/voice.html">voice.md</a>.</p>
+<h2 id="9-ratings-and-leaderboard">9. রেটিং এবং লিডারবোর্ড</h2>
+<p>গেম ক্লায়েন্টরা কখনই একটি স্কোর জমা দেয় না। একটি খেলা শেষ হলে, <strong>স্ক্রিপ্ট</strong> রিটার্ন <code>eloUpdates</code> এবং <strong>প্ল্যাটফর্ম</strong> গেমের লিডারবোর্ডে সেগুলি প্রকাশ করে। ক্লায়েন্ট সরাসরি লিডারবোর্ড এন্ট্রি লিখতে পারে না; সার্ভারকে অবশ্যই তার রেটিং আপডেটের পিছনে গেমপ্লে যাচাই করতে হবে।</p>
+<p>ক্লায়েন্ট পক্ষ তাই তুচ্ছ: এন্ট্রিগুলি পড়ুন (§4) এবং রেন্ডার করুন, যেমন রেফারেন্স বাস্তবায়ন করে। দেখুন <a href="/bn/docs/api/leaderboards.html">leaderboards.md</a>.</p>
+<h2 id="10-replays">10. রিপ্লে</h2>
+<p>একটি খেলা যে ঘোষণা <code>replays: true</code> এর স্ক্রিপ্টে প্ল্যাটফর্ম দ্বারা রাখা প্রতিটি সমাপ্ত সেশন রয়েছে; ক্লায়েন্টরা শুধু আনয়ন এবং রেন্ডার করে। চেক করুন <code>replaysEnabled</code> অন <code>GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94</code> স্ক্রীন অফার করার আগে — একজন অপারেটর যেকোন উপায়ে একটি গেমের জন্য উত্তর দিতে পারে এবং নীচের শেষ পয়েন্টগুলি ফিরে আসে <code>404</code> যখন রিপ্লে বন্ধ থাকে। রেফারেন্স বাস্তবায়নে আনা হচ্ছে <code>App.loadReplays</code> / <code>App.openReplay</code> মধ্যে <code>app.js</code>:</p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/mine?limit=10
+GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/{sessionId}
+</code></pre>
+<p>একটি রিপ্লে পেলোড (দাবার উদাহরণের ফলাফলের আকারের সাথে দেখানো হয়েছে):</p>
+<pre><code class="language-json">{
+  "sessionId": "&lt;guid&gt;",
+  "players": [ /* ... */ ],
+  "finishedAt": "…",
+  "result": {
+    "kind": "win",
+    "reason": "checkmate",
+    "at": "…",
+    "white": "&lt;userId&gt;",
+    "black": "&lt;userId&gt;",
+    "moveCount": 41,
+    "eloBefore": { "white": 1420, "black": 1388 },
+    "eloAfter": { "white": 1436, "black": 1372 }
+  },
+  "state": { "game": { "moves": [ /* ... */ ] } }
+}
+</code></pre>
+<p>দর্শক পদক্ষেপ <code>state.game.moves</code> ভাগ করা মাধ্যমে <code>chessRules</code> স্থানীয়ভাবে ইঞ্জিন - একই <code>server.js</code> নিয়ম ফাইল, ব্রাউজারে চলছে — তাই রিপ্লেতে সার্ভার রাউন্ড-ট্রিপের প্রয়োজন নেই; নিয়ম পরিবর্তনের সময় সংরক্ষণাগারভুক্ত ম্যাচের জন্য ব্যবহৃত নিয়ম সংস্করণ সংরক্ষণ করুন। এটি §1 থেকে ওয়ান-ফাইল-টু-রোল ডিজাইনের দ্বিতীয় পেঅফ, একটি প্যাটার্ন যে কোনও গেম তার নিজস্ব নিয়ম ফাইলের সাথে গ্রহণ করতে পারে।</p>
+<h2 id="11-player-profiles">11. প্লেয়ার প্রোফাইল</h2>
+<p>গেম ক্লায়েন্টরা পাবলিক প্রোফাইল এন্ডপয়েন্টের মাধ্যমে অন্যান্য খেলোয়াড়দের সমাধান করে। রেফারেন্স বাস্তবায়নে, <code>App.profileFor</code> মধ্যে <code>app.js</code>:</p>
+<pre><code class="language-http">GET /api/v1/users/{id}/profile  → { "id": "…", "username": "…", "nickname": "…" }
+GET /api/v1/users/{id}/avatar   → image/png, or 404
+</code></pre>
+<p>দুটি UI নিয়ম রেফারেন্স ক্লায়েন্ট অনুসরণ করে:</p>
+<ul>
+<li>রেন্ডার <strong>ডাকনাম</strong>, কখনোই ব্যবহারকারীর নাম নয়।</li>
+<li>ফিরে পড়া <code>"Player " + id.slice(0, 8)</code> যখন একটি প্রোফাইল অনুপস্থিত থাকে বা একটি ডাকনাম খালি থাকে।</li>
+</ul>
+<p>তথ্যসূত্র: <a href="/bn/docs/api/profile.html">profile.md</a>.</p>
+<h2 id="12-ai-practice-opponents">12. এআই অনুশীলন বিরোধীদের</h2>
+<p><code>POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/ai</code> (উদাহরণ স্লাগের সাথে দেখানো হয়েছে) একটি সেশন তৈরি করে যেখানে প্ল্যাটফর্ম একটি আসন পতাকাঙ্কিত করে <code>ai: true</code> মধ্যে <code>createSession</code>. স্ক্রিপ্ট নিজেই সেই আসনটি চালায় — এআই আচরণ এমন কিছু যা আপনার নিজের স্ক্রিপ্ট সংজ্ঞায়িত করে। দাবা উদাহরণে, আসন দ্বারা খেলা হয় "hal", একটি লোভী উপাদান-ক্যাপচার ইঞ্জিন যা উত্তর দেয় <strong>একই আহ্বানের মধ্যে</strong> যা মানুষের চালকে প্রক্রিয়া করে।</p>
+<p>খেলার স্ক্রিপ্ট সিদ্ধান্ত নেয় অনুশীলন মানব খেলোয়াড়ের রেটিং পরিবর্তন করে কিনা। এআই সিট পারে না
+অ্যাকাউন্ট প্লেয়ার-স্টেট, রেটিং, বা অর্জনের লেখা গ্রহণ করুন। যেকোন এআই পরিসংখ্যান সেশন স্টেটে রাখুন।</p>
+<h2 id="13-what-the-reference-game-does-not-use">13. রেফারেন্স গেম কি ব্যবহার করে না</h2>
+<p>দাবা রেফারেন্স বাস্তবায়ন এগুলির কোনওটিকেই স্পর্শ করে না, তবে এগুলি সমস্ত গেমগুলির জন্য উপলব্ধ যা তাদের প্রয়োজন:</p>
+<ul>
+<li><strong>অর্জন</strong> — a এর সাথে যেকোনো খেলা <code>server=</code> স্ক্রিপ্ট তাদের ঘোষণা করতে পারে (<code>game.achievements</code>) এবং যেকোন লাইফসাইকেল হুক থেকে তাদের সার্ভার-অনুমোদিতভাবে মঞ্জুর করুন; দাবা সহজভাবে না. ক্যাটালগ শিরোনামগুলির একটি পৃথক ক্লায়েন্ট-দাবী পথ রয়েছে: <a href="/bn/docs/api/achievements.html">achievements.md</a>, <a href="/bn/docs/api/game-scripts.html#achievements">game-scripts.md</a>.</li>
+<li><strong>ক্যাটালগ/এনটাইটেলমেন্ট</strong> — ক্যাটালগের মাধ্যমে বিতরণ করা এবং বিক্রি করা গেমগুলির জন্য: <a href="/bn/docs/api/catalog.html">catalog.md</a>.</li>
+<li><strong>রিলে</strong> — দ্রুতগতির, রিয়েল-টাইম গেমগুলির জন্য উচ্চ-ফ্রিকোয়েন্সি রিলে চ্যানেল যেখানে প্রতি-কমান্ড স্ক্রিপ্ট রাউন্ড-ট্রিপ খুব ধীর: <a href="/bn/docs/api/relay.html">relay.md</a>.</li>
+<li><strong>বাহ্যিক লাইব্রেরি</strong> — স্টিম, এপিক বা GOG গেম লাইব্রেরি লিঙ্ক করা: <a href="/bn/docs/api/external-libraries.html">external-libraries.md</a>.</li>
+</ul>
+<p>দাবা উদাহরণ, একটি টার্ন-ভিত্তিক বোর্ড গেম, তাদের কোনটির প্রয়োজন নেই। যদি আপনার গেমটি রিয়েল-টাইম হয়, ক্যাটালগ-বিতরণ করা হয়, বা বাইনারি পেলোডের প্রয়োজন হয়, সেই পৃষ্ঠাগুলি পরবর্তীতে কোথায় দেখতে হবে।</p>
+<h2 id="14-integration-checklist">14. ইন্টিগ্রেশন চেকলিস্ট</h2>
+<ul>
+<li>একটি যোগ করুন <code>starhermit.txt</code> প্রকাশ (<code>name</code>, <code>launch</code>, <code>owner</code>, <code>server</code>; ঐচ্ছিক <code>cover=</code> লাইব্রেরি টাইলের জন্য)।</li>
+<li>পড়ুন <code>#game_token</code> URL হ্যাশ থেকে একবার, তারপর এটি দিয়ে ফালা <code>history.replaceState</code>.</li>
+<li>এর জন্য JWT ডিকোড করুন <code>sub</code> (ইউজার আইডি) এবং <code>game_scope</code> (স্লাগ) - কখনই আপনার স্লাগকে হার্ড-কোড করবেন না।</li>
+<li>একই-অরিজিন আপেক্ষিক URL হিসাবে সমস্ত API পাথ তৈরি করুন: <code>/api/v1/games/&lt;slug&gt;</code> + প্রত্যয়।</li>
+<li>প্রতি 45 মিনিটের মাধ্যমে লঞ্চ টোকেন রিফ্রেশ করুন <code>POST …/launch-token</code>.</li>
+<li>[ ] ব্যবহার করুন <code>cmd</code> / <code>sync</code> WebSocket প্যাটার্ন: সবকিছু খাম করুন, প্রতিটি খোলাতে সিঙ্ক করুন, 1s→30s ব্যাকঅফের সাথে পুনরায় সংযোগ করুন।</li>
+<li>আপনার স্ক্রিপ্টের কমান্ড এবং সম্প্রচার ডিজাইন করুন <strong>ক্লায়েন্ট চুক্তি হিসাবে</strong> — ক্লায়েন্ট ব্রডকাস্ট রেন্ডার করে এবং কমান্ড পাঠায়, আর কিছু নয়।</li>
+<li>[ ] একটি সারাংশ বস্তু ফেরত দিন <code>{ turnPlayerId, deadline, status, moveCount }</code> তাই সেশন লিস্ট দেখাতে পারে কার পালা।</li>
+<li>[ ] ফিরে এসে গেমস শেষ করুন <code>result</code> — সেই একটি রিটার্ন মান যা রিপ্লে এবং ইলো উভয়কেই শক্তি দেয়।</li>
+<li>[ ] ঘোষণা <code>replays: true</code> আপনার স্ক্রিপ্টে যদি আপনি শেষ সেশন রাখতে চান এবং রিপ্লে UI চালু করতে চান <code>replaysEnabled</code>.</li>
+</ul>
+<p>প্ল্যাটফর্মটি প্রমাণীকরণ, সেশন, ম্যাচমেকিং এবং স্টোরেজ সরবরাহ করে; আপনার স্ক্রিপ্ট সরবরাহ করে
+খেলার নিয়ম। দিয়ে শুরু করুন <a href="/bn/docs/tutorials/browser-quickstart.html">ব্রাউজার কুইকস্টার্ট</a> সম্পূর্ণ প্রথম আপলোডের জন্য।</p>
+
+{% endraw %}

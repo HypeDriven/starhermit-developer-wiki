@@ -1,0 +1,369 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Tutorial: jogadores integrados com chave pública"
+source_url: "/docs/tutorials/public-key-onboarding.html"
+source_path: "docs/tutorials/public-key-onboarding.md"
+source_hash: "49ebc031a538076978eab193219b2c0fd3cce731ed6327ede6768bbbcbb310f3"
+translation: "machine"
+permalink: "/pt/docs/tutorials/public-key-onboarding.html"
+---
+{% raw %}
+<h1 id="tutorial-onboard-players-with-a-public-key">Tutorial: jogadores integrados com chave pública</h1>
+<p>Uma conta StarHermit não precisa do Google, GitHub ou qualquer outro provedor de login. Sua credencial pode
+será um par de chaves que seu jogo gera no dispositivo do jogador, além de um endereço de e-mail que o jogador
+confirma uma vez. Depois disso, seu jogo entra silenciosamente em cada lançamento, assinando um desafio com
+a chave. O jogador nunca digita uma senha e nunca precisa visitar uma página do StarHermit.</p>
+<p>Este tutorial constrói esse fluxo de ponta a ponta: gere a chave, registre-a, espere o jogador
+confirme, faça login, mantenha a sessão e administre segundos dispositivos e chaves perdidas.</p>
+<p><strong>Use isso para</strong> jogos nativos e independentes, inicializadores, compilações Steam/Epic/GOG e ferramentas de desktop —
+qualquer coisa que rode na máquina do jogador e possa manter uma chave privada lá.</p>
+<p><strong>Use outra coisa para</strong></p>
+<ul>
+<li><strong>Um jogo de navegador hospedado no StarHermit</strong>, que já recebe um token de lançamento quando aberto em
+no painel ou pode mostrar um <a href="/pt/docs/api/auth.html#sign-in-from-a-directly-opened-browser-game">Botão de login</a>.</li>
+<li><strong>Um pipeline de CI</strong>, que deve registrar uma chave de uma sessão OAuth sem etapa de email:
+<a href="/pt/docs/tutorials/ci-cd-build-upload.html">Tutorial: fazer upload de compilações de CI/CD</a>.</li>
+<li><strong>Um servidor de jogo dedicado</strong>, que tem seu próprio token de implantação e não pode criar ou atuar como
+jogadores: <a href="/pt/docs/tutorials/dedicated-server-onboarding.html">Tutorial: publicar um servidor dedicado</a>.</li>
+</ul>
+<h2 id="what-the-player-sees">O que o jogador vê</h2>
+<ol>
+<li>Seu jogo pede um endereço de e-mail e consentimento para criar uma conta StarHermit.</li>
+<li>Eles abrem o e-mail de confirmação, clicam no link e pressionam <strong>Confirmar</strong> na página que ele abre.</li>
+<li>De volta ao jogo, eles estão logados. Em lançamentos posteriores, nada é solicitado.</li>
+</ol>
+<p>É necessário um endereço de e-mail e o jogador deve confirmá-lo uma vez. Não há como criar um
+Conta StarHermit silenciosamente apenas com uma identidade Steam, Epic ou GOG.</p>
+<h2 id="before-you-start">Antes de começar</h2>
+<p>O código nesta página é JavaScript simples usando WebCrypto e <code>fetch</code>, então ele roda em um navegador, em
+Electron e no Nó 20 ou posterior. <strong>O <code>js</code> blocos abaixo, em ordem, formam um módulo ES</strong> - salve-os
+juntos como <code>starhermit-key-auth.js</code>. Qualquer outra linguagem funciona da mesma maneira: o passo 1 fornece a exata
+formatos de bytes e etapa 3 os bytes exatos a serem assinados.</p>
+<pre><code class="language-js">const API = 'https://api.starhermit.com';
+
+const b64 = (bytes) =&gt; btoa(String.fromCharCode(...new Uint8Array(bytes)));
+</code></pre>
+<h2 id="1-create-the-device-key">1. Crie a chave do dispositivo</h2>
+<p>Gerar <strong>um par de chaves por instalação</strong>, na primeira vez que seu jogo precisar de uma conta. O privado
+A chave nunca sai do dispositivo: nem para seus servidores, nem para o StarHermit.</p>
+<table>
+<thead>
+<tr>
+<th><code>keyType</code></th>
+<th><code>keyData</code> (Base64 padrão)</th>
+<th>Assinatura (base64 padrão)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Ed25519</code> - recomendado</td>
+<td>A chave pública bruta de 32 bytes</td>
+<td>A assinatura Ed25519 bruta de 64 bytes</td>
+</tr>
+<tr>
+<td><code>ECDSA-P256</code></td>
+<td>O ponto público: 65 bytes não compactados (<code>04‖X‖Y</code>) ou compactado de 33 bytes</td>
+<td>ECDSA com SHA-256, <strong>ASN.1 codificado por DER</strong></td>
+</tr>
+<tr>
+<td><code>RSA-PSS</code></td>
+<td><code>SubjectPublicKeyInfo</code> DER, módulo de 2048–8192 bits, expoente ≤ 32 bits</td>
+<td>RSASSA-PSS, SHA-256, MGF1-SHA-256, sal de 32 bytes</td>
+</tr>
+</tbody>
+</table>
+<p><code>keyData</code> tem no máximo 2.000 caracteres. Uma chave pertence a uma conta na plataforma.</p>
+<p>Escolha <strong>Ed25519</strong> a menos que sua plataforma não possa produzi-lo. Se você usa ECDSA, observe que WebCrypto,
+O Windows CNG e a maioria dos armazenamentos de chaves de hardware retornam a assinatura como bruta <code>r‖s</code> (64bytes). Eremita Estelar
+espera DER, então converta-o - o módulo abaixo o faz.</p>
+<pre><code class="language-js">// One key per installation. The private key can sign but is never exported.
+export async function createDeviceKey(keyType = 'Ed25519') {
+  if (!['Ed25519', 'ECDSA-P256'].includes(keyType)) throw new Error('This helper supports Ed25519 or ECDSA-P256');
+  const algorithm = keyType === 'Ed25519'
+    ? { name: 'Ed25519' }
+    : { name: 'ECDSA', namedCurve: 'P-256' };
+  const pair = await crypto.subtle.generateKey(algorithm, false, ['sign', 'verify']);
+  return {
+    keyType: keyType === 'Ed25519' ? 'Ed25519' : 'ECDSA-P256',
+    keyData: b64(await crypto.subtle.exportKey('raw', pair.publicKey)),
+    privateKey: pair.privateKey,
+  };
+}
+</code></pre>
+<p><strong>Armazene a chave privada onde o sistema operacional a protege.</strong> Em um navegador ou renderizador Electron,
+um não extraível <code>CryptoKey</code> pode ser mantido no IndexedDB como está. Um jogo nativo deve usar o
+keystore da plataforma — Windows DPAPI ou CNG, macOS Keychain, libsecret no Linux. Loja <code>keyType</code> e
+<code>keyData</code> próximo a ele; você os envia com cada solicitação.</p>
+<h2 id="2-start-registration">2. Inicie o registro</h2>
+<p>Peça o endereço de e-mail e consentimento do jogador e então:</p>
+<pre><code class="language-js">async function post(path, body) {
+  const res = await fetch(API + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json().catch(() =&gt; ({})) };
+}
+
+function fail(step, { status, body }) {
+  return Object.assign(new Error(`${step}: ${body.error ?? status}`), { status, body });
+}
+
+export async function register(key, email) {
+  const res = await post('/api/v1/auth/public-key/register',
+    { email, keyType: key.keyType, keyData: key.keyData });
+  if (res.status !== 202) throw fail('register', res);
+  return res.body; // { registrationId, email, emailSent, deferralReason, message }
+}
+</code></pre>
+<p><code>202</code> significa que StarHermit aceitou o registro. Se <code>emailSent</code> é <code>false</code>, o e-mail será colocado na fila e
+ainda chegará; <code>deferralReason</code> diz por que esperou. Nada está vinculado a nenhuma conta ainda.</p>
+<p>Três regras moldam sua IU:</p>
+<ul>
+<li><strong>Um registro por endereço de e-mail e um por endereço IP, a cada 24 horas.</strong> Uma segunda tentativa
+é <code>429</code> com <code>Retry-After</code>. Peça ao jogador que confirme o endereço antes de enviá-lo, pois houve um erro de digitação
+custa-lhes um dia. Envie a solicitação do dispositivo do jogador, nunca através do seu próprio servidor: cada
+player compartilharia o IP do seu servidor e seu registro único diário.</li>
+<li><strong>O link expira após 4 horas.</strong> Se caducar, o jogador poderá se cadastrar novamente uma vez decorridas 24 horas
+estão acordados.</li>
+<li><strong><code>400</code></strong> significa que o endereço de e-mail ou material chave foi rejeitado; <code>error</code> diz qual.</li>
+</ul>
+<h2 id="3-sign-in-with-the-key">3. Faça login com a chave</h2>
+<p>Entrar é um desafio e uma resposta. <code>POST /api/v1/auth/public-key/challenge</code> retorna:</p>
+<pre><code class="language-json">{
+  "challengeId": "4fc4d72b-4c12-41ca-a500-dc13cccc3865",
+  "payload": {
+    "challengeId": "4fc4d72b-4c12-41ca-a500-dc13cccc3865",
+    "fingerprint": "9c0b7a…",
+    "issuer": "starhermit",
+    "audience": "starhermit",
+    "expiry": "2026-10-09T14:21:41.9264875+00:00",
+    "nonce": "NmL+tgMum6HXU/pa3T9xjQ==",
+    "clientTimestamp": "2026-10-09T14:16:41.9265739+00:00"
+  },
+  "expiresIn": 300
+}
+</code></pre>
+<p><strong>O que você assina não é o JSON que você recebeu.</strong> StarHermit verifica a assinatura por conta própria
+serialização de <code>payload</code>:</p>
+<ul>
+<li>JSON compacto, sem espaços em branco;</li>
+<li><strong>Caso Pascal</strong> nomes dos membros, exatamente na ordem <code>ChallengeId</code>, <code>Fingerprint</code>, <code>Issuer</code>,
+<code>Audience</code>, <code>Expiry</code>, <code>Nonce</code>, <code>ClientTimestamp</code>;</li>
+<li>cada valor copiado <strong>exatamente como servido</strong> — não analise e reformate as datas;</li>
+<li>todo <code>+</code> no nonce escrito como <code>\u002B</code>. O <code>+</code> nas datas permanece como está.</li>
+</ul>
+<p>Para o desafio acima, os bytes assinados são a codificação UTF-8 de:</p>
+<pre><code class="language-text">{"ChallengeId":"4fc4d72b-4c12-41ca-a500-dc13cccc3865","Fingerprint":"9c0b7a…","Issuer":"starhermit","Audience":"starhermit","Expiry":"2026-10-09T14:21:41.9264875+00:00","Nonce":"NmL\u002BtgMum6HXU/pa3T9xjQ==","ClientTimestamp":"2026-10-09T14:16:41.9265739+00:00"}
+</code></pre>
+<p>Entenda tudo errado e a resposta é <code>401 "Invalid signature."</code>, que nenhuma nova tentativa corrigirá.</p>
+<pre><code class="language-js">const FIELDS = ['challengeId', 'fingerprint', 'issuer', 'audience', 'expiry', 'nonce', 'clientTimestamp'];
+
+export function challengeSigningBytes(payload) {
+  const members = FIELDS.map((field) =&gt; {
+    let value = JSON.stringify(payload[field]);
+    if (field === 'nonce') value = value.replaceAll('+', '\\u002B');
+    return `"${field[0].toUpperCase()}${field.slice(1)}":${value}`;
+  });
+  return new TextEncoder().encode(`{${members.join(',')}}`);
+}
+
+export async function signChallenge(key, payload) {
+  const data = challengeSigningBytes(payload);
+  if (key.keyType === 'Ed25519')
+    return b64(await crypto.subtle.sign({ name: 'Ed25519' }, key.privateKey, data));
+  // WebCrypto returns an ECDSA signature as raw r||s; the server expects ASN.1 DER.
+  const rs = new Uint8Array(
+    await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key.privateKey, data));
+  return b64(derEcdsaSignature(rs));
+}
+
+function derEcdsaSignature(rs) {
+  const integer = (bytes) =&gt; {
+    let i = 0;
+    while (i &lt; bytes.length - 1 &amp;&amp; bytes[i] === 0) i++;
+    const value = [...bytes.slice(i)];
+    return value[0] &amp; 0x80 ? [0x02, value.length + 1, 0, ...value] : [0x02, value.length, ...value];
+  };
+  const body = [...integer(rs.slice(0, 32)), ...integer(rs.slice(32))];
+  return new Uint8Array([0x30, body.length, ...body]);
+}
+
+// Resolves to { userId, accessToken, refreshToken }, or null while the key is not attached to
+// an account yet — the player has not confirmed, the link expired, or the key was revoked.
+export async function signIn(key) {
+  const { keyType, keyData } = key;
+  const challenge = await post('/api/v1/auth/public-key/challenge', { keyType, keyData });
+  if (challenge.status !== 200) throw fail('challenge', challenge);
+  const signature = await signChallenge(key, challenge.body.payload);
+  const done = await post('/api/v1/auth/public-key/complete',
+    { challengeId: challenge.body.challengeId, signature, keyType, keyData });
+  if (done.status === 200) return done.body;
+  if (done.status === 401 &amp;&amp; done.body.error === 'Public key not registered or revoked.') return null;
+  throw fail('complete', done); // "Invalid signature." will never succeed: fix it, don't retry it
+}
+</code></pre>
+<p>Um desafio dura cinco minutos e é descartável, mesmo quando a tentativa falha, então solicite um novo
+para cada tentativa. Desafie e conclua o compartilhamento de um limite de 60 solicitações por minuto por endereço IP.</p>
+<h2 id="4-wait-for-the-player-to-confirm">4. Aguarde a confirmação do jogador</h2>
+<p>O link enviado por e-mail abre uma página do StarHermit dizendo o que a confirmação fará; abri-lo muda
+nada, então um scanner de e-mail que visualiza o link não pode confirmar em nome do jogador. Quando o
+jogador pressiona <strong>Confirmar</strong>, StarHermit cria sua conta, anexa sua chave e marca o endereço
+verificado. Se uma conta já usa esse endereço, a página informa isso e a chave é adicionada a ela
+em vez disso, um jogador que já possui uma conta StarHermit a mantém. Em starhermit.com eles pousam
+no painel do StarHermit, já conectado.</p>
+<p><strong>Seu jogo nunca recebe os tokens dessa página</strong>, e não precisa deles. O jogador pode
+confirme em um telefone ou em outro navegador. Assim que a chave for anexada, seu jogo pode simplesmente fazer login
+com isso. Então mostre um "verifique sua caixa de entrada" tela e continue tentando:</p>
+<pre><code class="language-js">// Poll until the player confirms the emailed link. Two requests per attempt, so every 5 s stays
+// well inside the 60-per-minute sign-in limit.
+export async function waitUntilConfirmed(key, { intervalMs = 5000, signal } = {}) {
+  for (;;) {
+    signal?.throwIfAborted();
+    const session = await signIn(key);
+    if (session) return session;
+    await new Promise((resolve) =&gt; setTimeout(resolve, intervalMs));
+  }
+}
+</code></pre>
+<p>Juntando as etapas 1 a 4:</p>
+<pre><code class="language-javascript">import { createDeviceKey, register, signIn, waitUntilConfirmed } from './starhermit-key-auth.js';
+
+const key = await loadStoredKey() ?? await saveKey(await createDeviceKey());
+let session = await signIn(key);                // a returning player is signed in here
+if (!session) {
+  const email = await askForEmailAndConsent();
+  await register(key, email);
+  showCheckYourInbox(email);
+  session = await waitUntilConfirmed(key, { signal: cancelButton.signal });
+}
+</code></pre>
+<p><code>loadStoredKey</code>, <code>saveKey</code>, <code>askForEmailAndConsent</code> e <code>showCheckYourInbox</code> é seu para escrever.
+Ofereça um <strong>Cancelar</strong> que aborta a espera e interrompe a pesquisa após quatro horas, quando o link expira.</p>
+<p>Continue pesquisando mesmo que a página de confirmação da sua plataforma redirecione de volta para o seu site. O jogador muitas vezes
+abre o e-mail em um dispositivo diferente daquele que está aguardando e o redirecionamento não chega a lugar nenhum
+perto da tela de espera; polling é o que conecta o dispositivo em espera. Se o redirecionamento chegar
+em uma segunda aba, faça login com apenas uma delas e revogue a sessão extra, ou o jogador acaba
+com dois.</p>
+<h2 id="5-keep-the-session">5. Mantenha a sessão</h2>
+<p><code>complete</code> retorna um token de acesso de 15 minutos e um token de atualização que dura sete dias e é rotativo.
+Envie o token de acesso como <code>Authorization: Bearer …</code>e atualize antes que expire:</p>
+<pre><code class="language-js">// Resolves to the new pair, or null when the session is over — sign in with the key again.
+export async function refresh(refreshToken) {
+  const res = await post('/api/v1/auth/refresh', { refreshToken });
+  return res.status === 200 ? res.body : null; // { accessToken, refreshToken }
+}
+</code></pre>
+<p>Substituir <strong>ambos</strong> fichas todas as vezes. Apresentar um token de atualização usado encerra toda a sessão, então faça
+certifique-se de que dois threads ou processos nunca sejam atualizados ao mesmo tempo. Quando <code>refresh</code> retorna <code>null</code>, chamar <code>signIn</code> -
+nenhum e-mail está envolvido. A chave é a credencial de longa duração; tokens são apenas um cache disso.</p>
+<h2 id="6-finish-setting-up-the-account">6. Conclua a configuração da conta</h2>
+<p><strong>Termos.</strong> Uma nova conta deve aceitar os termos atuais do StarHermit antes de poder usar qualquer outra coisa.
+Chamar <code>GET /api/v1/me</code>. Se <code>termsAcceptanceRequired</code> é <code>true</code>, mostre o texto de
+<code>GET /api/v1/terms</code>, e quando o jogador aceitar, envie seu hash para <code>POST /api/v1/me/terms/accept</code>.
+Verifique novamente em lançamentos posteriores, pois os termos foram revisados. Detalhes:
+<a href="/pt/docs/api/profile.html#terms-acceptance">Aceitação dos termos</a>.</p>
+<p><strong>Nome.</strong> A conta começa com um <code>pk-…</code> nome de usuário. Deixe o jogador escolher um apelido:</p>
+<pre><code class="language-http">PATCH /api/v1/me
+Authorization: Bearer &lt;access-token&gt;
+Content-Type: application/json
+
+{ "nickname": "RookPilot" }
+</code></pre>
+<p>A partir daqui a conta é como qualquer outra: amigos, chat, matchmaking, salvamentos na nuvem, conquistas.</p>
+<h2 id="7-second-devices-lost-keys-and-limits">7. Segundos dispositivos, chaves perdidas e limites</h2>
+<p><strong>Um segundo dispositivo</strong> gera sua própria chave e a registra com <strong>o mesmo endereço de e-mail</strong>. Quando o
+jogador confirma, a chave se junta à sua conta existente em vez de criar uma nova. As 24 horas
+o limite por endereço também se aplica aqui.</p>
+<p><strong>Um dispositivo perdido ou roubado.</strong> <code>POST /api/v1/auth/public-key/revoke-request</code> com <code>{ "email": "…" }</code>
+envia por e-mail um link para uma página; confirmando há revoga <strong>todo</strong> chave na conta e encerra as sessões
+essas chaves conectadas. Abrir o link por si só não muda nada. O pedido sempre responde <code>202</code> com a mesma mensagem, quer o
+endereço tem uma conta. O link expira após quatro horas e uma conta pode solicitar uma vez a cada 15 horas.
+minutos. Depois, cada dispositivo restante é registrado novamente (etapa 2).</p>
+<p><strong>O que uma conta somente chave não pode fazer.</strong> Algumas alterações protegem as credenciais da conta, então elas
+exigem uma sessão conectada por meio de um provedor como Google ou GitHub:</p>
+<table>
+<thead>
+<tr>
+<th>Ação</th>
+<th>Conta somente chave</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Adicione uma chave ou revogue outros dispositivos (<code>POST /me/public-keys</code>, <code>DELETE /me/public-keys/{id}</code> ou <code>/all</code>)</td>
+<td><code>403</code> — inscreva-se por meio de registro por e-mail ou use uma sessão autenticada por OAuth</td>
+</tr>
+<tr>
+<td>Alterar o endereço de e-mail da conta</td>
+<td><code>403 oauth_session_required</code> — não é possível até que um provedor esteja vinculado</td>
+</tr>
+<tr>
+<td>Revogar a própria chave desta instalação</td>
+<td><code>DELETE /api/v1/me/public-keys/current</code>, usando sua sessão completa da conta de chave pública; descartar credenciais locais após sucesso</td>
+</tr>
+</tbody>
+</table>
+<p>Para gerenciar outras credenciais ou alterar o e-mail, vincule um provedor. Quando uma conta somente chave vincula uma, a vinculação é mantida
+até que o jogador confirme em seu e-mail. Depois disso, o login do provedor pode fazer tudo acima.
+Ver <a href="/pt/docs/api/auth.html#get-apiv1authoauthproviderauthorizelinkclient"><code>authorize?link=true</code></a>.</p>
+<h2 id="troubleshooting">Solução de problemas</h2>
+<table>
+<thead>
+<tr>
+<th>Resposta</th>
+<th>Significado</th>
+<th>Consertar</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>register</code> → <code>400</code> "Os dados principais não são uma chave válida…"</td>
+<td><code>keyData</code> está no formato errado para seu <code>keyType</code></td>
+<td>Verifique a tabela na etapa 1. Ed25519 e ECDSA recebem bytes de chave brutos, não <code>SubjectPublicKeyInfo</code></td>
+</tr>
+<tr>
+<td><code>register</code> → <code>429</code></td>
+<td>Este endereço ou IP registrado nas últimas 24 horas</td>
+<td>Espere por <code>Retry-After</code>; não tente novamente em um loop</td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "Chave pública não registrada ou revogada."</td>
+<td>O jogador ainda não confirmou, o link expirou ou a chave foi revogada</td>
+<td>Continue aguardando (etapa 4) ou registre-se novamente</td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "Assinatura inválida."</td>
+<td>Os bytes assinados ou o formato da assinatura não correspondem</td>
+<td>Reconstrua exatamente a string assinada (etapa 3). Para ECDSA, envie DER, não <code>r‖s</code></td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "Desafio não encontrado ou expirou."</td>
+<td>O desafio tinha mais de cinco minutos ou já foi usado</td>
+<td>Solicite um novo desafio para cada tentativa</td>
+</tr>
+<tr>
+<td><code>challenge</code> / <code>complete</code> → <code>429</code></td>
+<td>Mais de 60 solicitações de login por minuto deste IP</td>
+<td>Faça pesquisas com menos frequência</td>
+</tr>
+<tr>
+<td>Confirmar página → "Este link não pode ser usado"</td>
+<td>Já confirmada, expirada, copiada incompletamente ou endereço da conta alterado desde o envio</td>
+<td>Se o seu jogo puder fazer login, a chave está anexada e não há nada de errado. Se não, cadastre-se novamente</td>
+</tr>
+<tr>
+<td>Pressionando Confirmar → "Essa chave pública já está registrada em outra conta."</td>
+<td>Esta chave pertence a uma conta diferente</td>
+<td>Gere uma nova chave neste dispositivo</td>
+</tr>
+<tr>
+<td><code>403</code> "Esta conta está suspensa."</td>
+<td>A conta está suspensa</td>
+<td>Nada que seu jogo possa consertar</td>
+</tr>
+</tbody>
+</table>
+
+{% endraw %}

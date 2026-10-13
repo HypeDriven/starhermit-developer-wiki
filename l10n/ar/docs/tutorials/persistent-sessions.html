@@ -1,0 +1,158 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "البرنامج التعليمي: الجلسات المستمرة - الألعاب التي تتوقف مؤقتًا عندما يغادر الجميع"
+source_url: "/docs/tutorials/persistent-sessions.html"
+source_path: "docs/tutorials/persistent-sessions.md"
+source_hash: "35977b60ae64d913cbd390339f114d1c67a92c310166173d669571a677e377fa"
+translation: "machine"
+permalink: "/ar/docs/tutorials/persistent-sessions.html"
+---
+{% raw %}
+<h1 id="tutorial-persistent-sessions--games-that-pause-when-everyone-leaves">البرنامج التعليمي: الجلسات المستمرة - الألعاب التي تتوقف مؤقتًا عندما يغادر الجميع</h1>
+<p>عادةً ما تُنهي المنصة المباراة التي لا يلعبها أحد: بمجرد أن ينقطع اتصال كل لاعب ولا أحد
+عاد في غضون خمس دقائق، وتنتهي الجلسة كما <code>abandoned</code> مع السبب <code>players_left</code>
+(يرى <a href="/ar/docs/api/games.html#server--client">واجهة برمجة تطبيقات الألعاب - طريقة اللعب WebSocket</a>). هذا صحيح بالنسبة للشطرنج
+لعبة أو سباق، وخطأ بالنسبة لمزرعة أو باني مدينة أو زنزانة مشتركة أو أي عالم مجموعة
+يعود اللاعبون إلى أكثر من أيام.</p>
+<p>لعبة يمكن أن نسأل عنه <strong>جلسات مستمرة</strong> بدلاً من. تتوقف الجلسة المستمرة مؤقتًا عندما ينقطع اتصال لاعبيها:</p>
+<ol>
+<li>آخر لاعب يغادر.</li>
+<li>بعد حوالي 15 ثانية مع عدم اتصال أي شخص بالمنصة <strong>توقف مؤقتًا</strong> الجلسة. لا شيء يعمل:
+لعبة السيناريو لا تحصل على أي <code>onTick</code> المكالمات، وتتم إزالة جلسة لعبة الحاوية من ملف
+حاوية.</li>
+<li>تظل الجلسة متوقفة مؤقتًا ضمن سياسة الاحتفاظ بالاسترداد الخاصة بها. يقرأ <code>/sessions/{id}/recovery</code>
+لأي انتهاء الصلاحية بدلا من افتراض الاحتفاظ بها إلى الأبد.</li>
+<li>أول لاعب يتصل <code>ws/v1/games</code> <strong>يستأنف</strong> ذلك، قبل أمرهم الأول
+التعامل معها. يستمر اللعب من حيث توقف.</li>
+</ol>
+<p>توضح هذه الصفحة كيفية تشغيله، وكيفية منع ساعات لعبتك من القفز عبر التوقف المؤقت، و
+ما يحتاج عميلك إلى القيام به.</p>
+<h2 id="1-opt-in">1. الاشتراك</h2>
+<p>الثبات هو إعلان لكل لعبة، يمكنك قراءته عند نشر لعبتك أو تحديثها - انشر إعلانًا
+التحديث بعد تغييره. يجب أن يكون حرفيا <code>true</code> أو <code>false</code>; أي شيء آخر يعتبر لا
+الإعلان، واللعبة التي تعلن عن لا شيء تتصرف كما كانت من قبل.</p>
+<p><strong>لعبة السيناريو</strong> - ثابت <code>persistent</code> على <code>game</code> كائن (انظر
+<a href="/ar/docs/api/game-scripts.html#persistent-sessions">مخطوطات اللعبة</a>):</p>
+<pre><code class="language-js">globalThis.game = {
+  persistent: true,
+  tickRateHz: 1,
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<p><strong>لعبة الحاوية</strong> — <code>persistent</code> في الخاص بك <code>GET /describe</code> الجواب (انظر
+<a href="/ar/docs/api/container-games.html#get-describe">خوادم ألعاب الحاويات</a>):</p>
+<pre><code class="language-json">{ "protocol": 1, "tickRateHz": 20, "maxSessions": 48, "persistent": true }
+</code></pre>
+<p>لم يتغير شيء حول كيفية إنشاء الجلسات: التوفيق، والدعوات، ونقطة نهاية الذكاء الاصطناعي، والوقت الفعلي
+تنتج جميع الغرف جلسات مستمرة للعبة مستمرة.</p>
+<h2 id="2-keep-game-time-still-while-paused">2. حافظ على ثبات وقت اللعبة أثناء الإيقاف المؤقت</h2>
+<p>المنصة لا تعيد الكتابة <code>ctx.now</code> - تظل ساعة الحائط الحقيقية، لذلك في أي وقت مطلق
+إظهار اللاعبين (الموعد النهائي، أ "الحصاد جاهز عند") يبقى يعني ما يقوله. بدلا من ذلك، مثابرة
+تحصل الجلسات على حقل سياق إضافي واحد:</p>
+<pre><code class="language-js">ctx.pausedMs   // total milliseconds this session has spent paused, so far
+</code></pre>
+<p>إنه ينمو فقط، وفقط في الجلسات المستمرة (الألعاب الأخرى لا ترى المجال أبدًا). اطرحها وأنت
+لديك <strong>ساعة اللعبة</strong> الذي يتوقف بينما لا أحد هناك:</p>
+<pre><code class="language-js">function gameTime(ctx) {
+  return ctx.now - (ctx.pausedMs || 0);
+}
+
+globalThis.game = {
+  persistent: true,
+  tickRateHz: 1,
+
+  createSession(ctx) {
+    return { ok: true, sessionState: { lastTick: gameTime(ctx), crops: [] } };
+  },
+
+  onTick(ctx) {
+    var state = ctx.sessionState;
+    var t = gameTime(ctx);
+    var dt = t - state.lastTick;      // never includes the time the world was paused
+    state.crops.forEach(function (crop) { crop.growth += dt; });
+    state.lastTick = t;
+    return { ok: true, sessionState: state };
+  },
+
+  onPlayerMessage(ctx) { /* ... */ }
+};
+</code></pre>
+<p>قم بتخزين الطوابع الزمنية الخاصة بك في وقت اللعبة (<code>gameTime(ctx)</code>)، وليس في <code>ctx.now</code>، ومقارنتها فقط
+ضد وقت المباراة إذا كنت <em>يريد</em> العالم يمضي قدمًا دون أن يراقبه أحد - محاصيل تنمو
+بين عشية وضحاها - استخدام <code>ctx.now</code> بدلاً من ذلك ومتابعة العلامة الأولى بعد السيرة الذاتية. وفي كلتا الحالتين هو الخاص بك
+الاختيار؛ تقوم المنصة بالإبلاغ فقط عما حدث.</p>
+<p>تفاصيل التوقيت:</p>
+<ul>
+<li>خلال الـ 15 ثانية تقريبًا بين مغادرة آخر لاعب والتوقف المؤقت، تظل الجلسة ثابتة
+تكتك بشكل طبيعي. اللاعب الذي ينقطع اتصاله ويعود مباشرة لا يتسبب في توقفه مؤقتًا.</li>
+<li>بعد السيرة الذاتية، في اليوم التالي <code>onTick</code> يأتي فاصل زمني واحد في وقت لاحق. لا يتم إعادة تشغيل الوقت المتوقف مؤقتًا
+كتراكم من القراد الفائتة.</li>
+</ul>
+<p>حاوية تستقبل <code>pausedMs</code> في نفس المكان: في <code>POST /sessions</code> الجسم يتم إرساله عندما
+تتم استعادة الجلسة بعد توقف مؤقت.</p>
+<h2 id="3-your-client">3. عميلك</h2>
+<p>تظل الجلسة المتوقفة مؤقتًا جلسة نشطة، وبالتالي فإن تدفق العميل هو الذي لديك بالفعل:</p>
+<ul>
+<li><strong>قائمة العوالم للانضمام مرة أخرى</strong> مع <code>GET /api/v1/games/{slug}/sessions/mine</code>. كل إدخال لديه
+<code>pausedAt</code> الطابع الزمني أثناء إيقافه مؤقتًا و <code>null</code> أثناء وجود شخص ما فيه، حتى تتمكن من إظهاره "متوقف مؤقتا
+منذ…" أو "2 أصدقاء يلعبون الآن" (يرى <a href="/ar/docs/api/games.html#get-apiv1gamesslugsessionsmine">واجهة برمجة تطبيقات الألعاب - الجلسات</a>).</li>
+<li><strong>إعادة الانضمام</strong> عن طريق الفتح <code>ws/v1/games?sessionId=…</code> تماما كما كان من قبل. السيرة الذاتية تحدث خلال
+اتصال. لا يوجد خاص "تم استئنافه" إطار لها - يتم تشغيل اللعبة ببساطة عند أول مرة
+وصول الأمر - لذا اطلب أو انتظر رسالة الحالة الكاملة العادية للعبتك، كما تفعل في السابق
+أي إعادة الاتصال.</li>
+<li><strong>التعامل مع السيرة الذاتية الفاشلة.</strong> إذا لم يتمكن النظام الأساسي من استئناف الجلسة — على الأرجح حاوية
+اللعبة التي لا يزال خادمها قيد التشغيل — تتلقى <code>{"type":"error","error":"…"}</code> والمقبس
+مغلق بالكود <code>1001</code>. تظل الجلسة متوقفة مؤقتًا ولا يتم فقدان أي شيء. أعد الاتصال بعد فترة قصيرة
+التراجع (بضع ثوان، المتزايد)، والعرض "بدء العالم…" بدلا من الخطأ.</li>
+<li><code>presence</code> تعمل الإطارات كالمعتاد، حتى يرى اللاعبون الآخرون من هو الموجود في العالم الآن.</li>
+</ul>
+<h2 id="4-ending-a-persistent-session">4. إنهاء الجلسة المستمرة</h2>
+<p>تنتهي الجلسة المستمرة عندما:</p>
+<ul>
+<li><strong>تقارير لعبتك أ <code>result</code></strong> (قيمة إرجاع البرنامج النصي أو رسالة التحكم في الحاوية)، أو</li>
+<li>ينهيها مالك اللعبة (<code>DELETE /api/v1/me/github-games/{id}/sessions/{sessionId}</code>),</li>
+<li>العضو الأخير يترك صراحة عالمًا بدون غرفة من خلاله <code>/sessions/{id}/leave</code>، أو</li>
+<li>تنتهي صلاحية بيانات الاسترداد المتوقفة مؤقتًا بموجب سياسة الاحتفاظ بالنشر.</li>
+</ul>
+<p>قطع الاتصال يترك العضوية سليمة؛ ترك صراحة يتخلى عن العضوية. يرى
+<a href="/ar/docs/session-lifecycle.html">دورة حياة الجلسة والانتعاش</a> لكلا التدفقين.</p>
+<p>السؤال عن لعبة جديدة يفعل <strong>لا</strong> قم بإلغاء جلسات اللاعب المتوقفة مؤقتًا، ولا تزال الجلسات المتوقفة مؤقتًا تحتسب
+مقابل الحد الأقصى للجلسة المتزامنة لكل لاعب (20 افتراضيًا). <strong>امنح اللاعبين طريقة لإنهاء أو
+اترك عالما</strong> - ان "التخلي عن العالم" اطلب إجاباتك النصية باستخدام أ <code>result</code>، على سبيل المثال.
+وإلا فإن اللاعب الذي ملأ الحد الأقصى لا يمكنه أن يبدأ أي شيء جديد.</p>
+<pre><code class="language-js">onPlayerMessage(ctx) {
+  var msg = ctx.message.data;
+  if (msg.type === "close-world" &amp;&amp; ctx.message.from === ctx.sessionState.ownerId) {
+    return { ok: true, sessionState: ctx.sessionState, result: { kind: "closed" } };
+  }
+  /* ... */
+}
+</code></pre>
+<h2 id="5-container-games-parking">5. ألعاب الحاويات: مواقف السيارات</h2>
+<p>بالنسبة للعبة الحاوية، يكون التوقف مؤقتًا <strong>حديقة</strong>:</p>
+<ol>
+<li>تطلب المنصة الحصول على لقطة نهائية (<code>GET /sessions/{id}/snapshot</code>) ويخزنها بشكل دائم.</li>
+<li>يمزق الجلسة (<code>DELETE /sessions/{id}</code>). تتوقف الحاوية الخاصة بك عن محاكاتها، وإذا
+ليس لديه جلسات أخرى يمكن إيقاف النشر بعد فترة الخمول.</li>
+<li>في الانضمام التالي، يقوم بإعادة إنشاء الجلسة باستخدام <code>POST /sessions</code>، تحمل المخزنة <code>snapshot</code>
+والمحدثة <code>pausedMs</code> - نفس طلب استعادة الأعطال - تنبيه النشر المتوقف
+أولا إذا لزم الأمر.</li>
+</ol>
+<p>لذا فإن اللقطة التي تعيدها يجب أن تكون كافية لإعادة بناء العالم بأكمله، وليس فقط لاستئناف البعض منه
+ثواني من اللعب. إذا فشلت تلك اللقطة النهائية، فسيتم إيقاف الجلسة من آخر دورية لها
+نقطة تفتيش. على عكس الأعطال، لا يتم احتساب عملية الإيقاف والاستعادة ضمن ميزانية إعادة التشغيل الخاصة بك، و
+يحصل اللاعبون على لا <code>resumed</code> الإطار: لم يكن هناك أحد لرؤية حالة الترجيع.</p>
+<h2 id="checklist">قائمة التحقق</h2>
+<ul>
+<li>[ ] <code>persistent: true</code> أعلن (السيناريو) أو عاد من <code>/describe</code> (حاوية)، وتم نشر تحديث.</li>
+<li>[ ] استخدام توقيت اللعبة <code>ctx.now - ctx.pausedMs</code>، أو استخدامه عمدا <code>ctx.now</code> واللحاق.</li>
+<li>[ ] قوائم العملاء <code>sessions/mine</code>، يظهر <code>pausedAt</code>، وينضم مجددًا <code>ws/v1/games</code>.</li>
+<li>[ ] يقوم العميل بإعادة المحاولة مع التراجع بعد فترة <code>error</code> متبوعًا برمز الإغلاق <code>1001</code> على الاتصال.</li>
+<li>[ ] لدى اللاعبين طريقة لإنهاء العالم، لذلك لن يعلقوا أبدًا عند الحد الأقصى للجلسة.</li>
+<li>[ ] لقطات (الحاوية) تعيد بناء العالم بأكمله.</li>
+</ul>
+
+{% endraw %}

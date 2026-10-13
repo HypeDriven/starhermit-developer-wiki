@@ -1,0 +1,192 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Convenções de API"
+source_url: "/docs/api/conventions.html"
+source_path: "docs/api/conventions.md"
+source_hash: "3772241b0e04e8e2f4e4ecf1c0ef8e2d956c065446a78c7df107b6205de258d6"
+translation: "machine"
+permalink: "/pt/docs/api/conventions.html"
+---
+{% raw %}
+<h1 id="api-conventions">Convenções de API</h1>
+<p>REST usa <code>https://api.starhermit.com/api/v1/...</code>; uso de soquetes <code>wss://api.starhermit.com/ws/v1/...</code>.
+Os jogos hospedados podem ligar <code>/api/v1/...</code> e <code>/ws/v1/...</code> na sua própria origem. Os clientes nativos usam o
+origem da API pública. Uma página de desenvolvimento em outra origem precisa de uma origem CORS permitida no jogo
+anfitrião; definir apenas um URL base do SDK não autoriza essa origem.</p>
+<h2 id="requests-and-responses">Solicitações e respostas</h2>
+<p>Enviar JSON com <code>Content-Type: application/json</code>, exceto uploads de pacotes gzip brutos. Nomes de membros JSON
+são camelCase. Envie credenciais de portador no REST <code>Authorization</code> cabeçalho.</p>
+<table>
+<thead>
+<tr>
+<th>Resposta</th>
+<th>Como ler</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>200</code> / <code>201</code> JSON</td>
+<td>Analise o objeto ou array documentado; tolerar campos adicionais</td>
+</tr>
+<tr>
+<td><code>204</code></td>
+<td>Sucesso sem corpo; não ligue <code>response.json()</code></td>
+</tr>
+<tr>
+<td><code>302</code></td>
+<td>Redirecionamento de login/confirmação do navegador; navegar em vez de buscar páginas OAuth</td>
+</tr>
+<tr>
+<td><code>304</code></td>
+<td>Leitura condicional inalterada; reter os dados que você já possui</td>
+</tr>
+<tr>
+<td>Imagem, anexo, salvamento na nuvem</td>
+<td>Leia bytes usando o tipo de conteúdo de resposta e o contrato de endpoint</td>
+</tr>
+<tr>
+<td>Erro</td>
+<td>Leia o status primeiro e depois analise o corpo defensivamente</td>
+</tr>
+</tbody>
+</table>
+<p>A forma de erro comum é <code>{ "error": "...", "code": "..." }</code>, com campos opcionais dependendo
+o ponto final. <code>error</code> muitas vezes é legível por humanos; <code>code</code> é um discriminador estável quando fornecido.
+Os termos e alguns outros pontos finais colocam um discriminador diretamente <code>error</code>. Alguns endpoints retornam simples
+texto, um corpo vazio ou um objeto de validação de Detalhes do Problema com <code>title</code>, <code>status</code> e <code>errors</code>.
+Os clientes não devem presumir que todas as respostas malsucedidas são JSON ou possuem os mesmos campos.</p>
+<pre><code class="language-js">export async function readResponse(response) {
+  if (response.status === 204 || response.status === 304) return null;
+  const text = await response.text();
+  let body;
+  try { body = text ? JSON.parse(text) : null; } catch { body = text || null; }
+  if (!response.ok) {
+    const message = (body &amp;&amp; typeof body === 'object' &amp;&amp; (body.error || body.message || body.title))
+      || (typeof body === 'string' &amp;&amp; body) || response.statusText;
+    throw Object.assign(new Error(message), {
+      status: response.status, code: body?.code, body,
+      retryAfter: response.headers.get('Retry-After'),
+    });
+  }
+  return body;
+}
+</code></pre>
+<h2 id="time-sizes-and-nulls">Tempo, tamanhos e nulos</h2>
+<ul>
+<li><code>createdAt</code>, <code>updatedAt</code>, <code>finishedAt</code>e carimbos de data/hora de conta/recurso semelhantes são strings ISO 8601
+com um deslocamento. Tratar ausente ou <code>null</code> valores opcionais como indisponíveis.</li>
+<li><code>ctx.now</code>, <code>summary.deadline</code>, lista de sessões <code>deadline</code>, e <code>/time.serverTime</code> são inteiros Unix
+<strong>milissegundos</strong>. Converter com <code>new Date(value)</code>, não <code>Date.parse(value)</code>.</li>
+<li>Os valores limite em bytes são bytes, não caracteres Base64. Um upload JSON Base64 é maior que seu
+conteúdo decodificado. Use o limite efetivo relatado por um endpoint, quando disponível.</li>
+<li>Omissão, <code>null</code>e um objeto vazio não são universalmente equivalentes. Configurações <code>PATCH</code> remove um
+chave nomeada com <code>null</code>; configurações de tecla única <code>PUT</code> lojas <code>null</code> como um valor. Coleção <code>PUT</code> substitui
+todo o mapa. Leia as regras de atualização de cada endpoint.</li>
+<li>Um patch de configurações é mesclado <strong>chaves de nível superior</strong>. Um valor de objeto fornecido substitui o valor dessa chave;
+ele não mescla recursivamente propriedades aninhadas.</li>
+</ul>
+<h2 id="pagination">Paginação</h2>
+<p>A paginação é baseada em onde <code>page</code>/<code>pageSize</code> são suportados. APIs diferentes têm deliberadamente diferentes
+envelopes de resposta; não reutilize um analisador que assume um único nome de campo de contagem.</p>
+<table>
+<thead>
+<tr>
+<th>Área</th>
+<th>Forma de coleção</th>
+<th>Tamanho de página padrão/máximo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Títulos e compilações de software</td>
+<td><code>{ items, totalCount, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>Mensagens de bate-papo</td>
+<td><code>{ conversationId, items, totalCount, page, pageSize }</code></td>
+<td>50 / 100</td>
+</tr>
+<tr>
+<td>Entradas na tabela de classificação</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>Software externo</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20; solicite um tamanho de página pequeno e positivo</td>
+</tr>
+<tr>
+<td>Relatórios, registros de falhas de contêineres, listas de moderação</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>Sessões, amigos, listas de jogos, conquistas</td>
+<td>Matrizes</td>
+<td>Limites específicos de endpoint; nenhum cursor genérico da próxima página</td>
+</tr>
+<tr>
+<td>Feed de retirada de moderação</td>
+<td>Baseado em cursor</td>
+<td>Mantenha o cursor retornado; recuperar de <code>410</code> conforme documentado</td>
+</tr>
+</tbody>
+</table>
+<p>Os metadados da paginação de resposta refletem a página veiculada, quando disponível. <a href="/pt/#api-reference">Páginas de referência</a>
+e <a href="/pt/docs/api/contracts.html">contratos legíveis por máquina</a> descrever parâmetros de consulta específicos do endpoint.</p>
+<h2 id="retry-and-concurrency">Nova tentativa e simultaneidade</h2>
+<table>
+<thead>
+<tr>
+<th>Situação</th>
+<th>Ação</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Token de acesso à conta rejeitado com <code>401</code></td>
+<td>Atualize uma vez, usando uma solicitação de atualização compartilhada; então faça login se for recusado</td>
+</tr>
+<tr>
+<td>O token de lançamento expirou</td>
+<td>Obtenha um novo token através do login/lançador; tokens expirados não podem ser renovados</td>
+</tr>
+<tr>
+<td><code>403 terms_acceptance_required</code></td>
+<td>Exibir e aceitar explicitamente os termos atuais e tentar novamente</td>
+</tr>
+<tr>
+<td>Outro <code>403</code></td>
+<td>Resolver escopo, associação, permissões ou status da conta; não atualize em um loop</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>Resolver conflitos de duplicação/estado/revisão; releia antes de alterar um recurso</td>
+</tr>
+<tr>
+<td>Salvar na nuvem <code>412</code></td>
+<td>Carregue a versão mais recente e deixe o jogo fundi-la ou adotá-la</td>
+</tr>
+<tr>
+<td><code>429</code> ou temporário <code>503</code></td>
+<td>Honra <code>Retry-After</code>, adicione jitter e novas tentativas vinculadas</td>
+</tr>
+<tr>
+<td>Falha de rede durante uma gravação</td>
+<td>O resultado pode ser desconhecido; inspecionar o estado do recurso antes de repetir a ação</td>
+</tr>
+</tbody>
+</table>
+<p><code>Retry-After</code> pode ser segundos ou uma data HTTP. Não invente um cabeçalho de idempotência: a API não
+prometer um mecanismo geral de chave de idempotência. Uma nova tentativa de criação de sessão ou um convite pode criar
+outro recurso ou conflito com o primeiro. Prefira leituras e operações explicitamente idempotentes para
+novas tentativas automáticas. Rotação de atualização, uploads completos, consentimento de termos e resultados de jogos terminais cada
+têm suas próprias regras.</p>
+<p>Para gravações de comparação e troca, use ETags salvos na nuvem, room <code>expectedRevision</code>ou revisões de moderação
+onde suportado. Uma gravação bem-sucedida não é necessariamente uma implantação de contêiner concluída; verifique seu
+status antes de enviar jogadores para uma nova construção. Ver <a href="/pt/docs/troubleshooting.html">solução de problemas</a>.</p>
+
+{% endraw %}

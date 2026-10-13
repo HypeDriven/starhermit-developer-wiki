@@ -1,0 +1,331 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "教程：游戏的排行榜和成就"
+source_url: "/docs/tutorials/game-leaderboards-achievements.html"
+source_path: "docs/tutorials/game-leaderboards-achievements.md"
+source_hash: "96ac3993941c25c39514f47fc1c97e41e66138bc4e9b8d819a8bb8bb12108f31"
+translation: "machine"
+permalink: "/zh-CN/docs/tutorials/game-leaderboards-achievements.html"
+---
+{% raw %}
+<h1 id="tutorial-leaderboards-and-achievements-for-your-game">教程：游戏的排行榜和成就</h1>
+<p>如果您在 StarHermit 上拥有一款游戏，那么您就是该游戏的发行商。你可以给它 <strong>排行榜</strong> （高分，
+跑得最快、连续跑得最长）和 <strong>成就</strong> 没有发布商帐户或任何特殊
+许可。拥有游戏就足够了。</p>
+<p>此页面上的所有内容背后都有一条规则： <strong>你定义它们，你的游戏服务器写入
+他们。</strong> 玩家的客户端永远不能发布分数或声称获得这些成就，并且您的服务器必须验证赢得这些分数的游戏玩法。拒绝直接API提交
+仅凭这一点并不能阻止修改后的客户端发明游戏事件。这就是为什么游戏需要一个权威的后端：
+<code>server=</code> 脚本或 <code>container.image=</code> 在 <a href="/zh-CN/docs/starhermit-txt.html"><code>starhermit.txt</code></a>.</p>
+<p>本教程为小型街机游戏构建， <em>明星收藏家</em>：当玩家
+崩溃，并且有总分和运行时间。</p>
+<ol>
+<li><a href="#before-you-start">开始之前</a></li>
+<li><a href="#1-create-the-leaderboards">创建排行榜</a></li>
+<li><a href="#2-create-the-achievements">创造成绩</a></li>
+<li><a href="#3-post-scores-and-unlock-achievements-from-your-script">发布分数并解锁脚本中的成就</a></li>
+<li><a href="#3b-the-same-from-a-container">与容器相同</a></li>
+<li><a href="#4-show-them-in-your-game">在你的游戏中展示它们</a></li>
+<li><a href="#5-look-after-them">照顾他们</a></li>
+</ol>
+<h2 id="before-you-start">开始之前</h2>
+<p>您需要：</p>
+<ul>
+<li><strong>带有服务器后端的游戏</strong> 您拥有的：您从自己的存储库添加的、上传的
+作为文件夹，或者 <a href="/zh-CN/docs/tutorials/claim-existing-game.html">声称</a>。仅限浏览器的游戏答案 <code>409</code> 每一个电话
+下面有一条消息说明原因。</li>
+<li><strong>完整的用户访问令牌</strong>，而不是游戏的启动令牌。启动代币被隔离到游戏的
+玩家表面且无法到达 <code>/me/...</code>.</li>
+<li><strong>您的游戏 ID</strong> （这也是它的 <code>&lt;id&gt;.starhermit.com</code> 地址）：</li>
+</ul>
+<pre><code class="language-bash">ACCESS_TOKEN='your-full-user-access-token'
+API=https://api.starhermit.com
+
+curl -s "$API/api/v1/me/github-games" -H "Authorization: Bearer $ACCESS_TOKEN" |
+  jq '.[] | {id, displayName, gameSlug}'
+</code></pre>
+<pre><code class="language-bash">GAME_ID='the-id-from-above'
+</code></pre>
+<p><code>gameSlug</code> 是你的客户对游戏的称呼 <code>/api/v1/games/{slug}/...</code>。您添加的每个游戏
+或上传包含一个仅限浏览器的游戏，因此它不会告诉您是否有服务器：
+<code>GET /api/v1/games/{slug}</code> 确实——它回答了 <code>404</code> 直到游戏有了后端。</p>
+<h2 id="1-create-the-leaderboards">1. 创建排行榜</h2>
+<p>明星收藏家获得两个板：最高分（越高越好）和最快达到 100 分（越低）
+更好）。</p>
+<pre><code class="language-bash">curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/leaderboards" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "high-score", "name": "High score",
+        "scoreType": "integer", "sortDirection": "desc",
+        "minScore": 0, "maxScore": 1000000 }'
+
+curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/leaderboards" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "fastest-100", "name": "Fastest to 100",
+        "scoreType": "time-ms", "sortDirection": "asc" }'
+</code></pre>
+<p>每次调用都会返回 <code>201</code> 和董事会，包括其 <code>id</code> 和 <code>key</code>。您的服务器使用 <strong>钥匙</strong>,
+所以要仔细选择。关键， <code>scoreType</code> 和 <code>sortDirection</code> 以后无法更改。</p>
+<table>
+<thead>
+<tr>
+<th><code>scoreType</code></th>
+<th>接受</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>integer</code></td>
+<td>整数</td>
+</tr>
+<tr>
+<td><code>decimal</code></td>
+<td>任意数量</td>
+</tr>
+<tr>
+<td><code>time-ms</code></td>
+<td>整数、非负毫秒</td>
+</tr>
+</tbody>
+</table>
+<p>放 <code>minScore</code>/<code>maxScore</code> 您的游戏实际可以产生什么。在他们之外的分数被丢弃，
+这是针对您自己的服务器逻辑中的错误的廉价防护措施。</p>
+<h2 id="2-create-the-achievements">2、创造业绩</h2>
+<p>您可以通过两种方式赋予游戏成就，并且可以同时使用这两种方式：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>在代码中声明</th>
+<th>通过API创建</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>在哪里</td>
+<td><code>game.achievements</code> 在你的脚本中，或者 <code>/describe</code> 在你的容器中</td>
+<td><code>POST /me/github-games/{id}/achievements</code></td>
+</tr>
+<tr>
+<td>更改者</td>
+<td>发布更新</td>
+<td>API调用，立即生效</td>
+</tr>
+<tr>
+<td>适合</td>
+<td>您的代码所围绕的成就</td>
+<td>在没有发布的情况下添加或重写一些内容</td>
+</tr>
+</tbody>
+</table>
+<p>两种解锁方式相同，由服务器返回密钥。这里我们创建两个通过
+API：</p>
+<pre><code class="language-bash">curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/achievements" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "century", "name": "Century",
+        "description": "Collect 100 stars in one run.", "points": 10 }'
+
+curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/achievements" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "untouchable", "name": "Untouchable",
+        "description": "Reach 500 points without losing a shield.",
+        "points": 50, "secret": true }'
+</code></pre>
+<p>A <code>secret</code> 成就对玩家来说是隐藏的，直到他们解锁为止。</p>
+<p>要查看游戏拥有的所有内容，包括代码声明的成就，请列出它们：</p>
+<pre><code class="language-bash">curl -s "$API/api/v1/me/github-games/$GAME_ID/achievements" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" | jq '.[] | {key, origin, unlocks}'
+</code></pre>
+<p><code>origin</code> 是 <code>declared</code> 从您的代码中取得的成就以及 <code>owner</code> 为了你创造的成就
+在这里。您只能编辑和删除 <code>owner</code> 那些。一个 <code>declared</code> 一个会被你的下一个放回去
+更新，因此 API 拒绝（<code>409</code>），然后您在代码中更改它。</p>
+<h2 id="3-post-scores-and-unlock-achievements-from-your-script">3. 发布分数并从脚本中解锁成就</h2>
+<p>您的脚本在其返回值中报告这两种结果。它可以从任何钩子执行此操作：
+<code>createSession</code>, <code>onPlayerMessage</code> 或者 <code>onTick</code>.</p>
+<ul>
+<li><code>scores</code>：棋盘钥匙→玩家ID→号码。</li>
+<li><code>achievements</code>：玩家 ID → 解锁钥匙。</li>
+</ul>
+<pre><code class="language-js">'use strict';
+
+function endRun(ctx, s, playerId) {
+  var run = s.runs[playerId];
+  var scores = { "high-score": {} };
+  scores["high-score"][playerId] = run.points;
+  if (run.reached100At) {
+    scores["fastest-100"] = {};
+    scores["fastest-100"][playerId] = run.reached100At - run.startedAt;
+  }
+
+  var unlocked = [];
+  if (run.stars &gt;= 100) unlocked.push("century");
+  if (run.points &gt;= 500 &amp;&amp; !run.lostShield) unlocked.push("untouchable");
+  var achievements = {};
+  achievements[playerId] = unlocked;
+
+  run.over = true;
+  return {
+    ok: true,
+    sessionState: s,
+    scores: scores,
+    achievements: achievements,
+    broadcast: [{ to: [playerId], data: { type: "run-over", points: run.points } }]
+  };
+}
+
+globalThis.game = {
+  tickRateHz: 10,
+
+  createSession(ctx) {
+    var runs = {};
+    ctx.players.forEach(function (p) {
+      runs[p.id] = { points: 0, stars: 0, lostShield: false, startedAt: ctx.now,
+                     reached100At: null, over: false };
+    });
+    return { ok: true, sessionState: { runs: runs } };
+  },
+
+  onPlayerMessage(ctx) {
+    var s = ctx.sessionState;
+    var from = ctx.message.from;
+    var run = s.runs[from];
+    var msg = ctx.message.data || {};
+    if (!run || run.over) return { ok: false, error: "No run in progress" };
+
+    // The client reports what happened; the script decides what it is worth.
+    if (msg.type === "collect") {
+      run.stars += 1;
+      run.points += 5;
+      if (run.points &gt;= 100 &amp;&amp; !run.reached100At) run.reached100At = ctx.now;
+      return { ok: true, sessionState: s };
+    }
+    if (msg.type === "shield-lost") {
+      run.lostShield = true;
+      return { ok: true, sessionState: s };
+    }
+    if (msg.type === "crash") return endRun(ctx, s, from);
+    return { ok: false, error: "Unknown command" };
+  },
+
+  onTick(ctx) { return { ok: true }; }
+};
+</code></pre>
+<p>你做的事情 <strong>不是</strong> 需要处理：</p>
+<ul>
+<li><strong>成绩更差。</strong> 每个玩家都在每个棋盘上保留自己的最佳成绩，并根据棋盘的得分来判断
+<code>sortDirection</code>。报告每次跑步，平台保持最佳成绩。</li>
+<li><strong>重复解锁。</strong> 解锁玩家已经拥有的东西没有任何作用，所以归还钥匙
+每当条件成立时。</li>
+<li><strong>别人的id。</strong> 为不在会话中的人（包括人工智能）评分和解锁
+座位，被忽略。</li>
+</ul>
+<p>未知的按键、不活动的棋盘和超出范围的分数都会被悄悄丢弃。你的脚本没有得到
+他们的错误，所以检查你的董事会一次，如 <a href="#4-show-them-in-your-game">第4节</a>.</p>
+<p>真正的游戏应该让服务器根据自己的权威状态计算出分数和时间，而不是
+信任 <code>collect</code> 消息原样。该示例保持简短以显示报告。
+<a href="/zh-CN/docs/api/game-scripts.html#leaderboards">游戏脚本</a> 具有完整的回报形状合同。</p>
+<h2 id="3b-the-same-from-a-container">3b.与容器相同</h2>
+<p>容器游戏在其控件 WebSocket 上发送相同的两个内容：</p>
+<pre><code class="language-json">{ "type": "scores", "sessionId": "…",
+  "scores": { "high-score": { "&lt;userId&gt;": 740 }, "fastest-100": { "&lt;userId&gt;": 41250 } } }
+
+{ "type": "achievements", "sessionId": "…",
+  "unlocks": { "&lt;userId&gt;": ["century"] } }
+</code></pre>
+<p><code>scores</code> 也可以包含在您的容器返回的任何响应信封中 <code>/sessions</code>。的
+相同的规则适用：仅限参与者，保留最佳成绩，忽略未知键。看
+<a href="/zh-CN/docs/api/container-games.html#control-channel">容器游戏服务器</a>.</p>
+<h2 id="4-show-them-in-your-game">4. 在你的游戏中展示它们</h2>
+<p>您的客户端使用其已持有的启动令牌读取所有内容。这里没有什么需要
+所有者的令牌。</p>
+<p><strong>找到木板。</strong></p>
+<pre><code class="language-js">const boards = await api(`/api/v1/games/${slug}/leaderboards`);
+// [{ id, key: "high-score", name: "High score", sortDirection: "desc", ... }, ...]
+const high = boards.find(b =&gt; b.key === "high-score");
+</code></pre>
+<p>仅列出活动板。</p>
+<p><strong>读一块板子。</strong></p>
+<pre><code class="language-js">const page = await api(`/api/v1/leaderboards/${high.id}/entries?page=1&amp;pageSize=10`);
+// { items: [{ rank, username, score, ... }], total, page, pageSize }
+const friends = await api(`/api/v1/leaderboards/${high.id}/entries?friendsOnly=true&amp;pageSize=10`);
+</code></pre>
+<p>对于一个 <code>time-ms</code> board，将分数格式化为时间： <code>41250</code> → <code>0:41.25</code>.</p>
+<p><strong>成就。</strong></p>
+<ul>
+<li><code>GET /api/v1/games/{slug}/achievements</code> 列出玩家的每项成就 <code>unlocked</code>
+状态。秘密会被隐藏起来，直到它们被获得为止。</li>
+<li>解锁本身已上线 <code>ws/v1/games</code> 作为
+<code>{"type":"achievement","data":{key,name,description,points,...}}</code>。当它出现时，请举杯。
+加载时的列表调用捕获套接字关闭时未锁定的任何内容。</li>
+</ul>
+<p>看 <a href="/zh-CN/docs/api/achievements.html#3-the-player-is-notified-over-the-gameplay-socket">成就</a> 为了
+框架。</p>
+<h2 id="5-look-after-them">5. 照顾他们</h2>
+<p><strong>重命名板或更改其边界。</strong></p>
+<pre><code class="language-bash">curl -s -X PUT "$API/api/v1/me/github-games/$GAME_ID/leaderboards/$BOARD_ID" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "name": "All-time high score", "maxScore": 2000000 }'
+</code></pre>
+<p>新界限仅适用于新分数。</p>
+<p><strong>退出董事会但保留其分数。</strong> 发送 <code>{ "isActive": false }</code>。董事会停止受理
+得分并从游戏列表中消失。它的条目仍然可以通过 id 读取。</p>
+<p><strong>按计划重置。</strong> 给个板子 <code>"resetSchedule": "daily"</code>, <code>"weekly"</code> 或者 <code>"monthly"</code> （在
+创建，或稍后使用 <code>PUT</code>）并且每个周期在 00:00 UTC 开始 — 非常适合 "这个
+本周最佳" 董事会旁边是历史上最伟大的董事会。在您的脚本中无需执行任何操作：照常报告分数，并且
+每个玩家在新时期的第一个得分都算在内。看
+<a href="/zh-CN/docs/api/leaderboards.html#reset-schedules">重置时间表</a>.</p>
+<p><strong>手工开启新的季节。</strong> 对于一次性赛季而不是时间表，创建一个新董事会
+（<code>high-score-s2</code>），将你的脚本指向它，然后淘汰旧的脚本。</p>
+<p><strong>删除一块板子。</strong> <code>DELETE .../leaderboards/{id}</code> 删除棋盘及其所有条目，并且
+无法撤消。</p>
+<p><strong>编辑成就。</strong> <code>PUT .../achievements/{achievementId}</code> 与任何一个 <code>name</code>,
+<code>description</code>, <code>icon</code>, <code>secret</code> 和 <code>points</code>。钥匙永远不会改变。</p>
+<p><strong>删除成就。</strong> 这仅适用于您创建的尚未解锁的人。
+获得的成就是永久的。</p>
+<p><strong>将成就转移到代码中。</strong> 声明相同的键 <code>game.achievements</code> 并发布。的
+声明接管现有成就，拥有该成就的玩家保留该成就。</p>
+<table>
+<thead>
+<tr>
+<th>回复</th>
+<th>意义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>404</code></td>
+<td>该游戏不是您的，或者棋盘或成就不属于它</td>
+</tr>
+<tr>
+<td><code>409</code> "...服务器后端..."</td>
+<td>游戏没有 <code>server=</code> 或者 <code>container.image=</code></td>
+</tr>
+<tr>
+<td><code>409</code> "已经有……"</td>
+<td>关键是由董事会或已宣布或创造的成就获得</td>
+</tr>
+<tr>
+<td><code>409</code> "由游戏服务器声明"</td>
+<td>更改代码中的成就</td>
+</tr>
+<tr>
+<td><code>409</code> "已经解锁"</td>
+<td>玩家持有它，因此无法删除</td>
+</tr>
+<tr>
+<td><code>400</code></td>
+<td>带有其他字符的键、缺少名称或 <code>minScore</code> &gt; <code>maxScore</code></td>
+</tr>
+</tbody>
+</table>
+<p>限制：每场比赛有 2048 个排行榜和 200 个创建的成就，加上最多 100 个已声明的成就。</p>
+<h2 id="checklist">清单</h2>
+<ul>
+<li>[ ] 游戏中有一个 <code>server=</code> 脚本或 <code>container.image=</code>， 和 <code>gameSlug</code> 设置于 <code>GET /me/github-games</code>.</li>
+<li>[ ] 每块板都有一个稳定的密钥和正确的 <code>scoreType</code> 和 <code>sortDirection</code> （以后不能更改）。</li>
+<li>[ ] 服务器返回 <code>scores</code> 和 <code>achievements</code> （脚本）或发送控制消息（容器），由权威状态制定。</li>
+<li>[ ] 客户端找到带有以下内容的板 <code>GET /games/{slug}/leaderboards</code>，从不硬编码它们的 id，并通过 id 读取条目。</li>
+<li>[ ] 客户端加载 <code>GET /games/{slug}/achievements</code> 并在上面祝酒 <code>achievement</code> 框架。</li>
+<li>[ ] 旧板已退役 <code>isActive: false</code> 而不是删除，除非你真的希望分数消失。</li>
+</ul>
+
+{% endraw %}

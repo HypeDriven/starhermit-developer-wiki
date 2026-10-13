@@ -1,0 +1,949 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "游戏API"
+source_url: "/docs/api/games.html"
+source_path: "docs/api/games.md"
+source_hash: "e470bcc739248f71e3ff63290f133d01b1b9deb11aa638ef8f1c4d640d43ae5a"
+translation: "machine"
+permalink: "/zh-CN/docs/api/games.html"
+---
+{% raw %}
+<h1 id="games-api">游戏API</h1>
+<p>游戏子系统是 StarHermit 的核心：服务器权威的多人游戏，其规则在沙盒 JavaScript 文件或开发人员提供的容器中运行。两个运行时共享这个面向玩家的 REST API（<code>api/v1/games/{slug}</code>）和游戏玩法 WebSocket（<code>ws/v1/games</code>）。对于服务器创作，请参阅 <a href="/zh-CN/docs/api/game-scripts.html">游戏脚本</a> 或者 <a href="/zh-CN/docs/api/container-games.html">容器托管的游戏服务器</a>。有关完整的脚本运行时示例，请参阅 <a href="/zh-CN/docs/tutorials/chess-walkthrough.html">国际象棋演练</a> 和 <a href="https://github.com/HypeDriven/starhermit-chess">HypeDriven/明星隐士国际象棋</a>.</p>
+<p><strong>基本网址：</strong> <code>https://api.starhermit.com</code>.</p>
+<p>玩家端点需要身份验证并使用完整的用户令牌和游戏范围的启动
+代币。两人 <code>/server/...</code> 端点仅是容器：会话协调使用狭窄的
+服务器承载令牌，而令牌更新使用部署刷新密钥。</p>
+<h2 id="what-slug-is">什么 <code>{slug}</code> 是</h2>
+<p>游戏的主角就是它的 <strong>uid</strong> — 与它的值相同 <code>&lt;uid&gt;.starhermit.com</code> 地址，例如
+<code>83fd04b1-3cbe-4b09-a251-3733ad4b9d94</code>。它源自游戏的不可变 id 和 <strong>什么都没有
+可以设置一下</strong>： 不是 <code>starhermit.txt</code>，不是存储库名称，也不是操作员。开发人员可以使用的名称
+选择将是两个游戏可以争夺的东西，并且需要平台来仲裁谁
+明白了； uid 既不能冲突也不能被请求。</p>
+<p><strong>slug 不是服务器后端。</strong> 从本地文件夹添加的每个游戏以及每个存储库游戏
+添加了经过验证的所有者，拥有一个 - 有或没有 <code>server=</code> 或者 <code>container.image=</code> ——因为它是
+游戏面向玩家的表面的地址： <a href="#launch-tokens">启动代币</a>,
+<a href="#per-player-control-bindings">控制</a>, <a href="#per-player-game-settings">设置</a>， 它是
+<a href="/zh-CN/docs/api/catalog.html#saving-from-inside-a-game-launch-token">云保存槽</a> 和 <a href="/zh-CN/docs/api/realtime.html">房间</a>。一个
+纯浏览器游戏和其他游戏一样需要这些。唯一没有slug的游戏是repository
+其所有者未经验证的提交内容（<code>gameSlug</code> 是 <code>null</code> 在 <code>GET /api/v1/me/github-games</code>).</p>
+<p>有关游戏服务器的端点 - 游戏信息、成就、会话、匹配、邀请、
+重播——需要一个后端。 <code>GET /api/v1/games/{slug}</code> 答案 <code>404</code> 对于一个有子弹但没有子弹的游戏
+后端，这是区分两者的方法。</p>
+<p>不要对其进行硬编码。从启动令牌中读取它 <code>game_scope</code> 索赔，或 - 对于
+平台托管的浏览器游戏 — 来自 <code>location.hostname</code>，因为子域是 uid。</p>
+<h2 id="endpoints">端点</h2>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}</code></td>
+<td>承载者</td>
+<td>游戏信息+来电统计</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/games/{slug}/launch-token</code></td>
+<td>承载者</td>
+<td>铸造游戏范围内的启动令牌</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/achievements</code></td>
+<td>承载者</td>
+<td>游戏成就+来电者解锁状态</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/linked-achievements/{otherSlug}</code></td>
+<td>承载者</td>
+<td>来电者在另一款游戏中解锁了什么</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/controls</code></td>
+<td>承载者</td>
+<td>获取调用者的有效控件绑定</td>
+</tr>
+<tr>
+<td>放</td>
+<td><code>/api/v1/games/{slug}/controls</code></td>
+<td>承载者</td>
+<td>替换调用者的控制覆盖</td>
+</tr>
+<tr>
+<td>删除</td>
+<td><code>/api/v1/games/{slug}/controls</code></td>
+<td>承载者</td>
+<td>将调用者的控件重置为默认值</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>承载者</td>
+<td>调用者存储的该游戏设置以及大小限制</td>
+</tr>
+<tr>
+<td>放</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>承载者</td>
+<td>替换来电者的整个设置图</td>
+</tr>
+<tr>
+<td>修补</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>承载者</td>
+<td>合并到存储的地图中； <code>null</code> 删除一个键</td>
+</tr>
+<tr>
+<td>删除</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>承载者</td>
+<td>清除呼叫者为此游戏存储的所有设置</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/settings/{key}</code></td>
+<td>承载者</td>
+<td>一种设置，或 <code>404</code></td>
+</tr>
+<tr>
+<td>放</td>
+<td><code>/api/v1/games/{slug}/settings/{key}</code></td>
+<td>承载者</td>
+<td>存储一项设置</td>
+</tr>
+<tr>
+<td>删除</td>
+<td><code>/api/v1/games/{slug}/settings/{key}</code></td>
+<td>承载者</td>
+<td>删除一项设置</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/sessions/mine</code></td>
+<td>承载者</td>
+<td>呼叫者的活动会话</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/sessions/{sessionId}</code></td>
+<td>承载者</td>
+<td>会议详细信息（仅限参与者）</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/sessions/{sessionId}/recovery</code></td>
+<td>持有者（参与者或所有者）</td>
+<td>恢复数据、有效期和有效传输限制</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/games/{slug}/sessions/{sessionId}/leave</code></td>
+<td>承载者（参与者）</td>
+<td>留下一个没有空间的持久世界→ <code>204</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/leaderboards</code></td>
+<td>承载者</td>
+<td>自己游戏的活跃所有者创建的图板</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/games/{slug}/sessions/ai</code></td>
+<td>承载者</td>
+<td>创建与平台 AI 的练习课程</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/queues</code></td>
+<td>承载者</td>
+<td>该游戏接受的匹配形状</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/games/{slug}/matchmaking</code></td>
+<td>承载者</td>
+<td>排队进行最近的 elo 匹配（<code>?queues=</code> 子集）</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/matchmaking</code></td>
+<td>承载者</td>
+<td>仍可加入的最新门票</td>
+</tr>
+<tr>
+<td>删除</td>
+<td><code>/api/v1/games/{slug}/matchmaking</code></td>
+<td>承载者</td>
+<td>取消排队的门票</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/diagnostics</code></td>
+<td>智威汤逊（所有者）</td>
+<td>实时会话、脚本计量、队列、webhook 运行状况</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/webhooks</code></td>
+<td>智威汤逊（所有者）</td>
+<td>列出 Webhook 端点</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/games/{slug}/webhooks</code></td>
+<td>智威汤逊（所有者）</td>
+<td>创建一个网络钩子；秘密返回一次</td>
+</tr>
+<tr>
+<td>删除</td>
+<td><code>/api/v1/games/{slug}/webhooks/{id}</code></td>
+<td>智威汤逊（所有者）</td>
+<td>删除网络钩子</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/games/{slug}/webhooks/{id}/resume</code></td>
+<td>智威汤逊（所有者）</td>
+<td>固定端点后清除断路器</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/games/{slug}/invites</code></td>
+<td>承载者</td>
+<td>邀请朋友玩新游戏或您正在玩的游戏</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/invites</code></td>
+<td>承载者</td>
+<td>传入待定 + 所有传出邀请</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/games/{slug}/invites/{inviteId}/accept</code></td>
+<td>承载者</td>
+<td>接受邀请（创建会话，或加入其指定的会话）</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/games/{slug}/invites/{inviteId}/decline</code></td>
+<td>承载者</td>
+<td>拒绝邀请</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/game-invites</code></td>
+<td>账户智威汤逊</td>
+<td>所有待处理的邀请 - 每场比赛，两个邀请系统（最多 50 个）</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/replays/mine</code></td>
+<td>承载者</td>
+<td>呼叫者已完成的会话（带有重播的游戏）</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/replays/{sessionId}</code></td>
+<td>承载者</td>
+<td>完整重播状态（仅限参与者）</td>
+</tr>
+<tr>
+<td>WS</td>
+<td><code>/ws/v1/games?sessionId={guid}</code></td>
+<td>承载者</td>
+<td>游戏玩法 WebSocket</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/server/sessions/{sessionId}</code></td>
+<td>游戏服务器令牌</td>
+<td>容器后端会话协调；玩家代币不可使用</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/games/{slug}/server/token</code></td>
+<td>刷新键</td>
+<td>续订容器的过期服务器令牌</td>
+</tr>
+</tbody>
+</table>
+<p>错误体各不相同；看 <a href="/zh-CN/docs/api/conventions.html#requests-and-responses">API约定</a>.</p>
+<h2 id="game-info">游戏信息</h2>
+<h3 id="get-apiv1gamesslug"><code>GET /api/v1/games/{slug}</code></h3>
+<p>返回游戏定义以及该游戏的调用者统计数据。 <code>404</code> 如果不存在这样的游戏，
+或者如果游戏仅限浏览器（它有一个 slug 但没有服务器后端）。</p>
+<pre><code class="language-json">{
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "name": "Chess",
+  "enabled": true,
+  "leaderboardId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "maxConcurrentSessionsPerPlayer": 20,
+  "replaysEnabled": true,
+  "buildId": "s12",
+  "me": {
+    "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "elo": 1200,
+    "wins": 4,
+    "losses": 2,
+    "draws": 1,
+    "activeSessionCount": 2
+  }
+}
+</code></pre>
+<ul>
+<li><code>leaderboardId</code> 是可选的。</li>
+<li><code>me.elo</code> 默认为 <code>1200</code>; <code>wins</code>/<code>losses</code>/<code>draws</code> 从服务器运行时拥有的每个玩家文档中读取。</li>
+<li><code>replaysEnabled</code> 表示是否保留该游戏的已完成会话 - 阅读它而不是假设，并在保留时隐藏您的重播 UI <code>false</code>。看 <a href="#replays">重播</a>.</li>
+<li><code>buildId</code> 命名当前为游戏服务的服务器逻辑（<code>s</code> + 脚本版本，或者 <code>c</code> + 图像摘要前缀）。将其发回为 <code>ws/v1/games?build=…</code> 所以一个过时的客户端被拒绝 <code>409 {"error":"build_mismatch"}</code> 在它作用于移动的字段之前。省略 <code>build</code> 像以前一样连接。</li>
+</ul>
+<h2 id="launch-tokens">启动代币</h2>
+<h3 id="post-apiv1gamessluglaunch-token"><code>POST /api/v1/games/{slug}/launch-token</code></h3>
+<p>铸造一个游戏范围的 JWT（默认生命周期 60 分钟）携带 <code>game_scope={slug}</code> 并且没有任何许可声明。范围内的代币可以为自己的游戏重新铸造代币——这是客户端刷新模式——但更新受到以下限制： <code>launch_chain</code> （默认距离原始用户会话 12 小时）。过了那个天花板更新是 <code>403</code>。客户端应在令牌过期前刷新；例如，国际象棋参考客户端每 45 分钟刷新一次。在重新连接套接字之前也进行更新 - 请参阅 <a href="#gameplay-websocket">游戏玩法 WebSocket</a>.</p>
+<pre><code class="language-json">{
+  "token": "eyJhbGciOi...",
+  "expiresInSeconds": 3600
+}
+</code></pre>
+<h2 id="achievements">成就</h2>
+<h3 id="get-apiv1gamesslugachievements"><code>GET /api/v1/games/{slug}/achievements</code></h3>
+<p>游戏的权威后端声明的每项成就以及调用者的解锁状态。秘密
+成就将保持隐藏状态，直到调用者将其解锁。接受完整用户 JWT 或游戏范围
+启动令牌。 <code>404</code> 当slug没有权威的游戏定义时。</p>
+<pre><code class="language-json">[
+  {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "key": "first-win",
+    "name": "First Win",
+    "description": "Win a match.",
+    "icon": null,
+    "secret": false,
+    "points": 10,
+    "unlocked": true,
+    "unlockedAt": "2026-07-25T09:14:02Z"
+  }
+]
+</code></pre>
+<p>游戏成就有 <strong>服务器权威</strong>：只有游戏的脚本或容器才能授予它们，
+以及客户声称的 <code>POST /api/v1/me/achievements/unlock</code> 端点拒绝它们。实时解锁
+到达游戏套接字 <code>{"type":"achievement"}</code> 帧。完整合同已在
+<a href="/zh-CN/docs/api/achievements.html">成就</a>, <a href="/zh-CN/docs/api/game-scripts.html#achievements">游戏脚本</a>， 和
+<a href="/zh-CN/docs/api/container-games.html#control-channel">容器游戏服务器</a>.</p>
+<h3 id="get-apiv1gamessluglinked-achievementsotherslug"><code>GET /api/v1/games/{slug}/linked-achievements/{otherSlug}</code></h3>
+<p>调用者自己的解锁 <strong>其他</strong> 游戏，所以这个游戏可以基于它们开放功能。作品
+使用该游戏的启动令牌。看
+<a href="/zh-CN/docs/api/achievements.html#achievements-from-other-games">成就——其他游戏的成就</a>.</p>
+<h2 id="per-player-control-bindings">每个玩家的控制绑定</h2>
+<p>游戏可以声明桌面浏览器控件 <code>control.*</code> 条目在
+<a href="/zh-CN/docs/api/github-games.html#default-control-bindings"><code>starhermit.txt</code></a>。控件 API 存储一个
+每个用户和游戏的单独覆盖。完整用户 JWT 和游戏范围的启动令牌是
+已接受；启动令牌的 <code>game_scope</code> 必须匹配 <code>{slug}</code>.</p>
+<h3 id="get-apiv1gamesslugcontrols"><code>GET /api/v1/games/{slug}/controls</code></h3>
+<p>按清单顺序返回有效绑定。 <code>codes</code> 包含用户的覆盖时
+存在一个，否则 <code>defaultCodes</code>。退货 <code>404</code> <code>"This game declares no controls."</code> 当
+实时构建的 <code>starhermit.txt</code> 没有有效的 <code>control.*</code> line — 声明它们并发布构建；看
+<a href="/zh-CN/docs/tutorials/game-controls.html">教程：向游戏添加控件</a>.</p>
+<pre><code class="language-json">{
+  "actions": [
+    {
+      "action": "up",
+      "label": "Run forward",
+      "defaultCodes": ["KeyW", "ArrowUp"],
+      "codes": ["KeyW", "ArrowUp"]
+    },
+    {
+      "action": "shoot",
+      "label": "Shoot",
+      "defaultCodes": ["Space"],
+      "codes": ["KeyJ"]
+    }
+  ]
+}
+</code></pre>
+<h3 id="put-apiv1gamesslugcontrols"><code>PUT /api/v1/games/{slug}/controls</code></h3>
+<p>替换调用者的覆盖。这 <code>bindings</code> 对象可能包含声明的子集
+行动；省略的操作继续使用其默认值。</p>
+<pre><code class="language-json">{
+  "bindings": {
+    "up": ["KeyW", "ArrowUp"],
+    "shoot": ["KeyJ"]
+  }
+}
+</code></pre>
+<p>每个动作都必须由游戏声明。每个动作必须有 1-4 个有效
+<code>KeyboardEvent.code</code> 值，并且不能将代码分配给结果中的两个操作
+有效地图。返回无效的操作、代码或冲突 <code>400</code>.</p>
+<h3 id="delete-apiv1gamesslugcontrols"><code>DELETE /api/v1/games/{slug}/controls</code></h3>
+<p>删除所有调用者的覆盖并恢复清单默认值。退货 <code>204</code>。
+启动令牌写入是有意的，因此托管游戏可能会提供自己的重新绑定屏幕。</p>
+<h2 id="per-player-game-settings">每个玩家的游戏设置</h2>
+<p>你的游戏保存在哪里 <strong>有自己的选择</strong> 对于播放器 - 主音量、图形细节、字幕
+尺寸、首选相机、最后选择的装载 - 因此他们会跟随该玩家到他们登录的任何机器
+从。一种键/值存储，适用于一名玩家和一场游戏。</p>
+<p><strong>没有任何东西声明模式。</strong> 该平台存储您的密钥和您的值并且从不读取它们，
+因此，您可以通过编写来添加一个选项：没有清单条目，没有重新部署，没有平台发布。那也
+意味着平台无法为您验证它们 - 键名称中的拼写错误是一个新设置，而不是一个
+错误。</p>
+<p>与控制 API 一样，接受游戏范围的启动令牌（其 <code>game_scope</code> 必须匹配 <code>{slug}</code>),
+因此，游戏内的选项屏幕除了游戏已持有的代币外什么都不起作用。不像
+控制，不需要清单声明：每个游戏从一开始就有设置存储
+存在，包括完全没有服务器逻辑的纯浏览器游戏。</p>
+<p>选择合适的商店—— <a href="/zh-CN/docs/api/catalog.html#saving-from-inside-a-game-launch-token">云保存</a> 保留进度（每个标题一个不透明的存档，10 MB，也可以使用启动令牌访问），
+并且脚本或容器后端自己的玩家状态是服务器权威的，并且不可从服务器写入
+客户。设置是介于两者之间的、客户拥有的小偏好。</p>
+<h3 id="get-apiv1gamesslugsettings"><code>GET /api/v1/games/{slug}/settings</code></h3>
+<p>调用者为此游戏存储的所有内容。 <code>settings</code> 对于从未保存过的玩家来说是空的
+任何东西——那是 <code>200</code>，不是一个 <code>404</code>。钥匙回来已排序。</p>
+<pre><code class="language-json">{
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "settings": {
+    "audio.master": 0.8,
+    "graphics.detail": "ultra",
+    "graphics.options": { "shadows": true, "msaa": 4 }
+  },
+  "count": 3,
+  "bytes": 118,
+  "updatedAt": "2026-08-07T15:04:11Z",
+  "limits": { "maxKeys": 200, "maxKeyLength": 128, "maxTotalBytes": 2097152, "maxAccountBytes": 67108864 }
+}
+</code></pre>
+<p><code>bytes</code> 是该玩家当前设置的成本 <code>limits.maxTotalBytes</code>。阅读
+限制而不是硬编码：津贴是运营商设置，并且可以授予游戏
+它自己的。 <code>maxKeys</code> （默认200）也可以设置每场比赛，并且 <code>maxAccountBytes</code> 界限一
+每个游戏的帐户设置（默认为 64 MB）。</p>
+<h3 id="put-apiv1gamesslugsettings"><code>PUT /api/v1/games/{slug}/settings</code></h3>
+<p>替换整个地图。 <strong>主体省略的键被删除</strong> — 发送所有内容，或使用 <code>PATCH</code>.</p>
+<pre><code class="language-json">{ "settings": { "audio.master": 0.8, "graphics.detail": "ultra" } }
+</code></pre>
+<p>一个空的 <code>settings</code> 对象为调用者清除游戏设置。返回与以下相同的形状
+<code>GET</code>.</p>
+<h3 id="patch-apiv1gamesslugsettings"><code>PATCH /api/v1/games/{slug}/settings</code></h3>
+<p>合并到存储的内容中，留下它没有单独提及的密钥。一个 <code>null</code> 价值 <strong>删除</strong> 它的
+关键。这合并了顶级设置键；对象值替换其键处的整个值，
+包括它的嵌套属性。这就是一个
+选项屏幕应该使用 - 它可以保存未经第一次读取而移动的一个滑块，并且
+重写其他一切。</p>
+<pre><code class="language-json">{ "settings": { "audio.music": 0.25, "graphics.options": null } }
+</code></pre>
+<h3 id="get--put--delete-apiv1gamesslugsettingskey"><code>GET</code> / <code>PUT</code> / <code>DELETE /api/v1/games/{slug}/settings/{key}</code></h3>
+<p>一次一种设置。 <code>GET</code> 回报 <code>{ "key", "value", "updatedAt" }</code>， 或者 <code>404</code> 如果呼叫者有
+从未存储过它。 <code>PUT</code> 需要 <code>{ "value": &lt;any JSON&gt; }</code> 并存储该值 <strong>逐字</strong> — 包括
+明确的 <code>null</code>，这里是一个与其他值一样的值，而不是删除。 <code>DELETE</code> 回报 <code>204</code>, 和
+删除不存在的东西是无操作而不是错误。</p>
+<pre><code class="language-bash">curl -X PUT "https://api.starhermit.com/api/v1/games/$SLUG/settings/audio.master" \
+  -H "Authorization: Bearer $LAUNCH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"value": 0.35}'
+</code></pre>
+<h3 id="rules">规则</h3>
+<table>
+<thead>
+<tr>
+<th>规则</th>
+<th>价值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>设置名称</td>
+<td>1–128 个字符 <code>A-Z a-z 0-9 . _ - :</code> — 自由命名空间 (<code>audio.master</code>, <code>graphics:shadows</code>)</td>
+</tr>
+<tr>
+<td>价值观</td>
+<td>任何 JSON：数字、字符串、布尔值、数组、对象、 <code>null</code></td>
+</tr>
+<tr>
+<td>每个玩家、每个游戏的设置</td>
+<td>200</td>
+</tr>
+<tr>
+<td>每个玩家、每个游戏的字节数</td>
+<td><strong>默认 2 MB</strong> — 运营商可以提高或降低它，并可以为一款游戏授予不同的津贴</td>
+</tr>
+</tbody>
+</table>
+<p>单个设置可能会使用整个字节余量；没有单独的较小的每值上限。</p>
+<table>
+<thead>
+<tr>
+<th>地位</th>
+<th>意义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td>设置名称错误，或者主体不正确 <code>{"settings": {...}}</code> / <code>{"value": ...}</code></td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>没有游戏回答该弹头，或者（单键 <code>GET</code>）该键下没有存储任何内容</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>超出限额——要么设置太多，要么字节太多。该消息指出了限制</td>
+</tr>
+</tbody>
+</table>
+<p>包含一个坏密钥的批次不会写入任何好密钥。设置是针对每个玩家和每个
+游戏：两个玩家之间或同一玩家的两个游戏之间不会发生任何泄漏。他们幸存下来
+游戏被禁用或除名，因为它们是玩家的数据而不是游戏的数据。</p>
+<h2 id="sessions">会议</h2>
+<h3 id="get-apiv1gamesslugsessionsmine"><code>GET /api/v1/games/{slug}/sessions/mine</code></h3>
+<p>呼叫者在此游戏中的活动会话。 <code>myTurn</code> 和 <code>deadline</code> 从脚本状态解析 <code>summary</code> 对象（参见 <a href="/zh-CN/docs/api/game-scripts.html#the-platform-readable-window">游戏脚本</a>). <code>pausedAt</code> 被设置同时 <a href="/zh-CN/docs/tutorials/persistent-sessions.html">执着的</a> 会话已暂停且无人参与，并且 <code>null</code> 否则。</p>
+<p><strong>包括室内会议。</strong> A <a href="/zh-CN/docs/api/realtime.html#room-bound-sessions">实时房间</a>的绑定会话列出了房间开始时占据座位的每个人，因此在房间开始时它会出现在每个人的此处 <code>active</code>。 AI席位不在 <code>players</code>。离开房间或关闭房间不会将任何人从会话中删除，因此它会保留在此列表中，直到会话本身结束 - 除了在 <a href="/zh-CN/docs/api/realtime.html#join-in-progress">正在进行中的加入</a> 房间，离开的玩家让出座位并从会话中删除，而新加入的玩家在比赛中途承认会被添加到其中。响应中没有房间 ID：使用 <code>GET /api/v1/realtime/rooms/joined</code> 呼叫者的房间，并匹配他们的 <code>gameSessionId</code> 反对 <code>sessionId</code>.</p>
+<pre><code class="language-json">[
+  {
+    "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "status": "active",
+    "players": [
+      { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+      { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" }
+    ],
+    "createdAt": "2026-07-20T14:03:11Z",
+    "finishedAt": null,
+    "myTurn": true,
+    "deadline": 1784642591000,
+    "pausedAt": null
+  }
+]
+</code></pre>
+<h3 id="get-apiv1gamesslugsessionssessionid"><code>GET /api/v1/games/{slug}/sessions/{sessionId}</code></h3>
+<p>会议详细信息。仅限参与者 - <code>403</code> 否则。</p>
+<pre><code class="language-json">{
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "status": "active",
+  "players": [
+    { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+    { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" }
+  ],
+  "createdAt": "2026-07-20T14:03:11Z",
+  "finishedAt": null,
+  "chatConversationId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+  "result": null
+}
+</code></pre>
+<h3 id="recovery-and-explicit-leaving">恢复和明确离开</h3>
+<p><code>GET /api/v1/games/{slug}/sessions/{sessionId}/recovery</code> 返回有效快照、恢复、
+保留和运输价值。参与者和游戏所有者可以阅读它。时间单位及全部
+响应字段的描述见 <a href="/zh-CN/docs/session-lifecycle.html#read-recovery-information">会话生命周期和恢复</a>.</p>
+<p><code>POST /api/v1/games/{slug}/sessions/{sessionId}/leave</code> 放弃持久世界的成员资格
+没有实时房间。它不需要身体并返回 <code>204</code>;人类的最后离开结束了世界。
+<code>403</code> 表示不是会员， <code>404</code> 意味着没有会话， <code>410</code> 意味着结束，并且 <code>409</code> 意味着非持久性
+会话或房间限制的会话。对于房间内的会话，请使用房间的 <code>/leave</code> 端点。闭幕式
+单独的套接字可以保留成员身份。看 <a href="/zh-CN/docs/session-lifecycle.html#disconnecting-and-leaving-are-different">断开连接并离开</a>.</p>
+<h3 id="post-apiv1gamesslugsessionsai"><code>POST /api/v1/games/{slug}/sessions/ai</code></h3>
+<p>针对平台 AI 席位创建练习会话：固定用户 ID <code>00000000-0000-4000-8000-00000000a1a1</code>, 用户名 <strong>"房子"</strong>。游戏的权威后端发挥人工智能——没有外部机器人服务。</p>
+<pre><code class="language-json">{ "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e" }
+</code></pre>
+<h2 id="matchmaking">对接会</h2>
+<p>脚本声明它接受的匹配形状 <code>game.queues</code>。一个没有被接受的游戏
+声明有一个隐含的 <code>default</code> 队列（两队一组）。当前容器
+<code>/describe</code> 读者确实 <strong>不是</strong> 进口 <code>queues</code>，因此容器游戏使用隐式 1v1 形状。
+没有指定队列的客户端将获得游戏的第一名。</p>
+<p>最多保留八个脚本队列。键被修剪、小写、非空且最多 32 个
+人物；重复的键保留第一个。 <code>teams</code> 被钳位到 2–8 并且 <code>teamSize</code> 至 1–16；
+超过 32 个玩家的形状将被丢弃。无效声明可以回退到隐式声明
+1v1，因此验证有效形状 <code>GET /queues</code> 发布后。</p>
+<h3 id="get-apiv1gamesslugqueues"><code>GET /api/v1/games/{slug}/queues</code></h3>
+<pre><code class="language-json">[
+  { "key": "duos", "teams": 2, "teamSize": 2, "players": 4 }
+]
+</code></pre>
+<h3 id="post-apiv1gamesslugmatchmaking"><code>POST /api/v1/games/{slug}/matchmaking</code></h3>
+<p>将调用者排队以进行最近的 elo 配对。可重复 <code>?queues=</code> 查询键名称a <strong>子集</strong> 的
+这些形状（例如 1v1 和 2v2，而不是 3v3）。匹配仅根据其允许的形状填充票证。
+例如：</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/matchmaking?queues=solo&amp;queues=duos
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<p>使用返回的密钥 <code>GET /queues</code>. <code>?queue=solo</code> 选择单个形状；如果两者都 <code>queue</code> 和
+<code>queues</code> 提供后，它们的密钥将被组合并进行重复数据删除，不区分大小写。一把未知的钥匙
+是 <code>404</code>;验证后列表为空 <code>400</code>。退货 <code>409</code> 如果呼叫者已经在排队
+或达到并发会话上限。</p>
+<p>搜索从狭窄的 elo 带开始，并在票据等待时加宽（默认 100，+10/s）。
+状态： <code>queued</code>, <code>matched</code>, <code>cancelled</code>, <code>expired</code> （等待超过上限，默认300秒，没有
+找到任何人——提供练习游戏而不是旋转）。聚会是一个 <a href="/zh-CN/docs/api/realtime.html">实时房间</a>:
+<code>POST /api/v1/realtime/rooms/{id}/matchmake</code> （主持人、大厅）作为一个团队进入整个名单。</p>
+<pre><code class="language-json">{
+  "ticketId": "b3b7c8d2-5c1e-4f3a-9e2d-1a2b3c4d5e6f",
+  "status": "queued",
+  "sessionId": null,
+  "waitedSeconds": 12,
+  "searchEloBand": 220,
+  "maxWaitSeconds": 300
+}
+</code></pre>
+<p>游戏可能会选择加入 <a href="/zh-CN/docs/starhermit-txt.html#starting-matchmaking-before-every-human-seat-is-filled">截止日期开始于 <code>starhermit.txt</code></a>:
+<code>matchmaking.max_wait_seconds</code> 等待后开始未满的匹配，并且
+<code>matchmaking.ai_players</code> 限制有多少空位成为人工智能。其他座位空着。完全人性化
+比赛很早就开始了。 <code>maxWaitSeconds</code> 报告游戏的设置；这些门票保留 <code>queued</code>
+直到匹配开始，而不是在全局等待限制时到期。</p>
+<h3 id="get-apiv1gamesslugmatchmaking"><code>GET /api/v1/games/{slug}/matchmaking</code></h3>
+<p>返回呼叫者的最新票证，或者 <code>404</code>. A <code>matched</code> 票已报告 <strong>仅当其
+会话仍在 <code>active</code></strong>。比赛结束后是这样的 <code>404</code> 所以大厅提供了一个新的匹配
+而不是指向一个失效的会话 ID。</p>
+<h3 id="delete-apiv1gamesslugmatchmaking"><code>DELETE /api/v1/games/{slug}/matchmaking</code></h3>
+<p>取消呼叫者的排队票证。退货 <code>204</code>.</p>
+<h2 id="invites">邀请</h2>
+<h3 id="post-apiv1gamessluginvites"><code>POST /api/v1/games/{slug}/invites</code></h3>
+<p>请求正文：</p>
+<pre><code class="language-json">{ "toUserId": "9b2f8c1a-1111-4222-8333-444455556666" }
+</code></pre>
+<p>目标必须是朋友（<code>403</code> 否则——参见 <a href="/zh-CN/docs/api/friends.html">朋友们</a>); <code>409</code> 重复邀请或任一玩家达到会话上限时。受邀者还会收到 <a href="/zh-CN/docs/api/chat.html#game_invite-one-event-for-both-invite-systems"><code>game_invite</code> 事件</a> 推过他们的聊天套接字， <code>kind: "session"</code>.</p>
+<h4 id="inviting-a-friend-into-a-game-in-progress">邀请好友加入正在进行的游戏</h4>
+<p>添加您正在玩的会话：</p>
+<pre><code class="language-json">{ "toUserId": "9b2f8c1a-1111-4222-8333-444455556666", "sessionId": "3f0c…" }
+</code></pre>
+<p>接受然后 <strong>允许朋友参加跑步课程</strong> 而不是开始一个新的——他们成为各种意义上的玩家（插座、 <code>ctx.players</code>、恢复、重新连接）。您的游戏决定是否需要它们：平台询问脚本的 <code>game.onMembershipChange(ctx)</code> 或容器的 <a href="/zh-CN/docs/api/container-games.html"><code>POST /sessions/{id}/members</code></a>，并且两者都没有的游戏会拒绝每一个这样的加入。规则：</p>
+<ul>
+<li>该会话必须是该游戏的活动会话 <strong>你</strong> 玩 (<code>403</code> 否则， <code>410</code> 如果已经结束），您的朋友一定还没有在其中（<code>409</code>），并且它不能属于实时房间（<code>409</code> — 邀请穿过房间，其座位为名册）。</li>
+<li>响应携带 <code>targetSessionId</code>; <code>sessionId</code> 停留 <code>null</code> 直到邀请被接受。</li>
+<li>在接受时，一切都会再次检查。如果游戏拒绝（完全、关闭……），则接受是 <code>409</code> 和邀请 <strong>保持待定状态</strong>。如果比赛已经结束，则邀请 <strong>取消</strong> 和接受的答案 <code>410</code> ——它永远不会变成一个新游戏。</li>
+<li>仅受邀者的并发会话上限适用。您可以为每个目的地的每个朋友保留一个待处理的邀请，因此您的比赛的邀请和新游戏的邀请可以共存。</li>
+</ul>
+<p>在此功能之前构建的平台会忽略 <code>sessionId</code> 并在接受时开始一个新会话； <code>targetSessionId</code> 回复中会告诉您您得到了什么。</p>
+<p><strong>您应该发送哪一个邀请？</strong> 接受普通邀请（无 <code>sessionId</code>) <em>创建一个新会话</em> 对于两名球员来说。如果邀请者已经坐在 <a href="/zh-CN/docs/api/realtime.html">实时房间</a> （有座位的大厅），邀请他们进入那个房间 - <code>POST /api/v1/realtime/rooms/{id}/invites</code> - 所以接受他们在你实际所在的桌子上的座位。两者都以相同的方式通知受邀者，因此切勿为同一个邀请同时发送两者：这会通知两次。</p>
+<p>回复：</p>
+<pre><code class="language-json">{
+  "inviteId": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+  "from": { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+  "to": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
+  "status": "pending",
+  "createdAt": "2026-07-20T14:10:00Z",
+  "sessionId": null,
+  "targetSessionId": null,
+  "notified": true
+}
+</code></pre>
+<p><code>notified</code> 报告推送是否到达实时连接（<code>false</code> = 受邀者未连接；邀请仍然有效，他们将在收件箱中看到它）。这是 <code>null</code> 在不适用的列表/接受/拒绝响应中。</p>
+<h3 id="get-apiv1gamessluginvites"><code>GET /api/v1/games/{slug}/invites</code></h3>
+<pre><code class="language-json">{
+  "incoming": [ { "inviteId": "...", "from": { "userId": "...", "username": "bob" }, "to": { "userId": "...", "username": "alice" }, "status": "pending", "createdAt": "2026-07-20T14:10:00Z", "sessionId": null } ],
+  "outgoing": []
+}
+</code></pre>
+<p><code>incoming</code> 仅包含待处理的邀请； <code>outgoing</code> 包含呼叫者的所有传出邀请。</p>
+<h3 id="post-apiv1gamessluginvitesinviteidaccept"><code>POST /api/v1/games/{slug}/invites/{inviteId}/accept</code></h3>
+<p>接受邀请并创建会话 - 或者，对于带有 <code>targetSessionId</code>，加入那个。返回 <code>GameInviteDto</code> 和 <code>status</code> <code>accepted</code> 和 <code>sessionId</code> 设置为要打开的会话。</p>
+<h3 id="post-apiv1gamessluginvitesinviteiddecline"><code>POST /api/v1/games/{slug}/invites/{inviteId}/decline</code></h3>
+<p>退货 <code>204</code>.</p>
+<h3 id="get-apiv1megame-invites"><code>GET /api/v1/me/game-invites</code></h3>
+<p>需要完整的账户令牌；玩家启动令牌无法读取此帐户范围的收件箱。</p>
+<p>每个发送给呼叫者的待处理邀请（最多 50 个，最新的在前）——推送通知的民意调查回退，以及询问的一个地方 "我被邀请参加什么活动？"。它跨越 <strong>两个都</strong> 邀请系统：来自此页面的会话邀请以及 <a href="/zh-CN/docs/api/realtime.html#invites">实时房间邀请</a>。条目正是 <a href="/zh-CN/docs/api/chat.html#game_invite-one-event-for-both-invite-systems"><code>game_invite</code> 有效载荷</a>，因此客户端使用相同的代码呈现推送和轮询结果。</p>
+<pre><code class="language-json">[
+  {
+    "inviteId": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+    "kind": "room",
+    "gameSlug": "poker",
+    "gameName": "StarHermit Poker",
+    "roomId": "b1d2c3e4-5f60-4a71-8b92-c3d4e5f60718",
+    "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
+    "createdAt": "2026-07-26T14:10:00Z",
+    "acceptPath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/accept",
+    "declinePath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/decline"
+  },
+  {
+    "inviteId": "c4a5b6d7-8e9f-4012-8345-6789abcdef01",
+    "kind": "session",
+    "gameSlug": "chess",
+    "gameName": "Chess",
+    "roomId": null,
+    "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
+    "createdAt": "2026-07-20T14:10:00Z",
+    "acceptPath": "/api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/c4a5b6d7-8e9f-4012-8345-6789abcdef01/accept",
+    "declinePath": "/api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/c4a5b6d7-8e9f-4012-8345-6789abcdef01/decline"
+  }
+]
+</code></pre>
+<p>单独回答每个条目 <code>acceptPath</code>/<code>declinePath</code> — 两个系统保留单独的邀请 ID，因此房间邀请 ID 位于 <code>/games/{slug}/invites/...</code> 是一个 <code>404</code>。房间已关闭或已开始但未加入的房间邀请将被忽略；没有什么可以接受的了。已结束的比赛的会话邀请也是如此。每个条目都带有 <code>inProgress</code> （接受加入已经在玩的游戏 - 与目标的会话邀请，或已开始加入正在进行的房间的房间邀请）以及该游戏的 <code>sessionId</code>，所以客户可以说 "加入他们的游戏" 而不是 "玩".</p>
+<h3 id="share-links-invite-by-url">分享链接（通过 URL 邀请）</h3>
+<p>上面的邀请流程要求两个玩家已经是朋友。邀请某人 <strong>还没有上平台</strong> （或者还不是朋友），游戏可以分发 <strong>分享链接</strong> — 网络仪表板的 URL，可自动完成整个入职流程：</p>
+<pre><code>https://dashboard.starhermit.com/game-invite/&lt;userId&gt;/&lt;gameSlug&gt;
+</code></pre>
+<ul>
+<li><code>&lt;userId&gt;</code> — 共享玩家的用户 ID。游戏客户端已经有了它：它是 <code>sub</code> 声明其启动令牌（国际象棋参考实现将其公开为 <code>Net.userId</code>).</li>
+<li><code>&lt;gameSlug&gt;</code> — 游戏的子弹 (<code>game_scope</code> 宣称）。没有权威脚本或容器后端的游戏使用 GitHub 游戏 ID（GUID）；仪表板接受其中之一。</li>
+<li><strong>可选的查询字符串——你的。</strong> 之后的任何事情 <code>?</code> 不变地传递到您的游戏：
+<code>…/game-invite/&lt;userId&gt;/&lt;gameSlug&gt;?room=K7MP2X&amp;map=arena</code> 打开你的游戏
+<code>https://&lt;game-id&gt;.starhermit.com/…?room=K7MP2X&amp;map=arena</code>。用它直接丢下收件人
+进入房间、楼层或大厅。它在收件人登录后仍然存在，并且会添加到您的
+游戏的 URL，而不是替换其中的任何内容。启动令牌仍然到达
+<code>#game_token=</code> 碎片，所以两者永远不会碰撞。对您放入其中的值进行 URL 编码。</li>
+</ul>
+<p>当收件人打开链接时， <strong>仪表板</strong> （不是游戏）执行自动好友邀请部分——不涉及新的后端端点，它组成了现有的 API：</p>
+<ol>
+<li>让他们登录（通过实时提供商进行 OAuth），或重用他们现有的会话。链接意图在登录往返过程中仍然存在。</li>
+<li>显示一个同意对话框，命名共享者和游戏，然后 <strong>朋友分享者</strong>：如果存在，则接受共享者待处理的好友请求，否则发送一个（<code>POST /api/v1/me/friend-requests</code>).</li>
+<li>如果他们的帐户没有昵称，则提示他们选择昵称（游戏显示个人资料昵称 - 请参阅 <a href="/zh-CN/docs/api/profile.html">轮廓</a>).</li>
+<li>启动游戏（平台托管 <code>https://&lt;game-id&gt;.starhermit.com</code> 复制，并在其中包含启动令牌 <code>#game_token=</code> 像往常一样片段）。</li>
+<li>发送 <strong>向共享者播放邀请</strong> 和 <code>POST /api/v1/games/{slug}/invites</code> - 因此，共享链接以共享者接受的普通游戏邀请结束（仪表板吐司、桌面气球或游戏自己的邀请列表）。如果友谊仍然是待处理的请求，仪表板会将游戏邀请排队并在共享者接受后自动发送。</li>
+</ol>
+<p>这对您的游戏客户端意味着什么：</p>
+<ul>
+<li><strong>提供链接需要一行字符串构建</strong> — 放一个 "分享邀请链接" 按钮，然后将 URL 复制到剪贴板。看 <code>shareInviteLink()</code> 在 <a href="https://github.com/HypeDriven/starhermit-chess">国际象棋参考实现</a>.</li>
+<li><strong>接收方无需进行特殊处理。</strong> 收件人的邀请通过正常的邀请流程到达：您的 <code>GET .../invites</code> 轮询向共享者显示传入的邀请，接受邀请会创建会话，并且接收者会看到会话出现在 <code>GET .../sessions/mine</code> （显示待处理的传出邀请，以便等待可见 - 国际象棋客户端的 "已邀请 — 等待" 牌）。</li>
+<li>仪表板本身也使用这些 URL：每个可玩的托管游戏的详细信息窗格都有一个 <strong>复制邀请链接</strong> 按钮，Windows 客户端从游戏的上下文菜单中提供相同的按钮。</li>
+</ul>
+<h2 id="replays">重播</h2>
+<p>重播是已完成会话的最终状态文档，由平台保存并返回给
+身处其中的玩家。 <strong>重播是游戏的一项选择加入功能，除非游戏要求，否则关闭
+他们</strong>，因为重播是存储，只要比赛记录存在，平台就会保留。</p>
+<p>在您的服务器代码中询问它们 - <code>replays: true</code> 于 <code>game</code> 对象为一个
+<a href="/zh-CN/docs/api/game-scripts.html#replays">脚本</a>, <code>"replays": true</code> 从 <code>/describe</code> 对于一个
+<a href="/zh-CN/docs/api/container-games.html#get-describe">容器服务器</a> - 并发布更新以应用它。一个平台
+操作员也可以以任何一种方式回答特定游戏，因此请对待 <code>replaysEnabled</code> 的领域
+<code>GET /api/v1/games/{slug}</code> 作为答案，而不是假设您的声明就是最后一句话。</p>
+<p>下面的两个端点都返回 <code>404</code> 对于一场重播已关闭的游戏，一切都无法避免
+游戏已完成的会话 - 因此提供重播屏幕的客户端应该阅读 <code>replaysEnabled</code>
+第一的。</p>
+<h3 id="get-apiv1gamesslugreplaysminelimit"><code>GET /api/v1/games/{slug}/replays/mine?limit=</code></h3>
+<p>呼叫者已完成的会话。 <code>limit</code> 默认为 <code>10</code> 并被限制在 1-50。</p>
+<pre><code class="language-json">[
+  {
+    "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "players": [
+      { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+      { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" }
+    ],
+    "finishedAt": "2026-07-20T15:42:37Z",
+    "result": { "kind": "white-win", "reason": "checkmate" },
+    "moveCount": 41
+  }
+]
+</code></pre>
+<h3 id="get-apiv1gamesslugreplayssessionid"><code>GET /api/v1/games/{slug}/replays/{sessionId}</code></h3>
+<p>平台存档的完整最终状态 JSON。仅限参与者。 <code>recordedWith</code> 是什么
+生成文档（脚本版本、运行时间、滴答率），并在完成时盖章——以便稍后重新部署
+不会使旧的重播看起来像当前代码编写的那样。比赛在此之前结束
+现有报告 <code>null</code>.</p>
+<pre><code class="language-json">{
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [ { "userId": "...", "username": "alice" }, { "userId": "...", "username": "bob" } ],
+  "finishedAt": "2026-07-20T15:42:37Z",
+  "result": { "kind": "white-win", "reason": "checkmate" },
+  "state": { "...": "game-specific final session state" },
+  "recordedWith": { "scriptVersion": 12, "runtime": "script", "tickRateHz": 0.25 }
+}
+</code></pre>
+<h2 id="session-model">会话模型</h2>
+<ul>
+<li>会议 <code>status</code> 是 <code>"active"</code> 或者 <code>"finished"</code>.</li>
+<li>每个会话都会获得一个每个会话的聊天对话（类型 <code>"game"</code>）以便对手可以聊天和语音通话 <strong>没有成为朋友</strong> （看 <a href="/zh-CN/docs/api/chat.html">聊天</a> 和 <a href="/zh-CN/docs/api/voice.html">嗓音</a>).</li>
+<li>每个玩家的并发会话上限默认为 <code>20</code>.</li>
+<li>一款游戏宣告 <code>persistent</code> 保持空会话 <strong>暂停</strong> 而不是结束它们；连接到一个即可恢复它。暂停的会话会计入上限。请参阅 <a href="/zh-CN/docs/tutorials/persistent-sessions.html">持久会话教程</a>.</li>
+<li>没有人在玩的活动会话是 <strong>退休了</strong> （地位 <code>finished</code>，已放弃）：最后一次后 5 分钟 <code>ws/v1/games</code> 套接字在没有人重新加入的情况下关闭，或者在 24 小时后没有玩家操作的情况下关闭。持久会话会暂停。这也适用于室内会议；关闭他们的房间并不能结束他们。</li>
+<li>配对票状态： <code>queued</code> | <code>matched</code> | <code>cancelled</code> | <code>expired</code>.</li>
+<li>邀请状态： <code>pending</code> | <code>accepted</code> | <code>declined</code> | <code>cancelled</code>.</li>
+<li><strong>会话是通过匹配、邀请接受、AI 端点或实时房间启动创建的</strong> （房间内的会议——参见 <a href="/zh-CN/docs/api/realtime.html#room-bound-sessions">实时房间</a>) — 没有 "创建大厅" 端点。</li>
+<li>Elo更新来自权威脚本（<code>eloUpdates</code>）或容器控制频道，设置用于匹配的评分并发布到游戏排行榜（分数类型 <code>elo</code>). <strong>客户端永远无法直接将分数提交到游戏排行榜</strong> （看 <a href="/zh-CN/docs/api/leaderboards.html">排行榜</a>).</li>
+</ul>
+<h2 id="gameplay-websocket">游戏玩法 WebSocket</h2>
+<p><code>ws/v1/games?sessionId={guid}</code> （版本中立路线）。进行身份验证 <code>Authorization</code> 标头， <code>?ticket=</code>， 或者 <code>?access_token=</code>。仅限参与者（<code>403</code>）；当与启动令牌连接时，其 <code>game_scope</code> 必须与会话的游戏相匹配。完成的会话是 <code>410 {"error":"session_not_active"}</code>。选修的 <code>?build=</code> 是 <code>buildId</code> 从 <code>GET /games/{slug}</code> — 不匹配是 <code>409 {"error":"build_mismatch"}</code>.</p>
+<ul>
+<li>仅文本帧，每帧最大 16 KB。</li>
+<li>新的连接取代旧的连接：前一个连接被关闭 <code>PolicyViolation</code>.</li>
+<li>连接到暂停的 <a href="/zh-CN/docs/tutorials/persistent-sessions.html">执着的</a> 会话会在您执行第一个命令之前恢复它。如果无法恢复（通常容器仍在启动），您会得到一个 <code>error</code> 框架和插座用代码关闭 <code>1001</code>;会话保持暂停状态 - 通过退避重新连接。</li>
+<li><strong>每次重新连接之前更新令牌。</strong> 过期的令牌被拒绝 <code>401</code> 升级之前，浏览器仅将其报告为关闭代码 <code>1006</code> — 与网络丢失无法区分 — 因此重新连接失败可能是身份验证失败，并且重新打开相同的 <code>?access_token=</code> URL 永远无法恢复。续订通过 <a href="#post-apiv1gamessluglaunch-token"><code>POST /api/v1/games/{slug}/launch-token</code></a> 并重新连接新令牌。续订仅在当前令牌有效且原始启动后 12 小时（默认）内有效；一旦被拒绝（<code>401</code>/<code>403</code>），停止重新连接并将玩家发送回启动器以获取新的启动令牌。</li>
+</ul>
+<h3 id="client--server">客户端→服务器</h3>
+<p>这 <code>cmd</code> 信封是平台合约；的内容 <code>data</code> 由每个游戏的权威后端定义。例如，国际象棋参考实现发送如下棋步：</p>
+<pre><code class="language-json">{ "type": "cmd", "data": { "type": "move", "from": "e2", "to": "e4" } }
+</code></pre>
+<p>对于脚本运行时，持久命令通过 <code>onPlayerMessage</code>;明确标记 <code>{ "type": "input", "realtime": true, ... }</code> 数据使用最新胜利批处理到下一个 <code>onTick</code>。对于容器运行时，平台通过其二进制流转发经过身份验证的命令，并且容器拥有其模拟循环。在这两种情况下，平台都会提供可信的发送者身份，并且客户端永远无法直接中继状态。看 <a href="/zh-CN/docs/api/game-scripts.html#context-object">游戏脚本——上下文对象</a> 和 <a href="/zh-CN/docs/api/container-games.html#gameplay-stream">容器游戏服务器 - 游戏流</a>.</p>
+<h3 id="server--client">服务器→客户端</h3>
+<pre><code class="language-json">{ "type": "game", "data": { "...": "server-authorized message addressed to you" } }
+{ "type": "error", "error": "Illegal move" }
+{ "type": "presence", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "online": true }
+{ "type": "membership", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "change": "joined", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol", "team": 0, "slot": 1 }
+{ "type": "achievement", "data": { "key": "first-win", "name": "First Win", "description": "Win a match.", "icon": null, "points": 10, "unlockedAt": "2026-07-25T09:14:02Z" } }
+{ "type": "resumed", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "lostMs": 750 }
+{ "type": "abandoned", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "reason": "server_failure" }
+</code></pre>
+<ul>
+<li><code>game</code> — 一条经过服务器授权的发给您的消息。</li>
+<li><code>error</code> — 来自平台或您的上一个命令的错误。</li>
+<li><code>presence</code> — 当有人加入或离开时向其他参与者广播。</li>
+<li><code>membership</code> — 有人在本场比赛中成为一名球员（<code>joined</code>）或让座（<code>left</code>）；发送给每个连接的参与者。看 <a href="/zh-CN/docs/api/container-games.html#post-sessionssessionidmembers">容器游戏服务器 — 成员</a>.</li>
+<li><code>achievement</code> — 游戏脚本刚刚授予的成就 <strong>你</strong>，发送给赚钱玩家
+仅。故意使用单独的帧类型：这是平台事实，而不是脚本中继的游戏数据。
+从两个运行时的持久更新路径发出。看
+<a href="/zh-CN/docs/api/achievements.html#server-authoritative-game-achievements">成就</a>.</li>
+<li><code>resumed</code> — 会话易手（容器恢复，或另一个 Api 进程占用了
+所有权租赁）。丢弃本地预测； <code>lostMs</code> 是自上次持久写入以来的间隙。
+交接后的第一次附加对每个玩家宣布一次。</li>
+<li><code>abandoned</code> — 平台在没有获胜者或 elo 更新的情况下结束了会话。理由：
+<code>players_left</code>, <code>idle_no_players</code>, <code>superseded</code> （玩家要求一款该标题的新游戏），
+<code>server_failure</code>, <code>restore_failed</code>, <code>operator_ended</code> （游戏所有者结束了它），
+<code>retention_expired</code> （暂停世界的恢复保留已过去）。存储为
+<code>{ "kind": "abandoned", "reason": "…" }</code>. A <a href="/zh-CN/docs/tutorials/persistent-sessions.html">执着的</a> 游戏的会话永远不会
+仅仅是因为断开连接或不活动而结束——而是暂停。最后一个明确离开的人类
+一个独立的世界仍然可以结束它 <code>players_left</code>;配置的恢复到期可以将其结束为
+<code>retention_expired</code>.</li>
+</ul>
+<h2 id="limits">限制</h2>
+<p>平台强制执行的内容 <code>ws/v1/games</code> 以及收视率。数字为平台默认值；
+操作员可以调整它们。</p>
+<h3 id="messages-on-wsv1games">消息于 <code>ws/v1/games</code></h3>
+<table>
+<thead>
+<tr>
+<th>限制</th>
+<th>价值</th>
+<th>过去会发生什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>框架尺寸</td>
+<td>每个文本框架 16 KB</td>
+<td>套接字关闭时 <code>1009</code> （消息太大）。</td>
+</tr>
+<tr>
+<td>框架式</td>
+<td>仅文本</td>
+<td>二进制帧得到一个 <code>error</code> 框架;套接字保持打开状态。</td>
+</tr>
+<tr>
+<td>连接</td>
+<td>每个玩家每次会话一个</td>
+<td>较新的连接将关闭较旧的连接 <code>1008</code>.</td>
+</tr>
+<tr>
+<td>实时输入（<code>{"type":"input","realtime":true,…}</code>)</td>
+<td><strong>每秒 60 个</strong> 每个连接最多可爆发 120 个</td>
+<td>额外的帧是 <strong>悄然落下</strong> - 不 <code>error</code> 框架。</td>
+</tr>
+<tr>
+<td>对脚本的持久命令（所有其他 <code>cmd</code>)</td>
+<td><strong>每秒 20 个</strong> 每个玩家每次会话，有短暂的突发津贴</td>
+<td>拒绝了 <code>error</code> 框架： <code>"Too many commands; slow down."</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>实时输入</strong> 被采样，而不是排队：平台保留每个玩家的最新输入和手牌
+脚本的下一个批次 <code>onTick</code> 在 <code>ctx.inputs</code>。发送速度比游戏的速度快
+<a href="/zh-CN/docs/api/game-scripts.html#tick-rate">滴答率</a> 没有任何收获，因为两个刻度之间的输入合并为
+一。按您的滴答率或输入更改时发送。</p>
+<p><strong>对脚本的持久命令</strong> 按顺序处理并与实时分开限制
+输入。当离散动作发生时发送它们；通过标记实时发送连续运动
+输入路径。命令限制可能因游戏而异。脚本调用也受游戏的限制
+<a href="/zh-CN/docs/api/game-scripts.html#budgets">预算</a>。 WebSocket 错误帧携带消息，而不是 HTTP 状态。
+您的脚本应该拒绝没有意义的命令，例如不按顺序移动。</p>
+<p>对于一个 <strong>容器</strong> 游戏中，命令到达时会转发到您的容器，没有平台
+对他们进行速率限制。你的服务器强制执行它自己的。实时输入速率限制适用于脚本化
+仅限游戏。</p>
+<h3 id="elo-per-match">每场比赛 Elo</h3>
+<p>该平台确实 <strong>不是</strong> 限制一场比赛中评分的变化幅度。 <code>eloUpdates</code> （脚本）和
+<code>elo</code> 控制消息（容器）携带每个玩家的 <strong>新的绝对评级</strong>，没有改变，并且
+平台按发送时应用它们。它执行什么：</p>
+<ul>
+<li><strong>仅会话中的玩家</strong> 已更新。其他人的 ID 以及 AI 席位都会被丢弃。</li>
+<li>每当您的服务器返回更新时，就会应用更新。一个会话 <strong>平台</strong> 结束
+（<code>abandoned</code>：玩家离开、空闲、被取代、服务器故障、由所有者结束）发布 <strong>不</strong>
+改变。</li>
+<li>评级将写入配对配对栏，并作为一个写入游戏的 elo 板
+每个玩家的条目（他们的最新评级）。</li>
+<li>游戏的主人可以 <a href="/zh-CN/docs/api/leaderboards.html#resetting-a-players-rating">重置一名玩家的评分</a> 至 1200。</li>
+</ul>
+<p>所以挥杆的大小是由你的游戏决定的。在代码中使用标准 K 因子和钳位。这
+<a href="#example-chess-command-shapes">国际象棋参考实现</a> 使用 K = 32，因此一场比赛移动 a
+评分最高 32 分：</p>
+<pre><code class="language-js">function eloAfter(mine, theirs, score /* 1 win, 0.5 draw, 0 loss */, K = 32) {
+  const expected = 1 / (1 + Math.pow(10, (theirs - mine) / 400));
+  const next = mine + K * (score - expected);
+  return Math.round(Math.max(100, next));      // your floor, if you want one
+}
+</code></pre>
+<h2 id="owner-diagnostics-and-webhooks">所有者诊断和 webhook</h2>
+<p>仅限业主。游戏范围的启动令牌无法到达这些。</p>
+<h3 id="get-apiv1gamesslugdiagnostics"><code>GET /api/v1/games/{slug}/diagnostics</code></h3>
+<p>实时会话快照（活动、已完成、实时连接）、针对 CPU 的脚本计量/
+内存/语句预算、匹配队列（最长等待时间及其扩大的程度）、
+和 webhook 端点运行状况。</p>
+<h3 id="webhooks">网络钩子</h3>
+<p><code>GET/POST/DELETE /api/v1/games/{slug}/webhooks</code> 和 <code>POST .../{id}/resume</code>。每个最多 5 个端点
+游戏。活动： <code>session.created</code>, <code>session.finished</code> （忽略 <code>events</code> 订阅两者）。的
+返回签名秘密 <strong>一次</strong>，创建时。</p>
+<p>平台通过以下方式 POST JSON：</p>
+<ul>
+<li><code>X-Starhermit-Signature: t=&lt;unix&gt;,v1=&lt;hmac-sha256&gt;</code> 超过 <code>"&lt;t&gt;.&lt;body&gt;"</code></li>
+<li><code>X-Starhermit-Event-Id</code> — 事件（幂等键；在重试中重复）</li>
+<li><code>X-Starhermit-Delivery</code> ——这次尝试</li>
+</ul>
+<p>URL 必须是 https，并且不能解析为私有/环回/CGNAT 范围（在
+注册并在每次发送之前再次注册）。不遵循重定向。失败的端点退出
+连续失败后被禁用； <code>resume</code> 清除断路器。</p>
+<h3 id="runtime-timing">运行时计时</h3>
+<p>对于 JavaScript 游戏，该平台运行 <code>onTick</code> 以请求的钳位速率进行扫描
+<code>game.tickRateHz</code>; <code>0</code> 禁用勾选，并且不请求任何内容的游戏会被勾选 <strong>0.25赫兹</strong> —
+如果您的游戏玩法取决于价格变动，请声明一个费率。容器驱动自己的模拟循环并
+通过声明其请求的速率 <code>/describe</code>;该平台使用该速率进行调度和
+快照策略，不踩游戏。看 <a href="/zh-CN/docs/api/game-scripts.html#tick-rate">游戏脚本——滴答率</a> 和
+<a href="/zh-CN/docs/api/container-games.html#protocol-v1">容器游戏服务器</a>.</p>
+<h2 id="lifecycle-of-a-game">游戏的生命周期</h2>
+<ol>
+<li><strong>铸造启动令牌</strong> — <code>POST /api/v1/games/{slug}/launch-token</code>。客户端应在到期前刷新（国际象棋参考客户端每 45 分钟刷新一次）。</li>
+<li><strong>获取游戏状态</strong> — <code>GET /api/v1/games/{slug}</code> 获取信息+您的统计数据； <code>GET .../sessions/mine</code> 对于正在进行的游戏； <code>GET .../invites</code> 和 <code>GET /api/v1/realtime/rooms/invites</code> 对于待处理的邀请； <code>GET .../replays/mine</code> 对于历史当 <code>replaysEnabled</code>; <code>GET .../achievements</code> 用于成就屏幕。</li>
+<li><strong>寻找对手</strong>，以下三种方式之一：
+<ul>
+<li><strong>对接会：</strong> <code>POST .../matchmaking</code>，然后轮询 <code>GET .../matchmaking</code> 每 3 秒一次，直到 <code>status</code> 是 <code>matched</code> （响应携带 <code>sessionId</code>). <code>DELETE .../matchmaking</code> 取消。</li>
+<li><strong>邀请流程：</strong> 从中选择一个朋友 <code>GET /api/v1/me/friends</code> （看 <a href="/zh-CN/docs/api/friends.html">朋友们</a>), <code>POST .../invites</code> 和 <code>{ "toUserId": "..." }</code>;受邀者致电 <code>POST .../invites/{inviteId}/accept</code>，这会创建会话。 （如果您的游戏让玩家坐在 <a href="/zh-CN/docs/api/realtime.html">实时房间</a> 首先，邀请他们到房间 - 同样的通知，但接受后会将他们放在您已经所在的桌子上。）</li>
+<li><strong>人工智能实践：</strong> <code>POST .../sessions/ai</code>.</li>
+</ul>
+</li>
+<li><strong>加载会话</strong> — <code>GET .../sessions/{sessionId}</code>.</li>
+<li><strong>连接 WebSocket</strong> — <code>ws/v1/games?sessionId={guid}</code> 使用启动令牌，然后发送游戏后端定义的任何初始同步命令 - 例如，国际象棋参考实现发送 <code>{"type":"cmd","data":{"type":"sync"}}</code>.</li>
+<li><strong>玩</strong> - 交换 <code>cmd</code>/<code>game</code> 由后端、表面定义的框架 <code>achievement</code> 框架和手柄 <code>resumed</code> 通过放弃预测并请求完整状态。</li>
+<li><strong>结果</strong> ——权威后端结束游戏；该平台将 elo 更新发布到排行榜，并且对于具有 <a href="#replays">重播</a>，归档最终状态。</li>
+<li><strong>重播</strong> — <code>GET .../replays/{sessionId}</code> 完整的最终状态。</li>
+</ol>
+<h3 id="example-chess-command-shapes">示例：国际象棋命令形状</h3>
+<p>以下有效负载形状为例：国际象棋如何 <a href="https://github.com/HypeDriven/starhermit-chess">参考实现</a> 填写 <code>data</code>. <strong>它们是由国际象棋的脚本定义的，而不是由平台定义的</strong> - 每个游戏都定义自己的命令集并在其权威后端广播有效负载。客户端命令信封是 <code>cmd</code>;常见的服务器信封包括 <code>game</code>, <code>error</code>, <code>presence</code>， 和 <code>achievement</code>， 和 <code>resumed</code>/<code>abandoned</code> 另外用于容器回收。的内容 <code>data</code> 属于后端所有。</p>
+<p>客户端命令（发送为 <code>{"type":"cmd","data":{...}}</code>):</p>
+<pre><code class="language-json">{ "type": "move", "from": "e2", "to": "e4", "promo": "q" }
+{ "type": "resign" }
+{ "type": "offer-draw" }
+{ "type": "accept-draw" }
+{ "type": "decline-draw" }
+{ "type": "sync" }
+</code></pre>
+<p>(<code>promo</code> 是可选的 <code>move</code>.)</p>
+<p>服务器消息（作为 <code>{"type":"game","data":{...}}</code>):</p>
+<pre><code class="language-json">{
+  "type": "state",
+  "white": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "black": "9b2f8c1a-1111-4222-8333-444455556666",
+  "ratings": { "white": 1200, "black": 1187 },
+  "board": "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr",
+  "turn": "w",
+  "moves": [],
+  "status": "active",
+  "result": null,
+  "deadline": 1784642591000,
+  "drawOfferBy": null,
+  "ai": false,
+  "aiName": null
+}
+</code></pre>
+<pre><code class="language-json">{ "type": "moved", "...": "move details + updated state" }
+{ "type": "draw-offered" }
+{ "type": "draw-declined" }
+{ "type": "game-over", "result": { "kind": "white-win", "reason": "checkmate", "at": "2026-07-20T15:42:37Z" }, "view": { "...": "final state view" } }
+</code></pre>
+<p>看 <a href="/zh-CN/docs/api/game-scripts.html">游戏脚本</a> 了解脚本如何定义这些消息，以及 <a href="/zh-CN/docs/tutorials/chess-walkthrough.html">国际象棋演练</a> 用于端到端构建。</p>
+<p>看 <a href="/zh-CN/docs/credentials.html">凭证兼容性</a> 和 <a href="/zh-CN/docs/api/contracts.html">机器可读的合同</a>.</p>
+
+{% endraw %}

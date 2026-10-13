@@ -1,0 +1,512 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Tutorial: construye un corredor de karts multijugador"
+source_url: "/docs/tutorials/kart-racer.html"
+source_path: "docs/tutorials/kart-racer.md"
+source_hash: "d1191e3e810a9f7c888152161e331f2cebb8c39f3e6d39661e4cde37fd39c340"
+translation: "machine"
+permalink: "/es/docs/tutorials/kart-racer.html"
+---
+{% raw %}
+<h1 id="tutorial-build-a-multiplayer-kart-racer">Tutorial: construye un corredor de karts multijugador</h1>
+<p>Este tutorial construye la capa multijugador de un corredor de karts arcade: hasta ocho karts, privado.
+vestíbulos con amigos, uniones rápidas con extraños, controladores de CPU que llenan espacios vacíos de la cuadrícula, una cuenta regresiva,
+vueltas, orden de llegada y logros, en la API de StarHermit. Cubre el contrato netcode.
+y la plataforma llama; Tu motor, arte de la pista y modelo de manejo son tuyos.</p>
+<p>Todo lo específico del juego aquí: el <code>grand-prix</code> cola, el diseño del marco binario, el botón de elemento,
+las constantes físicas: es un valor de ejemplo. Sólo se muestran los puntos finales, las envolventes del marco y los límites.
+comportamiento de la plataforma, y cada uno enlaza a su página de referencia.</p>
+<h2 id="1-pick-an-architecture">1. Elige una arquitectura</h2>
+<p>Un corredor es la forma de juego más difícil para un presupuesto de servidor: los karts se mueven rápido, chocan y
+Los jugadores sienten 50 ms de retraso en la dirección. StarHermit le ofrece dos formas de ejecutarlo, ambas comenzando desde un
+<a href="/es/docs/api/realtime.html">sala en tiempo real</a>:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><strong>A. Enrutado por host</strong></th>
+<th><strong>B. Script autorizado por el servidor</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>quien simula</td>
+<td>El cliente del anfitrión de la sala, como quiera (60 Hz+)</td>
+<td>Su <code>server=</code> guión, como máximo <strong>30Hz</strong></td>
+</tr>
+<tr>
+<td>Transporte</td>
+<td>Marcos binarios activados <code>ws/v1/realtime</code></td>
+<td>JSON <code>cmd</code>/<code>game</code> marcos en <code>ws/v1/games</code></td>
+</tr>
+<tr>
+<td>Infiel</td>
+<td>El anfitrión es de confianza.</td>
+<td>Los clientes no tienen autoridad</td>
+</tr>
+<tr>
+<td>Elo, logros del guión.</td>
+<td>No (el anfitrión publica un resultado bloqueado)</td>
+<td>Sí - <code>eloUpdates</code>, <code>achievements</code>, repeticiones</td>
+</tr>
+<tr>
+<td>Lo mejor para</td>
+<td>Carreras casuales con amigos, física en total fidelidad.</td>
+<td>Carreras clasificadas con física arcade simple</td>
+</tr>
+</tbody>
+</table>
+<p>Empezar con <strong>A</strong> a menos que necesites un juego clasificado; La sección 7 muestra qué cambios <strong>B</strong>. A
+<a href="/es/docs/api/container-games.html">servidor de contenedores</a> también puede correr un ocho kart <strong>confinado a la habitación</strong> carrera y
+simular a 60 Hz con autoridad. Su emparejamiento directo de API de juegos actualmente utiliza un 1v1 implícito.
+cola, así que use una sala en tiempo real para la cuadrícula más grande. La plataforma no pisa el bucle del contenedor.</p>
+<h2 id="2-manifest">2. Manifiesto</h2>
+<p>Publique la carpeta de compilación distribuible con esto <code>starhermit.txt</code> en su raíz (ver
+<a href="/es/docs/starhermit-txt.html">el manifiesto</a>). El <code>control.*</code> Las líneas brindan a los jugadores una interfaz de usuario que se vuelve a vincular y su
+cliente un <a href="/es/docs/api/games.html#per-player-control-bindings">API de controles</a> para leer enlaces de:</p>
+<pre><code class="language-ini">name=Turbo Hermits
+launch=index.html
+cover=art/cover.png
+control.accelerate=KeyW+ArrowUp | Accelerate
+control.brake=KeyS+ArrowDown | Brake / reverse
+control.left=KeyA+ArrowLeft | Steer left
+control.right=KeyD+ArrowRight | Steer right
+control.drift=ShiftLeft+ShiftRight | Drift
+control.item=Space | Use item
+</code></pre>
+<p>El camino A tiene <strong>No</strong> <code>server=</code> línea. Si un juego incluye un guión, iniciar una sala crea una sesión vinculada
+y sólo el guión puede finalizar el partido: el anfitrión <code>POST .../result</code> deja de ser la forma en que terminan las carreras
+(sección 7).</p>
+<h2 id="3-sign-in-and-read-the-basics">3. Inicia sesión y lee los conceptos básicos</h2>
+<p>Un juego alojado en una plataforma se abre con <code>#game_token=&lt;jwt&gt;</code> en la URL: léelo una vez, quítalo con
+<code>history.replaceState</code>y actualícelo antes de que expiren los 60 minutos (detalles en la
+<a href="/es/docs/tutorials/chess-walkthrough.html#3-launch-and-authentication">tutorial de ajedrez</a> y
+<a href="/es/docs/api/auth.html">autenticación</a>). Tu babosa es la del token. <code>game_scope</code> reclamo (o <code>location.hostname</code>'s
+primera etiqueta); nunca lo codifique.</p>
+<p>Al cargar, busque lo que necesita el menú:</p>
+<pre><code class="language-http">GET /api/v1/games/{slug}/controls     # effective key bindings (manifest defaults + overrides)
+GET /api/v1/games/{slug}/settings     # camera, volume, last chosen kart — your own keys
+GET /api/v1/realtime/rooms/mine       # 200 → the player is still in a race; rejoin it
+</code></pre>
+<p>Guarde las opciones del menú con <code>PATCH /api/v1/games/{slug}/settings</code> (<code>{"settings":{"kart":"hermit-crab"}}</code>).
+Las configuraciones siguen al jugador a través de las máquinas y no necesitan declaración.</p>
+<h2 id="4-the-lobby">4. El vestíbulo</h2>
+<p>Un gran premio es todos contra todos, por lo que la sala tiene un equipo de ocho asientos. Pista, recuento de vueltas y motor.
+clase ir en el opaco <code>metadata</code>:</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms
+Authorization: Bearer &lt;launch token&gt;
+
+{ "teamCount": 1, "seatsPerTeam": 8, "backfillAfterSeconds": 45,
+  "aiPlayers": 0, "name": "Friday cup", "isVisible": true,
+  "metadata": { "track": "coral-loop", "laps": 3, "cc": 150 } }
+</code></pre>
+<p>Con una ficha de lanzamiento, el juego de la sala proviene de la ficha, por lo que <code>gameSlug</code> se puede omitir. el creador
+es el anfitrión en el asiento <code>(0, 0)</code>. Desde aquí, el vestíbulo es el flujo normal de la habitación:</p>
+<ul>
+<li><strong>Amigos</strong> — <code>POST /rooms/{id}/invites</code> con <code>{"toUserId": ...}</code>. La plataforma les notifica;
+aceptarlos los sienta. Mostrar los seis caracteres <code>joinCode</code> para que tus amigos también puedan escribirlo en
+<code>POST /rooms/join-by-code</code>.</li>
+<li><strong>extraños</strong> — el anfitrión llama <code>POST /rooms/{id}/open</code>. Jugadores sin room call
+<code>POST /rooms/quick-join</code> con <code>{"seats": 1}</code> y, en <code>404</code>, crear y abrir los suyos propios.</li>
+<li><strong>Seguimiento del voto/cambio de opinión del anfitrión</strong> — <code>PATCH /rooms/{id}</code> con nuevo <code>metadata</code> y la habitación
+<code>revision</code> como <code>expectedRevision</code>.</li>
+<li><strong>Solo contra CPU</strong> - crear con <code>"aiPlayers": 7</code>, entonces <code>POST /rooms/{id}/start</code>.</li>
+</ul>
+<p>Una sala abierta comienza por sí sola cuando los ocho asientos se llenan o <code>backfillAfterSeconds</code> pases; el anfitrión
+también puede <code>POST /rooms/{id}/start</code>. Cada asiento aún vacío se convierte en un participante de la IA: esos son sus
+Controladores de CPU.</p>
+<h2 id="5-the-race-socket-host-routed">5. El socket de carrera (enrutado por host)</h2>
+<h3 id="connect">Conectar</h3>
+<p>Cada participante abre el socket en tiempo real con un ticket de un solo uso:</p>
+<pre><code class="language-js">const { ticket } = await api.post("/api/v1/realtime/connection-tickets"); // { ticket, expiresIn }
+const ws = new WebSocket(
+  `wss://api.starhermit.com/ws/v1/realtime?roomId=${roomId}&amp;ticket=${encodeURIComponent(ticket)}`);
+ws.binaryType = "arraybuffer";
+</code></pre>
+<p>Los marcos de texto son marcos de control y push JSON; Los marcos binarios son un juego. El <code>roster</code> empujar es
+Tu parrilla: después del inicio se congela, incluidos los asientos AI. Con un equipo, la plaza de parrilla de un kart es su
+del participante <code>slot</code>.</p>
+<pre><code class="language-js">ws.onmessage = (e) =&gt; {
+  if (typeof e.data === "string") return onControl(JSON.parse(e.data)); // roster, presence, event, ready, chat, result
+  const bytes = new Uint8Array(e.data);
+  const sender = guidFromDotNet(bytes.subarray(0, 16)); // server-stamped, trustworthy
+  onGameplay(sender, new DataView(e.data, 16));          // your payload starts at byte 16
+};
+
+// The server prefixes the sender's participant id in .NET GUID byte order:
+// the first three groups are little-endian.
+function guidFromDotNet(b) {
+  const h = (i) =&gt; b[i].toString(16).padStart(2, "0");
+  return `${h(3)}${h(2)}${h(1)}${h(0)}-${h(5)}${h(4)}-${h(7)}${h(6)}-` +
+         `${h(8)}${h(9)}-${h(10)}${h(11)}${h(12)}${h(13)}${h(14)}${h(15)}`;
+}
+</code></pre>
+<p>Nunca coloques una identificación de jugador en tu propia carga útil y confía en ella: el prefijo de 16 bytes es la única identidad.
+que el servidor garantiza.</p>
+<h3 id="routing-and-budget">Enrutamiento y presupuesto</h3>
+<p>La plataforma impone la forma del juego enrutado por el anfitrión:</p>
+<ul>
+<li>A <strong>huéspedes</strong> alcance de los fotogramas binarios <strong>solo el anfitrión</strong> - ese es el canal de entrada.</li>
+<li>El <strong>anfitrión</strong> alcance de los fotogramas binarios <strong>cada invitado</strong> - ese es el canal de instantáneas.</li>
+<li>Cada cuadro es como máximo <strong>8 KB</strong>; cada conexión puede enviar <strong>30 mensajes/segundo</strong> (2× ráfaga por uno
+segundo). Al pasar se cierra el enchufe con <code>PolicyViolation</code>.</li>
+</ul>
+<p>Entonces, el anfitrión simula al ritmo que le parezca adecuado (60 Hz es típico), pero <strong>envía</strong> instantáneas en
+20 Hz y los invitados envían entradas a 20 Hz. Eso deja espacio para el marco de control ocasional.</p>
+<h3 id="frame-layouts-example">Diseños de marco (ejemplo)</h3>
+<p>Entradas, invitado → host, 7 bytes:</p>
+<table>
+<thead>
+<tr>
+<th>Compensar</th>
+<th>Tipo</th>
+<th>Campo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>u8</td>
+<td><code>1</code> = entrada</td>
+</tr>
+<tr>
+<td>1</td>
+<td>u16</td>
+<td><code>seq</code> — incrementa cada envío</td>
+</tr>
+<tr>
+<td>3</td>
+<td>i8</td>
+<td>dirigir, −127…127</td>
+</tr>
+<tr>
+<td>4</td>
+<td>u8</td>
+<td>acelerador, 0…255</td>
+</tr>
+<tr>
+<td>5</td>
+<td>u8</td>
+<td>bits: 0 freno, 1 deriva</td>
+</tr>
+<tr>
+<td>6</td>
+<td>u8</td>
+<td><code>itemPresses</code> — un contador, no una bandera</td>
+</tr>
+</tbody>
+</table>
+<p><code>itemPresses</code> es un recuento continuo de pulsaciones de botones de elementos. A 20 Hz, una pulsación inferior a 50 ms
+de lo contrario, quedará entre muestras; Con un contador, el anfitrión dispara un elemento por incremento, sin embargo, el
+Las prensas aterrizaron.</p>
+<p>Instantáneas, anfitrión → invitados, 4 + 22 bytes por kart (176 bytes para una cuadrícula completa):</p>
+<table>
+<thead>
+<tr>
+<th>Compensar</th>
+<th>Tipo</th>
+<th>Campo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>u8</td>
+<td><code>2</code> = instantánea</td>
+</tr>
+<tr>
+<td>1</td>
+<td>u16</td>
+<td>garrapata del anfitrión</td>
+</tr>
+<tr>
+<td>3</td>
+<td>u8</td>
+<td>recuento de karts</td>
+</tr>
+<tr>
+<td>por kart</td>
+<td>u8, f32 ×4, u8, u16, u8, u8</td>
+<td>espacio, x, z, rumbo, velocidad, vuelta, punto de control, artículo, banderas</td>
+</tr>
+</tbody>
+</table>
+<p>Los invitados rinden otros karts. <strong>~100 ms en el pasado</strong>, interpolando entre las dos instantáneas que
+mantener ese tiempo, y predecir su propio kart localmente a partir de sus entradas, acercándose al anfitrión
+posición cuando no están de acuerdo. Incluir la última entrada <code>seq</code> el anfitrión solicitó por kart en <code>flags</code> o un
+campo adicional si desea una conciliación exacta.</p>
+<h3 id="countdown-race-events-finish">Cuenta regresiva, eventos de carrera, finalización.</h3>
+<p>Los marcos de control son JSON, como máximo 4 KB, y los sellos del servidor <code>from</code> con la identificación del participante del remitente:</p>
+<ul>
+<li>Los invitados envían <code>{"type":"ready"}</code> una vez cargada la pista.</li>
+<li>El anfitrión espera a que cada humano conectado esté listo (o que se agote el tiempo de espera), luego envía
+<code>{"type":"event","kind":"countdown","goInMs":3000}</code>. Los invitados comienzan su cuenta regresiva local el
+recibo: no se necesita sincronización del reloj con esta precisión.</li>
+<li>Otros ritmos de carrera también son <code>event</code> marcos: <code>{"kind":"lap","slot":3,"lap":2}</code>,
+<code>{"kind":"finished","slot":3,"place":1,"timeMs":94210}</code>.</li>
+<li><code>chat</code> está disponible para todos, pero los invitados están limitados a 10 cuadros de control por minuto, suficiente para
+<code>ready</code> y algunos "gg"s, no para jugar.</li>
+</ul>
+<p>Cuando el último humano cruza la línea (o un cronómetro después de que se acabe el ganador), el anfitrión envía el
+resultado, que cierra la habitación y empuja <code>{"type":"result"}</code> a todos:</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms/{id}/result
+
+{ "teamScores": [0],
+  "metadata": { "track": "coral-loop",
+                "order": [ { "slot": 3, "timeMs": 94210 }, { "slot": 0, "timeMs": 95002 } ],
+                "bestLapMs": 30112 } }
+</code></pre>
+<p><code>teamScores</code> necesita exactamente una entrada por equipo (fijada entre 0 y 50), lo que no conlleva nada útil en un
+todos contra todos; el orden final vive en <code>metadata</code>. Una carrera por equipos es la misma sala con
+<code>teamCount: 2</code> y los puntos de cada equipo en <code>teamScores</code>.</p>
+<h3 id="cpu-drivers-leavers-and-host-changes">Controladores de CPU, abandonos y cambios de host</h3>
+<ul>
+<li><strong>Los asientos AI son tuyos para conducir.</strong> La plataforma reserva el asiento y nombra al conductor; el anfitrión
+la simulación lo dirige (una línea de carrera a través de los puntos de control, con algunas bandas elásticas).</li>
+<li><strong>Un invitado que se marcha a mitad de carrera.</strong> (<code>POST /rooms/{id}/leave</code>) mantiene su kart en la parrilla: el roster
+push muestra al mismo participante <code>id</code> ahora <code>isAi: true</code>, y la CPU del host se hace cargo de ese kart.</li>
+<li><strong>Un invitado que cae</strong> todavía está en la habitación; mantenga su kart en marcha y déjeles volver a conectarse.
+el enchufe más nuevo reemplaza al anterior.</li>
+<li><strong>Si el anfitrión se va</strong>, el rol de anfitrión pasa al humano restante que lleva más tiempo unido y al
+roster push muestra lo nuevo <code>isHost</code>. Todos los invitados ya tienen la última instantánea completa, por lo que la nueva
+el anfitrión reanuda la simulación y comienza a enviar instantáneas; las entradas de los invitados ahora se dirigen a ellos.
+La migración del host es tarea de su código: la plataforma solo mueve la función.</li>
+<li><strong>Si el host simplemente se desconecta</strong>, la habitación se cierra después de 60 segundos sin enchufe de host.</li>
+</ul>
+<h2 id="6-around-the-race">6. Alrededor de la carrera</h2>
+<ul>
+<li><strong>Voz y chat.</strong> Cada invitado ya puede <code>chat</code> en el zócalo de tiempo real; para voz, ver
+<a href="/es/docs/api/voice.html">Voz</a>.</li>
+<li><strong>Revancha.</strong> La sala se cierra tras el resultado. Haga que el anfitrión cree una nueva sala e invite al
+humanos de la lista anterior, o enviar a todos de regreso a unirse rápidamente.</li>
+<li><strong>Tablas de clasificación de tiempos de vuelta.</strong> La tabla de clasificación de la plataforma de un juego es su tablero elo, escrito únicamente por un servidor.
+tiempo de ejecución. Una tabla de clasificación definida por el editor acepta <code>POST /api/v1/leaderboards/{id}/submit</code>, pero eso
+La puntuación la reclama el cliente: está bien para una contrarreloj amistosa, no para nada con premios.</li>
+</ul>
+<h2 id="7-variant-b-server-authoritative-racing">7. Variante B: carreras con autoridad en el servidor</h2>
+<p>Para juegos clasificados, traslada la simulación a un guión. El vestíbulo no ha cambiado; agrega el guión y
+configuración de emparejamiento para el manifiesto:</p>
+<pre><code class="language-ini">server=server.js
+matchmaking.max_wait_seconds=20
+matchmaking.ai_players=7
+</code></pre>
+<p>Ahora dos cosas crean carreras: <strong>comenzando una habitación</strong> crea una sesión limitada a la habitación para sus humanos, y
+<strong>casamentero</strong> (<code>POST /api/v1/games/{slug}/matchmaking?queue=grand-prix</code>) crea uno cuando ocho
+Se encuentran reproductores o, con la configuración anterior, después de 20 segundos con CPU en hasta siete vacíos.
+asientos. Un lobby de amigos puede hacer cola junto con <code>POST /realtime/rooms/{id}/matchmake</code>.</p>
+<p>De cualquier manera, los clientes toman la <code>sessionId</code> (la habitación <code>gameSessionId</code>, o los billetes coincidentes) y
+jugar más <code>ws/v1/games?sessionId=…</code>. El socket en tiempo real, si lo hubiera, se conserva únicamente para la lista.</p>
+<h3 id="the-script">el guión</h3>
+<p>Toda la simulación se ejecuta <code>onTick</code> en el techo de 30 Hz. Cada invocación es una nueva caja de arena que
+obtiene <code>sessionState</code> entra y lo devuelve, así que mantenga ese estado pequeño: se serializa en cada tic.</p>
+<pre><code class="language-js">const TRACK = { laps: 3, radius: 14,
+  checkpoints: [[0, 0], [120, 0], [160, 60], [120, 120], [0, 120], [-40, 60]] };
+
+globalThis.game = {
+  tickRateHz: 30,
+  replays: true,
+  queues: [{ key: "grand-prix", teams: 8, teamSize: 1 }],
+  achievements: [
+    { key: "chequered-flag", name: "Chequered Flag", description: "Win a race.", points: 10 }
+  ],
+
+  createSession(ctx) {
+    const karts = racers(ctx).map((r, i) =&gt; ({
+      id: r.id, name: r.name, ai: r.ai, x: -8 * (i % 2), z: -6 * i, heading: 0, speed: 0,
+      cp: 1, lap: 0, boost: 0, boosts: 1, input: {}, ack: 0, finishedAt: null
+    }));
+    return { ok: true, sessionState: { t: ctx.now, goAt: ctx.now + 4000, karts, order: [] } };
+  },
+
+  onPlayerMessage(ctx) {                       // durable commands: discrete actions
+    const s = copy(ctx.sessionState);
+    const k = s.karts.find((k) =&gt; k.id === ctx.message.from);
+    if (ctx.message.data?.type === "use-item" &amp;&amp; k &amp;&amp; k.boosts &gt; 0 &amp;&amp; ctx.now &gt;= s.goAt) {
+      k.boosts--; k.boost = 1.2;
+    }
+    return { ok: true, sessionState: s };
+  },
+
+  onTick(ctx) {
+    const s = copy(ctx.sessionState);
+    const dt = Math.min(Math.max((ctx.now - s.t) / 1000, 0), 0.1);
+    s.t = ctx.now;
+    for (const i of ctx.inputs || []) {        // latest realtime input per player since last tick
+      const k = s.karts.find((k) =&gt; k.id === i.from);
+      if (k) { k.input = i.data; k.ack = Math.max(k.ack, Math.floor(+i.data.seq) || 0); }
+    }
+    if (ctx.now &gt;= s.goAt) {
+      for (const k of s.karts) {
+        if (k.finishedAt) continue;
+        move(k, k.ai ? aiInput(k) : k.input, dt);   // pure motion — shared with the client
+        progress(k, s, ctx);                        // checkpoints, laps, finish — server only
+      }
+    }
+    const snap = s.karts.map((k) =&gt;
+      [k.id, r2(k.x), r2(k.z), r3(k.heading), r2(k.speed), r2(k.boost), k.lap, k.cp, k.ack]);
+    const out = { ok: true, sessionState: s,
+      broadcast: [{ to: "all", data: { type: "snap", t: s.t, goAt: s.goAt, karts: snap } }] };
+    if (raceOver(s, ctx)) Object.assign(out, finish(s, ctx));
+    return out;
+  }
+};
+</code></pre>
+<p>Los ayudantes son códigos de juego normales. Las partes que le interesan a la plataforma:</p>
+<ul>
+<li><strong><code>racers(ctx)</code></strong> lee la grilla desde cualquier inicio que haya tenido la sesión: <code>ctx.room.roster</code> por un
+sala (los asientos AI tienen <code>userId: null</code>, así que dales identificadores como <code>ai-0-5</code>), <code>ctx.matchmaking.seats</code> por un
+carrera emparejada (saltar asientos con <code>id: null</code>), demás <code>ctx.players</code>.</li>
+<li><strong><code>move(k, input, dt)</code></strong> debe <strong>sujetar cada valor de entrada</strong> — <code>steer</code> a −1…1, <code>throttle</code> a 0…1 —
+porque <code>ctx.inputs[].data</code> es lo que el cliente envió. Solo <code>from</code> es de confianza. Mantenlo puro
+no <code>ctx</code>, sin estado de sesión, por lo que el cliente también puede ejecutarlo (consulte
+<a href="#client-side-prediction">predicción del lado del cliente</a>).</li>
+<li><strong>Aleatoriedad y tiempo</strong> venir de <code>ctx.random</code> y <code>ctx.now</code>; no hay <code>Date</code> o <code>Math.random</code>.</li>
+<li><strong><code>finish(s, ctx)</code></strong> regresa <code>result</code> (que finaliza la sesión y, para una sala, la cierra),
+<code>achievements</code> para el ganador si es humano, y <code>eloUpdates</code> para corredores humanos, por ejemplo, por parejas
+elo en el orden de finalización, leído y escrito de nuevo en <code>ctx.playerStates</code>. Los asientos AI no pueden
+recibir el estado del jugador, calificaciones o logros.</li>
+<li><strong><code>raceOver</code></strong> También deberíamos poner fin a las carreras que nadie puede terminar: cada ser humano se va según sus reglas.
+<code>ctx.presence</code> (habitaciones), o un límite de tiempo estricto.</li>
+<li><strong>Repeticiones</strong> mantener sólo el <em>final</em> <code>sessionState</code>. Mantenga una tabla compacta de tiempos de vuelta y finalización.
+orden en él, no un registro de posición por tick.</li>
+</ul>
+<h3 id="the-client">el cliente</h3>
+<p>Envíe dirección como entrada en tiempo real en cada tic y acciones discretas como comandos duraderos:</p>
+<pre><code class="language-js">// ~30 Hz: latest-wins, batched into the next onTick
+send({ type: "cmd", data: { type: "input", realtime: true, seq: ++seq,
+                            steer, throttle, brake, drift } });
+
+// on key press: a durable command, runs onPlayerMessage immediately
+send({ type: "cmd", data: { type: "use-item" } });
+</code></pre>
+<p>Elementos <strong>debe</strong> pasar por un comando duradero. Las entradas en tiempo real son las últimas ganancias entre ticks, y el
+La plataforma conserva sólo los campos de un solo uso. <code>pass</code>, <code>tackle</code> y <code>shoot</code> cuando una muestra más nueva
+reemplaza uno anterior: cualquier otro botón en una entrada en tiempo real se puede sobrescribir antes de marcar
+lo ve.</p>
+<p><code>achievement</code> los marcos llegan al mismo enchufe; leer <code>GET /api/v1/games/{slug}/achievements</code> en
+carga por cualquier cosa concedida antes de su apertura.</p>
+<h3 id="client-side-prediction">Predicción del lado del cliente</h3>
+<p>Renderizar solo lo que envía el servidor hace que el kart se sienta como si lo condujeran a través del barro. una direccion
+El cambio tiene que llegar al servidor, esperar el siguiente tic (hasta 33 ms a 30 Hz) y regresar en un
+<code>snap</code> — con un ping de 80 ms, es decir, más de 100 ms antes de que el kart gire. La predicción esconde que: el cliente
+se mueve <strong>su propio kart</strong> inmediatamente y trata a cada uno <code>snap</code> Como corrección, no como en la imagen.</p>
+<h4 id="share-the-motion-code">Comparte el código de movimiento</h4>
+<p>Divida la simulación como lo hace el script anterior: un puro <code>move(k, input, dt)</code> para el manejo y
+solo servidor <code>progress</code> para puntos de control, vueltas y llegadas. Exponer el código de movimiento de <code>server.js</code>
+como segundo global: el patrón que utiliza el ajedrez para <code>globalThis.chessRules</code> - y cargar el mismo archivo en
+el navegador:</p>
+<pre><code class="language-js">// server.js — shared by the platform's sandbox and the browser
+function move(k, input, dt) { /* clamp input, integrate speed, heading, x, z, boost */ }
+globalThis.kartPhysics = { move, TRACK };
+globalThis.game = { /* ... as above ... */ };
+</code></pre>
+<pre><code class="language-html">&lt;script src="server.js"&gt;&lt;/script&gt;  &lt;!-- defines kartPhysics; the client never calls game.* --&gt;
+</code></pre>
+<p>El cliente predice <strong>solo movimiento</strong>. Las vueltas, posiciones, elementos y el orden de llegada quedan en manos del servidor.
+llamar. No espere resultados idénticos: el sandbox y el navegador pueden no coincidir en los últimos bits de
+<code>Math.sin</code>/<code>Math.cos</code>y posiciones en <code>snap</code> son redondeados. La reconciliación absorbe esa tendencia.</p>
+<h4 id="step-at-the-servers-rhythm">Paso al ritmo del servidor</h4>
+<p>El servidor no ejecuta un paso por entrada. En cada tick se aplica el <strong>el último</strong> entrada que tiene para
+ese kart, lo sigue usando hasta que llega uno más nuevo y se integra en tiempo real desde el
+marca anterior. Así que refleje esa forma en lugar de avanzar a la velocidad de fotogramas de la pantalla:</p>
+<pre><code class="language-js">const pending = [];                              // inputs the server hasn't acknowledged yet
+let seq = 0, predicted, previous;               // { x, z, heading, speed, boost }, seeded from the first snap
+let error = { x: 0, z: 0, heading: 0 };          // visual offset, decays in render()
+
+setInterval(() =&gt; {                              // 30 Hz, the script's tickRateHz
+  if (!predicted || serverNow() &lt; goAt) return;  // the server ignores movement before goAt
+  const input = { steer: readSteer(), throttle: readThrottle(), brake: held("brake"), drift: held("drift") };
+  const entry = { seq: ++seq, input, dt: 1 / 30 };
+  send({ type: "cmd", data: { type: "input", realtime: true, seq: entry.seq, ...input } });
+  pending.push(entry);
+  previous = { ...predicted };
+  kartPhysics.move(predicted, input, entry.dt);  // the kart responds now, not a round trip later
+}, 1000 / 30);
+</code></pre>
+<p>Enviar más rápido que la tasa de ticks se desperdicia (solo se utiliza la última entrada por tick) y el
+La plataforma deja caer las entradas en tiempo real por encima de su límite por conexión.</p>
+<h4 id="reconcile-on-every-snap">Conciliar en cada <code>snap</code></h4>
+<p>El guión hace eco <code>ack</code>, el más alto <code>seq</code> se ha aplicado para cada kart. en cada <code>snap</code>, rebobina tu
+kart al estado del servidor y reproduce lo que el servidor aún no ha visto:</p>
+<pre><code class="language-js">function onSnap(snap) {
+  const [, x, z, heading, speed, boost, lap, cp, ack] = snap.karts.find((k) =&gt; k[0] === myId);
+  while (pending.length &amp;&amp; pending[0].seq &lt;= ack) pending.shift();   // applied or superseded
+
+  const corrected = { x, z, heading, speed, boost };
+  for (const p of pending) kartPhysics.move(corrected, p.input, p.dt);
+
+  if (!predicted) { predicted = corrected; previous = { ...corrected }; return; } // first snap
+  error.x += predicted.x - corrected.x;          // what the player would see jump
+  error.z += predicted.z - corrected.z;
+  error.heading += predicted.heading - corrected.heading;
+  if (Math.hypot(error.x, error.z) &gt; 3) error = { x: 0, z: 0, heading: 0 }; // wall hit, bump: snap
+  predicted = corrected;
+  hud.lap = lap; hud.checkpoint = cp;            // progress is never predicted
+}
+</code></pre>
+<p>Descartando todo hasta <code>ack</code> tiene razón a pesar de que last-wins omite algunas entradas: un omitido
+La entrada fue reemplazada antes de que el servidor funcionara, por lo que tampoco afectó al kart del servidor.</p>
+<h4 id="smooth-corrections-render-at-frame-rate">Correcciones suaves, renderizado a velocidad de fotogramas</h4>
+<p>Las pequeñas correcciones deberían ser invisibles. Dibuja el kart en la posición prevista más un decaimiento.
+compensación de error e interpolar entre los dos últimos pasos de predicción de 30 Hz para que una pantalla de 60 o 144 Hz
+se mueve suavemente:</p>
+<pre><code class="language-js">function render(frameDt) {
+  const decay = Math.exp(-frameDt / 0.1);        // ~100 ms to absorb a correction
+  error.x *= decay; error.z *= decay; error.heading *= decay;
+  const a = sinceLastStep() * 30;                // 0…1 between prediction steps
+  drawKart(lerp(previous.x, predicted.x, a) + error.x,
+           lerp(previous.z, predicted.z, a) + error.z,
+           lerpAngle(previous.heading, predicted.heading, a) + error.heading);
+}
+</code></pre>
+<p>Ajuste el umbral de aceleración en lugar de la caída: una corrección mayor que la longitud de un kart es real
+evento (un golpe que no predijo) y se lee mejor como un chasquido rápido que como una diapositiva lenta.</p>
+<h4 id="know-what-not-to-predict">Sepa qué no predecir</h4>
+<ul>
+<li><strong>Otros karts.</strong> Se extraen ~100 ms en el pasado (búfer <code>snap</code>s e interpolar entre los
+dos ese soporte <code>serverNow() - 100</code>), por lo que una colisión predicha contra ellos es una colisión con
+donde ellos <em>eran</em>. Predice las paredes y la pista (no se mueven) y deja que el servidor resuelva
+Golpes de kart a kart. La corrección llega en un viaje de ida y vuelta. Si el buffer se seca, extrapolar
+desde la velocidad y el rumbo hasta ~100 ms, luego manténgalo presionado.</li>
+<li><strong>Elementos.</strong> <code>use-item</code> es un comando duradero, por lo que se ejecuta en <code>onPlayerMessage</code> tan pronto como llegue -
+sin esperar tictac. Reproduzca la llama y el sonido al presionar la tecla; deja que la velocidad llegue
+reconciliación, ya que <code>boost</code> esta en el <code>snap</code>. Si el servidor se niega (no quedan cargos), el siguiente
+<code>snap</code> lo hace retroceder.</li>
+<li><strong>Estado racial.</strong> El recuento de vueltas, la posición y la llegada provienen de <code>snap</code> y solo las transmisiones de su guión.</li>
+</ul>
+<h4 id="estimate-the-server-clock">Estimar el reloj del servidor</h4>
+<p><code>snap.t</code> y <code>goAt</code> son la hora del servidor (<code>ctx.now</code>). Mantenga una compensación desde la brecha más pequeña observada, que
+filtra entregas lentas:</p>
+<pre><code class="language-js">let offset = Infinity;
+function noteSnap(snap) { offset = Math.min(offset, performance.now() - snap.t); }
+const serverNow = () =&gt; performance.now() - offset;
+</code></pre>
+<p>Inicia la cuenta regresiva desde <code>goAt</code>y predicción de puerta en él como lo hace el bucle anterior. Un kart que se mueve
+antes <code>goAt</code> localmente vuelve a la red con una banda elástica por el primer <code>snap</code> después del inicio.</p>
+<p>Para ajustar todo esto, agregue latencia artificial en el desarrollo (retraso <code>send</code> y <code>onSnap</code> entre 100 y 200 ms)
+y registrar el tamaño de cada corrección: correcciones grandes y constantes significan <code>move</code> se ha alejado de la
+copia del servidor o un campo de entrada se fija de forma diferente en cada lado.</p>
+<h2 id="checklist">Lista de verificación</h2>
+<ul>
+<li>[ ] <code>starhermit.txt</code> en la raíz del resultado de la compilación, con <code>control.*</code> para las acciones de kart.</li>
+<li>[] Token de lanzamiento leído desde el hash, eliminado, actualizado; babosa de <code>game_scope</code>.</li>
+<li>[ ] <code>GET /realtime/rooms/mine</code> en carga para volver a unirse a una carrera en curso.</li>
+<li>[ ] Sala de un solo equipo, seguimiento <code>metadata</code>; invitaciones, códigos de unión, abrir + unión rápida, solo con <code>aiPlayers</code>.</li>
+<li>[ ] Socket abierto con un ticket de conexión; Prefijo de remitente de 16 bytes eliminado y utilizado como identidad.</li>
+<li>[ ] Instantáneas del host y entradas de invitados a ≤ 20 Hz cada una, fotogramas ≤ 8 KB; El artículo presiona como contador.</li>
+<li>[] Listo → cuenta regresiva → eventos de carrera como marcos de control; resultado con el orden en <code>metadata</code>.</li>
+<li>[] El anfitrión conduce asientos de IA y karts de salida; el nuevo host se reanuda desde la última instantánea.</li>
+<li>[ ] Variante B: <code>tickRateHz: 30</code>, entradas sujetas, elementos como comandos duraderos, <code>result</code> + <code>eloUpdates</code>.</li>
+<li>[ ] Variante B: kart propio previsto con el compartido <code>move</code>, reconciliado en <code>ack</code>, correcciones suavizadas;
+sin movimiento antes <code>goAt</code>; otros karts interpolaron ~100 ms detrás.</li>
+</ul>
+<h2 id="see-also">Ver también</h2>
+<ul>
+<li><a href="/es/docs/api/realtime.html">Salas en tiempo real</a> — vestíbulos, asientos, el <code>ws/v1/realtime</code> contrato</li>
+<li><a href="/es/docs/api/game-scripts.html">Guiones de juego</a> — tasa de ticks, entradas en tiempo real, sesiones limitadas a la sala</li>
+<li><a href="/es/docs/api/games.html">Juegos</a> — emparejamiento, controles, configuraciones, el conector del juego</li>
+<li><a href="/es/docs/starhermit-txt.html"><code>starhermit.txt</code></a> — controles, fechas límite de emparejamiento, asientos de IA</li>
+</ul>
+
+{% endraw %}

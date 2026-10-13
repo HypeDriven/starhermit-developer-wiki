@@ -1,0 +1,185 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "崩溃和错误报告"
+source_url: "/docs/api/reports.html"
+source_path: "docs/api/reports.md"
+source_hash: "6d28d99eae2ec0d57e0611ea1d1db48136d4f38dacbb270fd4242dbfd0f0e97a"
+translation: "machine"
+permalink: "/zh-CN/docs/api/reports.html"
+---
+{% raw %}
+<h1 id="crash-and-bug-reports">崩溃和错误报告</h1>
+<p>玩家可以在任何有 slug 的游戏中报告崩溃或错误 - 仅限浏览器游戏
+包括 - 使用游戏的启动令牌或完整的用户令牌。游戏所有者阅读、分类和
+通过删除它们 <code>/api/v1/me/github-games/{id}/reports</code>.</p>
+<p>容器游戏自带服务器输出和崩溃记录，参见
+<a href="/zh-CN/docs/api/container-games.html#your-servers-output-and-crash-reports">容器托管的游戏服务器 - 您的服务器的输出和崩溃报告</a>.</p>
+<h2 id="endpoints">端点</h2>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/games/{slug}/reports</code></td>
+<td>该游戏的启动令牌或 JWT</td>
+<td>提交崩溃或错误报告</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/reports/mine</code></td>
+<td>该游戏的启动令牌或 JWT</td>
+<td>您对该游戏的 50 份最新报告及其状态</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/github-games/{id}/reports</code></td>
+<td>智威汤逊（所有者）</td>
+<td>列表报告： <code>?kind=crash|bug&amp;status=open|acknowledged|resolved&amp;page=&amp;pageSize=</code> (≤100)</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>智威汤逊（所有者）</td>
+<td>一份报告及其附件列表</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}/attachments/{attachmentId}</code></td>
+<td>智威汤逊（所有者）</td>
+<td>附件，始终作为下载</td>
+</tr>
+<tr>
+<td>修补</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>智威汤逊（所有者）</td>
+<td>放 <code>status</code></td>
+</tr>
+<tr>
+<td>删除</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>智威汤逊（所有者）</td>
+<td>删除报告 → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="file-a-report">提交报告</h2>
+<pre><code class="language-http">POST /api/v1/games/{slug}/reports
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  "kind": "crash",
+  "title": "Crash entering the second level",
+  "description": "TypeError: cannot read properties of undefined (reading 'tiles')\n    at loadLevel (game.js:812)",
+  "clientVersion": "1.4.2",
+  "platform": "web",
+  "buildId": "a1b2c3d",
+  "sessionId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "attachments": [
+    { "fileName": "console.log", "contentType": "text/plain", "dataBase64": "…" }
+  ]
+}
+</code></pre>
+<ul>
+<li><code>kind</code> 是 <code>crash</code> 或者 <code>bug</code>; <code>title</code> 为必填项（≤200 个字符）。</li>
+<li>其他一切都是可选的。 <code>userAgent</code> 默认为请求的 <code>User-Agent</code> 标头。</li>
+<li>回复： <code>201 { "id", "kind", "status": "open", "createdAt" }</code>.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>地位</th>
+<th>意义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td>畸形：未知 <code>kind</code>， 丢失的 <code>title</code>、无效的 base64 或不是 JSON</td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>未知或已删除的游戏</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>说明、附件计数或附件字节数超出游戏限制</td>
+</tr>
+<tr>
+<td><code>429</code></td>
+<td>超过该游戏每日报告限额；看 <code>Retry-After</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="limits">限制</h2>
+<p>运营商可以针对整个平台和单个游戏更改其中的每一项；每日限额
+也可以为一名玩家设置。</p>
+<table>
+<thead>
+<tr>
+<th>限制</th>
+<th>默认</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>每个玩家每天每场比赛的报告</td>
+<td>20</td>
+</tr>
+<tr>
+<td>描述长度</td>
+<td>20,000 个字符</td>
+</tr>
+<tr>
+<td>每份报告的附件</td>
+<td>4</td>
+</tr>
+<tr>
+<td>每个报告的附件字节数</td>
+<td>2 兆字节</td>
+</tr>
+<tr>
+<td>每场比赛保存的报告</td>
+<td>2,000</td>
+</tr>
+<tr>
+<td>每场比赛保留的字节数</td>
+<td>256 字节</td>
+</tr>
+<tr>
+<td>保留</td>
+<td>90天</td>
+</tr>
+</tbody>
+</table>
+<p>当游戏达到其存储限制时，最旧的报告（首先是已解决的报告）将被删除
+腾出空间。大于每个游戏的整个字节限制的单个报告将被拒绝 <code>413</code>.</p>
+<h2 id="triage-reports-game-owner">分类报告（游戏所有者）</h2>
+<p>列表返回 <code>{ "items", "total", "page", "pageSize" }</code>;每件物品都带有记者的名字，
+<code>kind</code>, <code>status</code>, <code>title</code>、客户详细信息及其附件数量。通过移动报告
+<code>open</code> → <code>acknowledged</code> → <code>resolved</code> 和：</p>
+<pre><code class="language-http">PATCH /api/v1/me/github-games/{id}/reports/{reportId}
+Content-Type: application/json
+
+{ "status": "resolved" }
+</code></pre>
+<p>附件以下载方式提供（<code>Content-Disposition: attachment</code>, <code>nosniff</code>, 沙箱
+客户服务提供商）。只有惰性类型才会保留其声明的内容类型 - text、JSON、PNG、JPEG、WebP、GIF、zip 和
+压缩包；其他任何东西，包括标记，都被用作 <code>application/octet-stream</code>.</p>
+<h2 id="from-the-javascript-sdk">来自 JavaScript SDK</h2>
+<pre><code class="language-js">StarHermit.reportBug('Score did not save', 'Finished level 3, score shows 0', { clientVersion: '1.4.2' });
+StarHermit.captureCrashes({ clientVersion: '1.4.2' });   // opt-in: uncaught errors become crash reports
+</code></pre>
+<p>请参阅 <a href="/zh-CN/docs/sdk/javascript.html#crash-and-bug-reports">JavaScript SDK</a>.</p>
+<p>共享 <a href="/zh-CN/docs/api/conventions.html">API约定</a> 描述响应解析、时间戳、分页和重试。</p>
+<p>看 <a href="/zh-CN/docs/credentials.html">凭证兼容性</a> 和 <a href="/zh-CN/docs/api/contracts.html">机器可读的合同</a>.</p>
+
+{% endraw %}

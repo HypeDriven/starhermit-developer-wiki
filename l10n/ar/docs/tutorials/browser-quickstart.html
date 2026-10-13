@@ -1,0 +1,111 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "أنشئ أول لعبة متصفح مستضافة"
+source_url: "/docs/tutorials/browser-quickstart.html"
+source_path: "docs/tutorials/browser-quickstart.md"
+source_hash: "41cf9fbedb43c0236d904fb42d9467a521861df09572f995e085dda2e06c1d23"
+translation: "machine"
+permalink: "/ar/docs/tutorials/browser-quickstart.html"
+---
+{% raw %}
+<h1 id="build-your-first-hosted-browser-game">أنشئ أول لعبة متصفح مستضافة</h1>
+<p><a href="/docs/examples/browser-quickstart.zip">تحميل ستار كوليكتور</a>، لعبة صغيرة كاملة بمدخلين
+الخيارات: اللعب بالحساب مع الحفظ السحابي، ولعب اللاعب الفردي الذي يتم الاحتفاظ بتقدمه في الذاكرة فقط.
+<a href="/docs/examples/browser-quickstart/index.html">حاول اللعب بدون توقيع</a> على هذا الويكي؛ يصبح تسجيل الدخول إلى الحساب
+متاحة بعد نشر نسختك الخاصة على StarHermit.</p>
+<p>أنت بحاجة إلى حساب StarHermit للنشر. اللعبة نفسها لا تحتاج إلى خادم خلفي أو تبعية
+التثبيت أو خطوة البناء أو مؤسسة الناشر.</p>
+<h2 id="1-unzip-and-play-locally">1. قم بفك الضغط واللعب محليًا</h2>
+<p>يحتوي الرمز البريدي <code>index.html</code>, <code>app.js</code>, <code>style.css</code>, <code>starhermit.txt</code>والملفين المساعدين.
+قم بخدمة المجلد المستخرج مع خادم ثابت محلي، على سبيل المثال:</p>
+<pre><code class="language-bash">python3 -m http.server 8000 --directory star-collector
+</code></pre>
+<p>هنا <code>star-collector</code> هو المجلد الذي قمت باستخراجه فيه. يفتح <code>http://localhost:8000</code> واختر
+<strong>العب بلاعب واحد (لا يتم حفظ التقدم)</strong>. انقر فوق النجمة. العودة إلى البداية أو إعادة التحميل
+يبدأ تشغيلًا جديدًا غير متعقب. لا يكتب هذا الوضع التقدم المحلي ولا تقدم الحساب.</p>
+<h2 id="2-publish-the-distributable-folder">2. قم بنشر المجلد القابل للتوزيع</h2>
+<p>البيان موجود بالفعل في جذر المجلد:</p>
+<pre><code class="language-ini">name=Star Collector Quickstart
+launch=index.html
+description=A small single-player game with account saves or untracked play.
+</code></pre>
+<p>في واجهة مستخدم نشر لعبة StarHermit، قم بإضافة هذا المجلد كلعبة جديدة. المجلد المحدد بأكمله هو
+بناء المنشورة. احتفظ فقط بالملفات التي تنوي تقديمها. يقوم API المكافئ بحزم الملفات
+تحت <code>client/</code> ويرسل أرشيف gzip الخام:</p>
+<pre><code class="language-bash">mkdir -p bundle/client
+cp -R star-collector/. bundle/client/
+cp star-collector/starhermit.txt bundle/starhermit.txt
+# Write the archive outside bundle so it cannot include itself.
+tar -C bundle -czf star-collector.tar.gz .
+
+curl --fail-with-body -X POST https://api.starhermit.com/api/v1/me/github-games/upload \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H 'Content-Type: application/gzip' \
+  --data-binary @star-collector.tar.gz
+</code></pre>
+<p><code>ACCESS_TOKEN</code> هو الرمز المميز لحسابك الكامل، بعد قبول صريح للشروط الحالية. الرد
+<code>game.id</code>, <code>game.gameSlug</code>، والنطاق الفرعي المستضاف يحدد لعبتك. افتح عنوان URL المستضاف الذي تم إرجاعه.
+للإصدارات اللاحقة استخدم تلك اللعبة <a href="/ar/docs/api/github-games.html#push-a-game-bundle">نقطة نهاية الحزمة</a>
+بدلاً من إنشاء قائمة أخرى. يرى <a href="/ar/docs/tutorials/ci-cd-build-upload.html">نشر سي.آي</a> عندما تكون جاهزة.</p>
+<h2 id="3-try-the-two-account-entry-paths">3. جرب المسارين للدخول إلى الحساب</h2>
+<p><strong>الإطلاق من StarHermit:</strong> إمدادات قاذفة <code>#game_token=&lt;jwt&gt;</code>. المساعد يلتقطها و
+يقوم بإزالته من عنوان URL قبل تشغيل وحدة اللعبة. يختار <strong>تواصل مع حساب StarHermit الخاص بك</strong>.</p>
+<p><strong>افتح عنوان URL المستضاف مباشرةً:</strong> يختار <strong>تسجيل الدخول مع ستارهيرميت</strong>. يتيح منتقي الموفر إمكانية
+يقوم اللاعب بتسجيل الدخول باستخدام حساب موجود أو إنشاء حساب. يعود مباشرة إلى هذه اللعبة بنطاق
+<code>#access_token=&lt;jwt&gt;</code>; ولا يتم إرسال أي بيانات اعتماد على مستوى الحساب إلى اللعبة.</p>
+<p>لا يتم تحميل اللعبة إلا عندما يختار اللاعب اللعب بالحساب. إذا كانت الشروط الحالية تحتاج إلى قبول،
+يعرض المستند كنص وعروض <strong>قبول والمتابعة</strong>. القبول يرسل التجزئة فقط
+من المراجعة المعروضة. يتم إعادة عرض المراجعة التي تم تغييرها لقرار صريح آخر.</p>
+<h2 id="4-check-progress-and-failures">4. التحقق من التقدم والفشل</h2>
+<p>اجمع بعض النجوم في وضع الحساب، وانتظر <strong>أنقذ</strong>، وإعادة التحميل. يعود العدد بعد الاختيار
+اللعب بالحساب. افتح علامة تبويب ثانية على نفس العدد المحفوظ: احفظ في واحدة، ثم اجمع في الأخرى. ال
+الثاني يجب أن يظهر الصراع والعرض <strong>تحميل أحدث التقدم السحابي</strong> بدلاً من الكتابة فوقه.</p>
+<p>وثيقة الحفظ هي <code>{ version: 1, points: &lt;non-negative integer&gt; }</code>. يتم تحميل اللعبة والتحقق من صحتها
+قبل الكتابة، يستخدم ETag المحمل للتحديثات المشروطة، ويمنع الكتابة بعد فشل القراءة.
+فهو يحفظ في كل مجموعة ويصنف البيانات المحفوظة فقط بعد الاعتراف. يرى
+<a href="/ar/docs/tutorials/cloud-save-sync.html">وصفة الحفظ</a> للتنسيقات والهجرة والمستندات الأكبر حجمًا.</p>
+<p>يؤدي تحديد اللعب الذي لم يتم تعقبه إلى تجاهل الرمز المميز للاعب اللعبة وإيقاف تجديد الخلفية. لا سحابة
+يحدث الحفظ أو الإنجاز أو المتصدرين أو كتابة التقدم المحلي. يستخدم اختيار تشغيل الحساب مرة أخرى
+قم بتسجيل الدخول للحصول على رمز مميز جديد.</p>
+<h2 id="5-adapt-it-to-your-game">5. قم بتكييفه مع لعبتك</h2>
+<p>استبدل زر النجمة ومخطط التقدم بطريقة اللعب الخاصة بك. احتفظ بخيارات الإدخال، الرمز المميز
+الالتقاط وقبول الشروط الصريحة وقاعدة التحميل قبل الحفظ ومعالجة الأخطاء وحالة الحفظ.
+أعلن عن إجراءات لوحة المفاتيح في البيان واقرأ <a href="/ar/docs/api/games.html#per-player-control-bindings">الضوابط API</a>
+عندما تحتاج لعبتك إلى عمليات إعادة ربط. ضع تفضيلات الحجم والرسومات فيها <a href="/ar/docs/api/games.html#per-player-game-settings">إعدادات</a>.</p>
+<p>للحصول على نتائج تنافسية متعددة اللاعبين أو تم التحقق من صحتها، قم بإضافة <a href="/ar/docs/choosing-an-integration.html">برنامج نصي أو حاوية</a>.
+يعد العداد السحابي الخاص بـ Quickstart تقدمًا مملوكًا للعميل، وليس دليلاً على نتيجة مشروعة.</p>
+<table>
+<thead>
+<tr>
+<th>ملف</th>
+<th>غاية</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index.html</code>, <code>style.css</code></td>
+<td>الدخول والشروط وطريقة اللعب وواجهة مستخدم الحالة التي يمكن الوصول إليها</td>
+</tr>
+<tr>
+<td><code>app.js</code></td>
+<td>أوضاع الدخول، الموافقة الصريحة، التحقق من التقدم، نقاط التفتيش، الصراعات</td>
+</tr>
+<tr>
+<td><code>starhermit-sdk.js</code></td>
+<td>التقاط الرمز المميز للإطلاق، وتسجيل الدخول المستضاف، وتجديد الرمز المميز</td>
+</tr>
+<tr>
+<td><code>cloud-save-store.js</code></td>
+<td>تحميل JSON الخام/وصفة الحفظ المشروط</td>
+</tr>
+<tr>
+<td><code>starhermit.txt</code></td>
+<td>البيانات الوصفية للنشر العام</td>
+</tr>
+</tbody>
+</table>
+<p>يرى <a href="/ar/docs/credentials.html">أوراق اعتماد</a>, <a href="/ar/docs/api/conventions.html">اتفاقيات API</a>، و
+<a href="/ar/docs/troubleshooting.html">استكشاف الأخطاء وإصلاحها</a> عندما يتصرف الطلب بشكل مختلف عن المتوقع.</p>
+
+{% endraw %}

@@ -1,0 +1,369 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "教程：使用公钥加入玩家"
+source_url: "/docs/tutorials/public-key-onboarding.html"
+source_path: "docs/tutorials/public-key-onboarding.md"
+source_hash: "49ebc031a538076978eab193219b2c0fd3cce731ed6327ede6768bbbcbb310f3"
+translation: "machine"
+permalink: "/zh-CN/docs/tutorials/public-key-onboarding.html"
+---
+{% raw %}
+<h1 id="tutorial-onboard-players-with-a-public-key">教程：使用公钥加入玩家</h1>
+<p>StarHermit 帐户不需要 Google、GitHub 或任何其他登录提供商。其凭证可以
+是您的游戏在玩家设备上生成的密钥对，以及玩家的电子邮件地址
+确认一次。之后，您的游戏将在每次启动时通过签署挑战来静默登录
+关键。玩家无需输入密码，也无需访问 StarHermit 页面。</p>
+<p>本教程构建了端到端的流程：生成密钥，注册它，等待玩家
+确认、登录、保持会话以及处理第二台设备和丢失的密钥。</p>
+<p><strong>用这个来</strong> 原生和独立游戏、启动器、Steam/Epic/GOG 版本和桌面工具 —
+任何在玩家机器上运行并且可以在那里保存私钥的东西。</p>
+<p><strong>使用其他东西</strong></p>
+<ul>
+<li><strong>StarHermit 上托管的浏览器游戏</strong>，在打开时已经收到启动令牌
+仪表板，或者可以显示 <a href="/zh-CN/docs/api/auth.html#sign-in-from-a-directly-opened-browser-game">登录按钮</a>.</li>
+<li><strong>CI 管道</strong>，它应该从 OAuth 会话注册密钥，无需电子邮件步骤：
+<a href="/zh-CN/docs/tutorials/ci-cd-build-upload.html">教程：从 CI/CD 上传构建</a>.</li>
+<li><strong>专用游戏服务器</strong>，它有自己的部署令牌，不能创建或充当
+玩家： <a href="/zh-CN/docs/tutorials/dedicated-server-onboarding.html">教程：发布专用服务器</a>.</li>
+</ul>
+<h2 id="what-the-player-sees">玩家看到什么</h2>
+<ol>
+<li>您的游戏要求提供电子邮件地址并获得他们的同意才能创建 StarHermit 帐户。</li>
+<li>他们打开确认电子邮件，单击链接，然后按 <strong>确认</strong> 在它打开的页面上。</li>
+<li>回到您的游戏中，他们已登录。在以后的启动中，根本不会询问任何问题。</li>
+</ol>
+<p>电子邮件地址为必填项，玩家必须确认一次。没有办法创建一个
+StarHermit 帐户默默地从 Steam、Epic 或 GOG 身份中单独获得。</p>
+<h2 id="before-you-start">开始之前</h2>
+<p>此页面上的代码是使用 WebCrypto 的纯 JavaScript，并且 <code>fetch</code>，所以它在浏览器中运行
+Electron 以及 Node 20 或更高版本。 <strong>这 <code>js</code> 下面的块按顺序组成一个ES模块</strong> ——拯救他们
+一起作为 <code>starhermit-key-auth.js</code>。任何其他语言都以同样的方式工作：步骤 1 给出了准确的
+字节格式，以及第 3 步要签名的确切字节。</p>
+<pre><code class="language-js">const API = 'https://api.starhermit.com';
+
+const b64 = (bytes) =&gt; btoa(String.fromCharCode(...new Uint8Array(bytes)));
+</code></pre>
+<h2 id="1-create-the-device-key">1. 创建设备密钥</h2>
+<p>产生 <strong>每次安装一对密钥</strong>，您的游戏第一次需要帐户。私人的
+密钥永远不会离开设备：不会离开您的服务器，不会离开 StarHermit。</p>
+<table>
+<thead>
+<tr>
+<th><code>keyType</code></th>
+<th><code>keyData</code> （标准 Base64）</th>
+<th>签名（标准Base64）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Ed25519</code> - 受到推崇的</td>
+<td>原始 32 字节公钥</td>
+<td>原始 64 字节 Ed25519 签名</td>
+</tr>
+<tr>
+<td><code>ECDSA-P256</code></td>
+<td>公共点：65字节未压缩（<code>04‖X‖Y</code>) 或 33 字节压缩</td>
+<td>采用 SHA-256 的 ECDSA， <strong>ASN.1 DER 编码</strong></td>
+</tr>
+<tr>
+<td><code>RSA-PSS</code></td>
+<td><code>SubjectPublicKeyInfo</code> DER，2048–8192 位模数，指数 ≤ 32 位</td>
+<td>RSASSA-PSS、SHA-256、MGF1-SHA-256、32 字节盐</td>
+</tr>
+</tbody>
+</table>
+<p><code>keyData</code> 最多 2,000 个字符。全平台一键一账户。</p>
+<p>挑选 <strong>埃德25519</strong> 除非你的平台无法产生。如果您使用 ECDSA，请注意 WebCrypto，
+Windows CNG 和大多数硬件密钥库返回原始签名 <code>r‖s</code> （64 字节）。星隐士
+需要 DER，因此将其转换 — 下面的模块会进行转换。</p>
+<pre><code class="language-js">// One key per installation. The private key can sign but is never exported.
+export async function createDeviceKey(keyType = 'Ed25519') {
+  if (!['Ed25519', 'ECDSA-P256'].includes(keyType)) throw new Error('This helper supports Ed25519 or ECDSA-P256');
+  const algorithm = keyType === 'Ed25519'
+    ? { name: 'Ed25519' }
+    : { name: 'ECDSA', namedCurve: 'P-256' };
+  const pair = await crypto.subtle.generateKey(algorithm, false, ['sign', 'verify']);
+  return {
+    keyType: keyType === 'Ed25519' ? 'Ed25519' : 'ECDSA-P256',
+    keyData: b64(await crypto.subtle.exportKey('raw', pair.publicKey)),
+    privateKey: pair.privateKey,
+  };
+}
+</code></pre>
+<p><strong>将私钥存储在操作系统保护的地方。</strong> 在浏览器或 Electron 渲染器中，
+不可提取的 <code>CryptoKey</code> 可以按原样保留在 IndexedDB 中。原生游戏应该使用
+平台密钥库 — Windows DPAPI 或 CNG、macOS 钥匙串、Linux 上的 libsecret。店铺 <code>keyType</code> 和
+<code>keyData</code> 在它旁边；您将每个请求都发送给他们。</p>
+<h2 id="2-start-registration">2. 开始注册</h2>
+<p>询问玩家的电子邮件地址并同意，然后：</p>
+<pre><code class="language-js">async function post(path, body) {
+  const res = await fetch(API + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json().catch(() =&gt; ({})) };
+}
+
+function fail(step, { status, body }) {
+  return Object.assign(new Error(`${step}: ${body.error ?? status}`), { status, body });
+}
+
+export async function register(key, email) {
+  const res = await post('/api/v1/auth/public-key/register',
+    { email, keyType: key.keyType, keyData: key.keyData });
+  if (res.status !== 202) throw fail('register', res);
+  return res.body; // { registrationId, email, emailSent, deferralReason, message }
+}
+</code></pre>
+<p><code>202</code> 表示星隐者已接受注册。如果 <code>emailSent</code> 是 <code>false</code>，电子邮件已排队并且
+仍会到达； <code>deferralReason</code> 说明为什么要等待。任何帐户尚未附加任何内容。</p>
+<p>塑造 UI 的三个规则：</p>
+<ul>
+<li><strong>每个电子邮件地址每 24 小时注册一次，每个 IP 地址注册一次。</strong> 第二次尝试
+是 <code>429</code> 和 <code>Retry-After</code>。请玩家在发送前确认地址，因为拼写错误
+花费他们一天的时间。从玩家的设备发送请求，而不是通过您自己的服务器：每个
+玩家将共享您服务器的 IP 及其每日注册次数。</li>
+<li><strong>该链接将在 4 小时后过期。</strong> 如果过期，玩家可以在24小时后再次注册一次
+起来了。</li>
+<li><strong><code>400</code></strong> 表示电子邮件地址或关键材料被拒绝； <code>error</code> 说哪个。</li>
+</ul>
+<h2 id="3-sign-in-with-the-key">3. 使用密钥登录</h2>
+<p>登录是一种挑战，也是一种回应。 <code>POST /api/v1/auth/public-key/challenge</code> 返回：</p>
+<pre><code class="language-json">{
+  "challengeId": "4fc4d72b-4c12-41ca-a500-dc13cccc3865",
+  "payload": {
+    "challengeId": "4fc4d72b-4c12-41ca-a500-dc13cccc3865",
+    "fingerprint": "9c0b7a…",
+    "issuer": "starhermit",
+    "audience": "starhermit",
+    "expiry": "2026-10-09T14:21:41.9264875+00:00",
+    "nonce": "NmL+tgMum6HXU/pa3T9xjQ==",
+    "clientTimestamp": "2026-10-09T14:16:41.9265739+00:00"
+  },
+  "expiresIn": 300
+}
+</code></pre>
+<p><strong>您签署的不是您收到的 JSON。</strong> StarHermit 通过自己的签名验证签名
+的序列化 <code>payload</code>:</p>
+<ul>
+<li>紧凑的 JSON，没有空格；</li>
+<li><strong>帕斯卡案例</strong> 成员姓名，严格按照顺序 <code>ChallengeId</code>, <code>Fingerprint</code>, <code>Issuer</code>,
+<code>Audience</code>, <code>Expiry</code>, <code>Nonce</code>, <code>ClientTimestamp</code>;</li>
+<li>复制的每个值 <strong>与服务完全一样</strong> — 不要解析和重新格式化日期；</li>
+<li>每一个 <code>+</code> 在随机数中写为 <code>\u002B</code>。这 <code>+</code> 日期保持原样。</li>
+</ul>
+<p>对于上述挑战，签名字节是以下内容的 UTF-8 编码：</p>
+<pre><code class="language-text">{"ChallengeId":"4fc4d72b-4c12-41ca-a500-dc13cccc3865","Fingerprint":"9c0b7a…","Issuer":"starhermit","Audience":"starhermit","Expiry":"2026-10-09T14:21:41.9264875+00:00","Nonce":"NmL\u002BtgMum6HXU/pa3T9xjQ==","ClientTimestamp":"2026-10-09T14:16:41.9265739+00:00"}
+</code></pre>
+<p>如果其中任何一个错误，答案就是 <code>401 "Invalid signature."</code>，重试无法修复。</p>
+<pre><code class="language-js">const FIELDS = ['challengeId', 'fingerprint', 'issuer', 'audience', 'expiry', 'nonce', 'clientTimestamp'];
+
+export function challengeSigningBytes(payload) {
+  const members = FIELDS.map((field) =&gt; {
+    let value = JSON.stringify(payload[field]);
+    if (field === 'nonce') value = value.replaceAll('+', '\\u002B');
+    return `"${field[0].toUpperCase()}${field.slice(1)}":${value}`;
+  });
+  return new TextEncoder().encode(`{${members.join(',')}}`);
+}
+
+export async function signChallenge(key, payload) {
+  const data = challengeSigningBytes(payload);
+  if (key.keyType === 'Ed25519')
+    return b64(await crypto.subtle.sign({ name: 'Ed25519' }, key.privateKey, data));
+  // WebCrypto returns an ECDSA signature as raw r||s; the server expects ASN.1 DER.
+  const rs = new Uint8Array(
+    await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key.privateKey, data));
+  return b64(derEcdsaSignature(rs));
+}
+
+function derEcdsaSignature(rs) {
+  const integer = (bytes) =&gt; {
+    let i = 0;
+    while (i &lt; bytes.length - 1 &amp;&amp; bytes[i] === 0) i++;
+    const value = [...bytes.slice(i)];
+    return value[0] &amp; 0x80 ? [0x02, value.length + 1, 0, ...value] : [0x02, value.length, ...value];
+  };
+  const body = [...integer(rs.slice(0, 32)), ...integer(rs.slice(32))];
+  return new Uint8Array([0x30, body.length, ...body]);
+}
+
+// Resolves to { userId, accessToken, refreshToken }, or null while the key is not attached to
+// an account yet — the player has not confirmed, the link expired, or the key was revoked.
+export async function signIn(key) {
+  const { keyType, keyData } = key;
+  const challenge = await post('/api/v1/auth/public-key/challenge', { keyType, keyData });
+  if (challenge.status !== 200) throw fail('challenge', challenge);
+  const signature = await signChallenge(key, challenge.body.payload);
+  const done = await post('/api/v1/auth/public-key/complete',
+    { challengeId: challenge.body.challengeId, signature, keyType, keyData });
+  if (done.status === 200) return done.body;
+  if (done.status === 401 &amp;&amp; done.body.error === 'Public key not registered or revoked.') return null;
+  throw fail('complete', done); // "Invalid signature." will never succeed: fix it, don't retry it
+}
+</code></pre>
+<p>挑战持续五分钟并且是一次性的，即使尝试失败也是如此，因此请申请新的挑战
+对于每一次尝试。挑战并完成共享每个 IP 地址每分钟 60 个请求的限制。</p>
+<h2 id="4-wait-for-the-player-to-confirm">4.等待玩家确认</h2>
+<p>通过电子邮件发送的链接将打开一个 StarHermit 页面，其中说明了确认将执行的操作；打开它会改变
+没有任何内容，因此预览链接的邮件扫描仪无法代表玩家进行确认。当
+球员紧逼 <strong>确认</strong>，StarHermit 创建他们的帐户，附上您的密钥并标记地址
+已验证。如果帐户已使用该地址，页面会显示该地址，并且密钥会添加到其中
+相反，已经拥有 StarHermit 帐户的玩家可以保留该帐户。然后他们登陆 starhermit.com
+在 StarHermit 仪表板上，已登录。</p>
+<p><strong>您的游戏永远不会从该页面收到令牌</strong>，并且不需要它们。玩家可以
+在手机或其他浏览器中确认。连接密钥后，您的游戏即可轻松登录
+与它。所以展示一个 "检查您的收件箱" 屏幕并继续尝试：</p>
+<pre><code class="language-js">// Poll until the player confirms the emailed link. Two requests per attempt, so every 5 s stays
+// well inside the 60-per-minute sign-in limit.
+export async function waitUntilConfirmed(key, { intervalMs = 5000, signal } = {}) {
+  for (;;) {
+    signal?.throwIfAborted();
+    const session = await signIn(key);
+    if (session) return session;
+    await new Promise((resolve) =&gt; setTimeout(resolve, intervalMs));
+  }
+}
+</code></pre>
+<p>将步骤 1 到 4 放在一起：</p>
+<pre><code class="language-javascript">import { createDeviceKey, register, signIn, waitUntilConfirmed } from './starhermit-key-auth.js';
+
+const key = await loadStoredKey() ?? await saveKey(await createDeviceKey());
+let session = await signIn(key);                // a returning player is signed in here
+if (!session) {
+  const email = await askForEmailAndConsent();
+  await register(key, email);
+  showCheckYourInbox(email);
+  session = await waitUntilConfirmed(key, { signal: cancelButton.signal });
+}
+</code></pre>
+<p><code>loadStoredKey</code>, <code>saveKey</code>, <code>askForEmailAndConsent</code> 和 <code>showCheckYourInbox</code> 是你写的。
+提供一个 <strong>取消</strong> 当链接过期时，会中止等待，并在四个小时后停止轮询。</p>
+<p>即使您平台的确认页面重定向回您的网站，也要继续轮询。玩家经常
+在与等待的设备不同的设备上打开电子邮件，然后重定向无处可去
+靠近您的等待屏幕；轮询是等待设备登录的方式。如果重定向确实到达
+在第二个选项卡中，仅使用其中一个选项卡登录并撤销额外的会话，否则玩家最终会
+有两个。</p>
+<h2 id="5-keep-the-session">5. 保持会话</h2>
+<p><code>complete</code> 返回 15 分钟的访问令牌和持续 7 天并轮换的刷新令牌。
+将访问令牌发送为 <code>Authorization: Bearer …</code>，并在过期前刷新：</p>
+<pre><code class="language-js">// Resolves to the new pair, or null when the session is over — sign in with the key again.
+export async function refresh(refreshToken) {
+  const res = await post('/api/v1/auth/refresh', { refreshToken });
+  return res.status === 200 ? res.body : null; // { accessToken, refreshToken }
+}
+</code></pre>
+<p>代替 <strong>两个都</strong> 每次都有令牌。提供使用过的刷新令牌会结束整个会话，因此
+确保两个线程或进程永远不会同时刷新。什么时候 <code>refresh</code> 回报 <code>null</code>， 称呼 <code>signIn</code> —
+不涉及电子邮件。关键是长期有效的凭证；令牌只是它的缓存。</p>
+<h2 id="6-finish-setting-up-the-account">6. 完成帐户设置</h2>
+<p><strong>条款。</strong> 新帐户必须接受当前的 StarHermit 条款才能使用其他任何内容。
+称呼 <code>GET /api/v1/me</code>。如果 <code>termsAcceptanceRequired</code> 是 <code>true</code>，显示来自的文本
+<code>GET /api/v1/terms</code>，当玩家接受它时，将其哈希发送到 <code>POST /api/v1/me/terms/accept</code>。
+请再次检查稍后的发布，因为条款已修改。细节：
+<a href="/zh-CN/docs/api/profile.html#terms-acceptance">条款接受</a>.</p>
+<p><strong>姓名。</strong> 该帐户以 <code>pk-…</code> 用户名。让玩家选择一个昵称：</p>
+<pre><code class="language-http">PATCH /api/v1/me
+Authorization: Bearer &lt;access-token&gt;
+Content-Type: application/json
+
+{ "nickname": "RookPilot" }
+</code></pre>
+<p>从这里开始，帐户就像其他帐户一样：朋友、聊天、配对、云保存、成就。</p>
+<h2 id="7-second-devices-lost-keys-and-limits">7. 第二台设备、丢失密钥和限制</h2>
+<p><strong>第二个设备</strong> 生成自己的密钥并将其注册到 <strong>相同的电子邮件地址</strong>。当
+玩家确认后，密钥会加入他们现有的帐户，而不是创建一个新帐户。 24小时的
+每个地址的限制也适用于此。</p>
+<p><strong>设备丢失或被盗。</strong> <code>POST /api/v1/auth/public-key/revoke-request</code> 和 <code>{ "email": "…" }</code>
+通过电子邮件发送页面链接；确认撤销 <strong>每一个</strong> 键入帐户并结束会话
+这些密钥已登录。仅打开链接不会改变任何情况。请求总会得到答复 <code>202</code> 具有相同的消息，无论是否
+地址有一个帐户。链接在四小时后过期，账户每 15 次可询问一次
+分钟。然后，剩余的每个设备再次注册（步骤 2）。</p>
+<p><strong>仅密钥帐户无法做到的事情。</strong> 一些更改可以保护帐户的凭据，因此它们
+需要通过 Google 或 GitHub 等提供商登录的会话：</p>
+<table>
+<thead>
+<tr>
+<th>行动</th>
+<th>仅限密钥帐户</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>添加密钥或撤销其他设备（<code>POST /me/public-keys</code>, <code>DELETE /me/public-keys/{id}</code> 或者 <code>/all</code>)</td>
+<td><code>403</code> — 通过电子邮件注册进行注册，或使用 OAuth 身份验证的会话</td>
+</tr>
+<tr>
+<td>更改帐户的电子邮件地址</td>
+<td><code>403 oauth_session_required</code> — 在链接提供者之前不可能</td>
+</tr>
+<tr>
+<td>撤销此安装自己的密钥</td>
+<td><code>DELETE /api/v1/me/public-keys/current</code>，使用其完整的公钥帐户会话；成功后丢弃本地凭据</td>
+</tr>
+</tbody>
+</table>
+<p>要管理其他凭据或更改电子邮件，请链接提供商。当仅密钥帐户链接一个帐户时，该链接将被保留
+直到玩家通过电子邮件确认为止。之后，提供商登录即可执行上述所有操作。
+看 <a href="/zh-CN/docs/api/auth.html#get-apiv1authoauthproviderauthorizelinkclient"><code>authorize?link=true</code></a>.</p>
+<h2 id="troubleshooting">故障排除</h2>
+<table>
+<thead>
+<tr>
+<th>回复</th>
+<th>意义</th>
+<th>使固定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>register</code> → <code>400</code> "密钥数据不是有效的……密钥"</td>
+<td><code>keyData</code> 其格式错误 <code>keyType</code></td>
+<td>检查步骤1中的表格。Ed25519和ECDSA采用原始密钥字节，而不是 <code>SubjectPublicKeyInfo</code></td>
+</tr>
+<tr>
+<td><code>register</code> → <code>429</code></td>
+<td>该地址或 IP 在过去 24 小时内注册</td>
+<td>等待 <code>Retry-After</code>;不要循环重试</td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "公钥未注册或撤销。"</td>
+<td>玩家尚未确认、链接已过期或密钥已被撤销</td>
+<td>继续等待（第 4 步），或重新注册</td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "签名无效。"</td>
+<td>签名字节或签名格式不匹配</td>
+<td>准确地重建签名字符串（步骤 3）。对于 ECDSA，发送 DER，而不是 <code>r‖s</code></td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "挑战未找到或已过期。"</td>
+<td>该挑战已超过五分钟或已使用</td>
+<td>为每次尝试请求新的挑战</td>
+</tr>
+<tr>
+<td><code>challenge</code> / <code>complete</code> → <code>429</code></td>
+<td>此 IP 每分钟有超过 60 个登录请求</td>
+<td>投票频率较低</td>
+</tr>
+<tr>
+<td>确认页面 → "该链接无法使用"</td>
+<td>已确认、已过期、复制不完整或帐户地址自发送后已更改</td>
+<td>如果您的游戏可以登录，则说明密钥已连接并且没有任何问题。如果没有，请重新注册</td>
+</tr>
+<tr>
+<td>按确认→ "该公钥已注册到另一个帐户。"</td>
+<td>该密钥属于不同的帐户</td>
+<td>在此设备上生成新密钥</td>
+</tr>
+<tr>
+<td><code>403</code> "该帐户已被暂停。"</td>
+<td>该账户已被暂停</td>
+<td>你的游戏无法解决任何问题</td>
+</tr>
+</tbody>
+</table>
+
+{% endraw %}

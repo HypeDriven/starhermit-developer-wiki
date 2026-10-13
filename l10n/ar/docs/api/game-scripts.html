@@ -1,0 +1,473 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "مخطوطات اللعبة"
+source_url: "/docs/api/game-scripts.html"
+source_path: "docs/api/game-scripts.md"
+source_hash: "cd6edb40d369c5c960591888b2d4bcb941948f0cd0a801d320fe8ae34ab69966"
+translation: "machine"
+permalink: "/ar/docs/api/game-scripts.html"
+---
+{% raw %}
+<h1 id="game-scripts">مخطوطات اللعبة</h1>
+<p>يمكن تعريف لعبة StarHermit الموثوقة من خلال أ <strong>ملف جافا سكريبت واحد</strong> تم تنفيذها من جانب الخادم في وضع الحماية <a href="https://github.com/sebastienros/jint">جينت</a> محرك. النص هو المرجع الوحيد لقواعد تلك اللعبة: فهو يتحقق من صحة أوامر كل لاعب، ويغير الحالة، ويقرر ما قد يراه كل عميل، ويحسب Elo، وينهي الألعاب. العملاء ليس لديهم أي سلطة. توثق هذه الصفحة وقت تشغيل JavaScript؛ الألعاب التي تحتاج إلى لغة أخرى قد تقوم بدلاً من ذلك بتنفيذ <a href="/ar/docs/api/container-games.html">خادم لعبة الحاوية</a> بروتوكول. كلاهما يستخدم نفس مواجهة اللاعب <a href="/ar/docs/api/games.html">واجهة برمجة تطبيقات الألعاب</a>. المثال العملي طوال الوقت هو الشطرنج - التنفيذ المرجعي في <a href="https://github.com/HypeDriven/starhermit-chess">HypeDriven/starhermit-الشطرنج</a>.</p>
+<h2 id="execution-model">نموذج التنفيذ</h2>
+<ul>
+<li>ملف JS واحد لكل لعبة، يتم تنفيذه في ملف <strong>محرك Jint ذو وضع الحماية الجديد لكل استدعاء</strong>. لا شيء يبقى في الذاكرة بين المكالمات - كل الحالة موجودة في المستندات التي تعيدها.</li>
+<li>لا المحيطة <code>Date</code> أو <code>Math.random</code>. يتم توفير الوقت والعشوائية على النحو التالي: <code>ctx.now</code> (عصر مللي ثانية) و <code>ctx.random</code> (تطفو في <code>[0, 1)</code>).</li>
+<li>تستدعي المنصة البرنامج النصي عندما يرسل اللاعب أمرًا دائمًا، وعندما يتم إنشاء الجلسة، وبشكل دوري <code>onTick</code> عمليات المسح (انظر <a href="/ar/docs/api/games.html#runtime-timing">واجهة برمجة تطبيقات الألعاب — توقيت وقت التشغيل</a>). في الوقت الحالى <code>{type:"input", realtime:true}</code> الإطارات هي الاستثناء: يتم تخزين أحدث المكاسب مؤقتًا وتسليمها كدفعة إلى العلامة التالية.</li>
+</ul>
+<h2 id="entry-points">نقاط الدخول</h2>
+<p>فضح المعالجات على <code>globalThis.game</code>. ستة اختيارية <strong>ثابت</strong> التصريحات تجلس بجانبهم:
+<code>tickRateHz</code> يسأل النظام الأساسي عن عدد مرات الاستدعاء <code>onTick</code> - أعلن ذلك إذا كانت لعبتك تعتمد على
+ضع علامة، نظرًا لأن اللعبة التي لا تقول شيئًا يتم تحديدها مرة واحدة كل أربع ثوانٍ (انظر <a href="#tick-rate">معدل القراد</a>),
+<code>achievements</code> يسجل إنجازات اللعبة (انظر <a href="#achievements">الإنجازات</a>), <code>replays</code>
+يطلب من المنصة الاحتفاظ بجلساتك النهائية (انظر <a href="#replays">الاعادة</a>), <code>persistent</code> توقف مؤقتًا
+الجلسات بدلاً من إنهائها عندما يغادر الجميع (انظر <a href="#persistent-sessions">جلسات مستمرة</a>),
+<code>linkedAchievements</code> أسماء الألعاب الأخرى التي تتلقى عمليات إلغاء القفل فيها <code>ctx.linkedAchievements</code> (يرى
+<a href="/ar/docs/api/achievements.html#achievements-from-other-games">الإنجازات من الألعاب الأخرى</a>)، و <code>queues</code> يعلن
+تقبل أشكال التوفيق بين التطابقات (انظر <a href="/ar/docs/api/games.html#matchmaking">الألعاب - التوفيق</a>). لعبة
+الذي يعلن عدم وجود قوائم انتظار يحتوي على 1v1 ضمني:</p>
+<pre><code class="language-js">globalThis.game = {
+  tickRateHz: 0, // turn-based: opt out of periodic ticks
+  replays: true, // keep finished sessions as replays
+  queues: [{ key: "duos", teams: 2, teamSize: 2 }],
+  achievements: [
+    { key: "first-win", name: "First Win", description: "Win a match.", points: 10 }
+  ],
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<p>تتم قراءة الإعلانات من خلال تقييم البرنامج النصي الخاص بك <strong>عندما يتم نشر اللعبة أو تحديثها</strong>,
+ليس في كل استدعاء — لذلك يجب أن تكون قيمًا ثابتة في ملف <code>game</code> هدف. نشر تحديث
+لتطبيق التغيير.</p>
+<ul>
+<li><code>createSession(ctx)</code> - يتم استدعاؤه عند إنشاء الجلسة (التوفيق، أو قبول الدعوة، أو ممارسة الذكاء الاصطناعي، أو بدء الغرفة في الوقت الفعلي - راجع <a href="#room-bound-sessions">جلسات مقيدة بالغرفة</a>).</li>
+<li><code>onPlayerMessage(ctx)</code> — يُستدعى لأوامر العميل الدائمة التي يتم تلقيها عبر طريقة اللعب WebSocket. تم وضع علامة واضحة على المدخلات <code>realtime:true</code> تجاوز نقطة الدخول هذه.</li>
+<li><code>onMembershipChange(ctx)</code> - خياري. يتم استدعاؤه عندما ينضم لاعب إلى جلسة تشغيل أو يغادرها (أ <a href="/ar/docs/api/realtime.html">غرفة التقدم</a>، أو <a href="/ar/docs/api/games.html#inviting-a-friend-into-a-game-in-progress">دعوة إلى لعبة قيد التقدم</a>). <code>ctx.players</code> يعكس بالفعل التغيير، و <code>ctx.membership</code> يكون <code>{ change: "joined" | "left", userId, name, team, slot }</code>. يعود <code>{ ok: false }</code> لرفض الانضمام؛ البرنامج النصي الذي لا يحتوي على هذا الخطاف يرفض كل صلة. الإجازة نهائية مهما رجعت. الإنجازات والنتائج قد تتفوق على النتيجة؛ أ <code>sessionState</code> يتم تجاهله.</li>
+<li><code>onTick(ctx)</code> - يتم استدعاؤها بواسطة خدمة مؤقت النظام الأساسي بمعدل التجزئة الفعلي؛ أحدث المدخلات في الوقت الحقيقي متوفرة في <code>ctx.inputs</code>. لا تتلقى اللعبة التي تم تحليلها إلى 0 هرتز مكالمات دورية، ولكن يجب أن تظل الوظيفة موجودة للوفاء بعقد البرنامج النصي.</li>
+</ul>
+<h2 id="context-object">كائن السياق</h2>
+<pre><code class="language-js">ctx = {
+  now: 1721473200000,              // ms epoch, from the host clock
+  random: 0.7231,                  // float in [0, 1), from the host RNG
+  sessionId: "0f8fad5b-...",       // current session id
+  pausedMs: 0,                     // persistent games only: total ms this session has spent paused
+  players: [                       // session participants
+    { id: "7c9e6679-...", name: "alice" },
+    { id: "00000000-0000-4000-8000-00000000a1a1", name: "The House", ai: true }
+  ],
+  sessionState: { /* ... */ },     // this script's session document, or null
+  playerStates: {                  // per-player documents (elo, history), or null
+    "7c9e6679-...": { elo: 1200, wins: 4, losses: 2, draws: 1, /* ... */ }
+  },
+  message: {                       // onPlayerMessage only
+    from: "7c9e6679-...",          // the authenticated user id — trusted
+    data: { type: "move", from: "e2", to: "e4" }  // client payload — untrusted (example: a chess move)
+  },
+  inputs: [                        // onTick only; omitted when none are pending
+    { from: "7c9e6679-...",        // authenticated sender id — trusted
+      data: { type: "input", seq: 42, mx: 0.7, mz: -0.2 } }
+  ]
+}
+</code></pre>
+<ul>
+<li>يتم وضع علامة على مقعد الذكاء الاصطناعي (إن وجد). <code>ai: true</code> على دخول اللاعب.</li>
+<li>لعبة تعلن <code>linkedAchievements</code> يحصل أيضا <code>ctx.linkedAchievements</code>: <code>{ &lt;playerId&gt;: { &lt;otherSlug&gt;: [unlocked keys] } }</code>، أعد القراءة عند كل استدعاء. يرى <a href="/ar/docs/api/achievements.html#achievements-from-other-games">الإنجازات من الألعاب الأخرى</a>.</li>
+<li>تحصل الجلسات المرتبطة بالغرفة (التي تبدأ من غرفة في الوقت الفعلي) على حقلي ctx إضافيين، <code>ctx.room</code> و <code>ctx.presence</code>، على <strong>كل</strong> الدعوة - ​​انظر <a href="#room-bound-sessions">جلسات مقيدة بالغرفة</a>.</li>
+<li><strong>لا تثق بشيء من <code>ctx.message.data</code> أو <code>ctx.inputs[].data</code>.</strong> الهوية الموثوقة هي المقابلة <code>from</code>، الذي يرفقه الخادم من الاتصال المصادق عليه - لا يمكن للعميل أبدًا توفيره أو انتحاله.</li>
+<li>المدخلات تختار التجميع مع <code>{type:"input", realtime:true, ...}</code>. غير مميزة <code>input</code> تظل الأوامر دائمة <code>onPlayerMessage</code> يدعو إلى التوافق مع الإصدارات السابقة. تستخدم مدخلات الوقت الفعلي فتحة واحدة معلقة لكل مرسل: الحركة هي آخر المكاسب، بينما <code>pass</code>, <code>shoot</code>، و <code>tackle</code> يتم دمج حواف الإجراء بحيث لا يمكن لعينة الحركة التالية مسحها قبل العلامة التالية. يجب أن تقوم البرامج النصية بتثبيت كل قيمة والتحقق من صحتها عند استهلاك الدفعة.</li>
+</ul>
+<h2 id="tick-rate">معدل القراد</h2>
+<p>تعمل المنصة <code>onTick</code> عمليات المسح لكل جلسة نشطة بمعدل قابل للتكوين. <strong>يطلب البرنامج النصي الخاص بك السعر الذي يريده</strong> من خلال إعلان ثابت <code>tickRateHz</code> على كائن اللعبة، بجانب نقاط الدخول:</p>
+<pre><code class="language-js">globalThis.game = {
+  tickRateHz: 15,          // ask the platform to tick this game 15x/second
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<ul>
+<li>تمت قراءة الإعلان <strong>عندما يتم نشر لعبتك أو تحديثها</strong>، وليس على كل علامة. نشر التحديث بعد تغييره.</li>
+<li><strong>اللعبة التي لا تعلن عن أي معدل يتم تحديدها عند 0.25 هرتز</strong> - مرة كل أربع ثواني. وهذا كثير
+الحكم على ساعة التحرك أو المهلة لا يكلف المنصة شيئًا تقريبًا، لكنه بطيء جدًا
+لأي شيء تعتمد عليه طريقة لعبك. لو <code>onTick</code> يقود لعبتك، أعلن عن المعدل الذي تحتاجه.</li>
+<li>يتم تثبيت الطلبات على الحد الأقصى للمنصة (<strong>30 هرتز</strong> بشكل افتراضي)، لذلك يمكن أن تطلب اللعبة مبلغًا أقل
+مما تسمح به المنصة ولكن ليس أكثر من ذلك أبدًا. اطلب <strong>0</strong> لتعطيل القراد بالكامل للعبة
+يتفاعل فقط مع أوامر اللاعب.</li>
+<li>قد تكون الأسعار <strong>كسور</strong>: <code>0.5</code> هي علامة كل ثانيتين. أصغر معدل غير الصفر هو
+<code>0.01</code> هرتز - يتم رفع رقم موجب أصغر إليه بدلاً من قراءته كإلغاء الاشتراك، لأن أ
+الكسر الصغير هو لعبة بطيئة. موقوتة معطلة فقط ل <code>0</code> أو معدل سلبي مفقود أو
+إعلان غير قابل للاستخدام (سلسلة، <code>null</code>, <code>NaN</code>) يأخذ الوضع الافتراضي 0.25 هرتز.</li>
+<li>يمكن للمشغل تجاوز سعر لعبة معينة، في أي من الاتجاهين.</li>
+<li>المدخلات في الوقت الفعلي هي أحدث المكاسب بين علامات التجزئة، بينما تظل حواف الإجراء المنفصلة مرتبة. قد يتخطى المستلم البطيء لقطة قديمة ولكن لا يمكنه تأخير المحاكاة أو المستلمين الآخرين.</li>
+</ul>
+<h2 id="replays">الاعادة</h2>
+<p>عند انتهاء الجلسة، يمكن للمنصة الاحتفاظ بجلستها النهائية <code>sessionState</code> كما <strong>اعادتها</strong> - ال
+الوثيقة التي يخدمها <code>GET /api/v1/games/{slug}/replays/{sessionId}</code> (يرى
+<a href="/ar/docs/api/games.html#replays">واجهة برمجة تطبيقات الألعاب - الإعادة</a>). الإعادة عبارة عن تخزين محفوظ لمدة طويلة مثل سجل المباراة
+هو، لذلك <strong>لعبتك تحصل على واحدة فقط إذا طلبت ذلك</strong>:</p>
+<pre><code class="language-js">globalThis.game = {
+  replays: true,           // keep finished sessions as replays
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<ul>
+<li>يجب أن يكون الإعلان حرفيًا <code>true</code> أو <code>false</code> — أي شيء آخر يُقرأ على أنه لا يوجد إعلان، و
+اللعبة التي لا تعلن شيئًا ليس لها إعادة.</li>
+<li>تمت قراءته <strong>عندما يتم نشر لعبتك أو تحديثها</strong>. نشر التحديث بعد تغييره.</li>
+<li>قد يجيب مشغل المنصة على لعبة معينة في كلتا الحالتين، وبالتالي فإن الإعلان هو طلب
+بدلا من الضمان. <code>GET /api/v1/games/{slug}</code> تقارير الجواب كما <code>replaysEnabled</code> —
+قم بتفرع واجهة مستخدم إعادة التشغيل الخاصة بك على ذلك، وليس على ما طلبه البرنامج النصي الخاص بك.</li>
+<li>لا يتغير أي شيء آخر مع إيقاف عمليات إعادة التشغيل: لا تزال حالة الجلسة الخاصة بك مخزنة ويتم إعادتها إليها
+كل دعوة كما <code>ctx.sessionState</code>، ولا تزال نقطة استعادة التعطل. يا لها من لعبة
+بدون عمليات إعادة التشغيل، لا يتم الحصول على نسخة تتجاوز مدة الجلسة، لذلك تجيب نقاط نهاية إعادة التشغيل الخاصة بها
+<code>404</code>.</li>
+<li>تصميم النهائي <code>sessionState</code> تستحق الإعادة — سجل التحركات، أو أي شيء يحتاجه عميلك
+لإعادة بناء المباراة. يستمر تنفيذ مرجع الشطرنج <code>state.game.moves</code> وخطوات ذلك
+من خلال نفس وحدة القواعد التي تنفذها المنصة.</li>
+</ul>
+<h2 id="persistent-sessions">جلسات مستمرة</h2>
+<p>لعبة تعلن <code>persistent: true</code> يحتفظ بجلساته عندما يغادر كل لاعب. حوالي 15
+ثواني بعد آخر قطع الاتصال بالجلسة <strong>متوقف مؤقتا</strong> - لا <code>onTick</code> المكالمات - والأول
+لاعب لإعادة الاتصال يستأنف ذلك. يؤدي قطع الاتصال أو عدم النشاط إلى إيقاف الجلسة مؤقتًا بدلاً من تركها. نتيجة المباراة يا صاحبي
+إجراء، أو إجازة صريحة للعضو النهائي، أو انتهاء صلاحية الاحتفاظ المهيأة، أو فشل استرداد المحطة الطرفية
+لا تزال تنتهي منه. يرى <a href="/ar/docs/session-lifecycle.html">دورة حياة الجلسة</a>.</p>
+<pre><code class="language-js">globalThis.game = {
+  persistent: true,        // pause empty sessions instead of ending them
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<ul>
+<li>يجب أن يكون حرفيا <code>true</code> أو <code>false</code>. تمت قراءته <strong>عندما يتم نشر لعبتك أو تحديثها</strong>.</li>
+<li><code>ctx.now</code> تبقى ساعة الحائط. تحصل أيضًا على جلسات مستمرة <code>ctx.pausedMs</code>، إجمالي الوقت الذي يقضيه
+توقفت، لذلك <code>ctx.now - ctx.pausedMs</code> هي الساعة التي تقف ساكنة بينما لا أحد هناك.</li>
+<li>يتم احتساب الجلسات المتوقفة مؤقتًا مقابل الحد الأقصى للجلسة لكل لاعب، لذا أعط اللاعبين أمرًا ينتهي بـ
+العالم مع أ <code>result</code>.</li>
+</ul>
+<p>انظر <a href="/ar/docs/tutorials/persistent-sessions.html">البرنامج التعليمي للجلسات المستمرة</a> للحصول على مثال عملي وتدفق العميل.</p>
+<h2 id="matchmaking-seat-layout">التوفيق بين تخطيط مقعد</h2>
+<p>تلقي جلسات مطابقة جديدة <code>ctx.matchmaking</code> على <strong>كل</strong> الاستدعاء (الإنشاء والأمر والعلامة).
+يحافظ على شكل قائمة الانتظار والمقاعد حتى لو تم إعادة نشر اللعبة لاحقًا:</p>
+<pre><code class="language-js">ctx.matchmaking = {
+  queue: "ffa", teams: 4, teamSize: 1,
+  seats: [
+    { id: "human-uuid", name: "Alice", team: 0, slot: 0, ai: false },
+    { id: "synthetic-ai-uuid", name: "AI 2-1", team: 1, slot: 0, ai: true },
+    { id: null, name: null, team: 2, slot: 0, ai: false },
+    { id: null, name: null, team: 3, slot: 0, ai: false }
+  ]
+};
+</code></pre>
+<p><code>ctx.players</code> يحتوي على مقاعد مشغولة فقط، مع <code>team</code> و <code>ai:true</code> للذكاء الاصطناعي. فهارس الفريق/الفتحة هي
+على أساس الصفر. معرفات الذكاء الاصطناعي مستقرة خلال هذه الجلسة وليست معرفات حساب StarHermit. البشر فقط
+لديك عضوية جلسة/دردشة ويمكنها الحصول على كتابات حالة اللاعب أو التقييم أو الإنجاز.
+حافظ على حالة الذكاء الاصطناعي <code>sessionState</code>. انسخ حقول القائمة التي يحتاجها العملاء إلى حالة لعبتك
+أو البث. يمكن حذف الجلسات الأقدم والجلسات غير المخصصة للتوفيق <code>ctx.matchmaking</code>.</p>
+<p>أعلن عن الموعد النهائي للبدء والحد الأقصى لعدد الذكاء الاصطناعي
+<a href="/ar/docs/starhermit-txt.html#starting-matchmaking-before-every-human-seat-is-filled"><code>starhermit.txt</code></a>.
+مع عدد منظمة العفو الدولية <code>0</code>، تبقى المقاعد الشاغرة فارغة. يتم تسليم نفس السياق إلى خوادم الحاويات.</p>
+<h2 id="room-bound-sessions">جلسات مقيدة بالغرفة</h2>
+<p>يمكن أن تكون الجلسة <strong>منضمة إلى غرفة الوقت الحقيقي</strong>: عندما أ <a href="/ar/docs/api/realtime.html">غرفة الوقت الحقيقي</a> للعبة مع أ <code>server=</code> يبدأ البرنامج النصي، وتقوم المنصة بإنشاء جلسة N-player واحدة للغرفة <strong>بشر</strong> المشاركين (مقاعد الذكاء الاصطناعي موجودة فقط في القائمة التي تواجه البرنامج النصي). هذه هي الطريقة التي يتم بها تشغيل ألعاب الوقت الفعلي المعتمدة من الخادم (مثل كرة القدم): توفر الغرف الردهة/التوفيق، ويقوم البرنامج النصي بتشغيل المباراة. يرى <a href="/ar/docs/api/realtime.html#room-bound-sessions">غرف الوقت الحقيقي — الجسر</a> لدورة حياة جانب الغرفة.</p>
+<p>كل دعوة (<code>createSession</code>, <code>onPlayerMessage</code>, <code>onTick</code>) لجلسة مقيدة بالغرفة تتلقى حقلين ctx إضافيين:</p>
+<pre><code class="language-js">ctx.room = {
+  roomId: "0f8fad5b-...",
+  metadata: { /* ... */ },        // the room's opaque config.metadata blob
+  roster: [                       // frozen match roster, humans AND AI seats,
+    { userId: "7c9e6679-...",     //   ordered by team then slot
+      name: "alice", team: 0, slot: 0, ai: false },
+    { userId: null,               // AI seat — never a session player
+      name: "Rafa Vento", team: 0, slot: 1, ai: true }
+  ]
+};
+ctx.presence = {                  // every user who is or was a human participant
+  "7c9e6679-...": { online: true, left: false }
+};
+</code></pre>
+<ul>
+<li><code>presence.online</code> — لدى المستخدم مقبس مباشر في أي من سجلي الاتصال (غرف الوقت الفعلي <strong>أو</strong> <code>ws/v1/games</code>).</li>
+<li><code>presence.left</code> — لم يعد المستخدم يشغل مقعدًا نشطًا: لقد غادر صراحةً وتم تحويل مقعده إلى مشارك يعمل بالذكاء الاصطناعي. <code>left</code> دائم؛ <code>online</code> قد ترفرف. من المتوقع أن يقود البرنامج النصي منطق الاستيلاء/إعادة الانضمام لمنظمة العفو الدولية من هذه العلامات.</li>
+<li>تتم إعادة قراءة القائمة عند كل استدعاء، لذلك تظهر تحويلات المقاعد (البشرية → الذكاء الاصطناعي) فور حدوثها.</li>
+</ul>
+<p>عندما يعود البرنامج النصي المرتبط بالغرفة <code>result</code>، المنصة تنهي الجلسة، <strong>يخزن النتيجة في الغرفة، ويغلق الغرفة</strong> - لا توجد نتيجة مقدمة من المضيف.</p>
+<p>والعكس غير صحيح: <strong>إغلاق الغرفة لا ينهي جلستها.</strong> إذا تم إغلاق الغرفة أولاً (على سبيل المثال لأن آخر إنسان غادر الغرفة دون تسجيل قيد التقدم - ليس فقط لأن المضيف أصبح غير متصل بالإنترنت، وهو ما يؤدي فقط إلى نقل دور المضيف عندما تكون الجلسة نشطة)، فستستمر الجلسة في العمل، <code>ctx.room.roster</code> يصبح فارغًا ويظهر كل إنسان <code>left: true</code>. يعود <code>result</code> ثم إذا كانت المباراة يجب أن تنتهي بالغرفة. يرى <a href="/ar/docs/api/realtime.html#the-60-second-host-rule-and-room-bound-sessions">غرف الوقت الفعلي — قاعدة المضيف لمدة 60 ثانية والجلسات المرتبطة بالغرفة</a>.</p>
+<h2 id="return-shape">عودة الشكل</h2>
+<p>تقوم كل نقطة إدخال بإرجاع نفس الشكل (جميع الحقول اختيارية باستثناء <code>ok</code>):</p>
+<pre><code class="language-js">return {
+  ok: true,                        // false on failure
+  error: "Illegal move",           // goes only to the sender (as a WS "error" frame)
+  sessionState: { /* ... */ },     // REPLACES the stored session document
+  playerStates: {                  // REPLACES stored per-player documents
+    "7c9e6679-...": { elo: 1216, /* ... */ }
+  },
+  broadcast: [                     // only these messages ever reach clients
+    { to: "all", data: { type: "moved", /* ... */ } },
+    { to: ["9b2f8c1a-..."], data: { type: "state", /* ... */ } }
+  ],
+  eloUpdates: {                    // published to the game's leaderboard by the host
+    "7c9e6679-...": 1216,
+    "9b2f8c1a-...": 1184
+  },
+  achievements: {                  // server-authoritative unlocks, by player id
+    "7c9e6679-...": ["first-win", "flawless"]
+  },
+  scores: {                        // to your game's own leaderboards, by board key
+    "high-score": { "7c9e6679-...": 4200 }
+  },
+  result: { kind: "white-win", reason: "checkmate" }  // ends the session (example: a chess result)
+};
+</code></pre>
+<p>القواعد الأساسية:</p>
+<ul>
+<li><code>sessionState</code> وكل دخول <code>playerStates</code> <strong>يستبدل</strong> المستندات المخزنة - قم دائمًا بإرجاع المستندات الكاملة، ولا تختلف أبدًا.</li>
+<li>الرسائل المدرجة فقط في <code>broadcast</code> يتم تسليمها للعملاء، كل منها موجه إلى معرفات اللاعب الصريحة أو <code>"all"</code>. لا شيء آخر يتسرب.</li>
+<li><code>eloUpdates</code> هي الطريقة الوحيدة لتغيير التقييمات. القيم هي كل لاعب <strong>تصنيف مطلق جديد</strong>، يتم تطبيقه كما تم إرساله - النظام الأساسي لا يضع حدًا أقصى للتغيير لكل مباراة، لذا قم بتثبيته بنفسك (انظر <a href="/ar/docs/api/games.html#elo-per-match">إيلو لكل مباراة</a>). يستخدمها المضيف من أجل التوفيق وينشرها على لوحة المتصدرين للعبة؛ لا يمكن للعملاء أبدًا إرسال النتائج مباشرة (انظر <a href="/ar/docs/api/leaderboards.html">المتصدرين</a>). الحفاظ على التصنيف في <code>playerStates[id].elo</code> لذلك المالك <a href="/ar/docs/api/leaderboards.html#resetting-a-players-rating">إعادة تعيين التصنيف</a> يصل إلى نسختك أيضًا.</li>
+<li><code>achievements</code> هي الطريقة الوحيدة لمنح الإنجازات. يتم حل المفاتيح وفقًا لإنجازات اللعبة - التي تم الإعلان عنها أو إنشاؤها بواسطة مالكها - وتستمر بواسطة النظام الأساسي؛ يرى <a href="#achievements">الإنجازات</a>.</li>
+<li><code>scores</code> هي الطريقة الوحيدة التي تتغير بها لوحات المتصدرين الخاصة بلعبتك - انظر <a href="#leaderboards">المتصدرين</a>.</li>
+<li>إنهاء الألعاب عبر <code>result</code>. ثم ينهي المضيف الجلسة ويلعب مع <a href="#replays">الاعادة</a> <strong>أرشيف النهائي <code>sessionState</code></strong> كما الإعادة (يخدم من قبل <code>GET .../replays/{sessionId}</code> - يرى <a href="/ar/docs/api/games.html#replays">واجهة برمجة تطبيقات الألعاب</a>).</li>
+</ul>
+<h2 id="achievements">الإنجازات</h2>
+<p>البرنامج النصي الخاص بك هو <strong>فقط</strong> الشيء الذي يمكن أن يفتح إنجازات لعبتك. لا يوجد عميل
+نقطة النهاية بالنسبة لهم: <code>POST /api/v1/me/achievements/unlock</code> يرفض الإنجازات على نطاق اللعبة بشكل مباشر،
+وترفض نقاط نهاية CRUD الخاصة بالناشر لمسها. يمكن لصاحب اللعبة إضافة إنجازات بجانبه
+المعلنة من خلال
+<a href="/ar/docs/api/achievements.html#achievements-created-by-the-games-owner"><code>/me/github-games/{id}/achievements</code></a>;
+يفتح البرنامج النصي الخاص بك تلك المفاتيح بنفس الطريقة تمامًا. وهذا يجعل الإنجازات كخادم-
+موثوقة مثل بقية اللعبة، وهي الآلية <strong>أي</strong> لعبة مع <code>server=</code> script
+يجب استخدامه - بما في ذلك الشخص الذي يتم تشغيل طريقة لعبه في مكان آخر (انظر
+<a href="/ar/docs/api/achievements.html#which-games-can-use-this">ما هي الألعاب التي يمكنها استخدام هذا؟</a>).</p>
+<h3 id="declare">يعلن</h3>
+<p>ثابت <code>achievements</code> مصفوفة على <code>game</code> هدف. فقط <code>key</code> مطلوب:</p>
+<pre><code class="language-js">globalThis.game = {
+  achievements: [
+    { key: "first-win", name: "First Win", description: "Win a match.", points: 10 },
+    { key: "flawless",  name: "Flawless",  description: "Win without conceding.",
+      points: 50, secret: true, icon: "https://cdn.example/flawless.png" }
+  ],
+  // ...entry points
+};
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>مجال</th>
+<th>يكتب</th>
+<th>ملحوظات</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>key</code></td>
+<td>خيط</td>
+<td><strong>مطلوب.</strong> معرف ثابت، ≥ 128 حرفًا، فريد داخل اللعبة. يتم تجاهل التكرارات بعد الأولى.</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>خيط</td>
+<td>الافتراضات ل <code>key</code>.</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>خيط</td>
+<td>الافتراضات ل <code>""</code>.</td>
+</tr>
+<tr>
+<td><code>icon</code></td>
+<td>خيط</td>
+<td>عنوان URL اختياري.</td>
+</tr>
+<tr>
+<td><code>secret</code></td>
+<td>منطقية</td>
+<td>مخفية عن اللاعب حتى <em>هم</em> فتحه. الافتراضات ل <code>false</code>.</td>
+</tr>
+<tr>
+<td><code>points</code></td>
+<td>رقم</td>
+<td>مثبتة إلى 0-10000. الافتراضات ل <code>0</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>يتم تطبيق المصفوفة عند نشر اللعبة أو تحديثها:</p>
+<ul>
+<li>التعاريف متطابقة <code>key</code> - يؤدي تحرير الاسم أو الرمز أو النقاط أو العلامة السرية إلى تحديث التعريف الحالي، ويحتفظ به كل من حصل عليه بالفعل.</li>
+<li>يتم حذف المفتاح الذي توقفت عن التصريح عنه <strong>فقط بينما لم يفتحه أحد</strong>. لا يتم تدمير التاريخ المكتسب أبدًا، لذا يظل الإنجاز المتقاعد مرئيًا للاعبين الذين يحملونه.</li>
+<li>على الأكثر <strong>100</strong> الإنجازات لكل لعبة؛ يتم إسقاط الإضافات التي تتجاوز ذلك.</li>
+<li>الإعلان هو <strong>أفضل جهد</strong>: يتم تخطي الإدخالات المشوهة. قم دائمًا بتأكيد التعريفات المنشورة باستخدام <code>GET /api/v1/games/{slug}/achievements</code> بعد تحديث اللعبة.</li>
+</ul>
+<h3 id="unlock">فتح</h3>
+<p>العودة ان <code>achievements</code> خريطة من <strong>أي</strong> نقطة الدخول — <code>createSession</code>, <code>onPlayerMessage</code>، أو
+<code>onTick</code>:</p>
+<pre><code class="language-js">onTick(ctx) {
+  const state = JSON.parse(JSON.stringify(ctx.sessionState));
+  const unlocks = {};
+  for (const p of ctx.players) {
+    if (!p.ai &amp;&amp; state.scores[p.id] &gt;= 10) unlocks[p.id] = ["ten-points"];
+  }
+  return { ok: true, sessionState: state, achievements: unlocks };
+}
+</code></pre>
+<ul>
+<li>يفتح <strong>عاجز</strong> - إعادة التأكيد على المفتاح الذي يحمله اللاعب بالفعل هو أمر محظور، لذلك يمكن للبرنامج النصي أن يمنح بأمان من الشرط الذي يعيد تقييمه في كل علامة بدلاً من التتبع "منحت بالفعل" في حالته الخاصة.</li>
+<li>يتم تجاهل المفاتيح غير المعروفة (لم يتم الإعلان عنها ولم يتم إنشاؤها من قبل مالك اللعبة)، والمستخدمين الذين ليسوا مشاركين في هذه الجلسة، ومقعد الذكاء الاصطناعي بصمت.</li>
+<li>على الأكثر <strong>32</strong> يتم قبول المفاتيح لكل لاعب لكل استدعاء؛ يتم إسقاط المزيد من المفاتيح في نفس المصفوفة.</li>
+<li>تستمر الصفوف مع بقية عمليات الكتابة الخاصة بالاستدعاء، لذا لا يمكن أن ينجو إلغاء القفل من استدعاء فاشل.</li>
+</ul>
+<h3 id="delivery">توصيل</h3>
+<p>يتم دفع كل فتح تم منحه حديثًا إلى اللاعب الفائز <code>ws/v1/games</code> كإطار متميز -
+إنها حقيقة المنصة، وليست واحدة منكم <code>broadcast</code> رسائل:</p>
+<pre><code class="language-json">{ "type": "achievement",
+  "data": { "key": "first-win", "name": "First Win", "description": "Win a match.",
+            "icon": null, "points": 10, "unlockedAt": "2026-07-25T09:14:02Z" } }
+</code></pre>
+<p>يفتح الممنوحة من <code>createSession</code> يهبطون قبل وجود أي مقبس، لذلك يصلون بدون إطار -
+يجب على العملاء قراءة <code>GET /api/v1/games/{slug}/achievements</code> عند التحميل وتعامل مع الإطار باعتباره
+مسار التحديث المباشر سطح كامل في <a href="/ar/docs/api/achievements.html">الإنجازات</a>.</p>
+<h2 id="leaderboards">المتصدرين</h2>
+<p>إلى جانب لوحة elo، يمكن أن تشتمل لعبتك على لوحات صدارة ينشئها مالكها
+<a href="/ar/docs/api/leaderboards.html#your-games-own-leaderboards"><code>POST /api/v1/me/github-games/{id}/leaderboards</code></a>,
+كل مع أ <code>key</code>. أرسل لهم عن طريق العودة <code>scores</code> من أي نقطة دخول — مفتاح اللوحة → معرف اللاعب →
+الرقم:</p>
+<pre><code class="language-js">onPlayerMessage(ctx) {
+  var s = ctx.sessionState;
+  if (ctx.message.data.type === "finish-run") {
+    var scores = { "high-score": {}, "fastest-run": {} };
+    scores["high-score"][ctx.message.from] = s.points[ctx.message.from];
+    scores["fastest-run"][ctx.message.from] = ctx.now - s.startedAt;   // a time-ms board
+    return { ok: true, sessionState: s, scores: scores };
+  }
+  /* ... */
+}
+</code></pre>
+<ul>
+<li>يحتفظ كل لاعب به <strong>أفضل</strong> سجل على كل لوحة، حسب اتجاه نوع اللوحة، لذا قم بالإبلاغ
+كل نتيجة – يتم تجاهل النتيجة الأسوأ بكل بساطة.</li>
+<li>يتم احتساب المشاركين في الجلسة فقط. مفاتيح غير معروفة أو غير نشطة، ونتائج خارج قواعد اللوحة،
+يتم إسقاطها بصمت. على الأكثر 16 لوحة لكل عودة.</li>
+<li>على عكس <code>eloUpdates</code>، لا يتم نشر أي شيء <code>playerStates</code> - احتفظ بنسختك الخاصة
+<code>playerStates</code> إذا كانت اللعبة تحتاج إلى قراءة أفضل ما في الأمر شخصيًا.</li>
+</ul>
+<h2 id="where-your-script-runs">حيث يتم تشغيل البرنامج النصي الخاص بك</h2>
+<p>البرنامج النصي الذي يتكرر بلا حدود، أو يستنفد ذاكرته، أو يتجاوز ميزانيته الزمنية، يفشل في
+استدعاء. لا يتم تطبيق نتائجها الفاشلة. يُبلغ الأمر أو العلامة عن واحد مما يلي:</p>
+<ul>
+<li><code>Game script error: the script crashed its runtime (for example, by recursing without limit).</code></li>
+<li><code>Game script error: the script exceeded its memory budget.</code></li>
+<li><code>Game script error: the script exceeded its time budget.</code></li>
+</ul>
+<h2 id="your-games-share-of-the-server">حصة لعبتك من السيرفر</h2>
+<ul>
+<li><strong>وقت البرنامج النصي.</strong> تشترك جميع جلسات اللعبة في ميزانية زمنية للبرنامج، تبلغ 2000 مللي ثانية في الثانية
+الافتراضي، مكلف بما استغرقه كل استدعاء بالفعل. تم رفض اللعبة على حصتها بدلاً من ذلك
+من قائمة الانتظار: يتم تخطي علامة الاختيار، ويتم الرد على الأمر "هذه اللعبة تستخدم أكثر من حصتها
+من الخادم الآن؛ حاول مرة أخرى قريبا."، وإنشاء عوائد الجلسة <code>429</code>.</li>
+<li><strong>الأوامر.</strong> يمكن لكل لاعب إرسال 20 أمرًا دائمًا في الثانية لكل جلسة (مع دفعة قصيرة
+بدل)؛ أبعد من ذلك يتم الرد على الأمر بـ <code>error</code> إطار، "أوامر كثيرة جدًا؛ ابطئ." لا يتضمن الإطار حالة HTTP. الإدخال في الوقت الفعلي محدود بشكل منفصل.</li>
+<li><strong>نتائج.</strong> قد تكون النتيجة التي تنتهي بها الجلسة 64 كيلو بايت على الأكثر؛ تم رفض واحد أكبر
+<code>422</code>.</li>
+<li><strong>حجم البرنامج النصي.</strong> A <code>server=</code> يمكن أن يصل حجم البرنامج النصي إلى 2 ميغابايت على الأكثر؛ تم رفض واحد أكبر <code>422</code> من قبل
+يتم تخزينها أو تحليلها.</li>
+</ul>
+<p>يمكن للمشغلين رفع أو خفض كل من هذه العناصر في لعبة فردية.</p>
+<h2 id="budgets">الميزانيات</h2>
+<p>تعمل البرامج النصية ضمن ميزانيات الموارد هذه:</p>
+<ul>
+<li>~250 مللي ثانية لوحدة المعالجة المركزية لكل استدعاء</li>
+<li>ذاكرة 32 ميجابايت</li>
+<li>حد بيان لكل استدعاء</li>
+<li>ميزانية بايت لكل لاعب — يجب أن تظل جميع مستندات الحالة قابلة للتسلسل وصغيرة الحجم</li>
+<li>تتداخل القيم على عمق 64 مستوى على الأكثر عندما تصبح نصًا. أي شيء ترجعه نقطة الدخول، كل
+إعلان, <code>JSON.stringify</code>، و <code>Array.prototype.join</code>/<code>toString</code>/<code>toLocaleString</code> رفض أ
+قيمة أعمق مع <code>RangeError</code> (واحد تم إرجاعه يفشل في الاحتجاج: "متداخلة أكثر من 64 المستويات
+عميق"). <code>JSON.parse</code> توقفت بالفعل عند 64، لذا فإن القيمة الأعمق لا يمكن أبدًا أن تكون ذهابًا وإيابًا. <code>flat</code>
+تتسطح حتى 64 مستوى وترمي إذا كانت المصفوفة متداخلة بشكل أعمق - بما في ذلك المصفوفة التي تحتوي على
+نفسها.</li>
+<li>لا يمكن لمكالمة واحدة تخصيص أكثر من ميزانية الذاكرة. <code>repeat</code>, <code>padStart</code>/<code>padEnd</code>, <code>concat</code> و
+<code>replace</code>/<code>replaceAll</code> يرمي <code>RangeError: Invalid string length</code> عندما يمكن أن تتجاوز النتيجة النصف
+الميزانية بالأحرف (16 مليونًا في الوضع الافتراضي 32 ميجابايت؛ ويحد استبدال regex كما لو كان كل
+الموضع المطابق، والذي يؤثر فقط على سلاسل مكونة من حوالي مليون حرف أو أكثر).
+<code>ArrayBuffer</code> ورمي المصفوفات المكتوبة <code>RangeError</code> تجاوز الميزانية بالبايت، والمصفوفات الماضية
+تم رفض عناصر الميزانية/8. يتم أيضًا فحص الميزانية بعد إرجاع خطافك، لذلك
+البيان النهائي الزائد عن الميزانية يفشل في الاستدعاء بدلاً من النجاح.</li>
+</ul>
+<p>يبقي النص المرجعي للشطرنج مستنداته صغيرة عن قصد - وكمثال على الالتزام بالميزانية، فإن المستند الخاص بكل لاعب هو</p>
+<pre><code class="language-js">{
+  elo: 1200,
+  wins: 0, losses: 0, draws: 0,
+  lastColorVs: "9b2f8c1a-...",        // for color alternation on rematch
+  lastColorOrder: "w",
+  recentGames: [ /* up to 30 summaries */ ]
+}
+</code></pre>
+<p>الحد الأقصى للجلسة المتزامنة هو 20 لكل لاعب بشكل افتراضي.</p>
+<h2 id="the-platform-readable-window">النافذة القابلة للقراءة على المنصة</h2>
+<p>كل شيء في <code>sessionState</code> غير شفاف للمنصة <strong>يستثني</strong> حقل واحد:</p>
+<pre><code class="language-js">sessionState.summary = {
+  turnPlayerId: "7c9e6679-...",
+  deadline: 1784642591000,
+  status: "active",
+  moveCount: 41
+};
+</code></pre>
+<p><code>deadline</code> هو الطابع الزمني يونكس عدد صحيح في <strong>ميلي ثانية</strong>، أو تم حذفها عندما لا يكون هناك موعد نهائي.
+لم يتم التعرف على سلسلة تاريخ ISO. <code>turnPlayerId</code> هو UUID لاعب.</p>
+<p><code>GET /api/v1/games/{slug}/sessions/mine</code> يقرأ <code>summary</code> لحساب <code>myTurn</code> و <code>deadline</code> للمتصل. اجعلها دقيقة عند كل تغيير في الحالة؛ احتفظ بكل شيء آخر أينما يريد البرنامج النصي الخاص بك.</p>
+<h2 id="worked-example-the-chess-script">مثال عملي: نص الشطرنج</h2>
+<p>كل شيء في هذا القسم خاص بالتنفيذ المرجعي للشطرنج - شكل الحالة، وترميز اللوحة، ومجموعة الأوامر، وأسباب انتهاء اللعبة، وثابت Elo، والذكاء الاصطناعي، والمهلات أدناه هي اختيارات الشطرنج الخاصة، والمحددة في نصها. لا يعد أي منها سلوكًا على المنصة؛ تحدد لعبتك مرادفاتها الخاصة.</p>
+<p>حالة الجلسة:</p>
+<pre><code class="language-js">{
+  white: "7c9e6679-...",
+  black: "9b2f8c1a-...",
+  aiId: "00000000-0000-4000-8000-00000000a1a1",   // present in AI games
+  game: {
+    board: "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr", // 64 chars
+    turn: "w",
+    castling: { K: true, Q: true, k: true, q: true },
+    epSquare: null,
+    halfmoveClock: 0,
+    fullmove: 1,
+    moves: [ { from: "e2", to: "e4", promo: null, san: "e4", at: 1721473200000 } ],
+    positionCounts: { /* fen-key: count, for threefold repetition */ },
+    status: "active"
+  },
+  createdAt: 1721473200000,
+  deadline: 1721559600000,
+  result: null,
+  drawOfferBy: null,
+  summary: { turnPlayerId: "...", deadline: "...", status: "active", moveCount: 1 }
+}
+</code></pre>
+<p>ترميز اللوحة: سلسلة مكونة من 64 حرفًا <code>index = rank * 8 + file</code> و <code>a1</code> هو الفهرس 0. <code>PNBRQK</code> هي قطع بيضاء، <code>pnbrqk</code> أسود، <code>.</code> هو مربع فارغ.</p>
+<p>الأوامر التي تم التعامل معها من قبل <code>onPlayerMessage</code>: <code>sync</code>, <code>move</code>, <code>resign</code>, <code>offer-draw</code>, <code>accept-draw</code>, <code>decline-draw</code> (أشكال الأسلاك في <a href="/ar/docs/api/games.html#example-chess-command-shapes">واجهة برمجة تطبيقات الألعاب</a>).</p>
+<p>انتهت اللعبة <code>reason</code> قيم: <code>checkmate</code>, <code>stalemate</code>, <code>threefold-repetition</code>, <code>fifty-move-rule</code>, <code>insufficient-material</code>, <code>resignation</code>, <code>agreement</code>, <code>timeout</code>, <code>timeout-no-moves</code>.</p>
+<p>تفاصيل أخرى في لعبة الشطرنج:</p>
+<ul>
+<li><strong>إيلو</strong> يستخدم K = 32، محسوبة في <code>finishGame</code> عندما تنتهي اللعبة، ويعود عبر <code>eloUpdates</code>.</li>
+<li><strong>اللعب بالذكاء الاصطناعي:</strong> عندما يتحرك مقعد الذكاء الاصطناعي، <code>aiReply</code> مسرحيات <strong>"هال"</strong> - محرك جشع لالتقاط المواد - داخل نفس الاستدعاء. لا يوجد بوت خارجي.</li>
+<li><strong>المهلات:</strong> <code>onTick</code> يفصل في ساعة الحركة على مدار 24 ساعة — إذا لم يتم لعب أي نقلات، تكون اللعبة عبارة عن <code>timeout-no-moves</code> يرسم؛ وإلا فإن اللاعب الذي يتحرك سيخسر <code>timeout</code>.</li>
+</ul>
+<h2 id="deployment">النشر</h2>
+<p>قم بتعريف البرنامج النصي في مستودع اللعبة الخاص بك <code>starhermit.txt</code> يظهر:</p>
+<pre><code>server=server.js
+</code></pre>
+<p>يتدفق النشر من خلال تكامل GitHub - راجع <a href="/ar/docs/api/github-games.html">ألعاب جيثب</a>. تقوم المنصة بتنفيذ البرنامج النصي ضمن الميزانيات الموثقة. لا تجمع <code>server=</code> مع <code>container.image=</code>; استخدم <a href="/ar/docs/api/container-games.html">وقت تشغيل الحاوية</a> بدلاً من ذلك عند شحن صورة.</p>
+<h2 id="best-practices">أفضل الممارسات</h2>
+<ul>
+<li><strong>التحقق من صحة كل أمر.</strong> يعامل <code>ctx.message.data</code> باعتبارها معادية: تحقق من الأنواع والنطاقات وترتيب الأدوار وحالة اللعبة قبل لمس الحالة.</li>
+<li><strong>اجعل الدعوات سريعة وصغيرة الحجم.</strong> لديك ما يقرب من 250 مللي ثانية وميزانية بايت لكل مستند لاعب؛ النص المرجعي للشطرنج، على سبيل المثال، قبعات <code>recentGames</code> في 30 إدخالات لهذا السبب.</li>
+<li><strong>يستخدم <code>ctx.now</code> / <code>ctx.random</code> فقط.</strong> لا <code>Date</code>، لا <code>Math.random</code> - يمتلك المضيف الساعة والنرد.</li>
+<li><strong>تصميم <code>broadcast</code> الرسائل باعتبارها عقد العميل الوحيد.</strong> يجب أن يكون العملاء قادرين على عرض اللعبة بأكملها مما يرسله البرنامج النصي؛ أي شيء لا يبث لا وجود له بالنسبة لهم.</li>
+<li><strong>ملف واحد، سطحين.</strong> يمكن مضاعفة الملف نفسه كقواعد من جانب العميل من خلال تصدير منفصل: على سبيل المثال، يتم الكشف عن تنفيذ مرجع الشطرنج <code>globalThis.chessRules</code> للمتصفح (معاينة النقل، وتلميحات التحقق من الصحة) و <code>globalThis.game</code> للمضيف. مصدر واحد للحقيقة، ولا سلطة على العميل.</li>
+<li><strong>قم دائمًا بإنهاء الألعاب عبر <code>result</code></strong> لذا تقوم المنصة بنشر تحديثات Elo وأرشفة إعادة التشغيل عندما تكون لعبتك متاحة <a href="#replays">الاعادة</a>.</li>
+</ul>
+<p>انظر <a href="/ar/docs/tutorials/chess-walkthrough.html">تجول الشطرنج</a> للقيام بجولة سطرًا تلو الآخر، و <a href="/ar/docs/tutorials/ai-prompts.html">مطالبات الذكاء الاصطناعي</a> للمساعدة في إنشاء البرنامج النصي الخاص بك.</p>
+<p>مشترك <a href="/ar/docs/api/conventions.html">اتفاقيات API</a> وصف تحليل الاستجابة، والطوابع الزمنية، وترقيم الصفحات، وإعادة المحاولة.</p>
+<p>يرى <a href="/ar/docs/credentials.html">التوافق الاعتماد</a> و <a href="/ar/docs/api/contracts.html">العقود المقروءة آليا</a>.</p>
+
+{% endraw %}

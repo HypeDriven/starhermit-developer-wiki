@@ -1,0 +1,466 @@
+---
+layout: "wiki"
+lang: "bn"
+title: "আপনার গেমে StarHermit ওয়্যার করতে AI ব্যবহার করুন"
+source_url: "/docs/tutorials/ai-prompts.html"
+source_path: "docs/tutorials/ai-prompts.md"
+source_hash: "30198ba803fa65609553b448e28bdaa5ab39bde9f0e0fd96be515ff530d80104"
+translation: "machine"
+permalink: "/bn/docs/tutorials/ai-prompts.html"
+---
+{% raw %}
+<h1 id="use-ai-to-wire-starhermit-into-your-game">আপনার গেমে StarHermit ওয়্যার করতে AI ব্যবহার করুন</h1>
+<p>এই পৃষ্ঠাটি একটি এআই কোডিং সহকারীর জন্য কপি-পেস্টযোগ্য প্রম্পটগুলির একটি সেট — কিমি কোড, ক্লড কোড, কপিলট চ্যাট, বা অনুরূপ — কাজ করে <strong>আপনার নিজস্ব গেম ভান্ডারের ভিতরে</strong>. প্রতিটি প্রম্পট অনুমান করে যে AI আপনার কোডবেস পড়তে পারে, তাই এটি জেনেরিক স্নিপেট তৈরি করার পরিবর্তে আপনার ভাষা, ফ্রেমওয়ার্ক এবং ফাইল লেআউটের সাথে মেলে।</p>
+<p>এগুলি কীভাবে ব্যবহার করবেন:</p>
+<ul>
+<li>প্রতিস্থাপন <code>[bracketed]</code> আপনার নিজস্ব মান সঙ্গে স্থানধারক.</li>
+<li>মোটামুটি তালিকাভুক্ত ক্রমে, এক সময়ে একটি বিভাগে কাজ করুন।</li>
+<li><strong>প্রসঙ্গ হিসাবে AI প্রাসঙ্গিক উইকি পৃষ্ঠা দিন।</strong> প্রতিটি বিভাগ পৃষ্ঠার নাম দেয়; কথোপকথনে এর বিষয়বস্তু পেস্ট করুন বা ফাইলটিতে টুলটি নির্দেশ করুন। প্রম্পট রেফারেন্স সঠিক শেষ পয়েন্ট, এবং রেফারেন্স পৃষ্ঠাগুলি ক্ষেত্রের নামের জন্য সত্যের উৎস।</li>
+<li>এ পাবলিক API এর বিরুদ্ধে প্রতিটি বৈশিষ্ট্য যাচাই করুন <code>https://api.starhermit.com</code> এগিয়ে যাওয়ার আগে - শেষে টিপস দেখুন।</li>
+</ul>
+<p>এই প্রম্পটগুলি যে কোনও গেমের জন্য কাজ করে। রেফারেন্স কোডের জন্য, দাবা রেফারেন্স বাস্তবায়নে AI নির্দেশ করুন — <a href="https://github.com/HypeDriven/starhermit-chess">হাইপড্রাইভেন/স্টারহার্মিট-দাবা</a> — এই পৃষ্ঠার প্রতিটি প্যাটার্নের একটি সম্পূর্ণ কাজ করা উদাহরণ।</p>
+<h2 id="1-project-bootstrap-manifest--same-origin-net-layer">1. প্রজেক্ট বুটস্ট্র্যাপ: ম্যানিফেস্ট + একই-অরিজিন নেট লেয়ার</h2>
+<p>প্রসঙ্গ পৃষ্ঠা: <a href="/bn/docs/api/github-games.html">github-games.md</a>, <a href="/bn/docs/api/auth.html">auth.md</a>, <a href="/bn/docs/api/games.html">games.md</a>.</p>
+<pre><code class="language-text">Read docs/api/github-games.md and docs/api/auth.md (pasted below), then:
+
+1. Create a starhermit.txt manifest at the build root with name and
+   launch=index.html. There is no slug key: the platform assigns the UID.
+   For a repository claim, owner is my StarHermit user UUID. Add
+   either server=server.js for section 4 or container.image=... for section
+   4b; never declare both.
+2. Create a net module (match this repo's language/module style) that:
+   - Reads the JWT from the URL hash fragment #game_token=&lt;jwt&gt; exactly once,
+     then strips it from the URL with history.replaceState. Also parse an
+     optional &amp;session_id=&lt;guid&gt; from the same hash.
+   - Decodes the JWT payload (base64url, no signature verification) and
+     exposes the `sub` claim (user id) and `game_scope` claim (game slug).
+   - Builds all API URLs as same-origin relative paths:
+     /api/v1/games/&lt;slug&gt; + suffix. Never hard-code the slug; always use
+     the game_scope claim.
+   - Attaches `Authorization: Bearer &lt;token&gt;` to every request.
+   - Also supports direct browser sign-in as documented in auth.md: navigate
+     to the public API's /api/v1/auth/games/&lt;gameId&gt;/sign-in when no token
+     exists, parse #access_token on return, restore game_fragment and scrub
+     credentials. Configure the game UID for this initial sign-in link.
+   - Renews before the returned expiresInSeconds elapses via
+     POST /api/v1/games/&lt;slug&gt;/launch-token. Respect the renewal-chain limit
+     (default 12 hours); require sign-in when renewal is no longer allowed.
+   - Handles 403 terms_acceptance_required by displaying GET /api/v1/terms
+     and offering explicit acceptance. POST the displayed hash to
+     /api/v1/me/terms/accept with the player token, then retry. Never silently
+     accept terms or use token refresh as a substitute for consent.
+   - Opens sockets with a fresh one-use ?ticket= obtained from
+     POST /api/v1/realtime/connection-tickets, choosing wss over HTTPS.
+     ?access_token= remains supported; never log either credential.
+
+The game will be served at &lt;slug&gt;.starhermit.com with /api and /ws proxied
+same-origin, so there is no CORS handling and no API-base configuration.
+</code></pre>
+<h2 id="2-matchmaking-flow">2. ম্যাচমেকিং প্রবাহ</h2>
+<p>প্রসঙ্গ পৃষ্ঠা: <a href="/bn/docs/api/games.html">games.md</a>.</p>
+<pre><code class="language-text">Read docs/api/games.md (pasted below). Implement a "Find match" button in
+[my lobby screen] that uses the net module's game-path helper:
+
+1. POST /api/v1/games/&lt;slug&gt;/matchmaking.
+2. If the response is { status: "matched", sessionId }, navigate straight
+   to the session screen for that sessionId.
+3. If it is { ticketId, status: "queued" }, show a "searching…" state and
+   poll GET /api/v1/games/&lt;slug&gt;/matchmaking every 3 seconds until it
+   reports matched, then navigate. Stop on cancelled/expired; treat 404
+   as no joinable ticket. Read /queues to offer allowed queue subsets.
+4. A cancel button sends DELETE /api/v1/games/&lt;slug&gt;/matchmaking and
+   returns to the idle state. Also cancel on page unload.
+5. After 30 seconds still unmatched, reveal a "Play against the AI" button
+   that calls POST /api/v1/games/&lt;slug&gt;/sessions/ai, cancels the
+   matchmaking ticket, and navigates to the returned sessionId.
+
+Handle 4xx responses by returning to the idle state with an error message.
+This flow uses Games API matchmaking, invite-accept, or sessions/ai.
+For a lobby or party flow, use the separate realtime rooms API.
+</code></pre>
+<h2 id="3-gameplay-socket">3. গেমপ্লে সকেট</h2>
+<p>প্রসঙ্গ পৃষ্ঠা: <a href="/bn/docs/api/games.html">games.md</a>, <a href="/bn/docs/api/game-scripts.html">game-scripts.md</a>.</p>
+<pre><code class="language-text">Read docs/api/games.md and docs/api/game-scripts.md (pasted below).
+Implement a GameController module for [my game screen]:
+
+1. On entering a session, GET /api/v1/games/&lt;slug&gt;/sessions/{sessionId}
+   and keep the response (it includes chatConversationId for later).
+2. Connect to ws(s)://&lt;host&gt;/ws/v1/games?sessionId=&lt;id&gt;&amp;ticket=&lt;fresh-ticket&gt;.
+   If using build compatibility checks, pass the client buildId as &amp;build=.
+3. Every frame is a JSON envelope. Outgoing: {"type":"cmd","data":&lt;command&gt;}.
+   Incoming: {"type":"game","data":…}, {"type":"error","error":…}, and
+   {"type":"presence","userId","online"}.
+4. On every socket open, immediately send
+   {"type":"cmd","data":{"type":"sync"}} — the server answers with a full
+   state broadcast. Never assume local state survives a reconnect.
+5. On close, reconnect with exponential backoff starting at 1 second,
+   doubling up to a 30-second ceiling, and re-send the sync on each open.
+   Stop on authorization/policy rejection or finished sessions; resolve terms
+   acceptance through REST and reload on build_mismatch. Acquire a new ticket
+   for each connection attempt.
+6. Route incoming frames: "game" frames go to a state handler that updates
+   the UI, "error" frames to a toast/log, "presence" frames to an
+   online/offline indicator for the opponent. On resumed, discard prediction
+   and resync; on abandoned, stop play and show the reason.
+7. Do not put any user id in outgoing commands — the platform passes the
+   authenticated sender to the server script; payloads are never trusted
+   for identity.
+
+Wire it to [my existing board/UI component] with a minimal render of the
+latest state broadcast.
+</code></pre>
+<h2 id="4-authoring-the-server-script">4. সার্ভার স্ক্রিপ্ট লেখা</h2>
+<p>প্রসঙ্গ পৃষ্ঠা: <a href="/bn/docs/api/game-scripts.html">game-scripts.md</a> — এটা বাধ্যতামূলক; চুক্তি সেখানে বসবাস করে।</p>
+<pre><code class="language-text">Read docs/api/game-scripts.md (pasted below) carefully — it defines the
+exact script contract. Write server.js for my game, which is [one-paragraph
+description of your game's rules]. The script runs in the platform's Jint
+host (JavaScript, no Node APIs, no imports, no network, no clock):
+
+1. Expose globalThis.game with createSession, onPlayerMessage, and onTick,
+   matching the signatures in game-scripts.md.
+2. Set globalThis.game.tickRateHz deliberately: 0 for a turn-based game
+   that needs no periodic work, or the lowest rate that meets this game's
+   realtime/timer needs (fractional rates are allowed — 0.5 is a tick every
+   two seconds). Explain the choice. A game that declares nothing is ticked
+   at 0.25 Hz, and the platform may clamp a request to its configured
+   maximum.
+3. Use ONLY ctx.now for time and ctx.random for randomness. These are
+   numeric context values, not functions. Never use Date, Math.random, or any ambient API.
+4. Every handler returns an object shaped per the contract:
+   { ok, error, sessionState, playerStates, broadcast, eloUpdates, result }.
+   Validate every command against the current state and the sender; reject
+   illegal input with { ok: false, error: "…" }.
+5. Define the command set the client may send (the "data" of cmd frames)
+   and the broadcast set the client will receive. Treat these as the
+   client contract and document them in a comment at the top of the file.
+6. Maintain a summary object { turnPlayerId, deadline, status, moveCount }
+   so the platform's sessions list can show whose turn it is.
+7. When the game ends, return a result object and eloUpdates for the rated
+   players. If I want finished sessions kept as replays, also declare
+   globalThis.game.replays = true and make the final sessionState
+   reconstructable — replays are off unless a game asks for them.
+8. Also expose the pure rules functions as globalThis.[myGame]Rules so the
+   browser client can reuse this same file for rendering and replays —
+   one file, one source of truth, zero rules authority on the client.
+</code></pre>
+<h3 id="4b-alternative-authoring-a-container-game-server">4 খ. বিকল্প: একটি ধারক গেম সার্ভার রচনা</h3>
+<p>যখন কর্তৃত্বপূর্ণ সার্ভারের মরিচা, গো, সি++ বা অন্য কোন প্রয়োজন তখন বিভাগ 4 এর পরিবর্তে এটি ব্যবহার করুন
+রানটাইম starhermit.com-এ যে কোনো সাইন-ইন করা ব্যবহারকারীর জন্য কন্টেইনার হোস্টিং উন্মুক্ত।</p>
+<p>প্রসঙ্গ পৃষ্ঠা: <a href="/bn/docs/api/container-games.html">container-games.md</a> — এই প্রোটোকল বাধ্যতামূলক।</p>
+<pre><code class="language-text">Read docs/api/container-games.md (pasted below) carefully. Implement a
+StarHermit game protocol v1 server for [one-paragraph game description] in
+[this repository's language]:
+
+1. Add a digest-pinned container.image to starhermit.txt plus only the
+   resource requests the server needs. Do not add server= or any secrets.
+2. Implement authenticated /health, /describe, POST /sessions,
+   GET /sessions/{id}/snapshot, DELETE /sessions/{id}, WS /control, and a
+   small WS /stream pool. Reject requests whose X-Starhermit-Invoke-Key
+   does not match STARHERMIT_INVOKE_KEY.
+3. Keep every live session keyed by session id. Validate the type-1 binary
+   frame's platform-stamped user id as the command sender and emit only
+   valid JSON payloads in type-2 frames.
+4. Declare protocol, tickRateHz, maxSessions, achievements and replays
+   from /describe (tickRateHz should be the rate my own loop runs at — the
+   platform does not step a container, it uses the rate to avoid asking for
+   snapshots faster than my game produces state; replays: true only if I want
+   finished sessions kept, they are off unless a game asks). Use control
+   messages for snapshots,
+   achievement grants, elo, and terminal results. Never trust a client
+   payload for identity.
+5. Make POST /sessions restore fully from snapshot and make snapshots
+   frequent enough to bound crash rewind. Handle finished sessions as
+   terminal and idempotent.
+6. Build for a read-only, non-root, network-isolated container: vendor all
+   dependencies, write only to /tmp, and call the platform only through
+   STARHERMIT_API_BASE with STARHERMIT_SERVER_TOKEN.
+7. Add protocol tests covering frame byte layout, bad invoke keys,
+   snapshot/restore equivalence, undeclared achievements, duplicate
+   results, malformed payloads, and graceful session teardown.
+</code></pre>
+<h2 id="5-friend-invites">5. বন্ধু আমন্ত্রণ</h2>
+<p>প্রসঙ্গ পৃষ্ঠা: <a href="/bn/docs/api/friends.html">friends.md</a>, <a href="/bn/docs/api/games.html">games.md</a>.</p>
+<pre><code class="language-text">Read docs/api/friends.md and docs/api/games.md (pasted below). Add an
+"Invite a friend" dialog to [my lobby screen]:
+
+1. GET /api/v1/me/friends to list friends — this endpoint is allowed for
+   game-scoped tokens. Render nicknames (see the profiles prompt).
+2. Selecting a friend sends POST /api/v1/games/&lt;slug&gt;/invites with body
+   { "toUserId": "&lt;friend user id&gt;" }. Show "invite sent" state.
+3. Poll GET /api/v1/games/&lt;slug&gt;/invites on the lobby screen to show
+   incoming invites with accept/decline buttons:
+   POST /api/v1/games/&lt;slug&gt;/invites/{id}/accept returns a sessionId —
+   navigate to it. POST …/invites/{id}/decline returns 204.
+4. On startup, if the launch hash contained &amp;session_id=&lt;guid&gt;, skip the
+   lobby and navigate straight to that session — that is how accepted
+   invite deep-links arrive.
+</code></pre>
+<h2 id="6-in-game-chat">6. ইন-গেম চ্যাট</h2>
+<p>প্রসঙ্গ পৃষ্ঠা: <a href="/bn/docs/api/chat.html">chat.md</a>.</p>
+<pre><code class="language-text">Read docs/api/chat.md (pasted below). Add a chat panel to [my game screen]
+using the chatConversationId from the session response:
+
+1. Load history with
+   GET /api/v1/chat/conversations/{id}/messages?page=1&amp;pageSize=50.
+2. Send with POST /api/v1/chat/conversations/{id}/messages and body
+   { "content": "&lt;text&gt;" }.
+3. Poll the GET endpoint every 5 seconds for new messages. Do NOT use
+   the ws/v1/chat socket — it is blocked for game-scoped tokens.
+4. The session conversation is type "game" with both players as
+   participants, so chat works between non-friends with no extra setup.
+5. Render messages with sender nicknames resolved via the profile helper,
+   and keep the input disabled while a send is in flight.
+</code></pre>
+<h2 id="7-voice-chat">7. ভয়েস চ্যাট</h2>
+<p>প্রসঙ্গ পৃষ্ঠা: <a href="/bn/docs/api/voice.html">voice.md</a>.</p>
+<pre><code class="language-text">Read docs/api/voice.md (pasted below). Add an opt-in voice toggle (default
+OFF) to [my game screen], disabled entirely when the game state marks the
+session as an AI game:
+
+1. On enable: GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;;
+   if no room exists, POST /api/v1/voice/rooms with
+   { "conversationId": "&lt;chatConversationId&gt;" }. Then
+   POST /api/v1/voice/rooms/{roomId}/join.
+2. Connect ws(s)://&lt;host&gt;/ws/v1/voice?roomId=&lt;id&gt;&amp;access_token=&lt;token&gt;.
+3. Media is WebRTC peer-to-peer with perfect negotiation. Exchange
+   signaling over the socket as
+   {"type":"rtc","to":&lt;userId&gt;,"payload":{"sdp":…}} and
+   {"type":"rtc","to":&lt;userId&gt;,"payload":{"ice":…}}; incoming signaling
+   arrives as voice.rtc events.
+4. Send {"type":"mute","muted":…} and {"type":"speaking","speaking":…}
+   for local state; render voice.roster, voice.participant_joined,
+   voice.participant_left, voice.mute_changed, and voice.speaking events
+   as the participant list with mute/speaking indicators.
+5. If P2P connection fails, fall back to server-relayed opus binary
+   frames: [16-byte sender id][audio payload].
+6. On disable or leaving the session: close peer connections, leave the
+   room, and close the socket.
+</code></pre>
+<h2 id="8-leaderboard--stats">8. লিডারবোর্ড &amp; পরিসংখ্যান</h2>
+<p>প্রসঙ্গ পৃষ্ঠা: <a href="/bn/docs/api/leaderboards.html">leaderboards.md</a>, <a href="/bn/docs/api/games.html">games.md</a>.</p>
+<pre><code class="language-text">Read docs/api/leaderboards.md (pasted below). Add a leaderboard panel and
+a player-stats card to [my lobby screen]:
+
+1. GET /api/v1/games/&lt;slug&gt; and read leaderboardId, plus the me object:
+   { userId, elo, wins, losses, draws, activeSessionCount }. Render the
+   stats card from me — that is all the stats the game exposes.
+2. GET /api/v1/leaderboards/{leaderboardId}/entries?friendsOnly=true&amp;page=1&amp;pageSize=10
+   for a friends leaderboard; add a toggle to the same endpoint without
+   friendsOnly for the global board, with prev/next paging.
+3. Never write scores from the client — entries are published by the
+   platform from the server script's eloUpdates. This panel is read-only.
+4. Resolve each entry's user id to a nickname via the profile helper.
+</code></pre>
+<h3 id="8b-your-games-own-leaderboards-games-with-a-server-backend">8 খ. আপনার গেমের নিজস্ব লিডারবোর্ড (একটি সার্ভার ব্যাকএন্ড সহ গেম)</h3>
+<p>প্রসঙ্গ পৃষ্ঠা: <a href="/bn/docs/api/leaderboards.html">leaderboards.md</a>, <a href="/bn/docs/api/game-scripts.html">game-scripts.md</a>,
+এবং <a href="/bn/docs/tutorials/game-leaderboards-achievements.html">লিডারবোর্ড এবং অর্জন টিউটোরিয়াল</a>.</p>
+<pre><code class="language-text">Read docs/api/leaderboards.md and docs/api/game-scripts.md (pasted below).
+My game's owner has created leaderboards with these keys:
+[high-score: integer, desc], [fastest-lap: time-ms, asc].
+
+1. In server.js, when a run or match ends, return
+   scores: { "&lt;key&gt;": { "&lt;userId&gt;": &lt;number&gt; } } alongside sessionState.
+   Compute every score from the authoritative session state, never from
+   a number the client sent. Report every result — the platform keeps
+   each player's best, so do not compare against previous scores.
+2. In the client, GET /api/v1/games/&lt;slug&gt;/leaderboards with the launch
+   token and pick boards by key (never hard-code board ids). Render each
+   with GET /api/v1/leaderboards/{id}/entries?page=&amp;pageSize=, plus a
+   friendsOnly=true toggle. Format time-ms scores as m:ss.cc.
+3. Never POST to /leaderboards/{id}/submit — it refuses these boards.
+</code></pre>
+<h2 id="9-replays">9. রিপ্লে</h2>
+<p>প্রসঙ্গ পৃষ্ঠা: <a href="/bn/docs/api/games.html">games.md</a>.</p>
+<pre><code class="language-text">Read docs/api/games.md (pasted below). Build a replay viewer:
+
+1. Read replaysEnabled from GET /api/v1/games/&lt;slug&gt; and hide the whole
+   replay screen when it is false — replays are off unless a game asks
+   for them, and the endpoints below answer 404 for a game without them.
+   Then list my recent games with
+   GET /api/v1/games/&lt;slug&gt;/replays/mine?limit=10.
+2. Opening one calls GET /api/v1/games/&lt;slug&gt;/replays/{sessionId}, which
+   returns { sessionId, players, finishedAt, result, state } — the
+   shapes of result and state are defined by my game's script.
+3. Step through my game's move log from state one move at a time (the
+   chess reference implementation stores it at state.game.moves; my
+   script defines its own shape), applying each to the shared rules
+   module from server.js running
+   client-side. Preserve the rules version for old replays when gameplay
+   rules change; current code alone does not guarantee historical playback. Add first/prev/next/last controls and
+   auto-play.
+4. Show the result block as a header (outcome, reason, and whatever
+   else my script's result object carries — the chess reference
+   implementation, for example, includes elo before/after).
+5. The viewer is entirely local after the initial GET — no per-move
+   requests.
+</code></pre>
+<h2 id="10-profiles">10. প্রোফাইল</h2>
+<p>প্রসঙ্গ পৃষ্ঠা: <a href="/bn/docs/api/profile.html">profile.md</a>.</p>
+<pre><code class="language-text">Read docs/api/profile.md (pasted below). Add a profile helper module used
+everywhere a user id is rendered:
+
+1. GET /api/v1/users/{id}/profile returns { id, username, nickname }.
+2. GET /api/v1/users/{id}/avatar returns image/png or 404.
+3. Display NICKNAMES, never usernames. If the profile is missing or the
+   nickname is empty, fall back to "Player " + id.slice(0, 8).
+4. Cache profiles and avatars in memory (and avatars as object URLs) for
+   the session so repeated renders of the same opponent don't refetch.
+5. Apply the helper everywhere user ids appear: session lists, leaderboard,
+   chat messages, replay headers, presence indicators.
+</code></pre>
+<h2 id="10b-per-player-game-settings">10 খ. প্রতি-প্লেয়ার গেম সেটিংস</h2>
+<p>প্রসঙ্গ পৃষ্ঠা: <a href="/bn/docs/api/games.html#per-player-game-settings">games.md</a>.</p>
+<pre><code class="language-text">Read docs/api/games.md (pasted below). Make my options screen persist
+per-player, so a player's settings follow them to any machine:
+
+1. On boot, GET /api/v1/games/{slug}/settings with the launch token. Merge
+   the returned `settings` object over my built-in defaults — a key that
+   isn't there means "never changed", not "off".
+2. When the player changes one option, PATCH /api/v1/games/{slug}/settings
+   with just that key. Do NOT re-PUT the whole map: PUT deletes every key
+   the body omits, and two screens saving concurrently would erase each
+   other's work. Debounce continuous controls like sliders.
+3. "Reset to defaults" for one option = PATCH with that key set to null,
+   which removes it. For all of them, DELETE the collection.
+4. Namespace keys by area — audio.master, graphics.detail — and keep
+   values small JSON. Read limits.maxTotalBytes from the GET response
+   rather than hard-coding it; it is an operator setting.
+5. Handle 413 by telling the player their settings are full instead of
+   silently dropping the write, and never store save-game progress here —
+   that is what cloud saves are for.
+</code></pre>
+<h2 id="11-cloud-saves-non-scripted--external-games">11. ক্লাউড সেভ করে (নন-স্ক্রিপ্টেড / এক্সটার্নাল গেম)</h2>
+<p>প্রসঙ্গ পৃষ্ঠা: <a href="/bn/docs/api/catalog.html#saving-from-inside-a-game-launch-token">catalog.md</a>. আপনার গেমটি সম্পূর্ণরূপে সার্ভার-স্ক্রিপ্টেড হলে এই বিভাগটি এড়িয়ে যান — সেশন স্টেট ইতিমধ্যেই প্ল্যাটফর্মে থাকে।</p>
+<pre><code class="language-text">Read docs/api/catalog.md (pasted below). Add save syncing to [my game],
+which runs its own logic client-side:
+
+0. The gameKey is `game:&lt;game_scope&gt;` — my launch token's game_scope
+   claim — and the launch token works for it; no other key is allowed.
+1. Load and validate before any upload. GET the slot on startup; 404 alone
+   means no save. Block writes on other errors or unsupported save formats.
+2. Keep the ETag of the loaded bytes. Serialize/base64-encode the save and
+   PUT with If-Match: &lt;etag&gt;, or If-None-Match: * for a confirmed empty slot.
+   Decoded bytes must fit the effective limit (10 MiB default).
+3. On 412, preserve local progress, load the current version, and offer
+   adopt/merge. Never retry unconditionally. Serialize writes, save at
+   foreground checkpoints, and treat page-exit uploads as best effort.
+4. Surface loading/saving/saved/failed/conflict; never mark saved before
+   acknowledgement. Unsigned single-player play keeps progress in memory
+   and makes no save or platform score requests.
+</code></pre>
+<h2 id="12-achievements">12. অর্জন</h2>
+<p>প্রসঙ্গ পৃষ্ঠা: <a href="/bn/docs/api/achievements.html">achievements.md</a>, <a href="/bn/docs/api/game-scripts.html">game-scripts.md</a>.
+ব্যবহার করুন <strong>12a</strong> যদি আপনার খেলা একটি আছে <code>server=</code> স্ক্রিপ্ট (স্ক্রিপ্টেড, রুম-বাউন্ড রিয়েলটাইম, বা হোস্ট-রাউটেড
+কর্তৃত্বের জন্য আবদ্ধ স্ক্রিপ্ট) — এটি সার্ভার-অনুমোদিত পথ এবং পছন্দের একটি। ব্যবহার করুন <strong>12b</strong>
+শুধুমাত্র কোনো সার্ভার স্ক্রিপ্ট ছাড়া একটি ক্যাটালগ-বিতরণ করা শিরোনামের জন্য, যেখানে ক্লায়েন্টই একমাত্র পর্যবেক্ষক।</p>
+<h3 id="12a-server-authoritative-achievements-any-game-with-a-server-script">12 ক. সার্ভার-অনুমোদিত অর্জন (একটি সার্ভার স্ক্রিপ্ট সহ যেকোনো গেম)</h3>
+<pre><code class="language-text">Read docs/api/achievements.md and docs/api/game-scripts.md (pasted below).
+Wire server-authoritative achievements into [my game]:
+
+1. In server.js, add a static game.achievements array declaring each
+   achievement as { key, name, description, points, secret?, icon? }.
+   Keys are stable ids (&lt;=128 chars, unique, max 100 per game). Keep the
+   array next to the entry points so it is obvious it is static — it is
+   read once when the game is provisioned, not per invocation.
+2. Grant them from the script by returning
+   achievements: { "&lt;userId&gt;": ["&lt;key&gt;", ...] } from createSession,
+   onPlayerMessage, or onTick, alongside the usual sessionState. Unlocks
+   are idempotent, so evaluate the condition from the authoritative state
+   and re-assert it freely rather than tracking "already awarded" flags.
+   Never award from the client — there is no client unlock for these.
+3. In the client, render the achievement screen from
+   GET /api/v1/games/&lt;slug&gt;/achievements (returns locked and unlocked,
+   with unlocked/unlockedAt, secrets hidden until earned).
+4. Handle the {"type":"achievement","data":{...}} frame on ws/v1/games as
+   the live-unlock signal — show a toast with data.name/description/points.
+   Unlocks granted in createSession arrive with no frame, so always do the
+   GET on load too.
+5. After changing the declaration, publish a new build or redeploy the
+   existing game, then confirm with the GET that the definitions changed.
+   Do not register the same repository again.
+</code></pre>
+<h3 id="12b-client-claimed-achievements-catalog-titles-only">12 খ. ক্লায়েন্ট-দাবী করা অর্জন (শুধুমাত্র ক্যাটালগ শিরোনাম)</h3>
+<pre><code class="language-text">Read docs/api/achievements.md (pasted below). Wire catalog-title
+achievements into [my game]:
+
+1. Unlock with POST /api/v1/me/achievements/unlock at the moment each
+   achievement's condition is met; treat "already unlocked" responses as
+   success, and queue retries offline if the call fails. This works only
+   for achievements owned by a catalog title the player is entitled to —
+   the endpoint rejects any achievement owned by a scripted game.
+2. Read definitions from GET /api/v1/software/&lt;titleId&gt;/achievements and
+   the player's unlocks from GET /api/v1/me/achievements?titleId=&lt;titleId&gt;.
+   Join by achievementDefinitionId to render locked and unlocked entries.
+3. Keep the achievement definitions (ids, names, descriptions) in one
+   config module so the unlock call sites stay readable.
+</code></pre>
+<h2 id="13-the-all-together-mega-prompt">13. সব মিলিয়ে মেগা-প্রম্পট</h2>
+<p>আপনি যখন সহকারীকে একটি সেশনে পুরো ফ্লো ওয়্যার করতে চান, তখন এটি ব্যবহার করুন — কিন্তু তবুও আশা করুন যে এটি বৈশিষ্ট্য অনুসারে কাজ করবে, এবং প্রতিটির পরে চেকপয়েন্ট (চালান এবং যাচাই করুন)</p>
+<pre><code class="language-text">You are working in my game repository. I am integrating it with the
+StarHermit platform. I have pasted these reference pages below:
+docs/api/games.md, docs/api/game-scripts.md, docs/api/chat.md,
+docs/api/voice.md, docs/api/auth.md, and docs/starhermit-txt.md. They are the source of truth for every endpoint path
+and field name — do not invent API surface beyond them.
+
+Build the complete loop, in this order, stopping for me to verify each
+step before continuing:
+
+1. Bootstrap: starhermit.txt manifest (name/launch/server; optional owner UUID
+   for repository claims, no slug key) and
+   a net module — read #game_token once and strip it with
+   history.replaceState, decode sub + game_scope, same-origin relative
+   /api/v1/games/&lt;slug&gt; paths, Authorization headers, renewal before expiry
+   via POST …/launch-token within the renewal-chain limit, one-use WS tickets.
+   Support direct-browser sign-in and #access_token as auth.md describes.
+   Handle terms_acceptance_required by displaying the current terms and
+   accepting the displayed hash only on the player's explicit action.
+2. Lobby: GET /api/v1/games/&lt;slug&gt; (leaderboardId + me stats),
+   GET …/sessions/mine (render myTurn/deadline), friends leaderboard via
+   GET /api/v1/leaderboards/{id}/entries?friendsOnly=true, recent replays
+   via GET …/replays/mine?limit=10, pending invites via GET …/invites.
+3. Matchmaking: POST …/matchmaking, poll GET every 3 s, DELETE to cancel,
+   handle cancelled/expired and 404, optional queue subsets and the game
+   manifest deadline/AI policy; offer practice through POST …/sessions/ai.
+4. Friend invites: GET /api/v1/me/friends, POST …/invites { toUserId },
+   accept/decline, and &amp;session_id= deep-link handling from the launch
+   hash.
+5. Gameplay: ws(s)://&lt;host&gt;/ws/v1/games?sessionId=…&amp;ticket=… with
+   the cmd/sync pattern, 1s→30s exponential-backoff reconnect with re-sync,
+   fresh tickets per attempt, game/error/presence/resumed/abandoned routing.
+   Stop on policy/auth rejection, recover terms via REST, and reload on
+   build_mismatch when opting into the build check.
+6. Server script: globalThis.game per game-scripts.md implementing
+   [my game's rules], an intentional tickRateHz (0 for no periodic ticks;
+   declaring none means a slow 0.25 Hz platform default),
+   replays: true if I want finished sessions kept, ctx.now/ctx.random only,
+   summary object, result + eloUpdates on game end, shared rules exposed
+   client-side.
+7. Chat: session conversation via chatConversationId, REST GET/POST
+   messages with 5 s polling (ws/v1/chat is blocked for scoped tokens).
+8. Voice: opt-in toggle, rooms REST + /ws/v1/voice, WebRTC perfect
+   negotiation over rtc messages, mute/speaking, roster events, disabled
+   for AI games.
+9. Replays: gated on replaysEnabled from GET /api/v1/games/&lt;slug&gt;, then
+   GET …/replays/mine and GET …/replays/{sessionId}, stepped locally
+   through the shared rules.
+10. Profiles: nickname/avatar resolution with caching and the
+    "Player &lt;id8&gt;" fallback, applied everywhere.
+11. Options screen: per-player settings via GET …/settings on boot merged
+    over my defaults, PATCH per changed key (never PUT the whole map),
+    null to reset one key, DELETE for all.
+
+Constraints: no build step beyond what this repo already has; no client
+rules authority; no score submission from clients; match my existing code
+style. After each numbered step, give me a curl command or small test page
+to verify it against https://api.starhermit.com.
+</code></pre>
+<h2 id="practical-tips">ব্যবহারিক টিপস</h2>
+<ul>
+<li><strong>প্রম্পটগুলিকে একটি বৈশিষ্ট্যের মধ্যে রাখুন।</strong> মেগা-প্রম্পট কাজ করে, কিন্তু তাদের মধ্যে যাচাইকরণের ধাপ সহ এক-বৈশিষ্ট্যের প্রম্পট কম ব্যর্থ হয় এবং যখন তারা করে তখন ডিবাগ করা সহজ।</li>
+<li><strong>সর্বদা AI কে সঠিক উইকি পৃষ্ঠা দিন।</strong> প্রম্পট রেফারেন্স এন্ডপয়েন্ট পাথ, কিন্তু রেফারেন্স পৃষ্ঠাগুলি ক্ষেত্রের নাম এবং ত্রুটি আকার বহন করে। পৃষ্ঠাটি পেস্ট করুন বা ফাইলটিতে টুলটি নির্দেশ করুন - এটি মেমরি থেকে প্যারাফ্রেজ করবেন না।</li>
+<li><strong>বৈশিষ্ট্য প্রতি একটি যাচাই আর্টিফ্যাক্ট জন্য জিজ্ঞাসা করুন.</strong> একটি ছোট থ্রোওয়ে টেস্ট পৃষ্ঠা বা একটি কার্ল স্ক্রিপ্টের বিরুদ্ধে অনুশীলন করা হয়েছে <code>https://api.starhermit.com</code> ইন্টিগ্রেশন ভুল অবিলম্বে ধরা.</li>
+<li><strong>ফিরে আসা টোকেন জীবনকাল ব্যবহার করুন.</strong> ডিফল্ট 60 মিনিট, কিন্তু ব্যবহার পুনর্নবীকরণ <code>expiresInSeconds</code> এবং পুনর্নবীকরণ-চেইন সিলিংকে সম্মান করুন। মুলতুবি থাকা শর্তাদি গ্রহণের জন্য একটি অ্যাকাউন্ট অ্যাকশন প্রয়োজন, অন্য রিফ্রেশ নয়।</li>
+</ul>
+<p>এই টুকরাগুলি কীভাবে একটি শিপড গেমে একসাথে ফিট করে তার বর্ণনামূলক সংস্করণের জন্য, দেখুন <a href="/bn/docs/tutorials/chess-walkthrough.html">দাবা ওয়াকথ্রু</a> - রেফারেন্স উদাহরণ; প্রথম স্থাপনার জন্য, <a href="/bn/docs/getting-started.html">শুরু করার নির্দেশিকা</a>.</p>
+
+{% endraw %}

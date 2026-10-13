@@ -1,0 +1,434 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "خوادم الألعاب المستضافة بالحاويات"
+source_url: "/docs/api/container-games.html"
+source_path: "docs/api/container-games.md"
+source_hash: "1236c6a7fd9205e65079aaa8684a472e45c363e0314f51528484e44c183f19c1"
+translation: "machine"
+permalink: "/ar/docs/api/container-games.html"
+---
+{% raw %}
+<h1 id="container-hosted-game-servers">خوادم الألعاب المستضافة بالحاويات</h1>
+<p>يمكن للعبة StarHermit إرسال منطق الخادم المعتمد الخاص بها كصورة حاوية بدلاً من ملف
+ملف جافا سكريبت في وضع الحماية. يتيح ذلك للخادم استخدام Rust أو Go أو C++ أو أي وقت تشغيل آخر يمكنه ذلك
+تخدم HTTP وWebSockets. التي تواجه المتصفح <a href="/ar/docs/api/games.html">واجهة برمجة تطبيقات الألعاب</a> يبقى كما هو: لا يزال العملاء
+استخدم الرموز المميزة للإطلاق على نطاق اللعبة، وجلسات REST، و <code>ws/v1/games</code> إطارات JSON.</p>
+<p>استضافة الحاوية مفتوحة لأي مستخدم مسجل الدخول على starhermit.com. يمكن للنشر المستضاف ذاتيًا
+وتقييده بالقائمة المسموح بها للمشغل؛ القائمة المسموح بها غير المحددة هناك لا تقبل أحدًا بدلاً من الجميع.
+ينطبق هذا بالتساوي على صورة التسجيل والملف الذي تم تحميله <code>server/image.tar</code>، لذلك لا يوجد أي طريق
+بهدوء أكثر تساهلاً من الآخر.</p>
+<p>بعد التسجيل الأولي للعبة، يمكن للمطورين أيضًا دفع الإصدار المدمج <code>.tar.gz</code> تحتوي على
+<code>server/image.tar</code> (<code>docker save</code> الإخراج) من خلال
+<code>POST /api/v1/me/github-games/{id}/bundle</code>. يقوم النظام الأساسي بتحميل الصورة وقوائم الانتظار وتثبيتها
+إعادة تشغيل النشر. يرى <a href="/ar/docs/api/github-games.html#push-a-game-bundle">ألعاب GitHub - ادفع حزمة ألعاب</a>
+و <a href="/ar/docs/tutorials/dedicated-server-onboarding.html">البرنامج التعليمي للخادم المخصص</a>.</p>
+<p>من الجدير معرفة هذه التفاصيل حول هذه الدفعة قبل إنشاء مسار إصدار حولها:</p>
+<ul>
+<li><strong>كبير <code>docker save</code> يمكن أن يتجاوز الحد الأقصى لنص طلب CDN الذي يصل إلى 100 ميجابايت تقريبًا</strong>، والذي يجيب بـ أ <code>413</code>
+المنصة لا ترى أبدًا - لا <code>limitBytes</code>، لا يوجد شيء في أي سجل يمكنك قراءته. ادفع الأرشيف
+<a href="/ar/docs/api/github-games.html#upload-over-a-websocket"><code>ws/v1/game-upload</code></a> بدلاً من؛ نفس الأرشيف، نفس
+بدل، نفس الإجابات.</li>
+<li><strong>الصورة التي تقوم بتحميلها هي في حد ذاتها الإعلان.</strong> لعبة بدون واجهة خلفية حتى الآن - تمت إضافة واحدة من
+المجلد الذي تم تحميله ولم يعلن عن أي شيء - يتم توفير تعريف الحاوية الخاص به من الملخص
+تحميلها للتو. لا تحتاج إلى <code>container.image=</code> في البيان الأول.</li>
+<li><strong>تؤدي عملية إعادة الدفع إلى تطبيق المقابض التي يعلن عنها البيان وتحتفظ بالمقابض التي يحذفها.</strong> تغيير
+<code>container.port</code> وإعادة التحميل الآن تنقل النشر إلى ذلك المنفذ؛ ترك البيان خارجا
+من الحزمة لا يغير شيئا سوى الصورة.</li>
+<li><strong>الصورة التي تم تحميلها تفوز بالبيان</strong>، بما في ذلك أكثر من <code>server=</code> الخط، والبيان
+اعلان كليهما <code>server=</code> و <code>container.image=</code> يتم رفضه قبل تحميل أي شيء.</li>
+<li><strong>علامة الصورة المحلية الخاصة بك لا تحدد الإصدار المنشور.</strong> يتم تثبيت الصورة التي تم تحميلها بواسطة
+ملخص المحتوى. يمكنك وضع علامة عليها محليًا كيفما تشاء؛ تحقق من الملخص الذي تم تحميله ونشره
+الحالة بعد النشر.</li>
+<li><strong><code>?mode=merge</code> تصحيحات ملفات العميل فقط.</strong> A <code>server/image.tar</code> في عملية الدمج يتم تحميلها تماما كما
+عند الاستبدال - لا يمكن تحديث الصورة نصفًا. يرى
+<a href="/ar/docs/api/github-games.html#partial-updates-modemerge">تحديثات جزئية</a>.</li>
+</ul>
+<h2 id="manifest">يظهر</h2>
+<p>قم بتعريف الصورة في المستودع <code>starhermit.txt</code>:</p>
+<pre><code class="language-ini">name=Void Marshals
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+
+container.image=ghcr.io/octocat/vm-server@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+container.port=8080
+container.health=/health
+container.memory_mb=1024
+container.cpu=1.0
+container.env.LOG_LEVEL=info
+</code></pre>
+<p>فقط <code>container.image</code> مطلوب. المنفذ ومسار الصحة الافتراضيان <code>8080</code> و <code>/health</code>.
+الذاكرة ووحدة المعالجة المركزية هي طلبات وليست ضمانات؛ تقوم المنصة بتثبيتها على حدود المشغل.</p>
+<p>صورتك لها سقف للحجم: 2 جيجا بايت غير مضغوطة ما لم يضبط المشغل لعبتك على مستوى آخر، و
+سحب التسجيل له خمس دقائق. يتم التخلي عن السحب الذي ينمو عبر السقف جزئيًا، ويتم تحميله
+<code>image.tar</code> تم رفض أكثر من ذلك <code>413</code>، والصورة التي تظهر أكبر عند فك ضغطها هي
+تمت إزالته مرة أخرى.
+<code>container.env.*</code> مخصص للتكوين غير السري فقط.</p>
+<p>يتم رفض التقديم ما لم:</p>
+<ul>
+<li>الصورة مثبتة على شكل <code>name@sha256:&lt;64 lowercase hex&gt;</code>. لا يتم قبول العلامات القابلة للتغيير.</li>
+<li>تم إدراج السجل في القائمة المسموح بها والصورة موجودة ضمن مساحة اسم مالك المستودع الذي تم التحقق منه؛
+حاليا هذا يعني <code>ghcr.io/&lt;github-owner&gt;/...</code>.</li>
+<li>يعلن البيان عن وقت تشغيل خادم واحد بالضبط. <code>server=</code> و <code>container.image=</code> متبادلة
+حصريا.</li>
+<li>أسماء البيئة صالحة ولا تبدأ بالمحجوزة <code>STARHERMIT_</code> بادئة.</li>
+</ul>
+<p>لا تضع أوراق الاعتماد أبدًا <code>starhermit.txt</code>; إنه ملف مستودع عام.</p>
+<h2 id="protocol-v1">البروتوكول v1</h2>
+<p>تخدم الحاوية HTTP/1.1 <code>container.port</code>. يتضمن كل طلب HTTP للنظام الأساسي وترقية WebSocket <code>X-Starhermit-Invoke-Key</code>، الذي قيمته
+يتطابق مع الحقن <code>STARHERMIT_INVOKE_KEY</code>; رفض الطلب في حالة غيابه أو خطأه.</p>
+<table>
+<thead>
+<tr>
+<th>نقطة النهاية</th>
+<th>غاية</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET &lt;container.health&gt;</code></td>
+<td>يعود <code>200</code> عندما يكون الخادم جاهزًا</td>
+</tr>
+<tr>
+<td><code>GET /describe</code></td>
+<td>الإعلان عن إصدار البروتوكول ومعدل التجزئة والقدرة والإنجازات</td>
+</tr>
+<tr>
+<td><code>POST /sessions</code></td>
+<td>ابدأ الجلسة، أو استعادتها عندما <code>snapshot</code> موجود</td>
+</tr>
+<tr>
+<td><code>GET /sessions/{sessionId}/snapshot</code></td>
+<td>إعادة الحالة الدائمة الحالية</td>
+</tr>
+<tr>
+<td><code>DELETE /sessions/{sessionId}</code></td>
+<td>هدم جلسة</td>
+</tr>
+<tr>
+<td><code>POST /sessions/{sessionId}/members</code></td>
+<td><em>خياري:</em> ينضم اللاعب إلى جلسة جارية أو يغادرها</td>
+</tr>
+<tr>
+<td><code>WS /control</code></td>
+<td>قناة التحكم الصادرة على نطاق النشر</td>
+</tr>
+<tr>
+<td><code>WS /stream</code></td>
+<td>إطارات اللعب في كلا الاتجاهين</td>
+</tr>
+</tbody>
+</table>
+<p>تستضيف حاوية واحدة جميع الجلسات المباشرة للعبة واحدة. حافظ على حالة الجلسة مرتبطة بـ <code>sessionId</code> وافعل
+لا تفترض أن العملية ستستمر طوال عمر المباراة.</p>
+<h3 id="get-describe"><code>GET /describe</code></h3>
+<pre><code class="language-json">{
+  "protocol": 1,
+  "tickRateHz": 20,
+  "maxSessions": 48,
+  "replays": true,
+  "persistent": false,
+  "achievements": [
+    { "key": "first-blood", "name": "First Blood", "description": "Score first.", "points": 10 }
+  ]
+}
+</code></pre>
+<p><code>protocol</code> يجب أن يكون <code>1</code>. <code>tickRateHz</code> و <code>maxSessions</code> هي طلبات ويمكن فرضت. المنصة
+لا تخطو أبدًا حلقة الحاوية، لذلك <code>tickRateHz</code> يخبرها بمدى سرعة لعبتك <em>التحركات</em> بدلا من كيف
+سريع لتشغيله: إنه ما يمنع النظام الأساسي من طلب لقطات أسرع مما تنتجه لعبتك
+دولة جديدة. أعلن عن المعدل الذي تعمل به حلقتك فعليًا. يتم قبول المعدلات الكسرية (<code>0.5</code> هو واحد
+ضع علامة كل ثانيتين)، والمعدل البطيء يؤدي إلى تمديد الفاصل الزمني بين طلبات اللقطات -
+وهو مقدار تكلفة اللعب أثناء التعطل. الحاوية التي لا تعلن عن شيء تغادر نقطة التفتيش
+الإيقاع لتكلفة اللقطة وحدها. تستخدم إدخالات الإنجاز نفس الحقول والحدود مثل
+<a href="/ar/docs/api/game-scripts.html#declare">الإنجازات المعلنة في النص</a>. يمكن منح المفاتيح المعلنة والتي أنشأها المالك لاحقًا.</p>
+<p><code>replays</code> يطلب من النظام الأساسي الاحتفاظ بالحالة الأخيرة لكل جلسة منتهية كـ <strong>اعادتها</strong>، يخدمها
+<code>GET /api/v1/games/{slug}/replays/{sessionId}</code> (يرى <a href="/ar/docs/api/games.html#replays">واجهة برمجة تطبيقات الألعاب - الإعادة</a>). يجب أن
+يكون حرفيا <code>true</code> أو <code>false</code>; اللعبة التي لا تعلن عن شيء لا تحتوي على إعادات، ونقاط نهاية إعادة التشغيل الخاصة بها
+إجابة <code>404</code>. مثل معدل القراد، فهو طلب - قد يجيب المشغل على لعبة معينة
+في كلتا الحالتين، قم بفرع عميلك <code>replaysEnabled</code> من <code>GET /api/v1/games/{slug}</code> وليس على
+ما أعلنته. لا تتأثر اللقطات في كلتا الحالتين: تحتاج الجلسة المباشرة إلى نقطة استعادة سواء
+أو لم يتم الاحتفاظ بآخرها.</p>
+<p><code>persistent</code> (حرفيا <code>true</code>/<code>false</code>) يطلب جلسات ذلك <strong>وقفة بدلا من الانتهاء</strong> عندما كل
+لقد غادر اللاعب. يؤدي التوقف المؤقت إلى إيقاف الجلسة: يقوم النظام الأساسي بأخذ لقطة نهائية، وتخزينها، ثم
+المكالمات <code>DELETE /sessions/{id}</code>; اللاعب التالي الذي ينضم إليه يعيده <code>POST /sessions</code> مع
+ذلك <code>snapshot</code>، تمامًا مثل استعادة الأعطال ولكن دون إنفاق ميزانية إعادة التشغيل أو الإرسال
+<code>resumed</code>. تحمل الجلسات المستمرة المستعادة أيضًا <code>pausedMs</code>، إجمالي الوقت المستغرق متوقفًا مؤقتًا. انظر
+<a href="/ar/docs/tutorials/persistent-sessions.html">البرنامج التعليمي للجلسات المستمرة</a>.</p>
+<p><code>linkedAchievements</code> (مجموعة تصل إلى 8 من البزاقات الثابتة للألعاب الأخرى) تضع فتح اللاعبين فيها
+الألعاب في ctx <code>POST /sessions</code>، عند الإنشاء والاستعادة. يرى
+<a href="/ar/docs/api/achievements.html#achievements-from-other-games">الإنجازات من الألعاب الأخرى</a>.</p>
+<p>الحالي <code>/describe</code> القارئ لا يستورد أ <code>queues</code> ملكية. ولذلك تستخدم ألعاب الحاوية
+الضمني <code>default</code> قائمة انتظار التوفيق بين 1 ضد 1؛ إضافة الأشكال هنا لا يؤدي إلى تمكين التطابقات الأكبر.
+يفحص <code>GET /api/v1/games/{slug}/queues</code> للحصول على الشكل الفعال. الموعد النهائي الواضح يبدأ ومقعد الذكاء الاصطناعي
+لا تزال الحدود مطبقة ضمن هذا الشكل؛ يرى <a href="/ar/docs/api/games.html#matchmaking">التوفيق</a>.</p>
+<h3 id="post-sessions"><code>POST /sessions</code></h3>
+<p>الطلب هو نفس شكل السياق الذي تتلقاه لعبة JavaScript:</p>
+<pre><code class="language-json">{
+  "now": 1769500000000,
+  "random": 0.418,
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [
+    { "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "name": "alice" }
+  ],
+  "sessionState": null,
+  "playerStates": {
+    "7c9e6679-7425-40de-944b-e07fc1f90ae7": null
+  }
+}
+</code></pre>
+<p>تتطابق الدلالات الميدانية مع <a href="/ar/docs/api/game-scripts.html#context-object">سياق البرنامج النصي</a>، مشتمل
+<a href="/ar/docs/api/game-scripts.html#matchmaking-seat-layout">التوفيق بين المقاعد وأعلام الذكاء الاصطناعي والمقاعد الفارغة</a> للألعاب
+التي تقوم بتكوين الموعد النهائي للبدء في <code>starhermit.txt</code>. الرد مع
+مظروف النتيجة القياسية، على سبيل المثال:</p>
+<pre><code class="language-json">{ "ok": true, "sessionState": { "round": 1 } }
+</code></pre>
+<p>عند الاسترداد يحتوي الطلب أيضًا <code>snapshot</code>، مع الاحتفاظ بالحالة الأخيرة التي استمرت بها المنصة،
+و <code>restoredFrom</code>، طابع زمني يونكس ميلي ثانية. أعد بناء جلسة قابلة للتشغيل من اللقطة.
+تتم استعادة الألعاب المستمرة بنفس الطريقة عندما ينضم اللاعب مرة أخرى إلى جلسة متوقفة مؤقتًا <code>pausedMs</code>
+في الجسم.</p>
+<h3 id="get-sessionssessionidsnapshot"><code>GET /sessions/{sessionId}/snapshot</code></h3>
+<p>قم بإرجاع المظروف القياسي كاملاً <code>sessionState</code> نقطة الاستعادة:</p>
+<pre><code class="language-json">{ "ok": true, "sessionState": { "round": 3, "scores": [2, 1] } }
+</code></pre>
+<p>تقوم نقاط تفتيش المنصة بجلسات نشطة بشكل دوري. قد تتضمن الاستجابة السريعة أيضًا
+<code>playerStates</code>, <code>eloUpdates</code>, <code>achievements</code>, <code>scores</code>، أو <code>result</code>; أنها تمر عبر نفس التحقق من الصحة و
+قواعد الثبات كنتيجة للبرنامج النصي. للعبة مع <a href="#get-describe">الاعادة</a>، الحالة الأخيرة أ
+الجلسة النهائية التي تم الوصول إليها هي ما تحتفظ به المنصة كإعادة تشغيل - لذا قم بإجراء هذه الحالة
+قابلة لإعادة البناء، وليست قابلة للاستئناف فحسب.</p>
+<h3 id="post-sessionssessionidmembers"><code>POST /sessions/{sessionId}/members</code></h3>
+<p>خياري. يمكن للاعبين <strong>الانضمام إلى جلسة قيد التقدم</strong>، من خلال أ <a href="/ar/docs/api/realtime.html">غرفة الوقت الحقيقي</a> هذا يسمح
+أو عن طريق قبول صديق <a href="/ar/docs/api/games.html#inviting-a-friend-into-a-game-in-progress">دعوة إلى الجلسة التي يلعبونها</a>,
+وتسمح الغرف للاعب بالتخلي عن مقعده دون أن يأخذه الذكاء الاصطناعي. تطلب المنصة من الحاوية الخاصة بك
+قبل أن يصبح التغيير نهائيًا. الجسم هو ctx العادي، مع <code>players</code> يعكس بالفعل
+التغيير، بالإضافة إلى <code>membership</code>:</p>
+<pre><code class="language-json">{
+  "now": 1769500000000,
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [
+    { "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "name": "alice" },
+    { "id": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol" }
+  ],
+  "membership": { "change": "joined", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol", "team": 0, "slot": 1 }
+}
+</code></pre>
+<p><code>change</code> يكون <code>joined</code> أو <code>left</code>. الإجابة باستخدام المظروف القياسي:</p>
+<ul>
+<li><strong>يمكن رفض الانضمام.</strong> <code>{"ok": false, "error": "This world is full."}</code> يبتعد اللاعب،
+يتم إرجاع المقعد ولا يتم تسجيل أي شيء؛ دعوة تقبل الإجابات <code>409</code> وتبقى الدعوة
+في انتظار. إذا لم تقم بتنفيذ نقطة النهاية، فسيتم رفض كل صلة: <code>404</code>, <code>405</code> و <code>501</code> يقصد
+"هذه اللعبة لا تأخذ اللاعبين في منتصف المباراة"، لذا فإن اللعبة المكتوبة لقائمة ثابتة لا تحتوي أبدًا على
+سقط شخص غريب فيه.</li>
+<li><strong>الإجازة نهائية</strong> مهما أجبت.</li>
+<li>الجواب قد يحمل <code>achievements</code> و <code>scores</code>. A <code>sessionState</code> تم تجاهله: أرسل أ <code>snapshot</code>
+زيادة <a href="#control-channel"><code>/control</code></a> إذا كان التغيير يستحق نقطة تفتيش.</li>
+</ul>
+<p>بعد الانضمام، تبدأ أوامر اللاعب الجديد في الوصول <code>/stream</code> وهم في <code>players</code> على كل
+استعادة في وقت لاحق. بعد الإجازة، تتوقف إطاراتها ويتم إغلاق مقبسها. كل عميل متصل
+يتلقى أ <a href="/ar/docs/api/games.html#server--client"><code>membership</code> إطار</a> وفي كلتا الحالتين، ستكسب أو تخسر جلسة الدردشة
+العضو.</p>
+<p>A <a href="/ar/docs/tutorials/persistent-sessions.html">جلسة مستمرة متوقفة مؤقتا</a> لم يتم السؤال، لأنه لا يعمل. استعادة ذلك
+يستأنف أنه يحمل التيار <code>players</code>، لذا تعامل مع لاعب لم تره من قبل في عملية الاستعادة كـ
+انضم.</p>
+<h2 id="gameplay-stream">تيار اللعب</h2>
+<p><code>WS /stream</code> يستخدم الرسائل الثنائية في كلا الاتجاهين:</p>
+<pre><code class="language-text">[1 byte type][16 byte sessionId][16 byte userId][payload...]
+</code></pre>
+<p>تستخدم المعرفات الفريدة العمومية (GUIDs) تمثيل سلك .NET ذو 16 بايت.</p>
+<ul>
+<li><strong>النوع 1، المنصة → الحاوية:</strong> أمر اللاعب. تقوم المنصة بختم معرف المستخدم المصادق عليه؛
+الحمولة هي قيمة JSON من العميل <code>cmd.data</code>.</li>
+<li><strong>النوع 2، الحاوية → المنصة:</strong> حمولة اللعبة. خاطب أحد المشاركين بمعرف المستخدم الخاص به، أو استخدمه
+معرف مستخدم صفري للبث. يجب أن تكون الحمولة صالحة بتنسيق JSON؛ العملاء يحصلون عليه في الداخل
+<code>{"type":"game","data":...}</code>.</li>
+</ul>
+<p>يتم تثبيت الجلسات لدفق الاتصالات للحفاظ على الطلب. لا تقبل أبدًا أو تستخرج اللاعب
+الهوية من الأمر JSON — الرأس المصادق عليه موثوق.</p>
+<h2 id="control-channel">قناة التحكم</h2>
+<p>إرسال رسائل نصية JSON على <code>WS /control</code> للحصول على تأثيرات دائمة:</p>
+<pre><code class="language-json">{ "type": "snapshot",     "sessionId": "...", "state": { "round": 3 } }
+{ "type": "achievements", "sessionId": "...", "unlocks": { "&lt;userId&gt;": ["first-blood"] } }
+{ "type": "elo",          "sessionId": "...", "updates": { "&lt;userId&gt;": 1312 } }   // absolute ratings, not deltas — see games.md#elo-per-match
+{ "type": "scores",       "sessionId": "...", "scores": { "&lt;boardKey&gt;": { "&lt;userId&gt;": 4200 } } }
+{ "type": "result",       "sessionId": "...", "result": { "kind": "win", "winner": "..." } }
+{ "type": "backpressure", "load": 0.75 }
+</code></pre>
+<p>يقبل النظام الأساسي التأثيرات فقط للجلسات الموجهة إلى هذا النشر، ويقوم بتصفية المستلمين إليها
+المشاركون في الجلسة، يحدون مفاتيح الإنجاز بإنجازات اللعبة (المعلن عنها، أو التي أنشأها
+صاحبها) حدود <code>scores</code> للعبة الخاصة
+<a href="/ar/docs/api/leaderboards.html#your-games-own-leaderboards">لوحات المتصدرين التي أنشأها المالك</a> — كل لاعب يحتفظ به
+الأفضل – ويطبق ميزانيات الدولة.
+<code>result</code> ينهي الجلسة؛ يتم تجاهل التأثيرات اللاحقة لتلك الجلسة. <code>backpressure.load</code> هو
+فرضت ل <code>0..1</code> ويساعد حساب النظام الأساسي على تحميل النشر الحالي.</p>
+<p>أرسل لقطة بعد الأحداث المهمة من الناحية الدلالية، مثل الهدف أو انتقال الجولة، بدلاً من ذلك
+بدلاً من الاعتماد فقط على نقاط التفتيش الدورية.</p>
+<h2 id="container-environment-and-server-api">بيئة الحاوية وواجهة برمجة تطبيقات الخادم</h2>
+<table>
+<thead>
+<tr>
+<th>عامل</th>
+<th>معنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>STARHERMIT_PROTOCOL</code></td>
+<td>نسخة البروتوكول (<code>1</code>)</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_GAME_SLUG</code></td>
+<td>سبيكة هذه اللعبة</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_INVOKE_KEY</code></td>
+<td>السر المتوقع في <code>X-Starhermit-Invoke-Key</code>; يصادق النظام الأساسي على الحاوية الخاصة بك</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_REFRESH_KEY</code></td>
+<td>سر منفصل يستخدم فقط لتجديد رمز الخادم</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_API_BASE</code></td>
+<td>يمكن الوصول إلى عنوان URL الأساسي لواجهة برمجة تطبيقات النظام الأساسي من الشبكة المعزولة</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_SERVER_TOKEN</code></td>
+<td>انتهاء صلاحية الرمز المميز لحامل واجهة برمجة التطبيقات الضيقة من خادم إلى خادم</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_SERVER_TOKEN_EXPIRES_IN</code></td>
+<td>عمر رمز الخادم الذي تم حقنه، بالثواني</td>
+</tr>
+<tr>
+<td><code>PORT</code></td>
+<td>المنفذ الذي يجب أن تستمع إليه الحاوية</td>
+</tr>
+</tbody>
+</table>
+<p>لا يحتوي رمز الخادم على هوية لاعب ولا يمكنه استخدام إجراءات الحساب أو اللاعب. يمكنها القراءة
+<code>GET /api/v1/time</code>، والتوفيق بين جلسات العمل الخاصة به، والاتصال بالخادم المدعوم
+<a href="/ar/docs/api/moderation.html#callers-and-routes">طرق الاعتدال</a> للعبة الخاصة بها. طرق الجيل هي
+<a href="/ar/docs/availability.html#reserved-generation-routes">محجوزة وغير متوفرة</a>.</p>
+<h3 id="renew-the-server-token">تجديد رمز الخادم</h3>
+<p>تنتهي صلاحية رمز الخادم الذي تم إدخاله (24 ساعة بشكل افتراضي). قم بتحديثه جيدًا قبل ذلك
+<code>STARHERMIT_SERVER_TOKEN_EXPIRES_IN</code> ينقضي:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/server/token
+X-Starhermit-Refresh-Key: &lt;STARHERMIT_REFRESH_KEY&gt;
+</code></pre>
+<pre><code class="language-json">{ "token": "eyJhbGciOi...", "expiresInSeconds": 86400 }
+</code></pre>
+<p>يتم استدعاء نقطة النهاية هذه عمدًا بدون الرمز المميز لحاملها منتهي الصلاحية. مفتاح التحديث المخصص
+تتم مقارنته بالنشر المباشر ويعمل حتى بعد انتهاء صلاحية الرمز القديم. انها متميزة
+من <code>STARHERMIT_INVOKE_KEY</code>: يقوم مفتاح الاستدعاء بتوثيق استدعاءات النظام الأساسي للعملية الخاصة بك، بينما يقوم
+يقوم مفتاح التحديث بمصادقة العملية الخاصة بك على النظام الأساسي. كلاهما يدور عندما تبدأ الحاوية.
+قم بجدولة التجديد بنصف العمر المُبلغ عنه تقريبًا واستبدل الرمز المميز تلقائيًا.</p>
+<p>"عندما تبدأ الحاوية" يتضمن أكثر من نشر. يتم إيقاف النشر الخامل بعد أ
+تعويذة هادئة بدون جلسات (15 دقيقة افتراضيًا) ويبدأها اللاعب التالي مرة أخرى. الحاوية المحطمة هي
+إعادة تشغيل. كل بداية عبارة عن حاوية جديدة تحتوي على مفاتيح جديدة ورمز مميز جديد، لذا اقرأ الثلاثة جميعًا من
+بيئة العملية الجارية. لا تقم أبدًا بدمجها في الصورة أو ملف التكوين أو اللقطة.</p>
+<p>إذا فشلت البداية مع <code>The game container returned 401 for GET /describe</code>ومفتاح المنصة و
+مفتاح عمليتك لا يوافق. يقرأ <code>STARHERMIT_INVOKE_KEY</code> عند بدء التشغيل ومقارنتها دون تعديل. إذا استمر فشل التحقق من الصحة،
+الإبلاغ عن معرف اللعبة وسجلات بدء التشغيل المعقمة؛ لا تخفيف الشيك.</p>
+<h3 id="reconcile-a-session">التوفيق بين الجلسة</h3>
+<p><code>GET /api/v1/games/{slug}/server/sessions/{sessionId}</code> مع
+<code>Authorization: Bearer &lt;STARHERMIT_SERVER_TOKEN&gt;</code> إرجاع عرض الجلسة الحالية للمنصة:</p>
+<pre><code class="language-json">{
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "status": "active",
+  "players": [
+    { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" }
+  ],
+  "createdAt": "2026-07-27T16:00:00Z",
+  "finishedAt": null,
+  "chatConversationId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+  "result": null
+}
+</code></pre>
+<p>استخدم هذا بعد الاستعادة عندما تحتاج الحاوية إلى تأكيد ما إذا كان النظام الأساسي لا يزال في الاعتبار
+جلسة نشطة. رمز مميز للعبة أخرى، أو رمز إطلاق اللاعب، محظور.</p>
+<h2 id="isolation">عزل</h2>
+<p>لا تحتوي حاوية اللعبة على إمكانية الوصول إلى الإنترنت. يمكنه الوصول فقط إلى StarHermit API من خلاله
+<code>STARHERMIT_API_BASE</code>; ولا يمكن الوصول إلى الألعاب الأخرى أو خدمات النظام الأساسي أو المضيف. بائع الكل
+تبعيات وقت التشغيل في الصورة.</p>
+<p>نظام الملفات الجذر للقراءة فقط، باستثناء الملفات الصغيرة <code>/tmp</code>; تعمل العملية باعتبارها غير الجذر القسري
+مستخدم ليس لديه إمكانيات Linux، ولا وحدات تخزين، ووحدة المعالجة المركزية، والذاكرة، وحدود العملية. لا تقم بالتثبيت
+الحزم عند بدء التشغيل أو الاستمرار في مطابقة الحالة على القرص المحلي فقط.</p>
+<h2 id="failure-and-recovery">الفشل والتعافي</h2>
+<p>إذا توقفت العملية، يقوم النظام الأساسي بإعادة تشغيل النشر وإعادة إنشاء جلساته المباشرة من
+اللقطات الأخيرة. يتلقى اللاعبون المتصلون إطارًا للمنصة:</p>
+<pre><code class="language-json">{ "type": "resumed", "sessionId": "...", "lostMs": 750 }
+</code></pre>
+<p>يجب على العملاء تجاهل التنبؤ المحلي وانتظار حمولة الحالة الكاملة العادية للعبة. جلسة
+يتم التخلي عنه بدلاً من استعادته في حالة عدم وجود لقطة قابلة للاستخدام، أو أنها قديمة جدًا، أو انتهت الجلسة
+إعادة التشغيل في كثير من الأحيان. تنهيها المنصة دون فائز أو تغيير إيلو وترسل:</p>
+<pre><code class="language-json">{ "type": "abandoned", "sessionId": "...", "reason": "server_failure" }
+</code></pre>
+<p><code>reason</code> يكون <code>server_failure</code> عندما تكون عملية الاسترداد غير آمنة أو عندما لا يبدأ الاستبدال مطلقًا، و
+<code>restore_failed</code> عند إعادة فشل الجلسة. يؤدي نشر صورة جديدة إلى استعادة الجلسات المباشرة
+في الاستبدال (أو يتخلى عن تلك التي لا معنى لها). البداية التي تفشل - انتهت مهلة السحب، و
+تم الخروج من الحاوية، أو لم يتم الرد مطلقًا على فحص السلامة الخاص بها في الوقت المناسب - تتم إعادة المحاولة مع التراجع، مثل
+تحطم. ثلاث محاولات فاشلة خلال عشر دقائق (قابلة للضبط بواسطة المشغل) تؤدي إلى تعطيل النشر (<code>failed</code>)،
+وهو كذلك <strong>لا</strong> استيقظ بناء على طلب اللاعب. يمكن إعادة محاولة انقطاعات الاستضافة المؤقتة دون إنفاق بدل فشل اللعبة.</p>
+<p>يتم إيقاف النشر بدون جلسات مباشرة بعد 15 دقيقة من الخمول (يمكن للمشغل ضبط لعبتك على نافذة مختلفة).
+متوقف مؤقتًا <a href="#get-describe">مثابر</a> الجلسات متوقفة خارج الحاوية ولا تستمر عليها.
+طلب الجلسة القادمة ضد أ <code>stopped</code> النشر يوقظه (<code>pending</code> → البوابة الصحية →
+<code>running</code>); خسارة هذا السباق هو <code>503</code> قائلا أن اللعبة بدأت. فقط <code>stopped</code> استيقظ هذا
+الطريق - أبدا <code>failed</code>.</p>
+<p>تصميم <code>POST /sessions</code> الاستعادة وإيقاع اللقطات كجزء من بروتوكول اللعبة، وليس كإجراء
+التحسين الاختياري.</p>
+<p>يمكن لمالك اللعبة سرد الجلسات العالقة وإنهائها:
+<code>GET</code>/<code>DELETE /api/v1/me/github-games/{id}/sessions[/{sessionId}]</code>.</p>
+<h2 id="your-servers-output-and-crash-reports">تقارير المخرجات والأعطال الخاصة بالخادم الخاص بك</h2>
+<p>باعتبارك مالك اللعبة، يمكنك قراءة ما طبعه خادمك، وما حدث عندما تعطل:</p>
+<table>
+<thead>
+<tr>
+<th>طريقة</th>
+<th>طريق</th>
+<th>وصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/github-games/{id}/container/logs?tail=N</code></td>
+<td>الإخراج الأخير: <code>{ source, deploymentStatus, capturedAt, truncated, logs }</code></td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/github-games/{id}/container/crashes?page=&amp;pageSize=</code></td>
+<td>سجلات الأعطال، الأحدث أولاً</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/github-games/{id}/container/crashes/{crashId}</code></td>
+<td>سجل تعطل واحد، مع التقاط الإخراج</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>سجلات</strong> تأتي مباشرة من الخادم قيد التشغيل (<code>source: "live"</code>)، تم الاحتفاظ بأحدث ما يصل إلى 500 سطر و
+256 كيلو بايت بشكل افتراضي. عندما لا يكون هناك شيء قيد التشغيل، يمكنك الحصول على الإخراج الذي تم التقاطه عند التعطل الأخير
+(<code>source: "last_crash"</code>). اللعبة التي تكون واجهتها الخلفية عبارة عن برنامج نصي، أو التي لا تحتوي على أي شيء، تحصل على <code>409</code>.</li>
+<li><strong>سجل تحطم</strong> يتم كتابته عندما يتعطل الخادم الخاص بك، أو يتوقف عن الرد، أو تنتهي المهلة أثناء ذلك
+بدء التشغيل أو الفشل في البدء — قبل إزالة الحاوية. يحمل النوع، رمز الخروج،
+ملخص الصور، وعدد مرات إعادة التشغيل، والجلسات المتأثرة، وآخر 64 كيلو بايت من المخرجات لخادمك. ال
+يتم الاحتفاظ بأحدث 50 منها لمدة 30 يومًا.</li>
+<li><strong>تم تنقيح الأسرار.</strong> يظهر مفتاح استدعاء الخادم الخاص بك ومفتاح التحديث وأي رمز مميز للخادم كما يلي
+<code>[redacted]</code>. الخاص بك <code>container.env.*</code> تظهر القيم مطبوعة — لا تقم بتسجيل ما لم تقم بتسجيله
+تريد تخزينها.</li>
+</ul>
+<p>يمكن للمشغلين تغيير كل من هذه الحدود في كل لعبة.</p>
+<h2 id="see-also">انظر أيضا</h2>
+<ul>
+<li><a href="/ar/docs/api/github-games.html">ألعاب جيثب</a> - تسجيل المستودع ونشره</li>
+<li><a href="/ar/docs/api/games.html">واجهة برمجة تطبيقات الألعاب</a> - سطح REST وWebSocket المواجه للاعب دون تغيير</li>
+<li><a href="/ar/docs/api/game-scripts.html">مخطوطات اللعبة</a> — وقت تشغيل JavaScript البديل وأشكال السياق/النتائج المشتركة</li>
+<li><a href="/ar/docs/api/achievements.html">الإنجازات</a> - قراءات وإشعارات الإنجاز التي تواجه اللاعب</li>
+</ul>
+<p>مشترك <a href="/ar/docs/api/conventions.html">اتفاقيات API</a> وصف تحليل الاستجابة، والطوابع الزمنية، وترقيم الصفحات، وإعادة المحاولة.</p>
+<p>يرى <a href="/ar/docs/credentials.html">التوافق الاعتماد</a> و <a href="/ar/docs/api/contracts.html">العقود المقروءة آليا</a>.</p>
+
+{% endraw %}

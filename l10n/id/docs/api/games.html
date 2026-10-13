@@ -1,0 +1,949 @@
+---
+layout: "wiki"
+lang: "id"
+title: "API Permainan"
+source_url: "/docs/api/games.html"
+source_path: "docs/api/games.md"
+source_hash: "e470bcc739248f71e3ff63290f133d01b1b9deb11aa638ef8f1c4d640d43ae5a"
+translation: "machine"
+permalink: "/id/docs/api/games.html"
+---
+{% raw %}
+<h1 id="games-api">API Permainan</h1>
+<p>Subsistem game adalah inti dari StarHermit: game multipemain otoritatif server yang aturannya dijalankan dalam file JavaScript kotak pasir atau wadah yang disediakan pengembang. Kedua runtime berbagi REST API yang dapat diakses oleh pemain (<code>api/v1/games/{slug}</code>) dan gameplay WebSocket (<code>ws/v1/games</code>). Untuk pembuatan server, lihat <a href="/id/docs/api/game-scripts.html">Skrip Permainan</a> atau <a href="/id/docs/api/container-games.html">Server Game yang dihosting oleh kontainer</a>. Untuk contoh runtime skrip yang lengkap, lihat <a href="/id/docs/tutorials/chess-walkthrough.html">Panduan Catur</a> Dan <a href="https://github.com/HypeDriven/starhermit-chess">HypeDriven/catur pertapa bintang</a>.</p>
+<p><strong>URL Dasar:</strong> <code>https://api.starhermit.com</code>.</p>
+<p>Titik akhir pemain memerlukan autentikasi dan berfungsi dengan token pengguna penuh dan peluncuran dalam lingkup game
+token. Keduanya <code>/server/...</code> titik akhir hanya untuk container: rekonsiliasi sesi menggunakan metode sempit
+token pembawa server, sedangkan pembaruan token menggunakan kunci penyegaran penerapan.</p>
+<h2 id="what-slug-is">Apa <code>{slug}</code> adalah</h2>
+<p>Siput sebuah game adalah miliknya <strong>uid</strong> — nilai yang sama dengan miliknya <code>&lt;uid&gt;.starhermit.com</code> alamat, mis.
+<code>83fd04b1-3cbe-4b09-a251-3733ad4b9d94</code>. Itu berasal dari id game yang tidak dapat diubah dan <strong>tidak ada apa-apa
+dapat mengaturnya</strong>: bukan <code>starhermit.txt</code>, bukan nama repo, bukan operator. Nama yang bisa digunakan oleh pengembang
+pilih akan menjadi sesuatu yang bisa diperebutkan oleh dua game, dan akan membutuhkan platform untuk menengahi siapa
+mengerti; suatu cairan tidak dapat bertabrakan atau diminta.</p>
+<p><strong>Siput bukanlah backend server.</strong> Setiap game ditambahkan dari folder lokal, dan setiap game repositori
+pemilik terverifikasi menambahkan, memilikinya — dengan atau tanpa <code>server=</code> atau <code>container.image=</code> — karena memang demikian
+alamat permukaan yang menghadap pemain dalam game: <a href="#launch-tokens">meluncurkan token</a>,
+<a href="#per-player-control-bindings">kontrol</a>, <a href="#per-player-game-settings">pengaturan</a>, dia
+<a href="/id/docs/api/catalog.html#saving-from-inside-a-game-launch-token">slot penyimpanan cloud</a> Dan <a href="/id/docs/api/realtime.html">kamar</a>. SEBUAH
+Game khusus browser membutuhkannya sama seperti game lainnya. Satu-satunya game tanpa siput adalah repositori
+kiriman yang pemiliknya tidak terverifikasi (<code>gameSlug</code> adalah <code>null</code> di dalam <code>GET /api/v1/me/github-games</code>).</p>
+<p>Titik akhir tentang server game — info game, pencapaian, sesi, perjodohan, undangan,
+memutar ulang — membutuhkan backend. <code>GET /api/v1/games/{slug}</code> jawaban <code>404</code> untuk game yang ada slug dan no
+backend, yang merupakan cara untuk membedakan keduanya.</p>
+<p>Jangan melakukan hard-code. Bacalah dari token peluncuran <code>game_scope</code> klaim, atau — untuk a
+game browser yang dihosting platform — dari <code>location.hostname</code>, karena subdomainnya adalah uid.</p>
+<h2 id="endpoints">Titik akhir</h2>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}</code></td>
+<td>Pembawa</td>
+<td>Info permainan + statistik penelepon</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/games/{slug}/launch-token</code></td>
+<td>Pembawa</td>
+<td>Buat token peluncuran dalam cakupan game</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/achievements</code></td>
+<td>Pembawa</td>
+<td>Prestasi game + status buka kunci penelepon</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/linked-achievements/{otherSlug}</code></td>
+<td>Pembawa</td>
+<td>Apa yang dibuka oleh penelepon di game lain</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/controls</code></td>
+<td>Pembawa</td>
+<td>Dapatkan pengikatan kontrol efektif penelepon</td>
+</tr>
+<tr>
+<td>MELETAKKAN</td>
+<td><code>/api/v1/games/{slug}/controls</code></td>
+<td>Pembawa</td>
+<td>Ganti penggantian kendali pemanggil</td>
+</tr>
+<tr>
+<td>MENGHAPUS</td>
+<td><code>/api/v1/games/{slug}/controls</code></td>
+<td>Pembawa</td>
+<td>Reset kontrol pemanggil ke default manifes</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>Pembawa</td>
+<td>Pengaturan yang disimpan penelepon untuk game ini, ditambah batas ukurannya</td>
+</tr>
+<tr>
+<td>MELETAKKAN</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>Pembawa</td>
+<td>Ganti seluruh peta pengaturan pemanggil</td>
+</tr>
+<tr>
+<td>tambalan</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>Pembawa</td>
+<td>Gabungkan ke dalam peta yang disimpan; <code>null</code> menghapus kunci</td>
+</tr>
+<tr>
+<td>MENGHAPUS</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>Pembawa</td>
+<td>Hapus setiap pengaturan yang disimpan penelepon untuk game ini</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/settings/{key}</code></td>
+<td>Pembawa</td>
+<td>Satu pengaturan, atau <code>404</code></td>
+</tr>
+<tr>
+<td>MELETAKKAN</td>
+<td><code>/api/v1/games/{slug}/settings/{key}</code></td>
+<td>Pembawa</td>
+<td>Simpan satu pengaturan</td>
+</tr>
+<tr>
+<td>MENGHAPUS</td>
+<td><code>/api/v1/games/{slug}/settings/{key}</code></td>
+<td>Pembawa</td>
+<td>Hapus satu pengaturan</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/sessions/mine</code></td>
+<td>Pembawa</td>
+<td>Sesi aktif penelepon</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/sessions/{sessionId}</code></td>
+<td>Pembawa</td>
+<td>Detail sesi (khusus peserta)</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/sessions/{sessionId}/recovery</code></td>
+<td>Pembawa (peserta atau pemilik)</td>
+<td>Data pemulihan, kedaluwarsa, dan batas pengangkutan efektif</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/games/{slug}/sessions/{sessionId}/leave</code></td>
+<td>Pembawa (peserta)</td>
+<td>Tinggalkan dunia yang gigih tanpa ruang → <code>204</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/leaderboards</code></td>
+<td>Pembawa</td>
+<td>Papan aktif yang dibuat oleh pemilik game sendiri</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/games/{slug}/sessions/ai</code></td>
+<td>Pembawa</td>
+<td>Buat sesi latihan vs platform AI</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/queues</code></td>
+<td>Pembawa</td>
+<td>Bentuk kecocokan yang diterima game ini</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/games/{slug}/matchmaking</code></td>
+<td>Pembawa</td>
+<td>Enqueue untuk perjodohan elo terdekat (<code>?queues=</code> bagian)</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/matchmaking</code></td>
+<td>Pembawa</td>
+<td>Tiket terbaru selagi masih bisa bergabung</td>
+</tr>
+<tr>
+<td>MENGHAPUS</td>
+<td><code>/api/v1/games/{slug}/matchmaking</code></td>
+<td>Pembawa</td>
+<td>Batalkan tiket yang antri</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/diagnostics</code></td>
+<td>JWT (pemilik)</td>
+<td>Sesi langsung, pengukuran skrip, antrean, kesehatan webhook</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/webhooks</code></td>
+<td>JWT (pemilik)</td>
+<td>Daftar titik akhir webhook</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/games/{slug}/webhooks</code></td>
+<td>JWT (pemilik)</td>
+<td>Buat webhook; rahasia kembali sekali</td>
+</tr>
+<tr>
+<td>MENGHAPUS</td>
+<td><code>/api/v1/games/{slug}/webhooks/{id}</code></td>
+<td>JWT (pemilik)</td>
+<td>Hapus webhook</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/games/{slug}/webhooks/{id}/resume</code></td>
+<td>JWT (pemilik)</td>
+<td>Hapus pemutus setelah memperbaiki titik akhir</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/games/{slug}/invites</code></td>
+<td>Pembawa</td>
+<td>Undang teman ke permainan baru, atau ke permainan yang sedang Anda mainkan</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/invites</code></td>
+<td>Pembawa</td>
+<td>Undangan masuk tertunda + semua undangan keluar</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/games/{slug}/invites/{inviteId}/accept</code></td>
+<td>Pembawa</td>
+<td>Terima undangan (membuat sesi, atau bergabung dengan sesi yang diberi nama)</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/games/{slug}/invites/{inviteId}/decline</code></td>
+<td>Pembawa</td>
+<td>Tolak undangan</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/game-invites</code></td>
+<td>Akun JWT</td>
+<td>Semua undangan tertunda — setiap pertandingan, kedua sistem undangan (maks 50)</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/replays/mine</code></td>
+<td>Pembawa</td>
+<td>Sesi selesai penelepon (permainan dengan pemutaran ulang)</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/replays/{sessionId}</code></td>
+<td>Pembawa</td>
+<td>Status pemutaran ulang penuh (khusus peserta)</td>
+</tr>
+<tr>
+<td>WS</td>
+<td><code>/ws/v1/games?sessionId={guid}</code></td>
+<td>Pembawa</td>
+<td>Permainan WebSocket</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/server/sessions/{sessionId}</code></td>
+<td>Token server game</td>
+<td>Rekonsiliasi sesi backend container; tidak tersedia untuk token pemain</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/games/{slug}/server/token</code></td>
+<td>Segarkan kunci</td>
+<td>Memperbarui token server kontainer yang sudah habis masa berlakunya</td>
+</tr>
+</tbody>
+</table>
+<p>Badan kesalahan bervariasi; melihat <a href="/id/docs/api/conventions.html#requests-and-responses">konvensi API</a>.</p>
+<h2 id="game-info">Informasi permainan</h2>
+<h3 id="get-apiv1gamesslug"><code>GET /api/v1/games/{slug}</code></h3>
+<p>Mengembalikan definisi game ditambah statistik pemanggil untuk game tersebut. <code>404</code> jika tidak ada permainan seperti itu,
+atau jika game tersebut hanya untuk browser (memiliki slug tetapi tidak ada server backend).</p>
+<pre><code class="language-json">{
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "name": "Chess",
+  "enabled": true,
+  "leaderboardId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "maxConcurrentSessionsPerPlayer": 20,
+  "replaysEnabled": true,
+  "buildId": "s12",
+  "me": {
+    "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "elo": 1200,
+    "wins": 4,
+    "losses": 2,
+    "draws": 1,
+    "activeSessionCount": 2
+  }
+}
+</code></pre>
+<ul>
+<li><code>leaderboardId</code> adalah opsional.</li>
+<li><code>me.elo</code> defaultnya adalah <code>1200</code>; <code>wins</code>/<code>losses</code>/<code>draws</code> dibaca dari dokumen per pemain yang dimiliki waktu proses server.</li>
+<li><code>replaysEnabled</code> menyatakan apakah sesi permainan yang telah selesai disimpan — bacalah daripada berasumsi, dan sembunyikan UI replay Anda saat itu <code>false</code>. Melihat <a href="#replays">Pemutaran ulang</a>.</li>
+<li><code>buildId</code> memberi nama logika server yang saat ini melayani permainan (<code>s</code> + versi skrip, atau <code>c</code> + awalan intisari gambar). Kirim kembali sebagai <code>ws/v1/games?build=…</code> jadi klien basi ditolak <code>409 {"error":"build_mismatch"}</code> sebelum bertindak pada ladang yang dipindahkan. Menghilangkan <code>build</code> terhubung seperti sebelumnya.</li>
+</ul>
+<h2 id="launch-tokens">Luncurkan token</h2>
+<h3 id="post-apiv1gamessluglaunch-token"><code>POST /api/v1/games/{slug}/launch-token</code></h3>
+<p>Mencetak JWT lingkup permainan (masa pakai default 60 menit). <code>game_scope={slug}</code> dan tidak ada klaim izin. Token yang tercakup dapat mencetak ulang token untuk permainannya sendiri — ini adalah pola penyegaran klien — tetapi pembaruan dibatasi oleh <code>launch_chain</code> (defaultnya 12 jam dari sesi pengguna asli). Melewati batas atas pembaharuan itu <code>403</code>. Klien harus menyegarkan sebelum token habis masa berlakunya; klien referensi catur, misalnya, menyegarkan setiap 45 menit. Perpanjang juga sebelum menyambungkan kembali soket — lihat <a href="#gameplay-websocket">Permainan WebSocket</a>.</p>
+<pre><code class="language-json">{
+  "token": "eyJhbGciOi...",
+  "expiresInSeconds": 3600
+}
+</code></pre>
+<h2 id="achievements">Prestasi</h2>
+<h3 id="get-apiv1gamesslugachievements"><code>GET /api/v1/games/{slug}/achievements</code></h3>
+<p>Setiap pencapaian yang dinyatakan oleh backend resmi game, dengan status tidak terkunci pemanggil. Rahasia
+pencapaian tetap tersembunyi sampai penelepon membukanya. Menerima JWT pengguna penuh atau cakupan game
+token peluncuran. <code>404</code> ketika siput tidak memiliki definisi permainan yang resmi.</p>
+<pre><code class="language-json">[
+  {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "key": "first-win",
+    "name": "First Win",
+    "description": "Win a match.",
+    "icon": null,
+    "secret": false,
+    "points": 10,
+    "unlocked": true,
+    "unlockedAt": "2026-07-25T09:14:02Z"
+  }
+]
+</code></pre>
+<p>Prestasi permainan adalah <strong>server-otoritatif</strong>: hanya skrip atau wadah game yang memberikannya,
+dan diklaim klien <code>POST /api/v1/me/achievements/unlock</code> titik akhir menolaknya. Buka kunci secara langsung
+tiba di soket gameplay sebagai <code>{"type":"achievement"}</code> bingkai. Kontrak penuh sudah masuk
+<a href="/id/docs/api/achievements.html">Prestasi</a>, <a href="/id/docs/api/game-scripts.html#achievements">Skrip Permainan</a>, Dan
+<a href="/id/docs/api/container-games.html#control-channel">Server Game Kontainer</a>.</p>
+<h3 id="get-apiv1gamessluglinked-achievementsotherslug"><code>GET /api/v1/games/{slug}/linked-achievements/{otherSlug}</code></h3>
+<p>Milik si penelepon membuka kuncinya <strong>lain</strong> game, sehingga game ini dapat membuka fitur berdasarkan game tersebut. Bekerja
+dengan token peluncuran game ini. Melihat
+<a href="/id/docs/api/achievements.html#achievements-from-other-games">Prestasi — Prestasi dari game lain</a>.</p>
+<h2 id="per-player-control-bindings">Ikatan kontrol per pemain</h2>
+<p>Game dapat mendeklarasikan kontrol browser desktop dengan <code>control.*</code> entri di
+<a href="/id/docs/api/github-games.html#default-control-bindings"><code>starhermit.txt</code></a>. Kontrol API menyimpan a
+penggantian terpisah untuk setiap pengguna dan game. JWT pengguna penuh dan token peluncuran cakupan game adalah
+diterima; token peluncuran <code>game_scope</code> harus cocok <code>{slug}</code>.</p>
+<h3 id="get-apiv1gamesslugcontrols"><code>GET /api/v1/games/{slug}/controls</code></h3>
+<p>Mengembalikan pengikatan efektif dalam urutan nyata. <code>codes</code> berisi penggantian pengguna kapan
+satu ada, sebaliknya <code>defaultCodes</code>. Kembali <code>404</code> <code>"This game declares no controls."</code> kapan
+bangunan hidup <code>starhermit.txt</code> tidak memiliki valid <code>control.*</code> line — deklarasikan dan publikasikan build; melihat
+<a href="/id/docs/tutorials/game-controls.html">Tutorial: tambahkan kontrol ke game Anda</a>.</p>
+<pre><code class="language-json">{
+  "actions": [
+    {
+      "action": "up",
+      "label": "Run forward",
+      "defaultCodes": ["KeyW", "ArrowUp"],
+      "codes": ["KeyW", "ArrowUp"]
+    },
+    {
+      "action": "shoot",
+      "label": "Shoot",
+      "defaultCodes": ["Space"],
+      "codes": ["KeyJ"]
+    }
+  ]
+}
+</code></pre>
+<h3 id="put-apiv1gamesslugcontrols"><code>PUT /api/v1/games/{slug}/controls</code></h3>
+<p>Menggantikan penggantian pemanggil. Itu <code>bindings</code> objek mungkin berisi subset dari yang dideklarasikan
+tindakan; tindakan yang dihilangkan terus menggunakan defaultnya.</p>
+<pre><code class="language-json">{
+  "bindings": {
+    "up": ["KeyW", "ArrowUp"],
+    "shoot": ["KeyJ"]
+  }
+}
+</code></pre>
+<p>Setiap tindakan harus diumumkan oleh permainan. Setiap tindakan harus memiliki 1–4 valid
+<code>KeyboardEvent.code</code> nilai, dan tidak ada kode yang dapat ditetapkan ke dua tindakan sebagai hasilnya
+peta yang efektif. Tindakan, kode, atau konflik yang tidak valid muncul kembali <code>400</code>.</p>
+<h3 id="delete-apiv1gamesslugcontrols"><code>DELETE /api/v1/games/{slug}/controls</code></h3>
+<p>Menghapus semua penggantian pemanggil dan memulihkan default manifes. Kembali <code>204</code>.
+Penulisan token peluncuran memang disengaja, sehingga game yang dihosting mungkin menyediakan layar rebindingnya sendiri.</p>
+<h2 id="per-player-game-settings">Pengaturan permainan per pemain</h2>
+<p>Tempat permainan Anda disimpan <strong>pilihannya sendiri</strong> untuk pemain — volume master, detail grafis, subtitle
+ukuran, kamera pilihan, pemuatan terakhir yang dipilih — sehingga mereka mengikuti pemain tersebut ke mesin mana pun yang mereka masuki
+dari. Penyimpanan kunci/nilai yang mencakup satu pemain dan satu game.</p>
+<p><strong>Tidak ada yang mendeklarasikan skema.</strong> Platform menyimpan kunci dan nilai-nilai Anda dan tidak pernah membacanya,
+jadi Anda menambahkan opsi dengan menuliskannya: tidak ada entri manifes, tidak ada penerapan ulang, tidak ada rilis platform. Itu juga
+berarti platform tidak dapat memvalidasinya untuk Anda — kesalahan ketik pada nama kunci adalah pengaturan baru, bukan pengaturan baru
+kesalahan.</p>
+<p>Seperti API kontrol, token peluncuran cakupan game diterima (itu <code>game_scope</code> harus cocok <code>{slug}</code>),
+jadi layar opsi dalam game hanya berfungsi dengan token yang sudah dimiliki game tersebut. Berbeda dengan
+kontrol, tidak diperlukan deklarasi manifes: setiap game memiliki penyimpanan pengaturan sejak saat itu
+ada, termasuk game khusus browser tanpa logika server sama sekali.</p>
+<p>Pilih toko yang tepat — <a href="/id/docs/api/catalog.html#saving-from-inside-a-game-launch-token">penyimpanan awan</a> tahan kemajuan (satu arsip buram per judul, 10 MB, juga dapat dijangkau dengan token peluncuran),
+dan status pemutar skrip atau container backend adalah otoritatif server dan tidak dapat ditulis dari a
+klien. Pengaturan adalah preferensi kecil milik klien di antaranya.</p>
+<h3 id="get-apiv1gamesslugsettings"><code>GET /api/v1/games/{slug}/settings</code></h3>
+<p>Semua yang disimpan penelepon untuk game ini. <code>settings</code> kosong untuk pemain yang belum pernah menyimpan
+apa pun - itu adalah a <code>200</code>, tidak a <code>404</code>. Kunci kembali diurutkan.</p>
+<pre><code class="language-json">{
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "settings": {
+    "audio.master": 0.8,
+    "graphics.detail": "ultra",
+    "graphics.options": { "shadows": true, "msaa": 4 }
+  },
+  "count": 3,
+  "bytes": 118,
+  "updatedAt": "2026-08-07T15:04:11Z",
+  "limits": { "maxKeys": 200, "maxKeyLength": 128, "maxTotalBytes": 2097152, "maxAccountBytes": 67108864 }
+}
+</code></pre>
+<p><code>bytes</code> adalah perbandingan dengan pengaturan pemain ini saat ini <code>limits.maxTotalBytes</code>. Baca
+batasan daripada mengkodekannya secara keras: tunjangan adalah pengaturan operator, dan permainan dapat diberikan
+miliknya sendiri. <code>maxKeys</code> (200 secara default) juga dapat diatur per game, dan <code>maxAccountBytes</code> batas satu
+pengaturan akun di setiap game (64 MB secara default).</p>
+<h3 id="put-apiv1gamesslugsettings"><code>PUT /api/v1/games/{slug}/settings</code></h3>
+<p>Menggantikan seluruh peta. <strong>Kunci yang dihilangkan oleh isi akan dihapus</strong> — kirim semuanya, atau gunakan <code>PATCH</code>.</p>
+<pre><code class="language-json">{ "settings": { "audio.master": 0.8, "graphics.detail": "ultra" } }
+</code></pre>
+<p>Sebuah kosong <code>settings</code> objek menghapus pengaturan game untuk pemanggil. Mengembalikan bentuk yang sama seperti
+<code>GET</code>.</p>
+<h3 id="patch-apiv1gamesslugsettings"><code>PATCH /api/v1/games/{slug}/settings</code></h3>
+<p>Menggabungkan ke dalam apa yang disimpan, meninggalkan kunci yang tidak disebutkan sendirian. A <code>null</code> nilai <strong>menghapus</strong> itu
+kunci. Ini menggabungkan kunci pengaturan tingkat atas; nilai objek menggantikan seluruh nilai pada kuncinya,
+termasuk properti bersarangnya. Inilah yang
+layar opsi harus digunakan — ini dapat menyimpan satu penggeser yang dipindahkan tanpa membaca terlebih dahulu dan
+menulis ulang segalanya.</p>
+<pre><code class="language-json">{ "settings": { "audio.music": 0.25, "graphics.options": null } }
+</code></pre>
+<h3 id="get--put--delete-apiv1gamesslugsettingskey"><code>GET</code> / <code>PUT</code> / <code>DELETE /api/v1/games/{slug}/settings/{key}</code></h3>
+<p>Satu pengaturan pada satu waktu. <code>GET</code> kembali <code>{ "key", "value", "updatedAt" }</code>, atau <code>404</code> jika penelepon punya
+tidak pernah menyimpannya. <code>PUT</code> dibutuhkan <code>{ "value": &lt;any JSON&gt; }</code> dan menyimpan nilainya <strong>kata demi kata</strong> — termasuk
+sebuah eksplisit <code>null</code>, yang di sini adalah nilai seperti nilai lainnya, bukan penghapusan. <code>DELETE</code> kembali <code>204</code>, dan
+menghapus sesuatu yang tidak ada adalah kegagalan, bukan kesalahan.</p>
+<pre><code class="language-bash">curl -X PUT "https://api.starhermit.com/api/v1/games/$SLUG/settings/audio.master" \
+  -H "Authorization: Bearer $LAUNCH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"value": 0.35}'
+</code></pre>
+<h3 id="rules">Aturan</h3>
+<table>
+<thead>
+<tr>
+<th>Aturan</th>
+<th>Nilai</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Menetapkan nama</td>
+<td>1–128 karakter dari <code>A-Z a-z 0-9 . _ - :</code> — namespace secara bebas (<code>audio.master</code>, <code>graphics:shadows</code>)</td>
+</tr>
+<tr>
+<td>Nilai-nilai</td>
+<td>JSON apa pun: nomor, string, boolean, array, objek, <code>null</code></td>
+</tr>
+<tr>
+<td>Pengaturan per pemain, per game</td>
+<td>200</td>
+</tr>
+<tr>
+<td>Byte per pemain, per game</td>
+<td><strong>2 MB secara default</strong> — operator dapat menaikkan atau menurunkannya, dan dapat memberikan tunjangan berbeda pada satu permainan</td>
+</tr>
+</tbody>
+</table>
+<p>Satu pengaturan dapat menggunakan seluruh tunjangan byte; tidak ada batasan per nilai yang lebih kecil dan terpisah.</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Arti</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td>Nama pengaturan yang buruk, atau isi yang tidak <code>{"settings": {...}}</code> / <code>{"value": ...}</code></td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>Tidak ada jawaban game untuk slug itu, atau (single-key <code>GET</code>) tidak ada yang disimpan di bawah kunci itu</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>Melebihi tunjangan — terlalu banyak pengaturan, atau terlalu banyak byte. Pesan tersebut menyatakan batasnya</td>
+</tr>
+</tbody>
+</table>
+<p>Kumpulan yang berisi satu kunci buruk tidak akan menulis satu pun kunci bagus. Pengaturannya per pemain dan per
+permainan: tidak ada kebocoran antara dua pemain, atau antara dua permainan pemain yang sama. Mereka bertahan hidup a
+game dinonaktifkan atau dihapus dari daftar, karena itu adalah data pemain, bukan data game.</p>
+<h2 id="sessions">Sesi</h2>
+<h3 id="get-apiv1gamesslugsessionsmine"><code>GET /api/v1/games/{slug}/sessions/mine</code></h3>
+<p>Sesi aktif penelepon untuk game ini. <code>myTurn</code> Dan <code>deadline</code> diurai dari status skrip <code>summary</code> objek (lihat <a href="/id/docs/api/game-scripts.html#the-platform-readable-window">Skrip Permainan</a>). <code>pausedAt</code> diatur sementara a <a href="/id/docs/tutorials/persistent-sessions.html">gigih</a> sesi dijeda tanpa ada orang di dalamnya, dan <code>null</code> jika tidak.</p>
+<p><strong>Sesi terikat ruangan sudah termasuk.</strong> A <a href="/id/docs/api/realtime.html#room-bound-sessions">ruang waktu nyata</a>Sesi terikat mencantumkan setiap manusia yang duduk saat ruangan dimulai, sehingga muncul di sini untuk masing-masing manusia saat ruangan tersebut dimulai <code>active</code>. Kursi AI tidak ada <code>players</code>. Meninggalkan ruangan, atau menutup ruangan, tidak menghapus siapa pun dari sesi, sehingga tetap berada dalam daftar ini sampai sesi itu sendiri berakhir — kecuali dalam keadaan <a href="/id/docs/api/realtime.html#join-in-progress">bergabung dalam proses</a> ruangan, di mana pemain yang keluar memberikan tempat duduknya dan dikeluarkan dari sesi, dan pemain baru yang diterima di tengah pertandingan ditambahkan ke dalamnya. Tidak ada id ruangan dalam respons: gunakan <code>GET /api/v1/realtime/rooms/joined</code> untuk kamar penelepon, dan cocokkan kamar mereka <code>gameSessionId</code> melawan <code>sessionId</code>.</p>
+<pre><code class="language-json">[
+  {
+    "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "status": "active",
+    "players": [
+      { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+      { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" }
+    ],
+    "createdAt": "2026-07-20T14:03:11Z",
+    "finishedAt": null,
+    "myTurn": true,
+    "deadline": 1784642591000,
+    "pausedAt": null
+  }
+]
+</code></pre>
+<h3 id="get-apiv1gamesslugsessionssessionid"><code>GET /api/v1/games/{slug}/sessions/{sessionId}</code></h3>
+<p>Detil sesi. Hanya peserta — <code>403</code> jika tidak.</p>
+<pre><code class="language-json">{
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "status": "active",
+  "players": [
+    { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+    { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" }
+  ],
+  "createdAt": "2026-07-20T14:03:11Z",
+  "finishedAt": null,
+  "chatConversationId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+  "result": null
+}
+</code></pre>
+<h3 id="recovery-and-explicit-leaving">Pemulihan dan kepergian yang jelas</h3>
+<p><code>GET /api/v1/games/{slug}/sessions/{sessionId}/recovery</code> mengembalikan snapshot yang efektif, memulihkan,
+nilai retensi dan transportasi. Peserta dan pemilik permainan boleh membacanya. Satuan waktu dan semuanya
+bidang respons dijelaskan dalam <a href="/id/docs/session-lifecycle.html#read-recovery-information">Siklus hidup sesi dan pemulihan</a>.</p>
+<p><code>POST /api/v1/games/{slug}/sessions/{sessionId}/leave</code> melepaskan keanggotaannya di dunia yang persisten
+tanpa ruang waktu nyata. Ia tidak membutuhkan tubuh dan kembali <code>204</code>; kepergian manusia terakhir mengakhiri dunia.
+<code>403</code> berarti bukan anggota, <code>404</code> berarti tidak ada sesi, <code>410</code> berarti berakhir, dan <code>409</code> berarti tidak persisten
+sesi atau sesi terikat ruangan. Untuk sesi terikat ruangan, gunakan ruangan itu <code>/leave</code> titik akhir. Penutupan
+soket saja yang mempertahankan keanggotaan. Melihat <a href="/id/docs/session-lifecycle.html#disconnecting-and-leaving-are-different">memutuskan hubungan dan pergi</a>.</p>
+<h3 id="post-apiv1gamesslugsessionsai"><code>POST /api/v1/games/{slug}/sessions/ai</code></h3>
+<p>Membuat sesi latihan terhadap kursi AI platform: id pengguna tetap <code>00000000-0000-4000-8000-00000000a1a1</code>, nama belakang <strong>"Rumah"</strong>. Backend resmi game ini memainkan AI — tidak ada layanan bot eksternal.</p>
+<pre><code class="language-json">{ "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e" }
+</code></pre>
+<h2 id="matchmaking">Penjaruman</h2>
+<p>Sebuah skrip mendeklarasikan bentuk kecocokan yang diterimanya <code>game.queues</code>. Sebuah permainan tanpa diterima
+deklarasi memiliki satu implisit <code>default</code> antrian (dua tim satu). Wadah saat ini
+<code>/describe</code> pembaca melakukannya <strong>bukan</strong> impor <code>queues</code>, jadi game container menggunakan bentuk implisit 1v1 itu.
+Klien yang tidak menyebutkan nama antrian akan mendapatkan permainannya terlebih dahulu.</p>
+<p>Hingga delapan antrian skrip dipertahankan. Kunci dipangkas, huruf kecil, tidak kosong dan paling banyak 32
+karakter; kunci duplikat simpan yang pertama. <code>teams</code> dijepit ke 2–8 dan <code>teamSize</code> sampai 1–16;
+bentuk yang melebihi 32 total pemain dibuang. Deklarasi yang tidak valid dapat kembali menjadi implisit
+1v1, jadi verifikasi bentuk yang efektif dengan <code>GET /queues</code> setelah diterbitkan.</p>
+<h3 id="get-apiv1gamesslugqueues"><code>GET /api/v1/games/{slug}/queues</code></h3>
+<pre><code class="language-json">[
+  { "key": "duos", "teams": 2, "teamSize": 2, "players": 4 }
+]
+</code></pre>
+<h3 id="post-apiv1gamesslugmatchmaking"><code>POST /api/v1/games/{slug}/matchmaking</code></h3>
+<p>Mengantrekan penelepon untuk pasangan elo terdekat. Dapat diulang <code>?queues=</code> nama kunci kueri a <strong>bagian</strong> dari
+bentuk-bentuk itu (misalnya 1v1 dan 2v2, bukan 3v3). Pencocokan hanya mengisi tiket dengan bentuk yang diperbolehkan.
+Misalnya:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/matchmaking?queues=solo&amp;queues=duos
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<p>Gunakan kunci yang dikembalikan oleh <code>GET /queues</code>. <code>?queue=solo</code> memilih satu bentuk; jika keduanya <code>queue</code> Dan
+<code>queues</code> disediakan, kuncinya digabungkan dan dihapus duplikatnya tanpa membedakan huruf besar-kecil. Kunci yang tidak diketahui
+adalah <code>404</code>; daftar kosong setelah validasi <code>400</code>. Kembali <code>409</code> jika penelepon sudah mengantri
+atau pada batas sesi bersamaan.</p>
+<p>Pencarian dimulai di pita elo sempit dan melebar saat tiket menunggu (default 100, +10/s).
+Status: <code>queued</code>, <code>matched</code>, <code>cancelled</code>, <code>expired</code> (menunggu melewati batas, default 300 detik, tanpa
+menemukan siapa pun — tawarkan permainan latihan daripada berputar). Pesta adalah a <a href="/id/docs/api/realtime.html">ruang waktu nyata</a>:
+<code>POST /api/v1/realtime/rooms/{id}/matchmake</code> (tuan rumah, lobi) memasukkan seluruh daftar sebagai satu tim.</p>
+<pre><code class="language-json">{
+  "ticketId": "b3b7c8d2-5c1e-4f3a-9e2d-1a2b3c4d5e6f",
+  "status": "queued",
+  "sessionId": null,
+  "waitedSeconds": 12,
+  "searchEloBand": 220,
+  "maxWaitSeconds": 300
+}
+</code></pre>
+<p>Game dapat ikut serta <a href="/id/docs/starhermit-txt.html#starting-matchmaking-before-every-human-seat-is-filled">batas waktu dimulai pada <code>starhermit.txt</code></a>:
+<code>matchmaking.max_wait_seconds</code> memulai pertandingan yang kurang terisi setelah menunggu, dan
+<code>matchmaking.ai_players</code> membatasi berapa banyak kursi kosong yang menjadi AI. Kursi lainnya tetap kosong. Manusia seutuhnya
+pertandingan dimulai lebih awal. <code>maxWaitSeconds</code> melaporkan pengaturan game itu; tiket ini tetap ada <code>queued</code>
+hingga perjodohan dimulai, alih-alih berakhir pada batas tunggu global.</p>
+<h3 id="get-apiv1gamesslugmatchmaking"><code>GET /api/v1/games/{slug}/matchmaking</code></h3>
+<p>Mengembalikan tiket terbaru penelepon, atau <code>404</code>. A <code>matched</code> tiket dilaporkan <strong>hanya sementara itu
+sesi masih <code>active</code></strong>. Setelah pertandingan berakhir inilah <code>404</code> jadi lobi menawarkan pertandingan baru
+alih-alih menunjuk pada id sesi yang mati.</p>
+<h3 id="delete-apiv1gamesslugmatchmaking"><code>DELETE /api/v1/games/{slug}/matchmaking</code></h3>
+<p>Membatalkan tiket antrian penelepon. Kembali <code>204</code>.</p>
+<h2 id="invites">Undangan</h2>
+<h3 id="post-apiv1gamessluginvites"><code>POST /api/v1/games/{slug}/invites</code></h3>
+<p>Badan permintaan:</p>
+<pre><code class="language-json">{ "toUserId": "9b2f8c1a-1111-4222-8333-444455556666" }
+</code></pre>
+<p>Targetnya haruslah teman (<code>403</code> jika tidak — lihat <a href="/id/docs/api/friends.html">Teman-teman</a>); <code>409</code> pada undangan duplikat atau saat salah satu pemain berada pada batas sesi. Yang diundang juga menerima a <a href="/id/docs/api/chat.html#game_invite-one-event-for-both-invite-systems"><code>game_invite</code> peristiwa</a> mendorong soket obrolan mereka, dengan <code>kind: "session"</code>.</p>
+<h4 id="inviting-a-friend-into-a-game-in-progress">Mengundang teman ke dalam permainan yang sedang berlangsung</h4>
+<p>Tambahkan sesi tempat Anda bermain:</p>
+<pre><code class="language-json">{ "toUserId": "9b2f8c1a-1111-4222-8333-444455556666", "sessionId": "3f0c…" }
+</code></pre>
+<p>Menerima kalau begitu <strong>akui teman itu pada sesi lari itu</strong> alih-alih memulai yang baru — mereka menjadi pemain dalam segala hal (soket, <code>ctx.players</code>, memulihkan, menghubungkan kembali). Game Anda memutuskan apakah akan memerlukannya: platform meminta skrip <code>game.onMembershipChange(ctx)</code> atau wadah <a href="/id/docs/api/container-games.html"><code>POST /sessions/{id}/members</code></a>, dan permainan yang tidak menolak setiap bergabung. Aturan:</p>
+<ul>
+<li>Sesi tersebut harus merupakan sesi aktif dari game ini <strong>Anda</strong> bermain di (<code>403</code> jika tidak, <code>410</code> jika sudah berakhir), temanmu pasti belum ada di dalamnya (<code>409</code>), dan tidak boleh termasuk dalam ruang real-time (<code>409</code> — mengundang melalui ruangan, yang tempat duduknya adalah roster).</li>
+<li>Responsnya membawa <code>targetSessionId</code>; <code>sessionId</code> tetap <code>null</code> sampai undangannya diterima.</li>
+<li>Saat menerima semuanya diperiksa lagi. Jika permainan menolak (penuh, tertutup…) penerimaannya adalah a <code>409</code> dan undangannya <strong>tetap tertunda</strong>. Jika pertandingan telah berakhir undangannya adalah <strong>dibatalkan</strong> dan menerima jawaban <code>410</code> — itu tidak pernah berubah menjadi permainan baru.</li>
+<li>Hanya batasan sesi serentak milik orang yang diundang yang berlaku. Anda dapat menyimpan satu undangan tertunda per teman per tujuan, sehingga undangan ke pertandingan Anda dan undangan ke permainan baru dapat dilakukan secara bersamaan.</li>
+</ul>
+<p>Platform yang dibangun sebelum fitur ini diabaikan <code>sessionId</code> dan memulai sesi baru saat menerima; <code>targetSessionId</code> dalam tanggapannya memberi tahu Anda mana yang Anda dapatkan.</p>
+<p><strong>Undangan mana yang harus Anda kirimkan?</strong> Menerima undangan polos (no <code>sessionId</code>) <em>membuat sesi baru</em> untuk kedua pemain tersebut. Jika pengundang sudah duduk di a <a href="/id/docs/api/realtime.html">ruang waktu nyata</a> (lobi dengan tempat duduk), undang mereka ke ruangan itu — <code>POST /api/v1/realtime/rooms/{id}/invites</code> — jadi pilihlah tempat duduk mereka di meja tempat Anda berada. Keduanya memberi tahu orang yang diundang dengan cara yang sama, jadi jangan pernah mengirimkan keduanya untuk satu undangan: itu akan memberi tahu dua kali.</p>
+<p>Tanggapan:</p>
+<pre><code class="language-json">{
+  "inviteId": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+  "from": { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+  "to": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
+  "status": "pending",
+  "createdAt": "2026-07-20T14:10:00Z",
+  "sessionId": null,
+  "targetSessionId": null,
+  "notified": true
+}
+</code></pre>
+<p><code>notified</code> melaporkan apakah push mencapai koneksi langsung (<code>false</code> = orang yang diundang tidak terhubung; undangannya masih berlaku dan mereka akan melihatnya di kotak masuk mereka). Dia <code>null</code> pada daftar/menerima/menolak tanggapan, jika tidak berlaku.</p>
+<h3 id="get-apiv1gamessluginvites"><code>GET /api/v1/games/{slug}/invites</code></h3>
+<pre><code class="language-json">{
+  "incoming": [ { "inviteId": "...", "from": { "userId": "...", "username": "bob" }, "to": { "userId": "...", "username": "alice" }, "status": "pending", "createdAt": "2026-07-20T14:10:00Z", "sessionId": null } ],
+  "outgoing": []
+}
+</code></pre>
+<p><code>incoming</code> hanya berisi undangan yang tertunda; <code>outgoing</code> berisi semua undangan keluar penelepon.</p>
+<h3 id="post-apiv1gamessluginvitesinviteidaccept"><code>POST /api/v1/games/{slug}/invites/{inviteId}/accept</code></h3>
+<p>Menerima undangan dan membuat sesi — atau, untuk undangan dengan a <code>targetSessionId</code>, bergabunglah dengan yang itu. Mengembalikan <code>GameInviteDto</code> dengan <code>status</code> <code>accepted</code> Dan <code>sessionId</code> diatur ke sesi untuk dibuka.</p>
+<h3 id="post-apiv1gamessluginvitesinviteiddecline"><code>POST /api/v1/games/{slug}/invites/{inviteId}/decline</code></h3>
+<p>Kembali <code>204</code>.</p>
+<h3 id="get-apiv1megame-invites"><code>GET /api/v1/me/game-invites</code></h3>
+<p>Membutuhkan token akun lengkap; token peluncuran pemain tidak dapat membaca kotak masuk seluruh akun ini.</p>
+<p>Setiap undangan yang tertunda ditujukan kepada penelepon (maks 50, terbaru terlebih dahulu) — jajak pendapat pengganti untuk pemberitahuan push, dan satu tempat untuk bertanya "aku diundang ke acara apa?". Itu membentang <strong>keduanya</strong> sistem undangan: undangan sesi dari halaman ini dan <a href="/id/docs/api/realtime.html#invites">undangan ruang waktu nyata</a>. Entrinya persis seperti itu <a href="/id/docs/api/chat.html#game_invite-one-event-for-both-invite-systems"><code>game_invite</code> muatan</a>, sehingga klien merender hasil push dan polling dengan kode yang sama.</p>
+<pre><code class="language-json">[
+  {
+    "inviteId": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+    "kind": "room",
+    "gameSlug": "poker",
+    "gameName": "StarHermit Poker",
+    "roomId": "b1d2c3e4-5f60-4a71-8b92-c3d4e5f60718",
+    "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
+    "createdAt": "2026-07-26T14:10:00Z",
+    "acceptPath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/accept",
+    "declinePath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/decline"
+  },
+  {
+    "inviteId": "c4a5b6d7-8e9f-4012-8345-6789abcdef01",
+    "kind": "session",
+    "gameSlug": "chess",
+    "gameName": "Chess",
+    "roomId": null,
+    "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
+    "createdAt": "2026-07-20T14:10:00Z",
+    "acceptPath": "/api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/c4a5b6d7-8e9f-4012-8345-6789abcdef01/accept",
+    "declinePath": "/api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/c4a5b6d7-8e9f-4012-8345-6789abcdef01/decline"
+  }
+]
+</code></pre>
+<p>Jawab setiap entri sendiri-sendiri <code>acceptPath</code>/<code>declinePath</code> — kedua sistem menyimpan id undangan yang terpisah, sehingga id undangan ruang ada di <code>/games/{slug}/invites/...</code> adalah a <code>404</code>. Undangan ruang yang ruangannya telah ditutup, atau telah dimulai tanpa proses bergabung, akan dihilangkan; tidak ada lagi yang bisa diterima. Begitu juga dengan sesi undangan ke dalam pertandingan yang telah berakhir. Setiap entri membawa <code>inProgress</code> (menerima bergabung dengan permainan yang sudah dimainkan — undangan sesi dengan target, atau undangan ruang ke ruang gabung yang sedang berlangsung) dan permainan itu <code>sessionId</code>, sehingga klien dapat mengatakannya "bergabung dengan permainan mereka" daripada "bermain".</p>
+<h3 id="share-links-invite-by-url">Bagikan tautan (undangan melalui URL)</h3>
+<p>Alur undangan di atas mengharuskan kedua pemain sudah berteman. Untuk mengundang seseorang yang ada <strong>belum ada di platform</strong> (atau belum menjadi teman), sebuah permainan dapat membagikan a <strong>berbagi tautan</strong> — URL ke dasbor web yang mengotomatiskan keseluruhan orientasi:</p>
+<pre><code>https://dashboard.starhermit.com/game-invite/&lt;userId&gt;/&lt;gameSlug&gt;
+</code></pre>
+<ul>
+<li><code>&lt;userId&gt;</code> — ID pengguna pemain yang berbagi. Klien game sudah memilikinya: itu adalah <code>sub</code> klaim token peluncurannya (implementasi referensi catur memaparkannya sebagai <code>Net.userId</code>).</li>
+<li><code>&lt;gameSlug&gt;</code> — siput permainan (<code>game_scope</code> mengeklaim). Game tanpa skrip resmi atau backend container menggunakan id game GitHub (GUID) sebagai gantinya; dasbor menerima keduanya.</li>
+<li><strong>String kueri opsional — milik Anda.</strong> Apapun setelahnya <code>?</code> diteruskan ke game Anda tanpa perubahan:
+<code>…/game-invite/&lt;userId&gt;/&lt;gameSlug&gt;?room=K7MP2X&amp;map=arena</code> membuka permainan Anda di
+<code>https://&lt;game-id&gt;.starhermit.com/…?room=K7MP2X&amp;map=arena</code>. Gunakan untuk menjatuhkan penerima secara langsung
+ke dalam ruangan, tingkat atau lobi. Itu bertahan saat penerima masuk, dan ditambahkan ke Anda
+URL game daripada mengganti apa pun di sana. Token peluncuran masih tiba di
+<code>#game_token=</code> pecahan, sehingga keduanya tidak pernah bertabrakan. Kodekan URL nilai yang Anda masukkan ke dalamnya.</li>
+</ul>
+<p>Saat penerima membuka tautan, <strong>dasbor</strong> (bukan game) yang melakukan bagian undangan teman otomatis — tidak ada titik akhir backend baru yang terlibat, ini menyusun API yang sudah ada:</p>
+<ol>
+<li>Masukkan mereka (OAuth melalui penyedia langsung), atau gunakan kembali sesi yang ada. Niat penautan bertahan selama proses masuk pulang pergi.</li>
+<li>Menampilkan dialog persetujuan yang memberi nama pembagi dan gamenya <strong>teman yang berbagi</strong>: ia menerima permintaan pertemanan yang tertunda dari si pembagi jika ada, jika tidak, ia akan mengirimkannya (<code>POST /api/v1/me/friend-requests</code>).</li>
+<li>Meminta mereka untuk memilih nama panggilan jika akun mereka tidak memiliki nama panggilan profil (permainan menampilkan nama panggilan profil — lihat <a href="/id/docs/api/profile.html">Profil</a>).</li>
+<li>Meluncurkan game (platform yang dihosting <code>https://&lt;game-id&gt;.starhermit.com</code> salin, dengan token peluncuran di <code>#game_token=</code> fragmen seperti biasa).</li>
+<li>Mengirim <strong>mainkan undangan kembali ke pembagi</strong> dengan <code>POST /api/v1/games/{slug}/invites</code> — jadi tautan berbagi berakhir seperti undangan permainan biasa yang diterima oleh pembagi (sulang di dasbor, balon desktop, atau daftar undangan permainan itu sendiri). Jika permintaan pertemanan masih tertunda, dasbor mengantri undangan bermain dan mengirimkannya secara otomatis setelah pembagi menerimanya.</li>
+</ol>
+<p>Artinya bagi klien game Anda:</p>
+<ul>
+<li><strong>Menawarkan tautan memerlukan satu baris pembuatan string</strong> — letakkan a "Bagikan tautan undangan" tombol di sebelah UI undang teman Anda dan salin URL ke papan klip. Melihat <code>shareInviteLink()</code> di <a href="https://github.com/HypeDriven/starhermit-chess">implementasi referensi catur</a>.</li>
+<li><strong>Tidak diperlukan penanganan khusus pada pihak penerima.</strong> Undangan penerima datang melalui alur undangan normal: undangan Anda <code>GET .../invites</code> polling menunjukkan kepada orang yang membagikan undangan masuk, menerimanya membuat sesi, dan penerima melihat sesi tersebut muncul <code>GET .../sessions/mine</code> (tunjukkan undangan keluar yang tertunda sehingga penantiannya terlihat — milik klien catur "diundang - menunggu" kartu).</li>
+<li>Dasbor juga menggunakan URL ini sendiri: panel detail setiap game yang dihosting yang dapat dimainkan memiliki a <strong>Salin tautan undangan</strong> tombol, dan klien Windows menawarkan hal yang sama dari menu konteks permainan.</li>
+</ul>
+<h2 id="replays">Pemutaran ulang</h2>
+<p>Pemutaran ulang adalah dokumen status akhir sesi yang telah selesai, disimpan oleh platform dan disajikan kembali ke
+pemain yang ada di dalamnya. <strong>Pemutaran ulang adalah fitur keikutsertaan dalam sebuah game, tidak aktif kecuali jika game tersebut memintanya
+mereka</strong>, karena tayangan ulang adalah penyimpanan yang disimpan platform selama rekor pertandingan ada.</p>
+<p>Mintalah mereka di kode server Anda — <code>replays: true</code> di <code>game</code> objek untuk a
+<a href="/id/docs/api/game-scripts.html#replays">naskah</a>, <code>"replays": true</code> dari <code>/describe</code> untuk a
+<a href="/id/docs/api/container-games.html#get-describe">server kontainer</a> — dan publikasikan pembaruan untuk menerapkannya. Sebuah platform
+operator juga dapat menjawab permainan tertentu, jadi perlakukanlah <code>replaysEnabled</code> bidang
+<code>GET /api/v1/games/{slug}</code> sebagai jawabannya daripada menganggap pernyataan Anda adalah kata terakhir.</p>
+<p>Kedua titik akhir di bawah kembali <code>404</code> untuk game yang pemutaran ulangnya tidak aktif, dan tidak ada yang disembunyikan darinya
+sesi permainan yang telah selesai — jadi klien yang menawarkan layar pemutaran ulang harus membacanya <code>replaysEnabled</code>
+Pertama.</p>
+<h3 id="get-apiv1gamesslugreplaysminelimit"><code>GET /api/v1/games/{slug}/replays/mine?limit=</code></h3>
+<p>Sesi penelepon sudah selesai. <code>limit</code> defaultnya adalah <code>10</code> dan dijepit ke 1–50.</p>
+<pre><code class="language-json">[
+  {
+    "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "players": [
+      { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+      { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" }
+    ],
+    "finishedAt": "2026-07-20T15:42:37Z",
+    "result": { "kind": "white-win", "reason": "checkmate" },
+    "moveCount": 41
+  }
+]
+</code></pre>
+<h3 id="get-apiv1gamesslugreplayssessionid"><code>GET /api/v1/games/{slug}/replays/{sessionId}</code></h3>
+<p>JSON status akhir lengkap seperti yang diarsipkan oleh platform. Hanya peserta. <code>recordedWith</code> adalah apa
+menghasilkan dokumen (versi skrip, runtime, tick rate), dicap setelah selesai — sehingga kemudian diterapkan ulang
+tidak membuat tayangan ulang lama terlihat seperti kode saat ini yang menulisnya. Pertandingan selesai sebelum ini
+laporan yang ada <code>null</code>.</p>
+<pre><code class="language-json">{
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [ { "userId": "...", "username": "alice" }, { "userId": "...", "username": "bob" } ],
+  "finishedAt": "2026-07-20T15:42:37Z",
+  "result": { "kind": "white-win", "reason": "checkmate" },
+  "state": { "...": "game-specific final session state" },
+  "recordedWith": { "scriptVersion": 12, "runtime": "script", "tickRateHz": 0.25 }
+}
+</code></pre>
+<h2 id="session-model">Model sesi</h2>
+<ul>
+<li>Sidang <code>status</code> adalah <code>"active"</code> atau <code>"finished"</code>.</li>
+<li>Setiap sesi mendapat percakapan obrolan per sesi (ketik <code>"game"</code>) agar lawan bisa ngobrol dan melakukan panggilan suara <strong>tanpa menjadi teman</strong> (melihat <a href="/id/docs/api/chat.html">Mengobrol</a> Dan <a href="/id/docs/api/voice.html">Suara</a>).</li>
+<li>Batas sesi serentak per pemain ditetapkan secara default <code>20</code>.</li>
+<li>Sebuah permainan yang menyatakan <code>persistent</code> membuat sesi kosong <strong>dijeda</strong> bukannya mengakhirinya; menghubungkan ke satu melanjutkannya. Sesi yang dijeda diperhitungkan dalam batas tersebut. Lihat <a href="/id/docs/tutorials/persistent-sessions.html">tutorial sesi persisten</a>.</li>
+<li>Sesi aktif yang tidak dimainkan oleh siapa pun adalah <strong>pensiun</strong> (status <code>finished</code>, ditinggalkan): 5 menit setelah yang terakhir <code>ws/v1/games</code> soket ditutup tanpa ada yang bergabung kembali, atau setelah 24 jam tanpa tindakan pemain. Sesi persisten malah dijeda. Hal ini juga berlaku untuk sesi di dalam ruangan; menutup kamar mereka tidak mengakhiri mereka.</li>
+<li>Status tiket perjodohan: <code>queued</code> | <code>matched</code> | <code>cancelled</code> | <code>expired</code>.</li>
+<li>Status undangan: <code>pending</code> | <code>accepted</code> | <code>declined</code> | <code>cancelled</code>.</li>
+<li><strong>Sesi dibuat melalui perjodohan, penerimaan undangan, titik akhir AI, atau permulaan ruang waktu nyata</strong> (sesi terikat ruangan — lihat <a href="/id/docs/api/realtime.html#room-bound-sessions">Ruangan Waktu Nyata</a>) — tidak ada "membuat lobi" titik akhir.</li>
+<li>Pembaruan Elo berasal dari skrip resmi (<code>eloUpdates</code>) atau saluran kontrol penampung, mengatur peringkat yang digunakan untuk perjodohan dan dipublikasikan ke papan peringkat game (jenis skor <code>elo</code>). <strong>Klien tidak pernah bisa mengirimkan skor ke papan peringkat game secara langsung</strong> (melihat <a href="/id/docs/api/leaderboards.html">Papan peringkat</a>).</li>
+</ul>
+<h2 id="gameplay-websocket">Permainan WebSocket</h2>
+<p><code>ws/v1/games?sessionId={guid}</code> (rute versi netral). Otentikasi dengan <code>Authorization</code> tajuk, <code>?ticket=</code>, atau <code>?access_token=</code>. Hanya peserta (<code>403</code>); saat terhubung dengan token peluncuran, itu <code>game_scope</code> harus cocok dengan permainan sesi. Sesi yang selesai adalah <code>410 {"error":"session_not_active"}</code>. Opsional <code>?build=</code> adalah <code>buildId</code> dari <code>GET /games/{slug}</code> — ketidakcocokan adalah <code>409 {"error":"build_mismatch"}</code>.</p>
+<ul>
+<li>Hanya bingkai teks, maks 16 KB per bingkai.</li>
+<li>Sambungan yang lebih baru menggantikan sambungan lama: sambungan sebelumnya ditutup dengan <code>PolicyViolation</code>.</li>
+<li>Menghubungkan ke jeda <a href="/id/docs/tutorials/persistent-sessions.html">gigih</a> sesi melanjutkannya sebelum perintah pertama Anda. Jika tidak dapat dilanjutkan (biasanya container masih dimulai), Anda mendapatkan file <code>error</code> bingkai dan soket ditutup dengan kode <code>1001</code>; sesi tetap dijeda — sambungkan kembali dengan backoff.</li>
+<li><strong>Perpanjang token sebelum menyambung kembali.</strong> Token yang kadaluarsa ditolak <code>401</code> sebelum pemutakhiran, yang dilaporkan browser hanya sebagai kode dekat <code>1006</code> — tidak dapat dibedakan dengan terputusnya jaringan — sehingga kegagalan penyambungan kembali mungkin merupakan kegagalan autentikasi, dan membuka kembali hal yang sama <code>?access_token=</code> URL tidak akan pernah dapat dipulihkan. Perbarui melalui <a href="#post-apiv1gamessluglaunch-token"><code>POST /api/v1/games/{slug}/launch-token</code></a> dan terhubung kembali dengan token baru. Pembaruan hanya berfungsi ketika token saat ini valid dan dalam waktu 12 jam (default) sejak peluncuran awal; setelah ditolak (<code>401</code>/<code>403</code>), berhenti menyambungkan kembali dan mengirim pemain kembali ke peluncur untuk mendapatkan token peluncuran baru.</li>
+</ul>
+<h3 id="client--server">Klien → server</h3>
+<p>Itu <code>cmd</code> amplop adalah kontrak platform; isi dari <code>data</code> ditentukan oleh backend otoritatif masing-masing game. Misalnya, implementasi referensi catur mengirimkan gerakan seperti ini:</p>
+<pre><code class="language-json">{ "type": "cmd", "data": { "type": "move", "from": "e2", "to": "e4" } }
+</code></pre>
+<p>Untuk waktu proses skrip, perintah yang tahan lama dijalankan <code>onPlayerMessage</code>; ditandai secara eksplisit <code>{ "type": "input", "realtime": true, ... }</code> data menggunakan kemenangan terbaru yang digabungkan ke kemenangan berikutnya <code>onTick</code>. Untuk runtime container, platform meneruskan perintah yang diautentikasi melalui aliran binernya dan container memiliki loop simulasinya. Dalam kedua kasus tersebut, platform menyediakan identitas pengirim tepercaya dan klien tidak pernah dapat menyampaikan status secara langsung. Melihat <a href="/id/docs/api/game-scripts.html#context-object">Skrip Game — Objek konteks</a> Dan <a href="/id/docs/api/container-games.html#gameplay-stream">Server Game Kontainer — Aliran gameplay</a>.</p>
+<h3 id="server--client">Server → klien</h3>
+<pre><code class="language-json">{ "type": "game", "data": { "...": "server-authorized message addressed to you" } }
+{ "type": "error", "error": "Illegal move" }
+{ "type": "presence", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "online": true }
+{ "type": "membership", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "change": "joined", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol", "team": 0, "slot": 1 }
+{ "type": "achievement", "data": { "key": "first-win", "name": "First Win", "description": "Win a match.", "icon": null, "points": 10, "unlockedAt": "2026-07-25T09:14:02Z" } }
+{ "type": "resumed", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "lostMs": 750 }
+{ "type": "abandoned", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "reason": "server_failure" }
+</code></pre>
+<ul>
+<li><code>game</code> — pesan resmi server yang ditujukan kepada Anda.</li>
+<li><code>error</code> — kesalahan dari platform atau dari perintah terakhir Anda.</li>
+<li><code>presence</code> — disiarkan ke peserta lain ketika seseorang bergabung atau keluar.</li>
+<li><code>membership</code> — seseorang menjadi pemain di sesi ini di tengah pertandingan (<code>joined</code>) atau menyerahkan tempat duduknya (<code>left</code>); dikirim ke setiap peserta yang terhubung. Melihat <a href="/id/docs/api/container-games.html#post-sessionssessionidmembers">Server Game Kontainer — anggota</a>.</li>
+<li><code>achievement</code> — sebuah pencapaian yang baru saja diberikan oleh skrip game <strong>Anda</strong>, dikirim ke pemain yang menghasilkan
+saja. Jenis bingkai terpisah dengan sengaja: ini adalah kebenaran platform, bukan data game yang dikirimkan skrip.
+Dipancarkan dari jalur pembaruan tahan lama kedua runtime. Melihat
+<a href="/id/docs/api/achievements.html#server-authoritative-game-achievements">Prestasi</a>.</li>
+<li><code>resumed</code> — sesi berpindah tangan (pemulihan kontainer, atau proses Api lainnya mengambil alih
+sewa kepemilikan). Buang prediksi lokal; <code>lostMs</code> adalah kesenjangan sejak penulisan tahan lama terakhir.
+Lampiran pertama setelah handoff diumumkan satu kali per pemain.</li>
+<li><code>abandoned</code> — platform mengakhiri sesi tanpa pemenang atau pembaruan elo. Alasan:
+<code>players_left</code>, <code>idle_no_players</code>, <code>superseded</code> (pemain meminta permainan baru dengan judul ini),
+<code>server_failure</code>, <code>restore_failed</code>, <code>operator_ended</code> (pemilik game mengakhirinya),
+<code>retention_expired</code> (retensi pemulihan dunia yang dijeda telah berlalu). Disimpan sebagai
+<code>{ "kind": "abandoned", "reason": "…" }</code>. A <a href="/id/docs/tutorials/persistent-sessions.html">gigih</a> sesi permainan tidak pernah
+berakhir hanya karena pemutusan hubungan atau tidak ada aktivitas — mereka malah berhenti sejenak. Manusia terakhir secara eksplisit pergi
+dunia yang berdiri sendiri masih bisa mengakhirinya <code>players_left</code>; kedaluwarsa pemulihan yang dikonfigurasi dapat mengakhirinya sebagai
+<code>retention_expired</code>.</li>
+</ul>
+<h2 id="limits">Batasan</h2>
+<p>Apa yang diterapkan oleh platform tersebut <code>ws/v1/games</code> dan pada peringkat. Angka-angka tersebut merupakan angka default platform;
+operator dapat menyetelnya.</p>
+<h3 id="messages-on-wsv1games">Pesan aktif <code>ws/v1/games</code></h3>
+<table>
+<thead>
+<tr>
+<th>Membatasi</th>
+<th>Nilai</th>
+<th>Apa yang terjadi setelahnya</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ukuran bingkai</td>
+<td>16 KB per bingkai teks</td>
+<td>Soket ditutup dengan <code>1009</code> (pesan terlalu besar).</td>
+</tr>
+<tr>
+<td>Jenis bingkai</td>
+<td>Hanya teks</td>
+<td>Bingkai biner mendapat <code>error</code> bingkai; soketnya tetap terbuka.</td>
+</tr>
+<tr>
+<td>Koneksi</td>
+<td>Satu per pemain per sesi</td>
+<td>Koneksi yang lebih baru menutup koneksi yang lama dengan <code>1008</code>.</td>
+</tr>
+<tr>
+<td>Masukan waktu nyata (<code>{"type":"input","realtime":true,…}</code>)</td>
+<td><strong>60 per detik</strong> per koneksi, meledak hingga 120</td>
+<td>Bingkai ekstra adalah <strong>dijatuhkan secara diam-diam</strong> - TIDAK <code>error</code> bingkai.</td>
+</tr>
+<tr>
+<td>Perintah tahan lama untuk skrip (satu sama lain <code>cmd</code>)</td>
+<td><strong>20 per detik</strong> per pemain per sesi, dengan tunjangan ledakan singkat</td>
+<td>Menolak dengan <code>error</code> bingkai: <code>"Too many commands; slow down."</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Masukan waktu nyata</strong> diambil sampelnya, bukan diantri: platform menyimpan masukan dan tangan terbaru setiap pemain
+batch ke skrip Anda berikutnya <code>onTick</code> di dalam <code>ctx.inputs</code>. Mengirim lebih cepat dari game Anda
+<a href="/id/docs/api/game-scripts.html#tick-rate">tingkat centang</a> tidak menghasilkan apa-apa, karena masukan antara dua tanda centang digabungkan
+satu. Kirim sesuai detak Anda, atau saat input berubah.</p>
+<p><strong>Perintah yang tahan lama untuk skrip</strong> diproses secara berurutan dan dibatasi secara terpisah dari waktu nyata
+masukan. Kirim tindakan terpisah ketika itu terjadi; mengirim gerakan terus menerus melalui waktu nyata yang ditandai
+jalur masukan. Batas perintah dapat bervariasi menurut game. Pemanggilan skrip juga dibatasi oleh game
+<a href="/id/docs/api/game-scripts.html#budgets">anggaran</a>. Bingkai kesalahan WebSocket membawa pesan, bukan status HTTP.
+Skrip Anda harus menolak perintah yang tidak masuk akal, seperti gerakan tidak bergiliran.</p>
+<p>Untuk a <strong>wadah</strong> game, perintah diteruskan ke container Anda saat perintah tersebut tiba, tanpa platform
+batas tarif pada mereka. Server Anda menerapkannya sendiri. Pembatasan laju input waktu nyata berlaku untuk skrip
+permainan saja.</p>
+<h3 id="elo-per-match">Elo per pertandingan</h3>
+<p>Platformnya melakukannya <strong>bukan</strong> membatasi seberapa jauh peringkat dapat bergerak dalam satu pertandingan. <code>eloUpdates</code> (naskah) dan
+<code>elo</code> pesan kontrol (wadah) dibawa masing-masing pemain <strong>peringkat absolut baru</strong>, bukan perubahan, dan
+platform menerapkannya saat dikirim. Apa yang ditegakkannya:</p>
+<ul>
+<li><strong>Hanya pemain dalam sesi ini</strong> diperbarui. Id orang lain, dan kursi AI, dihilangkan.</li>
+<li>Pembaruan diterapkan setiap kali server Anda mengembalikannya. Sesi itu <strong>platform</strong> berakhir
+(<code>abandoned</code>: pemain tersisa, menganggur, digantikan, kegagalan server, diakhiri oleh pemilik) diterbitkan <strong>TIDAK</strong>
+kamu berubah.</li>
+<li>Peringkat tersebut ditulis ke kolom perjodohan berpasangan, dan ke papan elo permainan sebagai satu
+entri per pemain (peringkat terbaru mereka).</li>
+<li>Pemilik game bisa <a href="/id/docs/api/leaderboards.html#resetting-a-players-rating">mengatur ulang peringkat satu pemain</a> sampai 1200.</li>
+</ul>
+<p>Jadi ukuran ayunan adalah keputusan permainan Anda. Gunakan faktor K standar dan jepit kode Anda. Itu
+<a href="#example-chess-command-shapes">implementasi referensi catur</a> menggunakan K = 32, jadi satu permainan bergerak a
+peringkat paling banyak 32 poin:</p>
+<pre><code class="language-js">function eloAfter(mine, theirs, score /* 1 win, 0.5 draw, 0 loss */, K = 32) {
+  const expected = 1 / (1 + Math.pow(10, (theirs - mine) / 400));
+  const next = mine + K * (score - expected);
+  return Math.round(Math.max(100, next));      // your floor, if you want one
+}
+</code></pre>
+<h2 id="owner-diagnostics-and-webhooks">Diagnostik pemilik dan webhook</h2>
+<p>Khusus pemilik. Token peluncuran dalam lingkup game tidak dapat mencapai hal ini.</p>
+<h3 id="get-apiv1gamesslugdiagnostics"><code>GET /api/v1/games/{slug}/diagnostics</code></h3>
+<p>Cuplikan sesi langsung (koneksi aktif, selesai, langsung), pengukuran skrip terhadap CPU /
+anggaran memori/pernyataan, antrian perjodohan (penantian terlama dan seberapa jauh pelebarannya),
+dan kesehatan titik akhir webhook.</p>
+<h3 id="webhooks">Webhook</h3>
+<p><code>GET/POST/DELETE /api/v1/games/{slug}/webhooks</code> Dan <code>POST .../{id}/resume</code>. Hingga 5 titik akhir per
+permainan. Acara: <code>session.created</code>, <code>session.finished</code> (menghilangkan <code>events</code> untuk berlangganan keduanya). Itu
+rahasia penandatanganan dikembalikan <strong>sekali</strong>, saat membuat.</p>
+<p>Platform POST JSON dengan:</p>
+<ul>
+<li><code>X-Starhermit-Signature: t=&lt;unix&gt;,v1=&lt;hmac-sha256&gt;</code> lebih <code>"&lt;t&gt;.&lt;body&gt;"</code></li>
+<li><code>X-Starhermit-Event-Id</code> — peristiwa (kunci idempotensi; berulang di seluruh percobaan ulang)</li>
+<li><code>X-Starhermit-Delivery</code> — upaya ini</li>
+</ul>
+<p>URL harus https dan tidak boleh ditetapkan ke rentang pribadi/loopback/CGNAT (dicentang di
+pendaftaran dan lagi sebelum setiap pengiriman). Pengalihan tidak diikuti. Titik akhir yang gagal mundur
+dan dinonaktifkan setelah kegagalan berturut-turut; <code>resume</code> membersihkan pemutus.</p>
+<h3 id="runtime-timing">Waktu proses</h3>
+<p>Untuk game JavaScript, platformnya berjalan <code>onTick</code> menyapu pada tingkat yang dijepit yang diminta melalui
+<code>game.tickRateHz</code>; <code>0</code> menonaktifkan centang, dan permainan yang tidak meminta apa pun dicentang <strong>0,25Hz</strong> —
+nyatakan tarif jika gameplay Anda bergantung pada centang. Sebuah container menggerakkan loop simulasinya sendiri dan
+menyatakan tarif yang diminta melalui <code>/describe</code>; platform menggunakan tarif tersebut untuk penjadwalan dan
+kebijakan snapshot, bukan untuk menghentikan permainan. Melihat <a href="/id/docs/api/game-scripts.html#tick-rate">Skrip Game — Tingkat centang</a> Dan
+<a href="/id/docs/api/container-games.html#protocol-v1">Server Game Kontainer</a>.</p>
+<h2 id="lifecycle-of-a-game">Siklus hidup sebuah game</h2>
+<ol>
+<li><strong>Buat token peluncuran</strong> — <code>POST /api/v1/games/{slug}/launch-token</code>. Klien harus menyegarkannya sebelum masa berlakunya habis (klien referensi catur menyegarkan setiap 45 menit).</li>
+<li><strong>Ambil status permainan</strong> — <code>GET /api/v1/games/{slug}</code> untuk info + statistik Anda; <code>GET .../sessions/mine</code> untuk permainan yang sedang berlangsung; <code>GET .../invites</code> Dan <code>GET /api/v1/realtime/rooms/invites</code> untuk undangan yang tertunda; <code>GET .../replays/mine</code> untuk sejarah kapan <code>replaysEnabled</code>; <code>GET .../achievements</code> untuk layar pencapaian.</li>
+<li><strong>Temukan lawan</strong>, salah satu dari tiga cara:
+<ul>
+<li><strong>Penjaruman:</strong> <code>POST .../matchmaking</code>, lalu jajak pendapat <code>GET .../matchmaking</code> setiap 3 detik sampai <code>status</code> adalah <code>matched</code> (responnya membawa <code>sessionId</code>). <code>DELETE .../matchmaking</code> untuk membatalkan.</li>
+<li><strong>Alur undangan:</strong> memilih teman dari <code>GET /api/v1/me/friends</code> (melihat <a href="/id/docs/api/friends.html">Teman-teman</a>), <code>POST .../invites</code> dengan <code>{ "toUserId": "..." }</code>; panggilan orang yang diundang <code>POST .../invites/{inviteId}/accept</code>, yang membuat sesi. (Jika permainan Anda menempatkan pemain di a <a href="/id/docs/api/realtime.html">ruang waktu nyata</a> pertama, undang mereka ke ruangan — pemberitahuan yang sama, tetapi menerima menempatkan mereka di meja yang sudah Anda ikuti.)</li>
+<li><strong>Latihan AI:</strong> <code>POST .../sessions/ai</code>.</li>
+</ul>
+</li>
+<li><strong>Muat sesi</strong> — <code>GET .../sessions/{sessionId}</code>.</li>
+<li><strong>Hubungkan WebSocket</strong> — <code>ws/v1/games?sessionId={guid}</code> dengan token peluncuran, lalu kirimkan perintah sinkronisasi awal apa pun yang ditentukan oleh backend game — implementasi referensi catur, misalnya, mengirimkan <code>{"type":"cmd","data":{"type":"sync"}}</code>.</li>
+<li><strong>Bermain</strong> - menukarkan <code>cmd</code>/<code>game</code> frame seperti yang ditentukan oleh backend, permukaan <code>achievement</code> bingkai, dan pegangan <code>resumed</code> dengan membuang prediksi dan meminta keadaan penuh.</li>
+<li><strong>Hasil</strong> — backend otoritatif mengakhiri permainan; platform menerbitkan pembaruan elo ke papan peringkat dan, untuk game dengan <a href="#replays">memutar ulang</a>, mengarsipkan keadaan akhir.</li>
+<li><strong>Memutar ulang</strong> — <code>GET .../replays/{sessionId}</code> untuk keadaan akhir penuh.</li>
+</ol>
+<h3 id="example-chess-command-shapes">Contoh: bentuk perintah catur</h3>
+<p>Bentuk muatan berikut ini contohnya: cara catur <a href="https://github.com/HypeDriven/starhermit-chess">implementasi referensi</a> mengisi <code>data</code>. <strong>Mereka ditentukan oleh naskah catur, bukan oleh platformnya</strong> — setiap game mendefinisikan kumpulan perintahnya sendiri dan menyiarkan muatan di backend otoritatifnya. Amplop perintah klien adalah <code>cmd</code>; termasuk amplop server umum <code>game</code>, <code>error</code>, <code>presence</code>, Dan <code>achievement</code>, dengan <code>resumed</code>/<code>abandoned</code> tambahan digunakan untuk pemulihan kontainer. Isi dari <code>data</code> dimiliki oleh backend.</p>
+<p>Perintah klien (dikirim sebagai <code>{"type":"cmd","data":{...}}</code>):</p>
+<pre><code class="language-json">{ "type": "move", "from": "e2", "to": "e4", "promo": "q" }
+{ "type": "resign" }
+{ "type": "offer-draw" }
+{ "type": "accept-draw" }
+{ "type": "decline-draw" }
+{ "type": "sync" }
+</code></pre>
+<p>(<code>promo</code> adalah opsional aktif <code>move</code>.)</p>
+<p>Pesan server (dikirim sebagai <code>{"type":"game","data":{...}}</code>):</p>
+<pre><code class="language-json">{
+  "type": "state",
+  "white": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "black": "9b2f8c1a-1111-4222-8333-444455556666",
+  "ratings": { "white": 1200, "black": 1187 },
+  "board": "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr",
+  "turn": "w",
+  "moves": [],
+  "status": "active",
+  "result": null,
+  "deadline": 1784642591000,
+  "drawOfferBy": null,
+  "ai": false,
+  "aiName": null
+}
+</code></pre>
+<pre><code class="language-json">{ "type": "moved", "...": "move details + updated state" }
+{ "type": "draw-offered" }
+{ "type": "draw-declined" }
+{ "type": "game-over", "result": { "kind": "white-win", "reason": "checkmate", "at": "2026-07-20T15:42:37Z" }, "view": { "...": "final state view" } }
+</code></pre>
+<p>Melihat <a href="/id/docs/api/game-scripts.html">Skrip Permainan</a> tentang bagaimana skrip mendefinisikan pesan-pesan ini, dan <a href="/id/docs/tutorials/chess-walkthrough.html">Panduan Catur</a> untuk pembangunan ujung ke ujung.</p>
+<p>Melihat <a href="/id/docs/credentials.html">kompatibilitas kredensial</a> Dan <a href="/id/docs/api/contracts.html">kontrak yang dapat dibaca mesin</a>.</p>
+
+{% endraw %}

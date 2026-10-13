@@ -1,0 +1,194 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Voz"
+source_url: "/docs/api/voice.html"
+source_path: "docs/api/voice.md"
+source_hash: "b854ce844a33279125a6c44c43b800b3efef80cbcf31d1f74a9f17192fab0aef"
+translation: "machine"
+permalink: "/es/docs/api/voice.html"
+---
+{% raw %}
+<h1 id="voice">Voz</h1>
+<p>StarHermit Voice proporciona salas de voz por conversación a través de una API REST (<code>api/v1/voice</code>) más un WebSocket mixto binario/texto (<code>ws/v1/voice</code>) para señalización de audio y WebRTC. Todos los puntos finales REST requieren autenticación. La disponibilidad de voz puede variar. Los cuerpos de error varían; ver <a href="/es/docs/api/conventions.html#requests-and-responses">Convenciones API</a>.</p>
+<p>Las habitaciones están ancladas a un <a href="/es/docs/api/chat.html">conversación de chat</a>; la membresía en la conversación controla todo, por lo que las reglas de amistad del chat también gobiernan la voz (las conversaciones de sesiones de juego pasan por alto la amistad). Límites: 3 salas activas por conversación, máximo 10 participantes por sala, códec <code>"opus"</code>.</p>
+<h2 id="rest-endpoints">Puntos finales de descanso</h2>
+<p>Base: <code>https://api.starhermit.com/api/v1/voice</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Camino</th>
+<th>autenticación</th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms</code></td>
+<td>JWT</td>
+<td>Crear una sala de voz para una conversación</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/rooms?conversationId=</code></td>
+<td>JWT</td>
+<td>Listar salas para una conversación</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/rooms/{roomId}</code></td>
+<td>JWT</td>
+<td>consigue una habitacion</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms/{roomId}/join</code></td>
+<td>JWT</td>
+<td>Unirse a una sala (requerido antes del WS)</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms/{roomId}/leave</code></td>
+<td>JWT</td>
+<td>dejar una habitación</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms/{roomId}/mute</code></td>
+<td>JWT</td>
+<td>Establece tu propio estado de silencio</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms/{roomId}/participants/{userId}/server-mute</code></td>
+<td>JWT (creador)</td>
+<td>El anfitrión silencia que el participante no puede levantar</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/rooms/{roomId}/close</code></td>
+<td>JWT</td>
+<td>Cerrar una sala (solo creador)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-room">crear una habitación</h3>
+<p><code>POST /rooms</code></p>
+<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 10 }
+</code></pre>
+<p>Devuelve un <code>VoiceRoomDto</code>.</p>
+<h3 id="room-shape">Forma de la habitación</h3>
+<p><code>GET /rooms?conversationId=&lt;guid&gt;</code> → <code>VoiceRoomDto[]</code>; <code>GET /rooms/{roomId}</code> → <code>VoiceRoomDto</code>:</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "conversationId": "&lt;guid&gt;",
+  "creatorUserId": "&lt;guid&gt;",
+  "codec": "opus",
+  "status": "Active",
+  "maxParticipants": 10,
+  "createdAt": "2026-07-22T07:00:00Z",
+  "participants": [
+    {
+      "userId": "&lt;guid&gt;",
+      "username": "alice",
+      "isMuted": false,
+      "isConnected": true,
+      "joinedAt": "2026-07-22T07:01:00Z"
+    }
+  ]
+}
+</code></pre>
+<h3 id="join-leave-mute-close">Unirse, salir, silenciar, cerrar</h3>
+<p><code>POST /rooms/{roomId}/join</code> → <code>VoiceRoomDto</code>. Esta unión REST es <strong>requerido</strong> antes de abrir el WebSocket; conectando sin que regrese <code>403</code>. Al volver a unirse se borra el permiso del participante. <strong>propio</strong> silenciar (<code>isMuted</code>); un anfitrión <code>isServerMuted</code> sobrevive a la salida y se vuelve a conectar.</p>
+<p><code>POST /rooms/{roomId}/leave</code> → <code>204</code>.</p>
+<p><code>POST /rooms/{roomId}/mute</code> con <code>{ "muted": true }</code> → <code>204</code>. Este es el silencio del participante y no puede borrar el silencio de un anfitrión.</p>
+<p><code>POST /rooms/{roomId}/participants/{userId}/server-mute</code> con <code>{ "muted": true }</code> → <code>204</code> (solo creador). El audio se interrumpe si se establece el silencio.</p>
+<p><code>POST /rooms/{roomId}/close</code> → <code>204</code> (solo creador).</p>
+<p>Indique su silencio al conectarse en lugar de heredar lo que recuerde la fila.</p>
+<h2 id="websocket-wsv1voice">WebSocket: <code>ws/v1/voice</code></h2>
+<p>Conéctate a <code>wss://api.starhermit.com/ws/v1/voice?roomId=&lt;guid&gt;</code> con un JWT a través del <code>Authorization</code> encabezamiento, <code>?ticket=</code>, o <code>?access_token=</code>. Un DESCANSO previo <code>join</code> se requiere.</p>
+<p>El protocolo es mixto:</p>
+<h3 id="binary-frames--audio">Marcos binarios: audio</h3>
+<p>Los fotogramas binarios transportan audio (por ejemplo, Opus). El servidor transmite cada cuadro a los demás participantes como:</p>
+<pre><code>[16-byte senderUserId][audio…]
+</code></pre>
+<p>El servidor antepone el <strong>autenticado</strong> ID del remitente y nunca confía en un remitente proporcionado por el cliente. Se elimina el audio de los usuarios silenciados. Límites: 100 paquetes/segundo por usuario, trama máxima de 4000 bytes.</p>
+<h3 id="text-frames--client--server-control">Marcos de texto: cliente → control de servidor</h3>
+<pre><code class="language-json">{ "type": "mute", "muted": true }
+</code></pre>
+<pre><code class="language-json">{ "type": "speaking", "speaking": true }
+</code></pre>
+<pre><code class="language-json">{ "type": "rtc", "to": "&lt;guid&gt;", "payload": { } }
+</code></pre>
+<pre><code class="language-json">{ "type": "deafen", "deafened": true }
+</code></pre>
+<p><code>rtc</code> Las cargas útiles son señales WebRTC opacas, reenviadas al participante direccionado.
+<code>deafen</code> suprime el audio binario retransmitido entrante para este conector; no se silencia automáticamente
+audio saliente o una conexión de pares separada. Aplícalos localmente cuando el jugador elija Deafen.</p>
+<p>La forma del participante REST expone el silencio propio, no el silencio del host. La lista de voces inicial y los eventos para unirse.
+incluir <code>serverMuted</code>; no hay ningún evento push separado de cambio de silenciamiento del host. Si tu juego usa P2P
+El audio, su señalización de silenciamiento del host y su aplicación deben ser parte de su propia integración de medios.</p>
+<p>Cuando se desconecta el último enchufe de voz, finaliza la membresía de la sala de voz. Llamar DESCANSO <code>join</code> otra vez antes
+reconectar y restaurar el silencio deseado antes de enviar audio.</p>
+<h3 id="server--client-events">Servidor → eventos de cliente</h3>
+<p>Sobre: <code>{ "event": "&lt;name&gt;", "data": { } }</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Evento</th>
+<th><code>data</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>voice.roster</code></td>
+<td><code>{ "roomId", "participants": [{ "userId", "muted", "serverMuted" }] }</code> — enviado al recién llegado</td>
+</tr>
+<tr>
+<td><code>voice.participant_joined</code></td>
+<td><code>{ "roomId", "userId", "muted", "serverMuted" }</code></td>
+</tr>
+<tr>
+<td><code>voice.participant_left</code></td>
+<td><code>{ "roomId", "userId" }</code></td>
+</tr>
+<tr>
+<td><code>voice.mute_changed</code></td>
+<td><code>{ "roomId", "userId", "muted" }</code></td>
+</tr>
+<tr>
+<td><code>voice.deafened</code></td>
+<td>`{ "ID de habitación", "ID de usuario", "ensordecido" }</td>
+</tr>
+<tr>
+<td><code>voice.speaking</code></td>
+<td><code>{ "roomId", "userId", "speaking" }</code></td>
+</tr>
+<tr>
+<td><code>voice.rtc</code></td>
+<td><code>{ "roomId", "from", "payload" }</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="example-integration-pattern-from-the-chess-reference-implementation">Patrón de integración de ejemplo (de la implementación de referencia de ajedrez)</h2>
+<p>La voz se activa por sesión de juego. Un cliente típico <code>enable()</code> fluir:</p>
+<ol>
+<li><code>GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;</code> para encontrar una habitación existente, de lo contrario <code>POST /api/v1/voice/rooms</code> para crear uno.</li>
+<li><code>POST /api/v1/voice/rooms/{roomId}/join</code>.</li>
+<li>Abierto <code>ws/v1/voice?roomId=&lt;guid&gt;</code>.</li>
+</ol>
+<p>En el <a href="/es/docs/tutorials/chess-walkthrough.html">implementación de referencia de ajedrez</a>, el audio se ejecuta a través de WebRTC P2P con negociación perfecta; La señalización se intercambia a través del <code>rtc</code> mensajes de control (<code>{ "sdp": … }</code> / <code>{ "ice": … }</code> payloads), con la ruta binaria Opus transmitida por el servidor como alternativa.</p>
+<p>Tokens de lanzamiento relacionados con el juego <strong>puede</strong> utilice la voz REST y WebSocket para salas adjuntas a sus propias sesiones de juego.</p>
+<h2 id="see-also">Ver también</h2>
+<ul>
+<li><a href="/es/docs/tutorials/audio-options.html">Opciones de audio</a> — controles básicos de volumen, micrófono y pulsar para hablar,
+con una tapa de reproducción detectada automáticamente</li>
+<li><a href="/es/docs/api/chat.html">Charlar</a> — las salas se anclan a las conversaciones; sesiones de juego exponen <code>chatConversationId</code></li>
+<li><a href="/es/docs/api/games.html">Juegos</a> — sesiones de juego y tokens de lanzamiento</li>
+<li><a href="/es/docs/api/relay.html">Relé</a> — distribución de bytes para el código de red del juego</li>
+</ul>
+<p>Ver <a href="/es/docs/credentials.html">compatibilidad de credenciales</a> y <a href="/es/docs/api/contracts.html">contratos legibles por máquina</a>.</p>
+
+{% endraw %}

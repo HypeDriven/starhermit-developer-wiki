@@ -1,0 +1,192 @@
+---
+layout: "wiki"
+lang: "ur"
+title: "API کنونشنز"
+source_url: "/docs/api/conventions.html"
+source_path: "docs/api/conventions.md"
+source_hash: "3772241b0e04e8e2f4e4ecf1c0ef8e2d956c065446a78c7df107b6205de258d6"
+translation: "machine"
+permalink: "/ur/docs/api/conventions.html"
+---
+{% raw %}
+<h1 id="api-conventions">API کنونشنز</h1>
+<p>REST استعمال کرتا ہے۔ <code>https://api.starhermit.com/api/v1/...</code>; ساکٹ استعمال کرتے ہیں <code>wss://api.starhermit.com/ws/v1/...</code>.
+ہوسٹڈ گیمز کال کر سکتے ہیں۔ <code>/api/v1/...</code> اور <code>/ws/v1/...</code> ان کی اپنی اصل پر. مقامی کلائنٹ استعمال کرتے ہیں۔
+عوامی API اصل۔ کسی اور اصل پر ترقیاتی صفحہ کو گیم پر اجازت شدہ CORS اصل کی ضرورت ہے۔
+میزبان؛ اکیلے SDK بیس یو آر ایل کو ترتیب دینے سے اس اصل کی اجازت نہیں ہوتی۔</p>
+<h2 id="requests-and-responses">درخواستیں اور جوابات</h2>
+<p>کے ساتھ JSON بھیجیں۔ <code>Content-Type: application/json</code>، سوائے خام gzip بنڈل اپ لوڈز کے۔ JSON ممبروں کے نام
+اونٹ کیس ہیں۔ REST میں بیئرر اسناد بھیجیں۔ <code>Authorization</code> ہیڈر</p>
+<table>
+<thead>
+<tr>
+<th>جواب</th>
+<th>اسے کیسے پڑھنا ہے۔</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>200</code> / <code>201</code> JSON</td>
+<td>دستاویزی آبجیکٹ یا صف کو پارس کریں۔ اضافی شعبوں کو برداشت کریں۔</td>
+</tr>
+<tr>
+<td><code>204</code></td>
+<td>بغیر جسم کے کامیابی؛ فون مت کرو <code>response.json()</code></td>
+</tr>
+<tr>
+<td><code>302</code></td>
+<td>براؤزر سائن ان/تصدیق ری ڈائریکٹ؛ OAuth صفحات کو بازیافت کرنے کے بجائے نیویگیٹ کریں۔</td>
+</tr>
+<tr>
+<td><code>304</code></td>
+<td>مشروط پڑھنا غیر تبدیل شدہ؛ آپ کے پاس پہلے سے موجود ڈیٹا کو برقرار رکھیں</td>
+</tr>
+<tr>
+<td>تصویر، اٹیچمنٹ، کلاؤڈ سیو</td>
+<td>جوابی مواد کی قسم اور اینڈ پوائنٹ کنٹریکٹ کا استعمال کرتے ہوئے بائٹس پڑھیں</td>
+</tr>
+<tr>
+<td>خرابی</td>
+<td>پہلے سٹیٹس کو پڑھیں، پھر جسم کو دفاعی طور پر پارس کریں۔</td>
+</tr>
+</tbody>
+</table>
+<p>عام غلطی کی شکل ہے۔ <code>{ "error": "...", "code": "..." }</code>پر منحصر ہے اختیاری فیلڈز کے ساتھ
+اختتامی نقطہ <code>error</code> اکثر انسان کے پڑھنے کے قابل ہوتا ہے۔ <code>code</code> ایک مستحکم امتیازی ہے جہاں فراہم کیا گیا ہے۔
+شرائط اور کچھ دوسرے اختتامی نکات امتیازی سلوک کرنے والے کو براہ راست داخل کرتے ہیں۔ <code>error</code>. کچھ اختتامی نقطے سادہ لوٹتے ہیں۔
+متن، ایک خالی باڈی، یا توثیق مسئلہ کی تفصیلات آبجیکٹ کے ساتھ <code>title</code>, <code>status</code> اور <code>errors</code>.
+کلائنٹس کو یہ فرض نہیں کرنا چاہیے کہ ہر ناکام جواب JSON ہے یا اس کی فیلڈز ایک جیسی ہیں۔</p>
+<pre><code class="language-js">export async function readResponse(response) {
+  if (response.status === 204 || response.status === 304) return null;
+  const text = await response.text();
+  let body;
+  try { body = text ? JSON.parse(text) : null; } catch { body = text || null; }
+  if (!response.ok) {
+    const message = (body &amp;&amp; typeof body === 'object' &amp;&amp; (body.error || body.message || body.title))
+      || (typeof body === 'string' &amp;&amp; body) || response.statusText;
+    throw Object.assign(new Error(message), {
+      status: response.status, code: body?.code, body,
+      retryAfter: response.headers.get('Retry-After'),
+    });
+  }
+  return body;
+}
+</code></pre>
+<h2 id="time-sizes-and-nulls">وقت، سائز، اور nulls</h2>
+<ul>
+<li><code>createdAt</code>, <code>updatedAt</code>, <code>finishedAt</code>، اور اسی طرح کے اکاؤنٹ/وسائل ٹائم سٹیمپ ISO 8601 سٹرنگز ہیں۔
+ایک آفسیٹ کے ساتھ. غیر حاضر یا علاج کریں۔ <code>null</code> اختیاری قدریں بطور دستیاب نہیں۔</li>
+<li><code>ctx.now</code>, <code>summary.deadline</code>، سیشن کی فہرست <code>deadline</code>، اور <code>/time.serverTime</code> انٹیجر یونکس ہیں۔
+<strong>ملی سیکنڈ</strong>. کے ساتھ تبدیل کریں۔ <code>new Date(value)</code>، نہیں <code>Date.parse(value)</code>.</li>
+<li>بائٹس میں حد اقدار بائٹس ہیں، نہ کہ Base64 حروف۔ ایک Base64 JSON اپ لوڈ اس سے بڑا ہے۔
+ضابطہ کشائی شدہ مواد۔ دستیاب ہونے پر اختتامی نقطہ کے ذریعہ اطلاع دی گئی موثر حد کا استعمال کریں۔</li>
+<li>کوتاہی، <code>null</code>، اور ایک خالی شے عالمی طور پر مساوی نہیں ہے۔ ترتیبات <code>PATCH</code> ہٹاتا ہے a
+نام کی کلید کے ساتھ <code>null</code>; واحد کلیدی ترتیبات <code>PUT</code> اسٹورز <code>null</code> ایک قدر کے طور پر. مجموعہ <code>PUT</code> بدل دیتا ہے
+پورا نقشہ ہر اختتامی نقطہ کے اپ ڈیٹ کے اصول پڑھیں۔</li>
+<li>ایک سیٹنگ پیچ ضم ہو جاتا ہے۔ <strong>اعلی درجے کی چابیاں</strong>. ایک سپلائی کردہ آبجیکٹ ویلیو اس کلید کی قدر کو بدل دیتی ہے۔
+یہ گھونسلے کی خصوصیات کو بار بار ضم نہیں کرتا ہے۔</li>
+</ul>
+<h2 id="pagination">صفحہ بندی</h2>
+<p>صفحہ بندی ایک پر مبنی ہے جہاں <code>page</code>/<code>pageSize</code> حمایت کر رہے ہیں. مختلف APIs جان بوجھ کر مختلف ہوتے ہیں۔
+جوابی لفافے؛ کسی ایسے تجزیہ کار کو دوبارہ استعمال نہ کریں جو ایک واحد کاؤنٹ فیلڈ کا نام لے۔</p>
+<table>
+<thead>
+<tr>
+<th>علاقہ</th>
+<th>مجموعہ کی شکل</th>
+<th>پہلے سے طے شدہ / زیادہ سے زیادہ صفحہ کا سائز</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>سافٹ ویئر کے عنوانات اور تعمیرات</td>
+<td><code>{ items, totalCount, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>چیٹ پیغامات</td>
+<td><code>{ conversationId, items, totalCount, page, pageSize }</code></td>
+<td>50 / 100</td>
+</tr>
+<tr>
+<td>لیڈر بورڈ اندراجات</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>بیرونی سافٹ ویئر</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20; چھوٹے مثبت صفحہ کے سائز کی درخواست کریں۔</td>
+</tr>
+<tr>
+<td>رپورٹس، کنٹینر کریش ریکارڈز، اعتدال کی فہرستیں۔</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>سیشن، دوست، گیم کی فہرستیں، کامیابیاں</td>
+<td>صفیں</td>
+<td>اختتامی نقطہ مخصوص ٹوپیاں؛ کوئی عام اگلے صفحے کا کرسر نہیں ہے۔</td>
+</tr>
+<tr>
+<td>اعتدال کی واپسی فیڈ</td>
+<td>کرسر پر مبنی</td>
+<td>واپس کرسر رکھیں؛ سے وصولی <code>410</code> جیسا کہ دستاویزی ہے۔</td>
+</tr>
+</tbody>
+</table>
+<p>رسپانس پیجنگ میٹا ڈیٹا پیش کردہ صفحہ کی عکاسی کرتا ہے جہاں دستیاب ہو۔ <a href="/ur/#api-reference">حوالہ جات کے صفحات</a>
+اور <a href="/ur/docs/api/contracts.html">مشین پڑھنے کے قابل معاہدے</a> اختتامی نقطہ کے مخصوص استفسار کے پیرامیٹرز کی وضاحت کریں۔</p>
+<h2 id="retry-and-concurrency">دوبارہ کوشش کریں اور ہم آہنگی کریں۔</h2>
+<table>
+<thead>
+<tr>
+<th>صورتحال</th>
+<th>ایکشن</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>اکاؤنٹ تک رسائی ٹوکن کے ساتھ مسترد کر دیا گیا۔ <code>401</code></td>
+<td>ایک بار ریفریش کریں، ایک مشترکہ ریفریش درخواست کا استعمال کرتے ہوئے؛ پھر انکار کرنے پر سائن ان کریں۔</td>
+</tr>
+<tr>
+<td>لانچ ٹوکن کی میعاد ختم ہو گئی۔</td>
+<td>سائن ان/لانچر کے ذریعے ایک نیا ٹوکن حاصل کریں۔ میعاد ختم ہونے والے ٹوکن خود کو تجدید نہیں کرسکتے ہیں۔</td>
+</tr>
+<tr>
+<td><code>403 terms_acceptance_required</code></td>
+<td>موجودہ شرائط کو ظاہر کریں اور واضح طور پر قبول کریں، پھر دوبارہ کوشش کریں۔</td>
+</tr>
+<tr>
+<td>دیگر <code>403</code></td>
+<td>دائرہ کار، رکنیت، اجازت، یا اکاؤنٹ کی حیثیت کو حل کریں؛ ایک لوپ میں تازہ نہ کریں</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>ڈپلیکیٹ/ریاست/نظرثانی تنازعہ کو حل کریں؛ وسائل کو تبدیل کرنے سے پہلے دوبارہ پڑھیں</td>
+</tr>
+<tr>
+<td>کلاؤڈ سیو <code>412</code></td>
+<td>نیا ورژن لوڈ کریں اور گیم کو ضم ہونے دیں یا اسے اپنانے دیں۔</td>
+</tr>
+<tr>
+<td><code>429</code> یا عارضی؟ <code>503</code></td>
+<td>عزت <code>Retry-After</code>, jitter , اور پابند دوبارہ کوششیں شامل کریں</td>
+</tr>
+<tr>
+<td>لکھنے کے دوران نیٹ ورک کی ناکامی۔</td>
+<td>نتیجہ نامعلوم ہو سکتا ہے؛ کارروائی کو دہرانے سے پہلے وسائل کی حالت کا معائنہ کریں۔</td>
+</tr>
+</tbody>
+</table>
+<p><code>Retry-After</code> سیکنڈ یا HTTP تاریخ ہو سکتی ہے۔ آئیڈیمپوٹینسی ہیڈر ایجاد نہ کریں: API ایسا نہیں کرتا ہے۔
+ایک عام آئیڈیمپوٹینسی کلیدی میکانزم کا وعدہ کریں۔ سیشن بنانے کی دوبارہ کوشش یا دعوت نامہ تشکیل دے سکتا ہے۔
+دوسرا وسیلہ یا پہلے کے ساتھ تنازعہ۔ پڑھنے کو ترجیح دیں اور واضح طور پر idempotent آپریشنز کے لیے
+خودکار دوبارہ کوششیں ریفریش گردش، مکمل اپ لوڈز، شرائط کی رضامندی، اور ٹرمینل گیم کے نتائج ہر ایک
+ان کے اپنے قوانین ہیں.</p>
+<p>موازنہ اور تبادلہ تحریروں کے لیے کلاؤڈ سیو ای ٹیگز، روم استعمال کریں۔ <code>expectedRevision</code>، یا اعتدال پر نظرثانی
+جہاں کی حمایت کی. ایک کامیاب تحریر ضروری نہیں کہ مکمل کنٹینر کی تعیناتی ہو۔ اس کی تصدیق کریں
+کھلاڑیوں کو نئی تعمیر میں بھیجنے سے پہلے کی حیثیت۔ دیکھیں <a href="/ur/docs/troubleshooting.html">خرابیوں کا سراغ لگانا</a>.</p>
+
+{% endraw %}

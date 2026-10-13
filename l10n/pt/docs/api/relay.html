@@ -1,0 +1,230 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Relé"
+source_url: "/docs/api/relay.html"
+source_path: "docs/api/relay.md"
+source_hash: "fee2406e9c32c62019b48f6c4c765d18672bef89ea5233e883180fc2a451396c"
+translation: "machine"
+permalink: "/pt/docs/api/relay.html"
+---
+{% raw %}
+<h1 id="relay">Relé</h1>
+<p>O relé fornece distribuição de bytes opacos para o netcode do jogo: uma API REST (<code>api/v1/relay</code>) gerencia
+sessões, e <code>ws/v1/relay</code> encaminha quadros binários literalmente entre os participantes. Cada relé é
+vinculado a exatamente uma correspondência existente - um <a href="/pt/docs/api/games.html">sessão de jogo</a> ou um <a href="/pt/docs/api/realtime.html">sala em tempo real</a>—e
+usa a escalação dessa partida para autorização.</p>
+<p>Todos os endpoints REST exigem autenticação – um token de usuário completo ou um token de lançamento de jogo para retransmissões
+vinculado às próprias sessões e salas do jogo: a listagem mostra apenas essas e quaisquer outras respostas de retransmissão
+<code>404</code> (ou <code>403</code> para criar um). A retransmissão de um token de lançamento leva <strong>o id do seu próprio jogo como <code>titleId</code></strong> -
+o uid em seu <code>game_scope</code> reivindicação - e qualquer outro título é recusado <code>403</code>, porque o título por título
+o limite de sessão é contado por ele. Os erros são retornados como <code>{"error":"..."}</code>: <code>403</code> quando o chamador é
+não está na partida vinculada ou o revezamento pertence a outro jogo, <code>404</code> para um relé desconhecido, <code>409</code> por um
+estado que recusa a solicitação (não consolidado, completo, fechado, já ingressado ou no limite da sessão), e
+<code>503</code> quando o relé está desligado.</p>
+<h2 id="rest-endpoints">Pontos de extremidade REST</h2>
+<p>Base: <code>https://api.starhermit.com/api/v1/relay</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Caminho</th>
+<th>Autenticação</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PEGAR</td>
+<td><code>/?titleId=</code></td>
+<td>JWT</td>
+<td>Listar sessões de retransmissão ativas para este título cuja correspondência vinculada inclui o chamador</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/</code></td>
+<td>JWT</td>
+<td>Crie um relé vinculado a uma partida</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/{sessionId}</code></td>
+<td>JWT</td>
+<td>Obtenha uma sessão de retransmissão — visível apenas para membros de sua correspondência vinculada (<code>404</code> de outra forma)</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/{sessionId}/join</code></td>
+<td>JWT</td>
+<td>Junte-se ao revezamento; o chamador deve estar em sua correspondência vinculada</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/{sessionId}/close</code></td>
+<td>JWT</td>
+<td>Fechar um relé (somente criador)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="match-binding">Vinculação de correspondência</h2>
+<p>A associação ao Relay não é um lobby independente e aberto. A escalação da partida é a fonte da verdade:</p>
+<ul>
+<li>Um relé tem <code>gameSessionId</code> ou <code>realtimeRoomId</code>, nunca os dois e nunca nenhum dos dois.</li>
+<li>O criador deve pertencer a essa sessão de jogo ou ocupar um lugar ativo e não-esquerdo naquela sessão em tempo real
+quarto.</li>
+<li>Cada junção posterior é verificada na mesma lista.</li>
+<li>Abrir o WebSocket requer uma linha de participante de retransmissão ativa e uma associação atual no
+partida vinculada. Sair de uma sala em tempo real evita, portanto, uma conexão de relé posterior/de substituição.</li>
+<li>Listando por <code>titleId</code> retorna apenas relés vinculados às correspondências às quais o chamador pertence; não é um
+diretório de todas as partidas ao vivo desse título.</li>
+</ul>
+<p>Esta é uma alteração obrigatória no formato da solicitação. As linhas de retransmissão não vinculadas herdadas não podem autorizar um soquete; criar
+em vez disso, um novo relé vinculado.</p>
+<h2 id="create-a-session">Crie uma sessão</h2>
+<p><code>POST /api/v1/relay</code></p>
+<p>Vincule-se a uma sessão de jogo oficial:</p>
+<pre><code class="language-json">{
+  "titleId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "maxParticipants": 8,
+  "gameSessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "realtimeRoomId": null
+}
+</code></pre>
+<p>Ou vincule-se a uma sala em tempo real:</p>
+<pre><code class="language-json">{
+  "titleId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "maxParticipants": 8,
+  "gameSessionId": null,
+  "realtimeRoomId": "b1d2c3e4-5f60-4a71-8b92-c3d4e5f60718"
+}
+</code></pre>
+<p><code>maxParticipants</code> o padrão é <code>8</code>. Podem existir no máximo cinco sessões de revezamento ativas por título,
+padrão. A chamada será rejeitada se a contagem de ligações não for exatamente uma ou se o chamador não estiver no
+partida selecionada.</p>
+<p>O revezamento não cria a sessão ou sala de jogo. Crie/participe dessa partida através do
+<a href="/pt/docs/api/games.html">API de jogos</a> ou <a href="/pt/docs/api/realtime.html">API de salas em tempo real</a> primeiro, depois passe seu ID aqui.</p>
+<h2 id="session-shape">Formato da sessão</h2>
+<pre><code class="language-json">{
+  "id": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+  "titleId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "creatorUserId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "gameSessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "realtimeRoomId": null,
+  "isBound": true,
+  "maxParticipants": 8,
+  "currentParticipantCount": 1,
+  "status": "Active",
+  "createdAt": "2026-07-28T11:30:00Z",
+  "closedAt": null,
+  "participants": [
+    {
+      "id": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+      "sessionId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+      "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "connectionId": null,
+      "joinedAt": "2026-07-28T11:30:01Z",
+      "leftAt": null,
+      "status": "Connected"
+    }
+  ]
+}
+</code></pre>
+<p>Exatamente um ID de ligação não é nulo e <code>isBound</code> é portanto <code>true</code>. Sessão <code>status</code> é
+<code>"Active"</code> ou <code>"Closed"</code>; <code>closedAt</code>, <code>connectionId</code>, e <code>leftAt</code> pode estar ausente ou nulo.</p>
+<h2 id="join-and-close">Junte-se e feche</h2>
+<p><code>POST /api/v1/relay/{sessionId}/join</code> retorna o atualizado <code>RelaySession</code>. Esta junção REST é obrigatória
+antes de abrir o WebSocket. Um slot de retransmissão livre não é suficiente: o chamador ainda deve ser membro do
+a partida vinculada.</p>
+<p><code>POST /api/v1/relay/{sessionId}/close</code> retorna <code>204</code> e é apenas para criadores.</p>
+<h2 id="websocket-wsv1relay">WebSocket: <code>ws/v1/relay</code></h2>
+<p>Conecte-se a:</p>
+<pre><code class="language-text">wss://api.starhermit.com/ws/v1/relay?sessionId=&lt;relay-id&gt;&amp;titleId=&lt;title-id&gt;
+</code></pre>
+<p>Autenticar com um <code>Authorization: Bearer &lt;token&gt;</code> cabeçalho, <code>?ticket=</code>, ou <code>?access_token=</code> parâmetro de consulta.
+O aperto de mão retorna <code>403</code> a menos que o usuário tenha ingressado no relé e ainda esteja autorizado por seu limite
+combinar.</p>
+<p>O soquete é um fan-out de bytes opaco. Cada quadro binário é encaminhado inalterado para todos os outros
+participante conectado. Não há enquadramento JSON e a plataforma não interpreta os dados do jogo.
+O tamanho máximo da mensagem é 4 KiB por padrão.</p>
+<h3 id="tick-rate-aware-rate-limit">Limite de taxa com reconhecimento de taxa de tick</h3>
+<blockquote>
+<p><strong>Regra de queda de conexão:</strong> se um cliente enviar comandos/quadros de retransmissão mais rápido que a taxa permitida,
+StarHermit fecha o WebSocket de retransmissão desse cliente com <code>PolicyViolation</code>. Isto não é uma fila ou um
+queda de quadro de melhor esforço – a conexão do cliente é encerrada e deve ser reconectada.</p>
+</blockquote>
+<p>O intervalo mínimo de cada remetente é derivado da taxa de ritmo da correspondência vinculada:</p>
+<pre><code class="language-text">minimum interval ms = (1000 / max(pacingRateHz, 1)) × 0.90
+</code></pre>
+<p>O headroom de 10% permite temporizador comum e instabilidade de rede. A taxa nunca é tomada abaixo <strong>1 hertz</strong>,
+então o limite nunca pede mais de ~900 ms de silêncio entre dois frames, por mais lento que seja o jogo
+carrapatos. Exemplos:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:right">Taxa efetiva</th>
+<th style="text-align:right">Intervalo mínimo do remetente</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right">20Hz</td>
+<td style="text-align:right">45ms</td>
+</tr>
+<tr>
+<td style="text-align:right">30Hz</td>
+<td style="text-align:right">30ms</td>
+</tr>
+<tr>
+<td style="text-align:right">60Hz</td>
+<td style="text-align:right">15ms</td>
+</tr>
+<tr>
+<td style="text-align:right">120Hz</td>
+<td style="text-align:right">7,5ms</td>
+</tr>
+</tbody>
+</table>
+<p>Para uma sessão de jogo, a taxa vem da definição do jogo. Para uma sala em tempo real, a sala
+<code>gameSlug</code> é resolvido para uma definição de jogo. A precedência da taxa efetiva normal se aplica:
+substituição do operador e, em seguida, a taxa solicitada pelo jogo. O que o limite do relé faz <strong>não</strong> seguir é um
+taxa que não diz nada sobre a frequência com que os jogadores conversam entre si: se nenhuma definição puder ser
+resolvido, se o jogo optou por não receber ticks do servidor com <code>0</code>, ou se não solicitou nenhuma taxa e assim
+assume o padrão lento da plataforma, o limite é dimensionado a partir da taxa global. Um jogo nunca é
+limitado a uma mensagem a cada poucos segundos porque ninguém escreveu um número no código do servidor. Tarifas
+são limitados pelo teto da plataforma.</p>
+<p>Um cliente deve acompanhar os comandos nesse intervalo ou mais lentamente. Enviando dois comandos/frames mais próximos
+do que o intervalo mínimo é tratado como inundação: StarHermit interrompe a conexão desse cliente
+fechando seu relé WebSocket com <code>PolicyViolation</code>. Os remetentes são limitados de forma independente, então um
+a violação do cliente não desconecta os outros jogadores.</p>
+<h2 id="recommended-client-flow">Fluxo de cliente recomendado</h2>
+<ol>
+<li>Crie ou participe da sessão de jogo/sala em tempo real.</li>
+<li>Faça com que um membro da correspondência crie uma retransmissão com esse ID de correspondência.</li>
+<li>Compartilhe o ID de retransmissão retornado somente por meio do estado autenticado ou das mensagens de escalação da partida.</li>
+<li>Cada outro membro da partida chama <code>POST /api/v1/relay/{relayId}/join</code>.</li>
+<li>Cada membro abre <code>ws/v1/relay</code> e acompanha os frames de acordo com a taxa efetiva de ticks do jogo; enviando
+descarta mais rapidamente a conexão WebSocket desse cliente.</li>
+<li>O criador fecha o revezamento quando a partida termina.</li>
+</ol>
+<p>Não use IDs de retransmissão como segredos de autorização. A plataforma autoriza a lista vinculada;
+os IDs identificam apenas recursos.</p>
+<h2 id="positioning">Posicionamento</h2>
+<p>Use o relé para jogos de ritmo acelerado que precisam de distribuição entre pares com baixa sobrecarga. É deliberadamente estúpido
+transporte: a ligação garante quem pode participar, mas a plataforma ainda não analisa ou valida
+cargas úteis, eleger um par com autoridade ou resolver trapaças.</p>
+<p>Para regras e estado impostos pelo servidor, use o <a href="/pt/docs/api/games.html">API de jogos</a> com um script em sandbox ou
+<a href="/pt/docs/api/container-games.html">back-end do contêiner</a>. As salas em tempo real oferecem lobbies, assentos, matchmaking e
+roteamento com reconhecimento de host; o relé agora pode se vincular a uma dessas salas em vez de duplicar sua lista.</p>
+<p>Confirme a disponibilidade do relé antes de enviar um recurso que dependa dele.</p>
+<h2 id="see-also">Veja também</h2>
+<ul>
+<li><a href="/pt/docs/api/realtime.html">Salas em tempo real</a> — lobbies, matchmaking, jogadores de IA e roteamento com reconhecimento de função</li>
+<li><a href="/pt/docs/api/games.html">Jogos</a> — sessões oficiais e taxas de tick efetivas</li>
+<li><a href="/pt/docs/api/container-games.html">Servidores de jogos em contêiner</a> — servidores autorizados em outros idiomas</li>
+<li><a href="/pt/docs/api/game-scripts.html">Scripts de jogos</a> — lógica do servidor em sandbox e taxas de tick solicitadas</li>
+<li><a href="/pt/docs/api/voice.html">Voz</a> — salas de voz para áudio do jogo</li>
+</ul>
+<p>Compartilhado <a href="/pt/docs/api/conventions.html">Convenções de API</a> descreve a análise de resposta, carimbos de data/hora, paginação e novas tentativas.</p>
+<p>Ver <a href="/pt/docs/credentials.html">compatibilidade de credenciais</a> e <a href="/pt/docs/api/contracts.html">contratos legíveis por máquina</a>.</p>
+
+{% endraw %}

@@ -1,0 +1,441 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Publique um servidor de jogo dedicado e jogadores integrados no jogo"
+source_url: "/docs/tutorials/dedicated-server-onboarding.html"
+source_path: "docs/tutorials/dedicated-server-onboarding.md"
+source_hash: "aa70f7fec680b797ff8479b56586e37fd9a16ee3031398235d457e97f83a90aa"
+translation: "machine"
+permalink: "/pt/docs/tutorials/dedicated-server-onboarding.html"
+---
+{% raw %}
+<h1 id="publish-a-dedicated-game-server-and-onboard-players-in-game">Publique um servidor de jogo dedicado e jogadores integrados no jogo</h1>
+<p>Este tutorial mostra como:</p>
+<ol>
+<li>Publique ou atualize um contêiner de servidor de jogo dedicado com a API de upload de pacote do StarHermit.</li>
+<li>Mantenha renovado o token do servidor StarHermit de um contêiner de longa duração.</li>
+<li>Integre jogadores do Steam, Epic, GOG ou de uma versão independente sem enviá-los através de um
+provedor OAuth ou exigindo que eles visitem o painel StarHermit.</li>
+<li>Dê a esses jogadores acesso a sessões StarHermit, matchmaking, tabelas de classificação, conquistas,
+bate-papo da sessão, voz, amigos, presença e replays.</li>
+</ol>
+<p>A API voltada para o jogador é a mesma, quer o executável venha do Steam, Epic, GOG, do seu próprio
+lançador, ou <code>https://&lt;slug&gt;.starhermit.com</code>.</p>
+<h2 id="important-boundary-embedded-is-not-silent">Limite importante: incorporado não é silencioso</h2>
+<p>StarHermit atualmente não expõe um privilégio "criar jogador arbitrário" ponto final para um jogo
+servidor. Um contêiner <code>STARHERMIT_SERVER_TOKEN</code> deliberadamente não tem identidade de jogador e não pode cunhar
+contas de jogadores ou personificar jogadores.</p>
+<p>O registro de chave pública também requer um e-mail válido e um link de verificação único. Portanto:</p>
+<ul>
+<li>Você <strong>pode</strong> mantenha o registro dentro da IU da marca do seu jogo e evite o Google/GitHub OAuth e o
+Painel StarHermit.</li>
+<li>Você <strong>não pode</strong> crie silenciosamente uma conta StarHermit apenas a partir de um Steam ID, Epic account ID ou GOG
+IDENTIFICAÇÃO. O jogador deve consentir, fornecer um e-mail e confirmá-lo uma vez.</li>
+<li>Gere e armazene a chave privada de cada jogador em seu dispositivo. Não gere a chave de cada jogador
+em seu servidor dedicado, carregue chaves privadas ou mantenha um banco de dados de chaves de custódia, a menos que você esteja
+assumindo intencionalmente a responsabilidade por todas essas contas.</li>
+</ul>
+<p>Para um jogo nativo, a experiência suportada mais tranquila é: um painel de conta no jogo gera o
+chave, pede e-mail e consentimento, espera enquanto o jogador confirma o link em sua caixa de entrada e então faz login
+com a chave e mantém o token de atualização no cofre de credenciais do sistema operacional. O jogador nunca precisa
+navegue no site StarHermit.
+Um jogador que não consegue fornecer e verificar um e-mail não poderá concluir este fluxo com a API atual.</p>
+<h2 id="architecture-and-trust-boundaries">Arquitetura e limites de confiança</h2>
+<pre><code class="language-text">Steam/Epic/GOG/native client
+  ├─ owns the player's private key
+  ├─ performs public-key registration/login
+  ├─ holds player access + rotating refresh token
+  ├─ optionally links the external platform identity
+  └─ uses a game-scoped launch token for game/social APIs
+                  │
+                  │ REST + ws/v1/games
+                  ▼
+StarHermit API ───────── authenticated command ────────► your container
+  ├─ creates sessions and matchmaking                     ├─ owns simulation
+  ├─ stamps the trusted StarHermit user id                 ├─ never trusts payload identity
+  ├─ persists snapshots/results/elo/achievements           └─ uses narrow server token only
+  └─ supplies session chat, voice, friends, and replays
+</code></pre>
+<p>O cliente do jogo prova quem é o jogador. StarHermit carimba essa identidade no tráfego enviado para o
+recipiente. O contêiner nunca aceita um Steam ID ou ID de usuário fornecido dentro do JSON do jogo como prova
+de identidade.</p>
+<h2 id="prerequisites">Pré-requisitos</h2>
+<p>Você precisa de:</p>
+<ul>
+<li>Uma conta de desenvolvedor StarHermit e um token de acesso total.</li>
+<li>Um jogo registrado que você possui, com um <code>gameSlug</code> e back-end oficial. O ponto final do pacote
+atualiza um jogo existente; ele não cria um registro de jogo nem reserva um slug.</li>
+<li>Hospedagem de contêiner habilitada para sua conta.</li>
+<li>Docker ou outra ferramenta capaz de produzir um arquivo compatível com Docker <code>docker save</code> arquivo.</li>
+<li>Um contêiner implementando <a href="/pt/docs/api/container-games.html#protocol-v1">protocolo de jogo v1</a>.</li>
+</ul>
+<p>Para registro inicial de autoatendimento, use um repositório GitHub verificado com <code>starhermit.txt</code> e um
+válido <code>container.image</code> declaração conforme descrito em <a href="/pt/docs/api/github-games.html">Jogos GitHub</a>. Uma vez que
+Se o jogo existir, os pacotes push podem publicar compilações posteriores de cliente e servidor diretamente.</p>
+<h2 id="part-1-implement-the-container-contract">Parte 1: implementar o contrato de contêiner</h2>
+<p>Seu processo deve ouvir <code>PORT</code> e implementar:</p>
+<table>
+<thead>
+<tr>
+<th>Ponto final</th>
+<th>Responsabilidade</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /health</code></td>
+<td>Retornar <code>200</code> somente quando as sessões podem ser aceitas</td>
+</tr>
+<tr>
+<td><code>GET /describe</code></td>
+<td>Declarar protocolo <code>1</code>, taxa/capacidade de tick solicitada e conquistas</td>
+</tr>
+<tr>
+<td><code>POST /sessions</code></td>
+<td>Crie uma sessão ou restaure uma de <code>snapshot</code></td>
+</tr>
+<tr>
+<td><code>GET /sessions/{id}/snapshot</code></td>
+<td>Retorne um ponto de restauração durável completo</td>
+</tr>
+<tr>
+<td><code>DELETE /sessions/{id}</code></td>
+<td>Liberar a sessão</td>
+</tr>
+<tr>
+<td><code>WS /stream</code></td>
+<td>Receba comandos de jogadores autenticados e emita cargas de jogo</td>
+</tr>
+<tr>
+<td><code>WS /control</code></td>
+<td>Envie instantâneos, conquistas, Elo, resultados e contrapressão</td>
+</tr>
+</tbody>
+</table>
+<p>Validar <code>X-Starhermit-Invoke-Key</code> em cada solicitação HTTP e atualização do WebSocket em relação a
+<code>STARHERMIT_INVOKE_KEY</code>. Isso autentica o StarHermit em seu processo.</p>
+<p>Uma declaração mínima é:</p>
+<pre><code class="language-json">{
+  "protocol": 1,
+  "tickRateHz": 20,
+  "maxSessions": 48,
+  "replays": true,
+  "achievements": [
+    {
+      "key": "first-win",
+      "name": "First Win",
+      "description": "Win a match.",
+      "points": 10
+    }
+  ]
+}
+</code></pre>
+<p><code>replays</code> pede à plataforma para manter o último estado de cada sessão finalizada, que é o que
+<code>GET /api/v1/games/{slug}/replays/{sessionId}</code> serve. Declare isso apenas se o seu jogo quiser replays;
+sem ele, nada é mantido quando a partida termina. Ver
+<a href="/pt/docs/api/container-games.html#get-describe">Servidores de jogos em contêineres — <code>GET /describe</code></a>.</p>
+<p>Os quadros de fluxo de jogo usam:</p>
+<pre><code class="language-text">[1 byte type][16 byte sessionId][16 byte userId][payload...]
+</code></pre>
+<p>Tipo <code>1</code> é um comando de entrada; seu ID de usuário foi carimbado pelo jogador StarHermit autenticado.
+Tipo <code>2</code> é uma carga JSON de saída endereçada a esse jogador ou a todos quando o ID do usuário é
+todos zeros.</p>
+<p>Efeitos duráveis ​​passam <code>/control</code>:</p>
+<pre><code class="language-json">{ "type": "snapshot", "sessionId": "...", "state": { "round": 4 } }
+{ "type": "achievements", "sessionId": "...", "unlocks": { "&lt;userId&gt;": ["first-win"] } }
+{ "type": "elo", "sessionId": "...", "updates": { "&lt;userId&gt;": 1248 } }
+{ "type": "result", "sessionId": "...", "result": { "kind": "win", "winner": "&lt;userId&gt;" } }
+</code></pre>
+<p>StarHermit filtra essas atualizações para os participantes da sessão e chaves de conquistas declaradas. Um resultado é
+terminal. Ver <a href="/pt/docs/api/container-games.html">Servidores de jogos hospedados em contêineres</a> para o protocolo completo,
+contrato de snapshot, isolamento e recuperação.</p>
+<h2 id="part-2-register-the-game-once">Parte 2: registre o jogo uma vez</h2>
+<p>Coloque um manifesto no repositório verificado usado para registro inicial:</p>
+<pre><code class="language-ini">name=Orbit League
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6  # your user ID from GET /api/v1/me, not username
+
+container.image=ghcr.io/your-github-login/orbit-server@sha256:&lt;64-lowercase-hex&gt;
+container.port=8080
+container.health=/health
+container.memory_mb=1024
+container.cpu=1.0
+</code></pre>
+<p>Definir <code>owner</code> para o imutável <code>id</code> retornado por <code>GET /api/v1/me</code>. Não use o nome de usuário da conta ou
+apelido; esses são valores de exibição e podem mudar.</p>
+<p>Registre-o:</p>
+<pre><code class="language-bash">API=https://api.starhermit.com
+ACCESS_TOKEN='developer-access-token'
+
+curl -sS -X POST "$API/api/v1/me/github-games" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repoUrl":"https://github.com/your-github-login/orbit-league"
+  }'
+</code></pre>
+<p>Salve o devolvido <code>id</code> como <code>GAME_ID</code> e <code>gameSlug</code> como <code>GAME_SLUG</code>e confirme se o back-end existe:
+<code>GET $API/api/v1/games/$GAME_SLUG</code> respostas <code>200</code> assim que isso acontecer. Um presente <code>gameSlug</code> sozinho não
+prove – todo jogo verificado tem um, incluído apenas no navegador. Um registro que declara um
+contêiner sem provar que você possui o repositório é recusado com <code>403</code>e registro inicial
+também pode falhar quando a hospedagem do contêiner estiver indisponível ou restrita.</p>
+<p>A imagem apoiada pelo registro no manifesto é suficiente para implantar a primeira versão. A próxima seção
+cobre o caminho de upload direto, útil para CI e para compilações que você não deseja
+plataforma para clonar ou puxar novamente.</p>
+<h2 id="part-3-publish-a-client-and-dedicated-server-bundle">Parte 3: publicar um pacote de cliente e servidor dedicado</h2>
+<h3 id="build-the-archive">Construa o arquivo</h3>
+<p>O upload é um arquivo tar compactado com gzip com este layout:</p>
+<pre><code class="language-text">client/            optional static web client, including the registered launch file
+server/image.tar   optional `docker save` output
+starhermit.txt     the manifest
+</code></pre>
+<p>Pelo menos <code>client/</code> ou <code>server/image.tar</code> deve estar presente.</p>
+<p>Se você publicar por meio do painel da web StarHermit ou do cliente Windows em vez de curl, você não
+construa este arquivo manualmente. Escolha um <strong>pasta de distribuição do servidor</strong> (contenção <code>starhermit.txt</code>
+e <code>image.tar</code>) ou <strong>o <code>image.tar</code> por conta própria</strong>, e o cliente empacota o layout acima. O
+<a href="/pt/docs/starhermit-txt.html"><code>starhermit.txt</code></a> valores - nome de exibição e o <code>container.*</code> botões - são
+campos na caixa de diálogo, pré-preenchidos a partir do manifesto da pasta quando houver um, portanto, um simples <code>image.tar</code>
+publica tão bem.</p>
+<pre><code class="language-bash">rm -rf bundle game-bundle.tar.gz
+mkdir -p bundle/client bundle/server
+
+# Optional hosted web client.
+cp -R dist/. bundle/client/
+
+# Dedicated server image.
+docker build -t orbit-server:release -f Dockerfile.server .
+docker save orbit-server:release -o bundle/server/image.tar
+
+# Keeps the artifact self-describing, and is what the dashboard/desktop clients require.
+cp starhermit.txt bundle/starhermit.txt
+
+tar -C bundle -czf game-bundle.tar.gz .
+</code></pre>
+<p>A imagem deve funcionar com um sistema de arquivos raiz somente leitura, usuário não-root forçado, sem recursos, sem
+volumes, sem internet e apenas um pequeno volume gravável <code>/tmp</code>. Dependências do fornecedor na imagem.</p>
+<h3 id="upload-it">Faça upload</h3>
+<p><code>POST /api/v1/me/github-games/{id}/bundle</code> considera o arquivo como o corpo bruto da solicitação, não como um
+formulário multiparte:</p>
+<pre><code class="language-bash">curl -sS -X POST "$API/api/v1/me/github-games/$GAME_ID/bundle" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game-bundle.tar.gz
+</code></pre>
+<blockquote>
+<p><strong>Um pacote com mais de 100 MB não passará por esse caminho.</strong> O CDN na frente da API
+recusa um corpo de solicitação grande com um <code>413</code> por si só - algo que a plataforma nunca vê, por isso carrega
+não <code>limitBytes</code> e não aparece em nenhum registro que você possa ler. UM <code>docker save</code> de uma imagem de servidor real atinge
+esse tamanho facilmente. Se você ver um <code>413</code> sem <code>limitBytes</code>, isso é isso e não o do seu jogo
+subsídio, que é gigabytes.</p>
+<p>Envie o arquivo idêntico
+<a href="/pt/docs/api/github-games.html#upload-over-a-websocket"><code>ws/v1/game-upload</code></a> em vez disso - quadros após um
+A atualização do WebSocket não é um corpo de solicitação, portanto, o limite não se aplica. Mesmo layout de arquivo, mesmo
+subsídio, mesmas respostas JSON; a única adição é que você deve enviar <code>{"type":"complete"}</code> quando
+o último byte foi eliminado, porque nada será publicado até que você o faça.</p>
+</blockquote>
+<p>Exemplo de resposta:</p>
+<pre><code class="language-json">{
+  "clientPublished": true,
+  "serverImageLoaded": true,
+  "imageDigest": "sha256:4e7d...",
+  "bytesReceived": 318767104
+}
+</code></pre>
+<p>A plataforma:</p>
+<ul>
+<li>troca atomicamente em <code>client/</code>, para que os usuários não vejam uma compilação parcialmente carregada;</li>
+<li>cargas <code>server/image.tar</code>, calcula seu resumo imutável e fixa novamente a implantação;</li>
+<li>coloca o contêiner antigo na fila para ser substituído pela imagem carregada;</li>
+<li>restaura sessões ativas qualificadas de seus instantâneos persistentes.</li>
+</ul>
+<p>Você pode fazer upload apenas do cliente ou apenas da imagem do servidor. Uso de patches somente cliente
+<code>?mode=merge</code> no mesmo endpoint (veja
+<a href="/pt/docs/api/github-games.html#partial-updates-modemerge">atualizações parciais</a>); uma imagem em uma mesclagem ainda é
+carregado inteiro. A franquia de disco de um jogo é <strong>2GB</strong> em starhermit.com (ajustável pelo operador) e pode
+estar sintonizado por jogo; porque um push substitui o conteúdo de um jogo em vez de adicioná-lo, isso é ao mesmo tempo
+o maior empurrão e a maior quantidade de disco que o jogo pode ocupar. <code>413</code> inclui <code>limitBytes</code>; um inválido
+retorno de arquivo ou imagem <code>422</code>; e <code>507</code> significa que o servidor não tem espaço no momento - está verificado
+antes que seu corpo seja lido, então um upload condenado é recusado, em vez de ser feito pela metade. Não coloque links simbólicos,
+links físicos, passagem de caminho ou arquivos fora do layout documentado no arquivo.</p>
+<p>Um upload bem-sucedido não significa que o novo processo já passou nas verificações de integridade. Pesquise os existentes
+<code>GET /api/v1/me/github-games/{id}/deployment</code> visualizar e testar uma sessão real antes de promover o
+construir. Fixar um commit do repositório posteriormente alterna explicitamente a implantação de volta ao conteúdo do repositório.</p>
+<h3 id="switching-an-existing-game-from-server-to-a-container">Mudar um jogo existente de <code>server=</code> para um contêiner</h3>
+<p>Suportado e mantém o jogo: o mesmo id, slug, <code>&lt;uid&gt;.starhermit.com</code> endereço, jogadores,
+tabelas de classificação e conquistas. Não há etapa de registro separada.</p>
+<ol>
+<li>Substituir <code>server=...</code> com o seu <code>container.*</code> bloquear <code>starhermit.txt</code>. Os dois são mutuamente
+exclusivo; um manifesto declarando ambos é recusado.</li>
+<li>Empurre um pacote carregando <code>client/</code> (com esse manifesto) <strong>e</strong> <code>server/image.tar</code>, sobre
+<code>ws/v1/game-upload</code> se for grande.</li>
+<li>A imagem que você carrega é aquela que é executada. UM <code>container.image=</code> linha no mesmo manifesto é
+bom manter, mas o resumo enviado vence.</li>
+<li>Enquete <code>GET /api/v1/me/github-games/{id}/deployment</code> até que leia <code>running</code>, então comece um verdadeiro
+quarto ou jogo.</li>
+</ol>
+<h2 id="part-4-renew-the-containers-platform-token">Parte 4: renovar o token da plataforma do contêiner</h2>
+<p>Na inicialização, o contêiner recebe:</p>
+<pre><code class="language-text">STARHERMIT_API_BASE
+STARHERMIT_GAME_SLUG
+STARHERMIT_SERVER_TOKEN
+STARHERMIT_SERVER_TOKEN_EXPIRES_IN
+STARHERMIT_REFRESH_KEY
+STARHERMIT_INVOKE_KEY
+</code></pre>
+<p><code>STARHERMIT_SERVER_TOKEN</code> é estreito: representa o servidor do jogo, não um jogador. Ele expira depois
+24 horas por padrão. Agende a renovação em aproximadamente metade do
+<code>STARHERMIT_SERVER_TOKEN_EXPIRES_IN</code>:</p>
+<pre><code class="language-http">POST {STARHERMIT_API_BASE}/api/v1/games/{STARHERMIT_GAME_SLUG}/server/token
+X-Starhermit-Refresh-Key: {STARHERMIT_REFRESH_KEY}
+</code></pre>
+<pre><code class="language-json">{ "token": "eyJhbGciOi...", "expiresInSeconds": 86400 }
+</code></pre>
+<p>Nenhum token de portador é necessário para este terminal. Isso permite a recuperação mesmo que o token antigo tenha
+já expirou. Substitua o token na memória atomicamente e agende a próxima renovação do novo
+<code>expiresInSeconds</code>.</p>
+<p>Mantenha os dois segredos de implantação separados:</p>
+<ul>
+<li><code>STARHERMIT_INVOKE_KEY</code> autentica solicitações StarHermit em seu contêiner.</li>
+<li><code>STARHERMIT_REFRESH_KEY</code> autentica seu contêiner ao renovar seu token StarHermit.</li>
+</ul>
+<p>Ambos giram a cada reinicialização do contêiner. Nunca registre-os, devolva-os <code>/describe</code>, coloque-os em um
+instantâneo ou enviá-los para um player.</p>
+<h2 id="part-5-onboard-a-non-starhermit-player-without-oauth">Parte 5: integrar um jogador não StarHermit sem OAuth</h2>
+<p>Execute esse fluxo no jogo ou inicializador nativo, não no contêiner dedicado. O passo a passo completo,
+com código de cliente testado, é <a href="/pt/docs/tutorials/public-key-onboarding.html">Tutorial: jogadores integrados com chave pública</a>;
+resumidamente:</p>
+<ol>
+<li><strong>Gere uma chave por instalação</strong> na primeira inicialização (recomendado Ed25519) e mantenha a chave privada
+no armazenamento de credenciais do sistema operacional. Nunca faça upload e nunca gere chaves de jogadores em seu servidor.</li>
+<li><strong>Peça consentimento e um endereço de e-mail</strong>, então <code>POST /api/v1/auth/public-key/register</code> com
+<code>{ email, keyType, keyData }</code> do dispositivo do jogador. Ele é limitado a um registro por
+endereço e por IP a cada 24 horas (<code>429</code> com <code>Retry-After</code>), então nunca faça proxy através do seu
+servidor – cada jogador compartilharia seu IP.</li>
+<li><strong>Aguarde a confirmação do jogador.</strong> O link enviado por e-mail abre uma página que não muda nada até
+o jogador pressiona Confirm, que cria a conta e anexa a chave; em starhermit.com
+eles então chegam ao painel do StarHermit, para que seu jogo não receba esses tokens. Em vez disso <strong>entra com a chave até que isso seja bem-sucedido</strong>: <code>challenge</code>, assine StarHermit's
+<a href="/pt/docs/tutorials/public-key-onboarding.html#3-sign-in-with-the-key">bytes de desafio exatos</a>, <code>complete</code>. Até o
+jogador confirma, <code>complete</code> respostas <code>401 "Public key not registered or revoked."</code>.</li>
+<li><strong>Mantenha a sessão</strong> com <code>POST /api/v1/auth/refresh</code>e faça login com a chave novamente sempre que
+a atualização falha. Aceite os termos atuais quando <code>GET /api/v1/me</code> relatórios <code>termsAcceptanceRequired</code>
+(tanto as sessões da conta quanto os tokens de lançamento do jogador podem — consulte
+<a href="/pt/docs/api/profile.html#terms-acceptance">aceitação dos termos</a>). O token de implantação do seu contêiner é
+isento de termos; essa isenção não se estende aos seus jogadores.</li>
+</ol>
+<p><strong>Mais dispositivos.</strong> Cada instalação registra sua própria chave com o mesmo endereço de e-mail do jogador, e
+a chave se junta à conta existente. <code>POST /api/v1/me/public-keys</code> não é uma opção para estes jogadores:
+requer uma sessão conectada por meio de um provedor OAuth.</p>
+<h3 id="5-add-a-player-facing-name-and-external-identity">5. Adicione um nome voltado para o jogador e uma identidade externa</h3>
+<p>A conta gerada começa com um <code>pk-...</code> nome de usuário. Deixe o jogador escolher um apelido:</p>
+<pre><code class="language-http">PATCH /api/v1/me
+Authorization: Bearer &lt;access-token&gt;
+Content-Type: application/json
+
+{ "nickname": "RookPilot" }
+</code></pre>
+<p>Você pode associar a conta à plataforma em que o executável está sendo executado:</p>
+<pre><code class="language-http">POST /api/v1/me/identities
+Authorization: Bearer &lt;access-token&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  "provider": "epic",
+  "providerUserId": "epic-account-id",
+  "metadata": "{\"displayName\":\"RookPilot\"}"
+}
+</code></pre>
+<p>Use um <strong>não reservado</strong> nome do provedor (<code>epic</code>, <code>gog</code>ou seu próprio ID de loja). Fazer <strong>não</strong> usar
+<code>steam</code>, <code>google</code>, <code>github</code>, ou qualquer outro nome que a plataforma trate como provedor OAuth — aqueles
+são rejeitados mesmo que esse provedor não esteja configurado. Obtenha o ID externo dessa plataforma
+SDK/sessão autenticado, não de entrada editável do player. Este endpoint associa uma identidade
+com a conta StarHermit; não é por si só prova de propriedade da loja e não deve substituir
+a verificação de tickets da própria plataforma para compras ou proibições.</p>
+<p>A API de biblioteca externa separada é opcional e atualmente usa sincronização de demonstração enquanto o provedor
+as integrações são finalizadas; não é necessário para jogar em servidor dedicado.</p>
+<h2 id="part-6-enter-the-game-and-use-starhermit-services">Parte 6: entre no jogo e use os serviços StarHermit</h2>
+<p>Substituir <code>{slug}</code> nos exemplos HTTP abaixo com <code>GAME_SLUG</code>, o UUID do jogo que você obteve em
+registro. O nome do repositório <code>orbit-league</code> é um nome de exibição/fonte, não o slug da API.</p>
+<h3 id="mint-a-least-privilege-game-token">Crie um token de jogo com privilégios mínimos</h3>
+<p>Use o token de acesso completo uma vez para cunhar um token vinculado ao seu jogo:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/launch-token
+Authorization: Bearer &lt;access-token&gt;
+</code></pre>
+<pre><code class="language-json">{ "token": "eyJhbGciOi...", "expiresInSeconds": 3600 }
+</code></pre>
+<p>Use este token de inicialização para jogos e APIs sociais de sessão permitidas. Atualize-o antes de expirar.
+Mantenha o token completo da conta fora do código do jogo sempre que possível.</p>
+<h3 id="matchmaking">Organização de partidas</h3>
+<pre><code class="language-http">POST /api/v1/games/{slug}/matchmaking
+Authorization: Bearer &lt;game-token&gt;
+</code></pre>
+<p>Enquete <code>GET /api/v1/games/{slug}/matchmaking</code> até <code>status</code> é <code>matched</code>e conecte:</p>
+<pre><code class="language-text">wss://api.starhermit.com/ws/v1/games?sessionId=&lt;sessionId&gt;&amp;access_token=&lt;game-token&gt;
+</code></pre>
+<p>As mensagens do cliente permanecem JSON:</p>
+<pre><code class="language-json">{ "type": "cmd", "data": { "type": "input", "throttle": 0.8 } }
+</code></pre>
+<p>StarHermit converte o comando para o fluxo do contêiner e carimba o StarHermit autenticado
+ID do usuário. Seu contêiner retorna cargas de jogo autorizadas por meio de frames de fluxo tipo 2.</p>
+<h3 id="leaderboards-and-achievements">Classificações e conquistas</h3>
+<p>Cada jogo oficial recebe uma tabela de classificação Elo. Seu container envia alterações ao Elo e declara
+conquista é desbloqueada <code>/control</code>; os clientes leem apenas o estado da plataforma resultante:</p>
+<pre><code class="language-text">GET /api/v1/games/{slug}/achievements
+GET /api/v1/leaderboards/{leaderboardId}/entries
+</code></pre>
+<p>Um cliente Steam/Epic/GOG modificado não pode enviar diretamente as pontuações da tabela de classificação do jogo ou reivindicar um
+conquista de propriedade do jogo.</p>
+<h3 id="session-chat-and-voice">Bate-papo e voz da sessão</h3>
+<p><code>GET /api/v1/games/{slug}/sessions/{sessionId}</code> retorna <code>chatConversationId</code>. Sessão
+as conversas permitem que os participantes conversem e usem a voz mesmo quando não são amigos.</p>
+<p>Fluxo de voz típico:</p>
+<ol>
+<li><code>GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;</code>.</li>
+<li>Se necessário, <code>POST /api/v1/voice/rooms</code> com o ID da conversa.</li>
+<li><code>POST /api/v1/voice/rooms/{roomId}/join</code>.</li>
+<li>Conectar <code>wss://api.starhermit.com/ws/v1/voice?roomId=&lt;roomId&gt;&amp;access_token=&lt;game-token&gt;</code>.</li>
+</ol>
+<p>A mesma conta também permite amigos, presença, convites para jogos, replays e identidade de perfil em
+todas as construções de vitrines. Mantenha uma chave/conta StarHermit por pessoa em vez de criar uma nova conta
+para cada partida ou lançamento em loja.</p>
+<h2 id="production-checklist">Lista de verificação de produção</h2>
+<h3 id="publishing">Publicação</h3>
+<ul>
+<li>[] O jogo de propriedade existente tem um valor não nulo <code>gameSlug</code>.</li>
+<li>[] O contêiner rejeita uma chave de invocação errada ou ausente.</li>
+<li>[] A chave de invocação, a chave de atualização e o token do servidor são lidos do ambiente no início do processo, nunca inseridos na imagem ou armazenados em cache no disco (todos os três giram a cada início do contêiner).</li>
+<li>[ ] <code>/health</code> não retorna <code>200</code> antes que o estado possa ser aceito.</li>
+<li>[] Pacote usa raw <code>application/gzip</code>, não codificação multiparte.</li>
+<li>[] A imagem funciona somente leitura, não root, offline e sem volumes.</li>
+<li>[] O status de implantação e uma sessão real de matchmaking são testados após o upload.</li>
+<li>[] A atualização do token do servidor é executada antes da metade de sua vida útil e troca os tokens atomicamente.</li>
+<li>[] Nenhum segredo de implantação é registrado ou persistido em instantâneos.</li>
+</ul>
+<h3 id="player-onboarding">Integração do jogador</h3>
+<ul>
+<li>[] O par de chaves é gerado no dispositivo do player e a chave privada usa armazenamento seguro.</li>
+<li>[] A criação da conta é divulgada e consentida.</li>
+<li>[] A verificação de e-mail é concluída uma vez; <code>429 Retry-After</code> é respeitado.</li>
+<li>[] Registro e tokens de jogador não passam pelo servidor dedicado.</li>
+<li>[] Os tokens de acesso/atualização são armazenados com segurança e a rotação de atualização é serializada.</li>
+<li>[] IDs externos vêm do estado autenticado do Steam/Epic/GOG SDK.</li>
+<li>[] A jogabilidade usa um token no escopo do jogo após a configuração inicial da conta.</li>
+<li>[ ] Atendimentos do cliente <code>achievement</code>, <code>resumed</code>, e <code>abandoned</code> quadros de jogo.</li>
+</ul>
+<h2 id="reference-pages">Páginas de referência</h2>
+<ul>
+<li><a href="/pt/docs/api/auth.html">Autenticação</a></li>
+<li><a href="/pt/docs/api/container-games.html">Servidores de jogos hospedados em contêineres</a></li>
+<li><a href="/pt/docs/api/github-games.html#push-a-game-bundle">Jogos GitHub e upload de pacote</a></li>
+<li><a href="/pt/docs/api/games.html">API de jogos</a></li>
+<li><a href="/pt/docs/api/profile.html">Perfil e identidades vinculadas</a></li>
+<li><a href="/pt/docs/api/leaderboards.html">Tabelas de classificação</a></li>
+<li><a href="/pt/docs/api/achievements.html">Conquistas</a></li>
+<li><a href="/pt/docs/api/chat.html">Bater papo</a></li>
+<li><a href="/pt/docs/api/voice.html">Voz</a></li>
+</ul>
+
+{% endraw %}

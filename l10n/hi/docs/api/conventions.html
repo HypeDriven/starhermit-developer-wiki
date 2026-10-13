@@ -1,0 +1,192 @@
+---
+layout: "wiki"
+lang: "hi"
+title: "एपीआई कन्वेंशन"
+source_url: "/docs/api/conventions.html"
+source_path: "docs/api/conventions.md"
+source_hash: "3772241b0e04e8e2f4e4ecf1c0ef8e2d956c065446a78c7df107b6205de258d6"
+translation: "machine"
+permalink: "/hi/docs/api/conventions.html"
+---
+{% raw %}
+<h1 id="api-conventions">एपीआई कन्वेंशन</h1>
+<p>बाकी उपयोग करता है <code>https://api.starhermit.com/api/v1/...</code>; सॉकेट का उपयोग <code>wss://api.starhermit.com/ws/v1/...</code>.
+होस्ट किए गए गेम कॉल कर सकते हैं <code>/api/v1/...</code> और <code>/ws/v1/...</code> अपने स्वयं के मूल पर. मूल ग्राहक इसका उपयोग करते हैं
+सार्वजनिक एपीआई मूल. किसी अन्य मूल पर एक विकास पृष्ठ को खेल पर एक अनुमत CORS मूल की आवश्यकता होती है
+मेज़बान; अकेले एसडीके आधार यूआरएल सेट करने से उस मूल को अधिकृत नहीं किया जा सकता है।</p>
+<h2 id="requests-and-responses">अनुरोध और प्रतिक्रियाएँ</h2>
+<p>JSON के साथ भेजें <code>Content-Type: application/json</code>, कच्चे gzip बंडल अपलोड को छोड़कर। JSON सदस्य नाम
+कैमलकेस हैं। REST में वाहक क्रेडेंशियल भेजें <code>Authorization</code> शीर्षक.</p>
+<table>
+<thead>
+<tr>
+<th>प्रतिक्रिया</th>
+<th>इसे कैसे पढ़ें</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>200</code> / <code>201</code> JSON</td>
+<td>प्रलेखित वस्तु या सरणी को पार्स करें; अतिरिक्त फ़ील्ड सहन करें</td>
+</tr>
+<tr>
+<td><code>204</code></td>
+<td>बिना शरीर के सफलता; फ़ोन मत करो <code>response.json()</code></td>
+</tr>
+<tr>
+<td><code>302</code></td>
+<td>ब्राउज़र साइन-इन/पुष्टि पुनर्निर्देशन; OAuth पेज लाने के बजाय नेविगेट करें</td>
+</tr>
+<tr>
+<td><code>304</code></td>
+<td>सशर्त पढ़ें अपरिवर्तित; आपके पास पहले से मौजूद डेटा को बनाए रखें</td>
+</tr>
+<tr>
+<td>छवि, अनुलग्नक, क्लाउड सेव</td>
+<td>प्रतिक्रिया सामग्री प्रकार और समापन बिंदु अनुबंध का उपयोग करके बाइट्स पढ़ें</td>
+</tr>
+<tr>
+<td>गलती</td>
+<td>पहले स्थिति पढ़ें, फिर रक्षात्मक रूप से शरीर का विश्लेषण करें</td>
+</tr>
+</tbody>
+</table>
+<p>सामान्य त्रुटि प्रपत्र है <code>{ "error": "...", "code": "..." }</code>, वैकल्पिक फ़ील्ड के आधार पर
+समापन बिंदु. <code>error</code> प्रायः मानव-पठनीय है; <code>code</code> जहां प्रदान किया गया है वहां एक स्थिर विभेदक है।
+शर्तें और कुछ अन्य समापन बिंदु एक विवेचक को सीधे अंदर डाल देते हैं <code>error</code>. कुछ समापनबिंदु सादे लौट आते हैं
+टेक्स्ट, एक खाली बॉडी, या एक सत्यापन समस्या विवरण ऑब्जेक्ट <code>title</code>, <code>status</code> और <code>errors</code>.
+ग्राहकों को यह नहीं मानना ​​चाहिए कि प्रत्येक असफल प्रतिक्रिया JSON है या उसमें समान फ़ील्ड हैं।</p>
+<pre><code class="language-js">export async function readResponse(response) {
+  if (response.status === 204 || response.status === 304) return null;
+  const text = await response.text();
+  let body;
+  try { body = text ? JSON.parse(text) : null; } catch { body = text || null; }
+  if (!response.ok) {
+    const message = (body &amp;&amp; typeof body === 'object' &amp;&amp; (body.error || body.message || body.title))
+      || (typeof body === 'string' &amp;&amp; body) || response.statusText;
+    throw Object.assign(new Error(message), {
+      status: response.status, code: body?.code, body,
+      retryAfter: response.headers.get('Retry-After'),
+    });
+  }
+  return body;
+}
+</code></pre>
+<h2 id="time-sizes-and-nulls">समय, आकार और शून्यता</h2>
+<ul>
+<li><code>createdAt</code>, <code>updatedAt</code>, <code>finishedAt</code>, और समान खाता/संसाधन टाइमस्टैम्प आईएसओ 8601 स्ट्रिंग हैं
+ऑफसेट के साथ. अनुपस्थित व्यवहार करें या <code>null</code> वैकल्पिक मान अनुपलब्ध हैं।</li>
+<li><code>ctx.now</code>, <code>summary.deadline</code>, सत्र-सूची <code>deadline</code>, और <code>/time.serverTime</code> पूर्णांक यूनिक्स हैं
+<strong>मिलीसेकंड</strong>. के साथ कनवर्ट करें <code>new Date(value)</code>, नहीं <code>Date.parse(value)</code>.</li>
+<li>बाइट्स में सीमा मान बाइट्स हैं, बेस64 वर्ण नहीं। बेस64 JSON अपलोड इससे बड़ा है
+डिकोड की गई सामग्री। उपलब्ध होने पर समापन बिंदु द्वारा रिपोर्ट की गई प्रभावी सीमा का उपयोग करें।</li>
+<li>चूक, <code>null</code>, और एक खाली वस्तु सार्वभौमिक रूप से समतुल्य नहीं है। सेटिंग्स <code>PATCH</code> ए हटाता है
+नामित कुंजी के साथ <code>null</code>; एकल-कुंजी सेटिंग्स <code>PUT</code> भंडार <code>null</code> एक मूल्य के रूप में. संग्रह <code>PUT</code> प्रतिस्थापित करता है
+पूरा नक्शा. प्रत्येक समापन बिंदु के अद्यतन नियम पढ़ें।</li>
+<li>एक सेटिंग पैच मर्ज हो जाता है <strong>शीर्ष-स्तरीय कुंजियाँ</strong>. आपूर्ति किया गया ऑब्जेक्ट मान उस कुंजी के मान को प्रतिस्थापित कर देता है;
+यह नेस्टेड संपत्तियों को पुनरावर्ती रूप से मर्ज नहीं करता है।</li>
+</ul>
+<h2 id="pagination">पृष्ठ पर अंक लगाना</h2>
+<p>पेजिंग एक आधारित है <code>page</code>/<code>pageSize</code> समर्थित हैं. अलग-अलग एपीआई जानबूझकर अलग-अलग हैं
+प्रतिक्रिया लिफाफे; ऐसे पार्सर का पुन: उपयोग न करें जो एकल गिनती-फ़ील्ड नाम मानता हो।</p>
+<table>
+<thead>
+<tr>
+<th>क्षेत्र</th>
+<th>संग्रह आकार</th>
+<th>डिफ़ॉल्ट/अधिकतम पृष्ठ आकार</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>सॉफ़्टवेयर शीर्षक और निर्माण</td>
+<td><code>{ items, totalCount, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>चैट संदेश</td>
+<td><code>{ conversationId, items, totalCount, page, pageSize }</code></td>
+<td>50 / 100</td>
+</tr>
+<tr>
+<td>लीडरबोर्ड प्रविष्टियाँ</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>बाहरी सॉफ्टवेयर</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20; एक छोटे सकारात्मक पृष्ठ आकार का अनुरोध करें</td>
+</tr>
+<tr>
+<td>रिपोर्ट, कंटेनर क्रैश रिकॉर्ड, मॉडरेशन सूचियाँ</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>सत्र, मित्र, खेल सूचियाँ, उपलब्धियाँ</td>
+<td>सरणियों</td>
+<td>समापन बिंदु-विशिष्ट कैप; कोई सामान्य अगला पृष्ठ कर्सर नहीं</td>
+</tr>
+<tr>
+<td>मॉडरेशन निकासी फ़ीड</td>
+<td>कर्सर आधारित</td>
+<td>लौटाया गया कर्सर रखें; से उबरना <code>410</code> जैसा कि प्रलेखित है</td>
+</tr>
+</tbody>
+</table>
+<p>रिस्पॉन्स पेजिंग मेटाडेटा जहां उपलब्ध हो वहां परोसे गए पेज को दर्शाता है। <a href="/hi/#api-reference">संदर्भ पृष्ठ</a>
+और <a href="/hi/docs/api/contracts.html">मशीन-पठनीय अनुबंध</a> समापन बिंदु-विशिष्ट क्वेरी पैरामीटर का वर्णन करें।</p>
+<h2 id="retry-and-concurrency">पुनः प्रयास करें और समवर्ती करें</h2>
+<table>
+<thead>
+<tr>
+<th>परिस्थिति</th>
+<th>कार्रवाई</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>खाता पहुंच टोकन अस्वीकार कर दिया गया <code>401</code></td>
+<td>एक साझा ताज़ा अनुरोध का उपयोग करके, एक बार ताज़ा करें; यदि मना कर दिया जाए तो साइन इन करें</td>
+</tr>
+<tr>
+<td>लॉन्च टोकन की समय सीमा समाप्त हो गई</td>
+<td>साइन-इन/लॉन्चर के माध्यम से एक नया टोकन प्राप्त करें; समाप्त हो चुके टोकन स्वयं को नवीनीकृत नहीं कर सकते</td>
+</tr>
+<tr>
+<td><code>403 terms_acceptance_required</code></td>
+<td>वर्तमान शर्तों को प्रदर्शित करें और स्पष्ट रूप से स्वीकार करें, फिर पुनः प्रयास करें</td>
+</tr>
+<tr>
+<td>अन्य <code>403</code></td>
+<td>दायरा, सदस्यता, अनुमतियाँ, या खाता स्थिति का समाधान करें; एक लूप में ताज़ा न करें</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>डुप्लिकेट/स्थिति/संशोधन विवाद का समाधान करें; संसाधन बदलने से पहले दोबारा पढ़ें</td>
+</tr>
+<tr>
+<td>बादल-बचाओ <code>412</code></td>
+<td>नया संस्करण लोड करें और गेम को मर्ज होने दें या इसे अपनाने दें</td>
+</tr>
+<tr>
+<td><code>429</code> या अस्थायी <code>503</code></td>
+<td>सम्मान <code>Retry-After</code>, घबराना जोड़ें, और बाध्य पुनः प्रयास करें</td>
+</tr>
+<tr>
+<td>लिखने के दौरान नेटवर्क विफलता</td>
+<td>परिणाम अज्ञात हो सकता है; कार्रवाई दोहराने से पहले संसाधन स्थिति का निरीक्षण करें</td>
+</tr>
+</tbody>
+</table>
+<p><code>Retry-After</code> सेकंड या HTTP दिनांक हो सकता है। एक निष्क्रिय हेडर का आविष्कार न करें: एपीआई ऐसा नहीं करता है
+एक सामान्य निष्क्रियता-कुंजी तंत्र का वादा करें। सत्र निर्माण का पुनः प्रयास या आमंत्रण बनाया जा सकता है
+अन्य संसाधन या पहले के साथ संघर्ष। पढ़ने और स्पष्ट रूप से निष्क्रिय संचालन को प्राथमिकता दें
+स्वचालित पुनः प्रयास. ताज़ा रोटेशन, पूर्ण अपलोड, शर्तों की सहमति, और टर्मिनल गेम परिणाम प्रत्येक
+उनके अपने नियम हैं.</p>
+<p>तुलना-और-स्वैप लेखन के लिए क्लाउड-सेव ईटैग, रूम का उपयोग करें <code>expectedRevision</code>, या मॉडरेशन संशोधन
+जहां समर्थन किया गया. एक सफल लेखन आवश्यक रूप से एक पूर्ण कंटेनर परिनियोजन नहीं है; इसकी पुष्टि करें
+खिलाड़ियों को नए बिल्ड में भेजने से पहले की स्थिति। देखना <a href="/hi/docs/troubleshooting.html">समस्या निवारण</a>.</p>
+
+{% endraw %}

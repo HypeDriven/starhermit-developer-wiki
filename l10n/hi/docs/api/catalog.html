@@ -1,0 +1,365 @@
+---
+layout: "wiki"
+lang: "hi"
+title: "सॉफ्टवेयर कैटलॉग"
+source_url: "/docs/api/catalog.html"
+source_path: "docs/api/catalog.md"
+source_hash: "0dc7378c084cb717711091cd651d3fc514625f8737814c055edb6ab2fe19467a"
+translation: "machine"
+permalink: "/hi/docs/api/catalog.html"
+---
+{% raw %}
+<h1 id="software-catalog">सॉफ्टवेयर कैटलॉग</h1>
+<p>सॉफ़्टवेयर कैटलॉग में ब्राउज़िंग और शीर्षकों का दावा करना, लिस्टिंग बिल्ड, डाउनलोडिंग, क्लाउड सेव, विशलिस्ट और रेटिंग शामिल हैं। पढ़ी गई बातें गुमनाम हैं; लिखने के लिए JWT की आवश्यकता होती है।</p>
+<p>आधार यूआरएल: <code>https://api.starhermit.com</code>. सभी मार्ग नीचे हैं <code>/api/v1/...</code>.</p>
+<h2 id="browsing-and-claiming-titles">शीर्षकों को ब्राउज़ करना और दावा करना</h2>
+<table>
+<thead>
+<tr>
+<th>तरीका</th>
+<th>पथ</th>
+<th>प्रमाणीकरण</th>
+<th>विवरण</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/software</code></td>
+<td>गुमनाम</td>
+<td>कैटलॉग खोजें और पेज करें</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/software/{id}</code></td>
+<td>गुमनाम</td>
+<td>एक शीर्षक प्राप्त करें, या 404</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/software/{id}/builds?page=&amp;pageSize=</code></td>
+<td>गुमनाम</td>
+<td>किसी शीर्षक के लिए बिल्ड की पृष्ठांकित सूची</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/software/{id}/claim</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>एक निःशुल्क उपाधि का स्व-दावा करें, एक पात्रता प्रदान करें</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/software/{id}/launch</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>एक लॉन्च सत्र प्रारंभ करें (पात्रता की आवश्यकता है)</td>
+</tr>
+</tbody>
+</table>
+<p><code>GET /api/v1/software</code> क्वेरी पैरामीटर स्वीकार करता है <code>q</code> (पूर्ण पाठ), <code>category</code>, <code>tag</code>, <code>publisherId</code>, <code>platform</code>, <code>releaseStatus</code>, <code>sort</code>, <code>page</code>, और <code>pageSize</code>. वैध <code>sort</code> मान: <code>name</code>, <code>name_desc</code>, <code>created</code>, <code>created_desc</code>, <code>updated</code>, <code>updated_desc</code>. यह एक लौटाता है <code>PagedResult</code>:</p>
+<pre><code class="language-json">{
+  "items": [
+    {
+      "id": "…",
+      "name": "…",
+      "description": "…",
+      "publisherId": "…",
+      "category": "…",
+      "platform": "…",
+      "releaseStatus": "…",
+      "tags": ["…"],
+      "priceCents": 0,
+      "createdAt": "…",
+      "updatedAt": "…"
+    }
+  ],
+  "totalCount": 1,
+  "page": 1,
+  "pageSize": 20
+}
+</code></pre>
+<p><code>GET /api/v1/software/{id}/builds</code> रिटर्न ए <code>PagedResult</code> का <code>SoftwareBuild</code>:</p>
+<pre><code class="language-json">{
+  "items": [
+    {
+      "id": "…",
+      "titleId": "…",
+      "version": "…",
+      "releaseDate": "…",
+      "releaseNotes": "…",
+      "metadata": "…",
+      "createdAt": "…",
+      "updatedAt": "…"
+    }
+  ],
+  "totalCount": 1,
+  "page": 1,
+  "pageSize": 20
+}
+</code></pre>
+<p><code>POST /api/v1/software/{id}/claim</code> केवल निःशुल्क शीर्षकों के लिए काम करता है (<code>priceCents == 0</code>); यह कॉल करने वाले को एक पात्रता देता है और 204 लौटाता है। भुगतान किए गए शीर्षकों के लिए यह 402 लौटाता है:</p>
+<pre><code class="language-json">{"error": "purchasing is not available yet"}
+</code></pre>
+<p><code>POST /api/v1/software/{id}/launch</code> एक पात्रता की आवश्यकता है (403 अन्यथा) और एक रिटर्न देता है <code>LaunchSession</code>:</p>
+<pre><code class="language-json">{
+  "launchId": "…",
+  "startTime": "…"
+}
+</code></pre>
+<p>यह एक लॉन्च गतिविधि को रिकॉर्ड करता है, जो उपयोगकर्ता की गोपनीयता सेटिंग्स के कहने पर छिपी रहती है (देखें)। <a href="/hi/docs/api/profile.html">profile.md</a>). के साथ सत्र समाप्त करें <code>POST /api/v1/activity/launches/{id}/end</code> - देखना <a href="/hi/docs/api/activity.html">activity.md</a>. उपयोगकर्ता की पात्रताएँ इसके माध्यम से सूचीबद्ध हैं <code>GET /api/v1/me/entitlements</code> (देखना <a href="/hi/docs/api/profile.html">profile.md</a>).</p>
+<h2 id="downloads">डाउनलोड</h2>
+<table>
+<thead>
+<tr>
+<th>तरीका</th>
+<th>पथ</th>
+<th>प्रमाणीकरण</th>
+<th>विवरण</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/software/{id}/download</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>एक हस्ताक्षरित डाउनलोड यूआरएल प्राप्त करें (पात्रता की आवश्यकता है)</td>
+</tr>
+</tbody>
+</table>
+<p>एक पात्रता की आवश्यकता है (403 अन्यथा)। रिटर्न:</p>
+<pre><code class="language-json">{
+  "downloadUrl": "…"
+}
+</code></pre>
+<p>यूआरएल नवीनतम बिल्ड की पहली डाउनलोड करने योग्य संपत्ति को लक्षित करता है। कॉल एक डाउनलोड गतिविधि रिकॉर्ड करती है।
+कैटलॉग बाइनरी वितरण वर्तमान में एक पूर्वावलोकन है; लौटाए गए यूआरएल के उत्पादन की गारंटी नहीं है
+डाउनलोड. देखना <a href="/hi/docs/availability.html">सुविधा उपलब्धता</a> इस प्रकाशन प्रवाह पर भरोसा करने से पहले।</p>
+<h2 id="cloud-saves">क्लाउड सेव</h2>
+<p>प्रति गेम एक स्लॉट, अंतिम लेखन जीतता है। सभी मार्गों के लिए JWT की आवश्यकता होती है - एक पूर्ण उपयोगकर्ता टोकन, या एक गेम
+उस गेम के अपने स्लॉट के लिए लॉन्च टोकन (नीचे)।</p>
+<p>10 एमबी की सीमा (10,485,760 बाइट्स) लागू होती है <strong>डिकोडेड सेव</strong>, अनुरोध नहीं. <code>PUT</code> लेता है
+JSON में बेस64-एनकोडेड को सेव करें, इसलिए बॉडी सेव से लगभग एक तिहाई बड़ी है - लगभग 14 एमबी
+टोपी - और एपीआई इसे स्वीकार करता है।</p>
+<table>
+<thead>
+<tr>
+<th>सीमा (प्रति खाता)</th>
+<th>गलती करना</th>
+<th>इनकार</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>एक सेव, डिकोड किया गया</td>
+<td>10 एमबी</td>
+<td><code>413 cloud_save_too_large</code></td>
+</tr>
+<tr>
+<td>बचत के साथ खेल</td>
+<td>200</td>
+<td><code>409 cloud_save_slots_exhausted</code> (एक नए गेम के लिए बचत)</td>
+</tr>
+<tr>
+<td>सब मिलकर बचाते हैं</td>
+<td>1 जीबी</td>
+<td><code>507 cloud_save_quota_exceeded</code>, साथ <code>used</code></td>
+</tr>
+<tr>
+<td>अपलोड</td>
+<td>30 प्रति मिनट</td>
+<td><code>429</code>, साथ <code>Retry-After</code></td>
+</tr>
+</tbody>
+</table>
+<p>प्रत्येक इनकार में लागू संख्या को इस प्रकार बताया गया है <code>limit</code>. कुल को खाते के ऊपर मापा जाता है <em>अन्य</em>
+बचाता है, इसलिए एक स्लॉट को हमेशा किसी बड़ी चीज़ से अधिलेखित किया जा सकता है। ऑपरेटर इनमें से कोई भी बदल सकते हैं
+ये एक खाते के लिए.</p>
+<table>
+<thead>
+<tr>
+<th>तरीका</th>
+<th>पथ</th>
+<th>प्रमाणीकरण</th>
+<th>विवरण</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}/info</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>मेटाडेटा सहेजें: <code>{ exists, sizeBytes, updatedAt? }</code></td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}</code></td>
+<td>जेडब्ल्यूटी</td>
+<td><code>application/zip</code> बाइट्स, 404 यदि कोई नहीं</td>
+</tr>
+<tr>
+<td>रखना</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>एक सेव अपलोड करें (डीकोडेड सेव ≤ 10 एमबी, <code>gameKey</code> ≤ 300 वर्ण)</td>
+</tr>
+</tbody>
+</table>
+<p>शरीर रखो:</p>
+<pre><code class="language-json">{
+  "dataBase64": "…"
+}
+</code></pre>
+<p>प्रतिक्रिया दें:</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "sizeBytes": 0,
+  "updatedAt": "…"
+}
+</code></pre>
+<h3 id="saving-from-inside-a-game-launch-token">गेम के अंदर से बचत (लॉन्च टोकन)</h3>
+<p>अपने लॉन्च टोकन के साथ चलने वाला गेम खिलाड़ी के सेव को पढ़ और लिख सकता है <strong>वह खेल</strong>.
+आपका गेम जहां भी चलता है, खुद को सेव कर लेता है - ब्राउज़र, या स्टारहर्मिट डेस्कटॉप ऐप, जो चलता है
+गेम को ब्राउज़र में भी होस्ट किया जाता है - इसलिए सेव उनके बीच के प्लेयर का अनुसरण करता है।</p>
+<p>कुंजी है <code>game:&lt;gameId&gt;</code>, कहाँ <code>&lt;gameId&gt;</code> आपके गेम की आईडी है - उसके स्लग के समान मूल्य, इसका
+<code>&lt;gameId&gt;.starhermit.com</code> पता, और <code>game_scope</code> लॉन्च टोकन का दावा:</p>
+<pre><code class="language-js">const key = `game:${gameScope}`;            // e.g. "game:3fa85f64-5717-4562-b3fc-2c963f66afa6"
+
+// Load on startup — 404 means no save yet.
+const res = await fetch(`/api/v1/me/cloud-saves/${key}`, { headers: { Authorization: `Bearer ${launchToken}` } });
+if (res.status !== 404 &amp;&amp; !res.ok) throw new Error(`Save load failed: ${res.status}`);
+const save = res.status === 404 ? null : new Uint8Array(await res.arrayBuffer());
+const etag = res.headers.get("ETag");
+if (save &amp;&amp; !etag) throw new Error("Save version unavailable; do not overwrite it.");
+// Validate/decode your own save format before adopting it or enabling uploads.
+
+// Save at checkpoints, not every frame.
+const written = await fetch(`/api/v1/me/cloud-saves/${key}`, {
+  method: "PUT",
+  headers: {
+    Authorization: `Bearer ${launchToken}`, "Content-Type": "application/json",
+    ...(etag ? { "If-Match": etag } : { "If-None-Match": "*" }),
+  },
+  body: JSON.stringify({ dataBase64: base64(zipBytes) }), // Your ZIP encoder and bytes.
+});
+if (written.status === 412) throw new Error("Another device saved. Reload before writing again.");
+if (!written.ok) throw new Error(`Save write failed: ${written.status}`);
+const acknowledgement = await written.json(); // Retain acknowledgement.etag for your next write.
+</code></pre>
+<ul>
+<li><strong>केवल वही सटीक कुंजी.</strong> कोई अन्य कुंजी - किसी अन्य गेम की, किसी स्टोर गेम की, या किसी भिन्न वर्तनी की
+आपका (अपर केस, नंगे आईडी) - है <code>403</code> लॉन्च टोकन के लिए. इसमें शामिल है <code>github:&lt;gameId&gt;</code>,
+जब कोई खिलाड़ी आपके गेम के लिए स्थानीय सेव फ़ोल्डर को सिंक करता है तो डेस्कटॉप ऐप अलग स्लॉट का उपयोग करता है
+वह सिंक कभी भी आपके गेम द्वारा लिखे गए सेव को ओवरराइट नहीं कर सकता है।</li>
+<li><strong>कोई भी प्रारूप.</strong> प्लेटफ़ॉर्म कभी भी सेव नहीं खोलता; जो कुछ भी आपका गेम वापस पढ़ सकता है उसे संग्रहीत करें (यह है
+के रूप में सेवा की <code>application/zip</code> ध्यान दिए बगैर)। 10 एमबी तक.</li>
+<li><strong>बिना शर्त लेखन अंतिम लेखन जीत है</strong>, बिना किसी इतिहास के। पता लगाने के लिए सशर्त लेखन का उपयोग करें
+दो टैब/डिवाइस एक साथ सहेजे जा रहे हैं। प्रारंभ पर लोड करें और अग्रभूमि चौकियों पर सहेजें। पृष्ठ-निकास
+अपलोड सर्वोत्तम प्रयास हैं और ब्राउज़र बॉडी-आकार की सीमाएं हैं; देखना <a href="/hi/docs/tutorials/cloud-save-sync.html">सुरक्षित बचत नुस्खा</a>.</li>
+<li><strong>प्रत्येक सेव का एक संस्करण होता है।</strong> इसका <code>ETag</code> डाउनलोड पर है, चालू <code>/info</code> (के रूप में भी <code>etag</code>) और आगे
+द <code>PUT</code> प्रतिक्रिया। के रूप में इसे वापस भेजें <code>If-Match</code> और लिखना तभी होता है जब किसी ने नहीं बचाया हो
+चूँकि; अन्यथा <code>412 {"error":"precondition_failed","etag":"&lt;current&gt;"}</code> आपको संस्करण बताता है
+भार. <code>If-Match: *</code> मौजूदा बचत की आवश्यकता है; <code>If-None-Match: *</code> केवल तभी लिखता है जब कोई नहीं होता।
+न ही हेडर के साथ ए <code>PUT</code> बिना शर्त है - अंतिम लेखन जीतता है। ए <code>GET</code> साथ
+<code>If-None-Match: &lt;etag&gt;</code> जवाब <code>304</code> जब आपके पास पहले से ही नवीनतम सेव हो।</li>
+<li>बिना होस्टेड लिस्टिंग वाले गेम (ऑपरेटर द्वारा प्रदत्त गेम) में कोई स्लॉट नहीं होता है।</li>
+</ul>
+<p>छोटी, बार-बार बदलती प्राथमिकताएँ इसमें शामिल हैं <a href="/hi/docs/api/games.html#per-player-game-settings">प्रति-खिलाड़ी सेटिंग्स</a>
+बजाय; वे लॉन्च टोकन के साथ भी उपलब्ध हैं और आंशिक अपडेट का समर्थन करते हैं।</p>
+<h2 id="wishlist">इच्छा-सूची</h2>
+<p>सभी मार्गों के लिए JWT की आवश्यकता होती है।</p>
+<table>
+<thead>
+<tr>
+<th>तरीका</th>
+<th>पथ</th>
+<th>प्रमाणीकरण</th>
+<th>विवरण</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/me/wishlist</code></td>
+<td>जेडब्ल्यूटी</td>
+<td><code>{ titleIds: guid[] }</code></td>
+</tr>
+<tr>
+<td>रखना</td>
+<td><code>/api/v1/me/wishlist/{titleId}</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>इच्छा सूची में जोड़ें, 204 (निष्क्रिय)</td>
+</tr>
+<tr>
+<td>मिटाना</td>
+<td><code>/api/v1/me/wishlist/{titleId}</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>इच्छा सूची से हटाएँ, 204</td>
+</tr>
+</tbody>
+</table>
+<h2 id="ratings">रेटिंग</h2>
+<p>सभी मार्गों के लिए JWT की आवश्यकता होती है। यूनिफ़ॉर्म गेम कुंजी एक कैटलॉग गाइड है, या <code>"provider:externalId"</code> बाहरी खेलों के लिए (देखें <a href="/hi/docs/api/external-libraries.html">external-libraries.md</a>).</p>
+<table>
+<thead>
+<tr>
+<th>तरीका</th>
+<th>पथ</th>
+<th>प्रमाणीकरण</th>
+<th>विवरण</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>रखना</td>
+<td><code>/api/v1/me/ratings</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>किसी गेम के लिए मेरी रेटिंग बढ़ाएँ</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/ratings/query</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>बैच-फ़ेच रेटिंग सारांश</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/ratings/reviews?key=&amp;top=</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>किसी गेम के लिए समीक्षाएं (<code>top</code> डिफ़ॉल्ट 10)</td>
+</tr>
+</tbody>
+</table>
+<p>शरीर रखो:</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "stars": 4,
+  "review": "…"
+}
+</code></pre>
+<p><code>stars</code> 0-5 है; <code>review</code> वैकल्पिक है. प्रतिक्रिया एक है <code>RatingSummaryDto</code>:</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "average": 4.5,
+  "count": 12,
+  "myStars": 4
+}
+</code></pre>
+<p><code>POST /api/v1/ratings/query</code> शरीर और प्रतिक्रिया:</p>
+<pre><code class="language-json">{
+  "keys": ["…", "…"]
+}
+</code></pre>
+<p>रिटर्न <code>RatingSummaryDto[]</code>. <code>GET /api/v1/ratings/reviews</code> रिटर्न <code>GameReviewDto[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "userId": "…",
+    "username": "…",
+    "stars": 4,
+    "review": "…",
+    "timestamp": "…"
+  }
+]
+</code></pre>
+<p>देखना <a href="/hi/docs/api/conventions.html#requests-and-responses">एपीआई कन्वेंशन</a> त्रुटि पार्सिंग के लिए. संबंधित: <a href="/hi/docs/api/achievements.html">achievements.md</a>, <a href="/hi/docs/api/leaderboards.html">leaderboards.md</a>.</p>
+<p>देखना <a href="/hi/docs/credentials.html">क्रेडेंशियल अनुकूलता</a> और <a href="/hi/docs/api/contracts.html">मशीन-पठनीय अनुबंध</a>.</p>
+
+{% endraw %}

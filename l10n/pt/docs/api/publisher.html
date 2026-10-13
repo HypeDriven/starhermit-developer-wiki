@@ -1,0 +1,387 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Editor"
+source_url: "/docs/api/publisher.html"
+source_path: "docs/api/publisher.md"
+source_hash: "9e89984a9a4079848d8caad7471dca1a8215f68459ac2bf1078bd011cecfc2bf"
+translation: "machine"
+permalink: "/pt/docs/api/publisher.html"
+---
+{% raw %}
+<h1 id="publisher">Editor</h1>
+<p>A superfície do editor: gerencie organizações e membros de editores, crie e carregue títulos e compilações de software e gerencie conquistas, direitos e definições de placar para seus títulos.</p>
+<blockquote>
+<p><strong>Publicar um jogo em vez de um título de catálogo?</strong> Você não precisa de nada disso. O dono de um
+jogo com script ou back-end de contêiner é seu editor e gerencia suas tabelas de classificação e
+conquistas sob <code>/api/v1/me/github-games/{id}/…</code> - ver
+<a href="/pt/docs/tutorials/game-leaderboards-achievements.html">Tutorial: tabelas de classificação e conquistas para o seu jogo</a>.</p>
+</blockquote>
+<p>URL base: <code>https://api.starhermit.com</code>. Todas as rotas requerem um JWT mais as reivindicações de permissão listadas. Funções: <code>PublisherMember</code>, <code>PublisherOwner</code>. As reivindicações de permissão são atribuídas por meio de funções; os tokens cunhados carregam as reivindicações de permissão.</p>
+<h2 id="publishers-and-members">Editores e membros</h2>
+<p>Prefixo da rota: <code>api/v1/publisher</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Caminho</th>
+<th>Autenticação</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/publisher</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code>)</td>
+<td>Crie um editor; o criador se torna um membro com função <code>"Owner"</code> → <code>201</code></td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/publisher</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code>)</td>
+<td>Listar editores → <code>Publisher[]</code></td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/publisher/{publisherId}/members</code></td>
+<td>JWT (<code>Permission-publisher.members.manage</code>) + <strong>papel <code>Owner</code></strong></td>
+<td>Adicionar um membro → <code>204</code></td>
+</tr>
+<tr>
+<td>EXCLUIR</td>
+<td><code>/api/v1/publisher/{publisherId}/members/{memberUserId}</code></td>
+<td>JWT (<code>Permission-publisher.members.manage</code>) + <strong>papel <code>Owner</code></strong></td>
+<td>Remover um membro → <code>204</code> (o proprietário não pode ser removido)</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/publisher/{publisherId}/members/{memberUserId}</code></td>
+<td>JWT (<code>Permission-publisher.members.manage</code>) + <strong>adesão a essa editora</strong></td>
+<td>Obtenha um membro → <code>PublisherMember</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="who-may-change-membership">Quem pode mudar de membro</h3>
+<p>A solicitação de permissão diz que você pode gerenciar membros editores em algum lugar; não diz <em>qual</em>
+editor. Portanto, ambas as verificações se aplicam:</p>
+<ul>
+<li><strong>Adicionar e remover membros é <code>Owner</code>-apenas.</strong> A associação confere autoridade de gerenciamento de conteúdo
+cada um dos títulos da editora, então um membro simples que pudesse adicionar membros poderia conceder isso
+autoridade para ninguém. Um não-proprietário obtém <code>401</code>.</li>
+<li><strong>A leitura de uma assinatura exige pertencer a esse editor.</strong> Um chamador de fora recebe o mesmo
+<code>404</code> como um usuário que não é membro, então o endpoint não revela nada sobre editores que você não é
+parte de.</li>
+</ul>
+<h3 id="create-a-publisher">Crie um editor</h3>
+<p><code>POST /api/v1/publisher</code></p>
+<pre><code class="language-json">{
+  "name": "HypeDriven",
+  "description": "..."
+}
+</code></pre>
+<p>O criador se torna um membro com função <code>"Owner"</code>.</p>
+<h3 id="add-a-member">Adicionar um membro</h3>
+<p><code>POST /api/v1/publisher/{publisherId}/members</code></p>
+<pre><code class="language-json">{ "userId": "&lt;user id&gt;" }
+</code></pre>
+<h3 id="dtos">DTOs</h3>
+<pre><code class="language-json">// Publisher
+{
+  "id": "...",
+  "name": "...",
+  "description": "...",
+  "ownerUserId": "...",
+  "createdAt": "...",
+  "updatedAt": "..."
+}
+</code></pre>
+<pre><code class="language-json">// PublisherMember
+{
+  "id": "...",
+  "publisherId": "...",
+  "userId": "...",
+  "role": "...",
+  "joinedAt": "..."
+}
+</code></pre>
+<h2 id="software-titles-and-builds">Títulos e compilações de software</h2>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Caminho</th>
+<th>Autenticação</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/publisher/software</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code>)</td>
+<td>Criar/atualizar um título de software (corpo = metadados do título; adesão ao editor real do título é obrigatória)</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/publisher/software/upload</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code> <strong>+</strong> <code>Permission-publisher.binary.publish</code>)</td>
+<td>Obtenha URLs de upload para um título → <code>UploadUrlInfo[]</code></td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/publisher/software/build/finalize</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code> <strong>+</strong> <code>Permission-publisher.binary.publish</code>)</td>
+<td>Finalize uma compilação a partir de recursos carregados → <code>204</code></td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/publisher/analytics/downloads?publisherId=</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code>)</td>
+<td>Contagem de downloads por título</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/publisher/analytics/launches?publisherId=</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code>)</td>
+<td>Contagens de lançamento por título</td>
+</tr>
+</tbody>
+</table>
+<h3 id="publishing-a-build-needs-the-binary-publish-grant">A publicação de uma compilação precisa da concessão de publicação binária</h3>
+<p>Os dois endpoints de compilação exigem <strong><code>publisher.binary.publish</code></strong> em cima de
+<code>publisher.content.manage</code> e associação à editora do título. Sem isso ambos respondem <code>403</code>,
+enquanto todos os outros endpoints desta página continuam funcionando — você pode criar e editar títulos, definir
+conquistas e tabelas de classificação e direitos a subsídios; você simplesmente não pode enviar um executável.</p>
+<p>A razão é o que é uma construção. Os ativos de uma compilação são baixados pelo cliente de desktop e executados no
+máquina do jogador com os privilégios do jogador, fora de qualquer controle da sandbox Starhermit - ao contrário de um
+jogo de navegador, que roda no navegador. Portanto, o direito de publicar um é concedido por conta por um
+Administrador Starhermit (o <code>BinaryPublisher</code> função), não adquirida através da criação de um editor. Não
+outro papel o carrega. <strong>Peça a concessão a um administrador antes de criar um fluxo de upload
+esses pontos finais</strong>; ele também é removido quando a conta de um editor é suspensa.</p>
+<p>Os jogos de navegador não precisam de nada disso: <code>/api/v1/me/github-games</code> envios, uploads de pastas e pacotes
+pushes permanecem autoatendidos para qualquer conta conectada.</p>
+<h3 id="create-or-update-a-catalog-title">Crie ou atualize um título de catálogo</h3>
+<p><code>POST /api/v1/publisher/software</code> aceita <code>id</code> (omitir para um novo título), <code>publisherId</code>, <code>name</code>,
+<code>description</code>, <code>category</code>, <code>platform</code>, <code>releaseStatus</code>, <code>tags</code>, e <code>priceCents</code>:</p>
+<pre><code class="language-json">{
+  "publisherId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "name": "Orbit League",
+  "description": "A space racing game.",
+  "category": "game",
+  "platform": "windows",
+  "releaseStatus": "released",
+  "tags": ["racing"],
+  "priceCents": 0
+}
+</code></pre>
+<p>O sucesso é <code>201</code> com o título. Somente metadados de título são aceitos; não envie associação de editor
+ou objetos de ativos aqui. Criando devoluções de editor <code>201</code> sem objeto de editor; lista
+<code>GET /api/v1/publisher</code> para obter seu ID.</p>
+<h3 id="get-upload-urls">Obtenha URLs de upload</h3>
+<p><code>POST /api/v1/publisher/software/upload</code></p>
+<pre><code class="language-json">{ "titleId": "&lt;title id&gt;" }
+</code></pre>
+<p>Resposta - <code>UploadUrlInfo[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "type": "executable",
+    "uploadUrl": "...",
+    "fieldKey": "..."
+  }
+]
+</code></pre>
+<p><code>type</code> é um dos <code>"executable"</code>, <code>"data"</code>, <code>"metadata"</code>.</p>
+<h3 id="finalize-a-build">Finalizar uma compilação</h3>
+<p><code>POST /api/v1/publisher/software/build/finalize</code> → <code>204</code></p>
+<pre><code class="language-json">{
+  "titleId": "&lt;title id&gt;",
+  "buildId": "&lt;optional build id&gt;",
+  "version": "1.0.0",
+  "releaseNotes": "...",
+  "assets": [
+    { "type": "executable", "checksum": "...", "fieldKey": "..." }
+  ]
+}
+</code></pre>
+<p>O fluxo de trabalho de criação de catálogo é atualmente uma versão prévia e não fornece entrega binária de produção
+ou uma garantia de verificação de conteúdo ou verificação de malware. Não trate uma construção ou ativo aceito
+status como prova de que um executável é seguro. Ver <a href="/pt/docs/availability.html">disponibilidade de recursos</a>.
+A publicação de jogos hospedados usa o <a href="/pt/docs/api/github-games.html">API de upload de jogos</a>.</p>
+<h3 id="analytics">Análise</h3>
+<p>Ambos os endpoints retornam um ID de título de mapeamento de objeto JSON para contar:</p>
+<pre><code class="language-json">{ "&lt;titleId&gt;": 42 }
+</code></pre>
+<h2 id="achievements">Conquistas</h2>
+<p>Rota <code>api/v1/publisher</code>; todas as rotas de gerenciamento de conquistas exigem <code>Permission-publisher.content.manage</code>.</p>
+<p>Esses endpoints gerenciam <strong>título do catálogo</strong> apenas conquistas. Eles também exigem que o chamador seja um
+membro da editora proprietária do título, e eles <strong>falhar fechado para conquistas que pertencem a
+um jogo autoritário</strong> — eles são declarados pelo script do jogo ou pelo back-end do contêiner e não são
+gerenciado pelo editor (consulte <a href="/pt/docs/api/achievements.html">Conquistas</a>, <a href="/pt/docs/api/game-scripts.html#achievements">Scripts de jogos</a>,
+e <a href="/pt/docs/api/container-games.html#control-channel">Servidores de jogos em contêiner</a>).</p>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Caminho</th>
+<th>Autenticação</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/publisher/titles/{titleId}/achievements</code></td>
+<td>JWT</td>
+<td>Crie uma conquista → <code>AchievementDto</code></td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/publisher/titles/{titleId}/achievements</code></td>
+<td>JWT</td>
+<td>Liste as conquistas de um título → <code>AchievementDto[]</code></td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/publisher/achievements/{id}</code></td>
+<td>JWT</td>
+<td>Obtenha uma conquista → <code>AchievementDto</code></td>
+</tr>
+<tr>
+<td>COLOCAR</td>
+<td><code>/api/v1/publisher/achievements/{id}</code></td>
+<td>JWT</td>
+<td>Atualização (todos os campos anuláveis) → <code>AchievementDto</code></td>
+</tr>
+<tr>
+<td>EXCLUIR</td>
+<td><code>/api/v1/publisher/achievements/{id}</code></td>
+<td>JWT</td>
+<td>Excluir → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-an-achievement">Crie uma conquista</h3>
+<p><code>POST /api/v1/publisher/titles/{titleId}/achievements</code></p>
+<pre><code class="language-json">{
+  "key": "first_win",
+  "name": "First Win",
+  "description": "Win your first game.",
+  "icon": "...",
+  "secret": false,
+  "points": 10,
+  "visibility": "...",
+  "criteria": "..."
+}
+</code></pre>
+<p><code>icon</code>, <code>visibility</code>, e <code>criteria</code> são opcionais. Sobre <code>PUT</code>, todos os campos são anuláveis. Ver <a href="/pt/docs/api/achievements.html">achievements.md</a> para a superfície voltada para o jogador.</p>
+<h2 id="entitlements">Direitos</h2>
+<p>Rota <code>api/v1/publisher/entitlements</code>; ambas as rotas exigem <code>Permission-publisher.content.manage</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Caminho</th>
+<th>Autenticação</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/publisher/entitlements/grant</code></td>
+<td>JWT</td>
+<td>Conceda um título a um usuário → <code>204</code></td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/publisher/entitlements/revoke</code></td>
+<td>JWT</td>
+<td>Revogar um título de um usuário → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<p>Corpo para ambos:</p>
+<pre><code class="language-json">{
+  "userId": "&lt;user id&gt;",
+  "softwareTitleId": "&lt;title id&gt;"
+}
+</code></pre>
+<h2 id="leaderboards">Tabelas de classificação</h2>
+<p>Rota <code>api/v1/publisher/leaderboards</code>; todas as rotas exigem <code>Permission-publisher.content.manage</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Caminho</th>
+<th>Autenticação</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/publisher/leaderboards/</code></td>
+<td>JWT</td>
+<td>Crie uma definição de placar → <code>LeaderboardDefinitionDto</code></td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/publisher/leaderboards/{id}</code></td>
+<td>JWT</td>
+<td>Obtenha uma definição → <code>LeaderboardDefinitionDto</code></td>
+</tr>
+<tr>
+<td>COLOCAR</td>
+<td><code>/api/v1/publisher/leaderboards/{id}</code></td>
+<td>JWT</td>
+<td>Atualização (todos os campos anuláveis) → <code>LeaderboardDefinitionDto</code></td>
+</tr>
+<tr>
+<td>EXCLUIR</td>
+<td><code>/api/v1/publisher/leaderboards/{id}</code></td>
+<td>JWT</td>
+<td>Excluir → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-leaderboard">Crie uma tabela de classificação</h3>
+<p><code>POST /api/v1/publisher/leaderboards/</code></p>
+<pre><code class="language-json">{
+  "name": "Global Elo",
+  "scoreType": "...",
+  "sortDirection": "...",
+  "resetSchedule": "...",
+  "minScore": 0,
+  "maxScore": 4000,
+  "scope": "...",
+  "region": "...",
+  "isActive": true,
+  "softwareTitleId": "&lt;optional title id&gt;"
+}
+</code></pre>
+<p><code>resetSchedule</code>, <code>minScore</code>, <code>maxScore</code>, <code>region</code>, e <code>softwareTitleId</code> são opcionais. Sobre <code>PUT</code>, todos os campos são anuláveis. <code>resetSchedule</code> é <code>daily</code>, <code>weekly</code>, <code>monthly</code> ou <code>never</code>; qualquer outra coisa é um <code>400</code> - ver <a href="/pt/docs/api/leaderboards.html#reset-schedules">Redefinir programações</a>. Ver <a href="/pt/docs/api/leaderboards.html">leaderboards.md</a> para a superfície voltada para o jogador.</p>
+<h2 id="publish-a-build-flow">Publicar uma compilação: fluxo</h2>
+<ol start="0">
+<li><strong>Mantenha a concessão de publicação binária</strong>: as etapas 3 e 5 exigem <code>publisher.binary.publish</code>, que um
+Concessões de administrador Starhermit por conta. Ver
+<a href="#publishing-a-build-needs-the-binary-publish-grant">A publicação de uma compilação precisa da concessão de publicação binária</a>.</li>
+<li><strong>Crie um editor</strong>: <code>POST /api/v1/publisher</code> com <code>{ name, description }</code>.</li>
+<li><strong>Crie o título</strong>: <code>POST /api/v1/publisher/software</code> com os metadados do título abaixo.</li>
+<li><strong>Obtenha URLs de upload</strong>: <code>POST /api/v1/publisher/software/upload</code> com <code>{ titleId }</code>.</li>
+<li><strong>Carregar arquivos</strong> para o devolvido <code>uploadUrl</code>s.</li>
+<li><strong>Finalizar a construção</strong>: <code>POST /api/v1/publisher/software/build/finalize</code> com os recursos enviados' <code>{ type, checksum, fieldKey }</code> entradas.</li>
+<li><strong>Verifique a disponibilidade de distribuição</strong>: a visualização atual do catálogo não garante downloads de produção verificados ou verificação de malware; ver <a href="/pt/docs/availability.html">disponibilidade</a>.</li>
+<li><strong>Os usuários reivindicam e baixam</strong> o título através do catálogo - veja <a href="/pt/docs/api/catalog.html">catalog.md</a>.</li>
+</ol>
+<p>Os corpos de erro variam; ver <a href="/pt/docs/api/conventions.html#requests-and-responses">Convenções de API</a>.</p>
+<h2 id="see-also">Veja também</h2>
+<ul>
+<li><a href="/pt/docs/api/catalog.html">catalog.md</a> — como os jogadores navegam, reivindicam e baixam títulos</li>
+<li><a href="/pt/docs/api/achievements.html">achievements.md</a> - conquistas voltadas para o jogador</li>
+<li><a href="/pt/docs/api/leaderboards.html">leaderboards.md</a> - tabelas de classificação voltadas para os jogadores</li>
+<li><a href="/pt/docs/api/auth.html">auth.md</a> — JWT, funções e reivindicações de permissão</li>
+</ul>
+<p>Ver <a href="/pt/docs/credentials.html">compatibilidade de credenciais</a> e <a href="/pt/docs/api/contracts.html">contratos legíveis por máquina</a>.</p>
+
+{% endraw %}

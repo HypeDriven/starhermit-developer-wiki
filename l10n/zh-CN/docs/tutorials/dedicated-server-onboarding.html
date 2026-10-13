@@ -1,0 +1,441 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "发布专用游戏服务器并在游戏中加入玩家"
+source_url: "/docs/tutorials/dedicated-server-onboarding.html"
+source_path: "docs/tutorials/dedicated-server-onboarding.md"
+source_hash: "aa70f7fec680b797ff8479b56586e37fd9a16ee3031398235d457e97f83a90aa"
+translation: "machine"
+permalink: "/zh-CN/docs/tutorials/dedicated-server-onboarding.html"
+---
+{% raw %}
+<h1 id="publish-a-dedicated-game-server-and-onboard-players-in-game">发布专用游戏服务器并在游戏中加入玩家</h1>
+<p>本教程展示如何：</p>
+<ol>
+<li>使用 StarHermit 的捆绑包上传 API 发布或更新专用游戏服务器容器。</li>
+<li>保持长期运行容器的 StarHermit 服务器令牌更新。</li>
+<li>加入来自 Steam、Epic、GOG 或独立版本的玩家，无需通过
+OAuth 提供商或要求他们访问 StarHermit 仪表板。</li>
+<li>让这些玩家能够访问 StarHermit 会话、配对、排行榜、成就、
+会话聊天、语音、朋友、状态和重播。</li>
+</ol>
+<p>无论可执行文件来自 Steam、Epic、GOG 还是您自己的，面向玩家的 API 都是相同的
+启动器，或 <code>https://&lt;slug&gt;.starhermit.com</code>.</p>
+<h2 id="important-boundary-embedded-is-not-silent">重要边界：嵌入式并不沉默</h2>
+<p>StarHermit 目前不公开特权 "创建任意玩家" 游戏的终点
+服务器。一个集装箱的 <code>STARHERMIT_SERVER_TOKEN</code> 故意没有玩家身份且无法铸造
+玩家帐户或冒充玩家。</p>
+<p>公钥注册还需要有效的电子邮件和一次性验证链接。所以：</p>
+<ul>
+<li>你 <strong>能</strong> 将注册保留在游戏的品牌 UI 中，并避免使用 Google/GitHub OAuth 和
+StarHermit 仪表板。</li>
+<li>你 <strong>不能</strong> 仅通过 Steam ID、Epic 帐户 ID 或 GOG 静默创建 StarHermit 帐户
+身份证。玩家必须同意、提供电子邮件并确认一次。</li>
+<li>生成每个玩家的私钥并将其存储在他们的设备上。不要生成每个玩家的密钥
+在您的专用服务器中，上传私钥，或保留保管密钥数据库，除非您
+有意对所有这些账户负责。</li>
+</ul>
+<p>对于原生游戏来说，最流畅的支持体验是：游戏内账户面板生成
+键，请求电子邮件和同意，等待玩家确认收件箱中的链接，然后登录
+与密钥并将刷新令牌保留在操作系统凭证库中。玩家永远不需要
+浏览 StarHermit 网站。
+无法提供和验证电子邮件的玩家无法使用当前 API 完成此流程。</p>
+<h2 id="architecture-and-trust-boundaries">架构和信任边界</h2>
+<pre><code class="language-text">Steam/Epic/GOG/native client
+  ├─ owns the player's private key
+  ├─ performs public-key registration/login
+  ├─ holds player access + rotating refresh token
+  ├─ optionally links the external platform identity
+  └─ uses a game-scoped launch token for game/social APIs
+                  │
+                  │ REST + ws/v1/games
+                  ▼
+StarHermit API ───────── authenticated command ────────► your container
+  ├─ creates sessions and matchmaking                     ├─ owns simulation
+  ├─ stamps the trusted StarHermit user id                 ├─ never trusts payload identity
+  ├─ persists snapshots/results/elo/achievements           └─ uses narrow server token only
+  └─ supplies session chat, voice, friends, and replays
+</code></pre>
+<p>游戏客户端证明玩家是谁。 StarHermit 将该身份标记到发送到的流量上
+容器。容器从不接受游戏 JSON 中提供的 Steam ID 或用户 ID 作为证据
+的身份。</p>
+<h2 id="prerequisites">先决条件</h2>
+<p>您需要：</p>
+<ul>
+<li>StarHermit 开发者帐户和完全访问令牌。</li>
+<li>您拥有的已注册游戏 <code>gameSlug</code> 和权威的后台。捆绑端点
+更新现有游戏；它不会创建游戏记录或保留子弹。</li>
+<li>为您的帐户启用容器托管。</li>
+<li>Docker 或其他能够生成 Docker 兼容的工具 <code>docker save</code> 档案。</li>
+<li>一个容器实现 <a href="/zh-CN/docs/api/container-games.html#protocol-v1">游戏协议v1</a>.</li>
+</ul>
+<p>对于初始自助注册，请使用经过验证的 GitHub 存储库 <code>starhermit.txt</code> 和一个
+有效 <code>container.image</code> 声明如所述 <a href="/zh-CN/docs/api/github-games.html">GitHub 游戏</a>。一旦
+游戏存在，捆绑推送可以直接发布以后的客户端和服务器版本。</p>
+<h2 id="part-1-implement-the-container-contract">第1部分：实施容器合约</h2>
+<p>你的进程必须监听 <code>PORT</code> 并实施：</p>
+<table>
+<thead>
+<tr>
+<th>端点</th>
+<th>责任</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /health</code></td>
+<td>返回 <code>200</code> 仅当可以接受会话时</td>
+</tr>
+<tr>
+<td><code>GET /describe</code></td>
+<td>声明协议 <code>1</code>、请求的刻度率/容量和成就</td>
+</tr>
+<tr>
+<td><code>POST /sessions</code></td>
+<td>创建会话或从中恢复会话 <code>snapshot</code></td>
+</tr>
+<tr>
+<td><code>GET /sessions/{id}/snapshot</code></td>
+<td>返回完整的持久还原点</td>
+</tr>
+<tr>
+<td><code>DELETE /sessions/{id}</code></td>
+<td>释放会话</td>
+</tr>
+<tr>
+<td><code>WS /stream</code></td>
+<td>接收经过身份验证的玩家命令并发出游戏负载</td>
+</tr>
+<tr>
+<td><code>WS /control</code></td>
+<td>推送快照、成就、Elo、结果和背压</td>
+</tr>
+</tbody>
+</table>
+<p>证实 <code>X-Starhermit-Invoke-Key</code> 在每个 HTTP 请求和 WebSocket 升级上
+<code>STARHERMIT_INVOKE_KEY</code>。这将向您的进程验证 StarHermit。</p>
+<p>最小的声明是：</p>
+<pre><code class="language-json">{
+  "protocol": 1,
+  "tickRateHz": 20,
+  "maxSessions": 48,
+  "replays": true,
+  "achievements": [
+    {
+      "key": "first-win",
+      "name": "First Win",
+      "description": "Win a match.",
+      "points": 10
+    }
+  ]
+}
+</code></pre>
+<p><code>replays</code> 要求平台保留每个已完成会话的最后状态，这就是
+<code>GET /api/v1/games/{slug}/replays/{sessionId}</code> 服务。仅当您的游戏需要重播时才声明它；
+没有它，比赛结束后什么都不会保留。看
+<a href="/zh-CN/docs/api/container-games.html#get-describe">容器游戏服务器 — <code>GET /describe</code></a>.</p>
+<p>游戏流帧使用：</p>
+<pre><code class="language-text">[1 byte type][16 byte sessionId][16 byte userId][payload...]
+</code></pre>
+<p>类型 <code>1</code> 是入站命令；它的用户 ID 是由经过验证的 StarHermit 玩家盖上的印记。
+类型 <code>2</code> 是发送给该玩家的出站 JSON 负载，或者发送给每个人（当用户 ID 为
+全为零。</p>
+<p>持久效果结束 <code>/control</code>:</p>
+<pre><code class="language-json">{ "type": "snapshot", "sessionId": "...", "state": { "round": 4 } }
+{ "type": "achievements", "sessionId": "...", "unlocks": { "&lt;userId&gt;": ["first-win"] } }
+{ "type": "elo", "sessionId": "...", "updates": { "&lt;userId&gt;": 1248 } }
+{ "type": "result", "sessionId": "...", "result": { "kind": "win", "winner": "&lt;userId&gt;" } }
+</code></pre>
+<p>StarHermit 将这些更新过滤到会话参与者和声明的成就密钥。结果是
+终端。看 <a href="/zh-CN/docs/api/container-games.html">容器托管的游戏服务器</a> 对于完整的协议，
+快照、隔离和恢复合约。</p>
+<h2 id="part-2-register-the-game-once">第2部分：注册游戏一次</h2>
+<p>将清单放入用于初始注册的已验证存储库中：</p>
+<pre><code class="language-ini">name=Orbit League
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6  # your user ID from GET /api/v1/me, not username
+
+container.image=ghcr.io/your-github-login/orbit-server@sha256:&lt;64-lowercase-hex&gt;
+container.port=8080
+container.health=/health
+container.memory_mb=1024
+container.cpu=1.0
+</code></pre>
+<p>放 <code>owner</code> 到不可变的 <code>id</code> 由返回 <code>GET /api/v1/me</code>。不要使用帐户用户名或
+昵称；这些是显示值，可能会发生变化。</p>
+<p>注册它：</p>
+<pre><code class="language-bash">API=https://api.starhermit.com
+ACCESS_TOKEN='developer-access-token'
+
+curl -sS -X POST "$API/api/v1/me/github-games" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repoUrl":"https://github.com/your-github-login/orbit-league"
+  }'
+</code></pre>
+<p>保存返回的 <code>id</code> 作为 <code>GAME_ID</code> 和 <code>gameSlug</code> 作为 <code>GAME_SLUG</code>，然后确认后端存在：
+<code>GET $API/api/v1/games/$GAME_SLUG</code> 答案 <code>200</code> 一旦发生。一份礼物 <code>gameSlug</code> 单独不
+证明这一点——每个经过验证的游戏都有一个，仅限浏览器。声明一个注册
+没有证明您拥有该存储库的容器将被拒绝 <code>403</code>，以及初始注册
+当容器托管不可用或受到限制时，也可能会失败。</p>
+<p>清单中的注册表支持的映像足以部署第一个版本。下一节
+涵盖直接上传路径，对于 CI 和您不想要的构建很有用
+再次克隆或拉取的平台。</p>
+<h2 id="part-3-publish-a-client-and-dedicated-server-bundle">第 3 部分：发布客户端和专用服务器捆绑包</h2>
+<h3 id="build-the-archive">建立档案</h3>
+<p>上传的是一个 gzip 压缩的 tar 存档，其布局如下：</p>
+<pre><code class="language-text">client/            optional static web client, including the registered launch file
+server/image.tar   optional `docker save` output
+starhermit.txt     the manifest
+</code></pre>
+<p>至少 <code>client/</code> 或者 <code>server/image.tar</code> 必须在场。</p>
+<p>如果您通过 StarHermit Web 仪表板或 Windows 客户端而不是curl 进行发布，则不需要
+手动建立这个档案。选择一个 <strong>服务器分发文件夹</strong> （保持 <code>starhermit.txt</code>
+和 <code>image.tar</code>） 或者 <strong>这 <code>image.tar</code> 靠自己</strong>，客户端将上面的布局打包。这
+<a href="/zh-CN/docs/starhermit-txt.html"><code>starhermit.txt</code></a> value — 显示名称和 <code>container.*</code> 旋钮 - 是
+对话框中的字段，如果有的话，从文件夹的清单中预先填充，所以一个空的 <code>image.tar</code>
+出版也一样。</p>
+<pre><code class="language-bash">rm -rf bundle game-bundle.tar.gz
+mkdir -p bundle/client bundle/server
+
+# Optional hosted web client.
+cp -R dist/. bundle/client/
+
+# Dedicated server image.
+docker build -t orbit-server:release -f Dockerfile.server .
+docker save orbit-server:release -o bundle/server/image.tar
+
+# Keeps the artifact self-describing, and is what the dashboard/desktop clients require.
+cp starhermit.txt bundle/starhermit.txt
+
+tar -C bundle -czf game-bundle.tar.gz .
+</code></pre>
+<p>该映像必须与只读根文件系统一起使用，强制非根用户，没有功能，没有
+卷，没有互联网，只有一个小可写 <code>/tmp</code>。镜像中的供应商依赖性。</p>
+<h3 id="upload-it">上传</h3>
+<p><code>POST /api/v1/me/github-games/{id}/bundle</code> 将存档作为原始请求主体，而不是作为
+多部分形式：</p>
+<pre><code class="language-bash">curl -sS -X POST "$API/api/v1/me/github-games/$GAME_ID/bundle" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game-bundle.tar.gz
+</code></pre>
+<blockquote>
+<p><strong>超过 100 MB 的捆绑包将无法通过此路线。</strong> API前面的CDN
+拒绝一个大的请求体 <code>413</code> 它自己的——平台从未见过，所以它携带
+不 <code>limitBytes</code> 并且不会出现在您可以阅读的日志中。一个 <code>docker save</code> 真实服务器镜像的数量达到
+那个尺寸很容易。如果您看到 <code>413</code> 没有 <code>limitBytes</code>，那就是这个，而不是你的游戏
+津贴，单位为千兆字节。</p>
+<p>发送相同的存档
+<a href="/zh-CN/docs/api/github-games.html#upload-over-a-websocket"><code>ws/v1/game-upload</code></a> 相反 - a 之后的帧
+WebSocket 升级不是请求正文，因此上限不适用。相同的存档布局，相同
+津贴，相同的 JSON 答案；唯一的补充是您必须发送 <code>{"type":"complete"}</code> 当
+最后一个字节已输出，因为在您执行之前不会发布任何内容。</p>
+</blockquote>
+<p>响应示例：</p>
+<pre><code class="language-json">{
+  "clientPublished": true,
+  "serverImageLoaded": true,
+  "imageDigest": "sha256:4e7d...",
+  "bytesReceived": 318767104
+}
+</code></pre>
+<p>平台：</p>
+<ul>
+<li>原子交换 <code>client/</code>，因此用户看不到部分上传的构建；</li>
+<li>负载 <code>server/image.tar</code>，计算其不可变摘要，并重新固定部署；</li>
+<li>将旧容器放入队列，以替换为上传的图像；</li>
+<li>从持久快照中恢复符合条件的活动会话。</li>
+</ul>
+<p>您可以仅上传客户端或仅上传服务器图像。仅限客户端补丁使用
+<code>?mode=merge</code> 在同一端点上（参见
+<a href="/zh-CN/docs/api/github-games.html#partial-updates-modemerge">部分更新</a>）；合并中的图像是静止的
+整个加载。游戏的磁盘容量是 <strong>2GB</strong> 在 starhermit.com（运营商可调）上并且可以
+每场比赛进行调整；因为推送会替换游戏的内容而不是添加游戏内容，所以两者都是
+游戏可以占用的最大推力和最多磁盘空间。 <code>413</code> 包括 <code>limitBytes</code>;无效的
+存档或图像返回 <code>422</code>;和 <code>507</code> 表示服务器现在没有空间——已检查
+在读取您的正文之前，因此注定的上传会被拒绝，而不是半着陆。不要放置符号链接，
+硬链接、路径遍历或存档中记录的布局之外的文件。</p>
+<p>成功上传并不意味着新进程已通过健康检查。轮询现有的
+<code>GET /api/v1/me/github-games/{id}/deployment</code> 在推广之前查看并测试真实会话
+构建。稍后固定存储库提交将部署显式切换回存储库内容。</p>
+<h3 id="switching-an-existing-game-from-server-to-a-container">切换现有游戏 <code>server=</code> 到一个容器</h3>
+<p>支持，并且它保持游戏：相同的id，slug， <code>&lt;uid&gt;.starhermit.com</code> 地址、玩家、
+排行榜和成就。没有单独的注册步骤。</p>
+<ol>
+<li>代替 <code>server=...</code> 与你的 <code>container.*</code> 阻止 <code>starhermit.txt</code>。两者是相辅相成的
+独家；声明两者的清单均被拒绝。</li>
+<li>推一捆携带 <code>client/</code> （与该清单） <strong>和</strong> <code>server/image.tar</code>， 超过
+<code>ws/v1/game-upload</code> 如果它很大。</li>
+<li>您上传的图像就是运行的图像。一个 <code>container.image=</code> 同一清单中的行是
+保留起来很好，但上传的摘要胜过它。</li>
+<li>轮询 <code>GET /api/v1/me/github-games/{id}/deployment</code> 直到读到 <code>running</code>，然后开始真正的
+房间或比赛。</li>
+</ol>
+<h2 id="part-4-renew-the-containers-platform-token">第 4 部分：更新容器的平台令牌</h2>
+<p>启动时容器接收：</p>
+<pre><code class="language-text">STARHERMIT_API_BASE
+STARHERMIT_GAME_SLUG
+STARHERMIT_SERVER_TOKEN
+STARHERMIT_SERVER_TOKEN_EXPIRES_IN
+STARHERMIT_REFRESH_KEY
+STARHERMIT_INVOKE_KEY
+</code></pre>
+<p><code>STARHERMIT_SERVER_TOKEN</code> 狭义：它代表游戏服务器，而不是玩家。到期后
+默认24小时。安排更新大约一半
+<code>STARHERMIT_SERVER_TOKEN_EXPIRES_IN</code>:</p>
+<pre><code class="language-http">POST {STARHERMIT_API_BASE}/api/v1/games/{STARHERMIT_GAME_SLUG}/server/token
+X-Starhermit-Refresh-Key: {STARHERMIT_REFRESH_KEY}
+</code></pre>
+<pre><code class="language-json">{ "token": "eyJhbGciOi...", "expiresInSeconds": 86400 }
+</code></pre>
+<p>此端点不需要承载令牌。即使旧令牌已经存在，也允许恢复
+已经过期了。自动替换内存中的令牌并安排新令牌的下一次更新
+<code>expiresInSeconds</code>.</p>
+<p>将两个部署机密分开：</p>
+<ul>
+<li><code>STARHERMIT_INVOKE_KEY</code> 验证对容器的 StarHermit 请求。</li>
+<li><code>STARHERMIT_REFRESH_KEY</code> 在更新 StarHermit 令牌时对您的容器进行身份验证。</li>
+</ul>
+<p>两者都会在每次容器重新启动时轮换。永远不要登录它们，将它们归还 <code>/describe</code>，将它们放入
+快照，或将它们发送给玩家。</p>
+<h2 id="part-5-onboard-a-non-starhermit-player-without-oauth">第 5 部分：在没有 OAuth 的情况下加入非 StarHermit 玩家</h2>
+<p>在本机游戏或启动器中运行此流程，而不是在专用容器中。完整的演练，
+经过测试的客户端代码是 <a href="/zh-CN/docs/tutorials/public-key-onboarding.html">教程：使用公钥加入玩家</a>;
+简而言之：</p>
+<ol>
+<li><strong>生成每个安装密钥</strong> 首次启动时（推荐 Ed25519）并保留私钥
+在操作系统凭证存储中。切勿上传它，也切勿在您的服务器上生成玩家密钥。</li>
+<li><strong>征求同意并提供电子邮件地址</strong>， 然后 <code>POST /api/v1/auth/public-key/register</code> 和
+<code>{ email, keyType, keyData }</code> 从玩家的设备。它被限制为每个注册一次
+地址和每个 IP 每 24 小时 (<code>429</code> 和 <code>Retry-After</code>），所以永远不要通过你的代理它
+服务器——每个玩家都会共享其IP。</li>
+<li><strong>等待玩家确认。</strong> 通过电子邮件发送的链接将打开一个页面，该页面不会发生任何更改，直到
+玩家按“确认”，创建帐户并附加密钥；在 starhermit.com 上
+然后它们会降落在 StarHermit 仪表板上，因此您的游戏不会收到这些代币。相反它 <strong>使用密钥登录直至成功</strong>: <code>challenge</code>，签署星隐者的
+<a href="/zh-CN/docs/tutorials/public-key-onboarding.html#3-sign-in-with-the-key">确切的挑战字节</a>, <code>complete</code>。直到
+玩家确认， <code>complete</code> 答案 <code>401 "Public key not registered or revoked."</code>.</li>
+<li><strong>保持会话</strong> 和 <code>POST /api/v1/auth/refresh</code>，并在任何时候再次使用密钥登录
+刷新失败。接受当前条款 <code>GET /api/v1/me</code> 报告 <code>termsAcceptanceRequired</code>
+（帐户会话和玩家启动令牌都可以 - 请参阅
+<a href="/zh-CN/docs/api/profile.html#terms-acceptance">条款接受</a>）。您的容器的部署令牌是
+豁免条款；该豁免并不适用于其球员。</li>
+</ol>
+<p><strong>更多设备。</strong> 每个安装都会使用玩家的相同电子邮件地址注册自己的密钥，并且
+密钥加入现有帐户。 <code>POST /api/v1/me/public-keys</code> 不适合这些玩家：
+它需要通过 OAuth 提供商登录的会话。</p>
+<h3 id="5-add-a-player-facing-name-and-external-identity">5. 添加面向玩家的名称和外部身份</h3>
+<p>生成的帐户以 <code>pk-...</code> 用户名。让玩家选择一个昵称：</p>
+<pre><code class="language-http">PATCH /api/v1/me
+Authorization: Bearer &lt;access-token&gt;
+Content-Type: application/json
+
+{ "nickname": "RookPilot" }
+</code></pre>
+<p>您可以将该帐户与运行可执行文件的平台相关联：</p>
+<pre><code class="language-http">POST /api/v1/me/identities
+Authorization: Bearer &lt;access-token&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  "provider": "epic",
+  "providerUserId": "epic-account-id",
+  "metadata": "{\"displayName\":\"RookPilot\"}"
+}
+</code></pre>
+<p>使用一个 <strong>非保留的</strong> 提供商名称（<code>epic</code>, <code>gog</code>，或您自己的店面 ID）。做 <strong>不是</strong> 使用
+<code>steam</code>, <code>google</code>, <code>github</code>，或平台视为 OAuth 提供者的任何其他名称 - 那些
+即使未配置该提供程序，也会被拒绝。从该平台获取外部ID
+经过身份验证的 SDK/会话，而不是来自可编辑的玩家输入。该端点关联一个身份
+使用 StarHermit 帐户；它本身并不是店面所有权的证明，并且不得取代
+平台自己的购买或禁止票证验证。</p>
+<p>单独的外部库 API 是可选的，当前在提供程序时使用演示同步
+整合已完成；专用服务器游戏不需要它。</p>
+<h2 id="part-6-enter-the-game-and-use-starhermit-services">第六部分：进入游戏并使用StarHermit服务</h2>
+<p>代替 <code>{slug}</code> 在下面的 HTTP 示例中 <code>GAME_SLUG</code>，您获得的游戏UUID
+注册。存储库名称 <code>orbit-league</code> 是显示/源名称，而不是 API slug。</p>
+<h3 id="mint-a-least-privilege-game-token">铸造一个最低权限的游戏代币</h3>
+<p>使用一次完整访问令牌来铸造一个隔离到您的游戏的令牌：</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/launch-token
+Authorization: Bearer &lt;access-token&gt;
+</code></pre>
+<pre><code class="language-json">{ "token": "eyJhbGciOi...", "expiresInSeconds": 3600 }
+</code></pre>
+<p>使用此启动令牌进行游戏和允许的会话社交 API。过期前刷新一下。
+尽可能将完整帐户令牌排除在游戏代码之外。</p>
+<h3 id="matchmaking">对接会</h3>
+<pre><code class="language-http">POST /api/v1/games/{slug}/matchmaking
+Authorization: Bearer &lt;game-token&gt;
+</code></pre>
+<p>轮询 <code>GET /api/v1/games/{slug}/matchmaking</code> 直到 <code>status</code> 是 <code>matched</code>，然后连接：</p>
+<pre><code class="language-text">wss://api.starhermit.com/ws/v1/games?sessionId=&lt;sessionId&gt;&amp;access_token=&lt;game-token&gt;
+</code></pre>
+<p>客户端消息仍然是 JSON：</p>
+<pre><code class="language-json">{ "type": "cmd", "data": { "type": "input", "throttle": 0.8 } }
+</code></pre>
+<p>StarHermit 将命令转换为容器流并对经过身份验证的 StarHermit 进行标记
+用户 ID。您的容器通过 2 类流帧返回权威游戏负载。</p>
+<h3 id="leaderboards-and-achievements">排行榜和成就</h3>
+<p>每个权威游戏都会有一个 Elo 排行榜。您的容器发送 Elo 更改并声明
+成就解锁结束 <code>/control</code>;客户端仅读取生成的平台状态：</p>
+<pre><code class="language-text">GET /api/v1/games/{slug}/achievements
+GET /api/v1/leaderboards/{leaderboardId}/entries
+</code></pre>
+<p>修改后的Steam/Epic/GOG客户端无法直接提交游戏排行榜分数或领取
+游戏拥有的成就。</p>
+<h3 id="session-chat-and-voice">会话聊天和语音</h3>
+<p><code>GET /api/v1/games/{slug}/sessions/{sessionId}</code> 回报 <code>chatConversationId</code>。会议
+对话允许参与者聊天并使用语音，即使他们不是朋友。</p>
+<p>典型语音流程：</p>
+<ol>
+<li><code>GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;</code>.</li>
+<li>如果需要的话， <code>POST /api/v1/voice/rooms</code> 与对话 ID。</li>
+<li><code>POST /api/v1/voice/rooms/{roomId}/join</code>.</li>
+<li>连接 <code>wss://api.starhermit.com/ws/v1/voice?roomId=&lt;roomId&gt;&amp;access_token=&lt;game-token&gt;</code>.</li>
+</ol>
+<p>同一帐户还可以跨平台启用好友、在线状态、游戏邀请、重播和个人资料身份
+所有店面建设。每人保留一个 StarHermit 密钥/帐户，而不是创建新帐户
+每一场比赛或每一次店面发布。</p>
+<h2 id="production-checklist">生产清单</h2>
+<h3 id="publishing">出版</h3>
+<ul>
+<li>[ ] 现有拥有的游戏具有非空 <code>gameSlug</code>.</li>
+<li>[ ] 容器拒绝错误或丢失的调用键。</li>
+<li>[ ] 调用密钥、刷新密钥和服务器令牌是在进程启动时从环境中读取的，不会烘焙到映像中或缓存在磁盘上（这三个密钥在每个容器启动时轮换）。</li>
+<li>[ ] <code>/health</code> 不返回 <code>200</code> 在状态可以被接受之前。</li>
+<li>[ ] 捆绑使用原始 <code>application/gzip</code>，而不是多部分编码。</li>
+<li>[ ] 映像可以只读、非根、脱机且无卷的方式工作。</li>
+<li>[ ] 上传后测试部署状态和真实匹配会话。</li>
+<li>[ ] 服务器令牌刷新在其生命周期的一半之前运行并自动交换令牌。</li>
+<li>[ ] 部署机密均不会记录或保留在快照中。</li>
+</ul>
+<h3 id="player-onboarding">玩家入职</h3>
+<ul>
+<li>[ ] 密钥对在播放器设备上生成，私钥使用安全存储。</li>
+<li>[ ] 帐户创建已公开并获得同意。</li>
+<li>[ ] 邮箱验证一次完成； <code>429 Retry-After</code> 受到尊重。</li>
+<li>[ ] 注册和玩家令牌不通过专用服务器。</li>
+<li>[ ] 访问/刷新令牌被安全存储，并且刷新轮换被序列化。</li>
+<li>[ ] 外部 ID 来自经过身份验证的 Steam/Epic/GOG SDK 状态。</li>
+<li>[ ] 游戏在初始帐户设置后使用游戏范围的令牌。</li>
+<li>[ ] 客户端句柄 <code>achievement</code>, <code>resumed</code>， 和 <code>abandoned</code> 游戏帧。</li>
+</ul>
+<h2 id="reference-pages">参考页</h2>
+<ul>
+<li><a href="/zh-CN/docs/api/auth.html">验证</a></li>
+<li><a href="/zh-CN/docs/api/container-games.html">容器托管的游戏服务器</a></li>
+<li><a href="/zh-CN/docs/api/github-games.html#push-a-game-bundle">GitHub 游戏和捆绑包上传</a></li>
+<li><a href="/zh-CN/docs/api/games.html">游戏API</a></li>
+<li><a href="/zh-CN/docs/api/profile.html">个人资料和链接身份</a></li>
+<li><a href="/zh-CN/docs/api/leaderboards.html">排行榜</a></li>
+<li><a href="/zh-CN/docs/api/achievements.html">成就</a></li>
+<li><a href="/zh-CN/docs/api/chat.html">聊天</a></li>
+<li><a href="/zh-CN/docs/api/voice.html">嗓音</a></li>
+</ul>
+
+{% endraw %}

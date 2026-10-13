@@ -1,0 +1,192 @@
+---
+layout: "wiki"
+lang: "id"
+title: "konvensi API"
+source_url: "/docs/api/conventions.html"
+source_path: "docs/api/conventions.md"
+source_hash: "3772241b0e04e8e2f4e4ecf1c0ef8e2d956c065446a78c7df107b6205de258d6"
+translation: "machine"
+permalink: "/id/docs/api/conventions.html"
+---
+{% raw %}
+<h1 id="api-conventions">konvensi API</h1>
+<p>REST menggunakan <code>https://api.starhermit.com/api/v1/...</code>; penggunaan soket <code>wss://api.starhermit.com/ws/v1/...</code>.
+Game yang dihosting dapat menelepon <code>/api/v1/...</code> Dan <code>/ws/v1/...</code> pada asal mereka sendiri. Klien asli menggunakan
+asal API publik. Halaman pengembangan di asal lain memerlukan asal CORS yang diizinkan pada game
+tuan rumah; menyetel URL dasar SDK saja tidak mengotorisasi asal tersebut.</p>
+<h2 id="requests-and-responses">Permintaan dan tanggapan</h2>
+<p>Kirim JSON dengan <code>Content-Type: application/json</code>, kecuali unggahan paket gzip mentah. Nama anggota JSON
+adalah camelCase. Kirim kredensial pembawa di REST <code>Authorization</code> tajuk.</p>
+<table>
+<thead>
+<tr>
+<th>Tanggapan</th>
+<th>Bagaimana cara membacanya</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>200</code> / <code>201</code> JSON</td>
+<td>Parsing objek atau array yang didokumentasikan; mentolerir bidang tambahan</td>
+</tr>
+<tr>
+<td><code>204</code></td>
+<td>Sukses tanpa tubuh; jangan menelepon <code>response.json()</code></td>
+</tr>
+<tr>
+<td><code>302</code></td>
+<td>Pengalihan masuk/konfirmasi browser; menavigasi daripada mengambil halaman OAuth</td>
+</tr>
+<tr>
+<td><code>304</code></td>
+<td>Pembacaan bersyarat tidak berubah; simpan data yang sudah Anda simpan</td>
+</tr>
+<tr>
+<td>Gambar, lampiran, penyimpanan cloud</td>
+<td>Baca byte, menggunakan tipe konten respons dan kontrak titik akhir</td>
+</tr>
+<tr>
+<td>Kesalahan</td>
+<td>Baca statusnya terlebih dahulu, lalu parsing tubuhnya secara defensif</td>
+</tr>
+</tbody>
+</table>
+<p>Bentuk kesalahan yang umum adalah <code>{ "error": "...", "code": "..." }</code>, dengan bidang opsional bergantung pada
+titik akhir. <code>error</code> sering kali dapat dibaca manusia; <code>code</code> adalah diskriminator yang stabil jika disediakan.
+Persyaratan dan beberapa titik akhir lainnya langsung memasukkan diskriminator <code>error</code>. Beberapa titik akhir kembali normal
+teks, isi kosong, atau objek Detail Masalah validasi dengan <code>title</code>, <code>status</code> Dan <code>errors</code>.
+Klien tidak boleh berasumsi bahwa setiap respons yang gagal adalah JSON atau memiliki kolom yang sama.</p>
+<pre><code class="language-js">export async function readResponse(response) {
+  if (response.status === 204 || response.status === 304) return null;
+  const text = await response.text();
+  let body;
+  try { body = text ? JSON.parse(text) : null; } catch { body = text || null; }
+  if (!response.ok) {
+    const message = (body &amp;&amp; typeof body === 'object' &amp;&amp; (body.error || body.message || body.title))
+      || (typeof body === 'string' &amp;&amp; body) || response.statusText;
+    throw Object.assign(new Error(message), {
+      status: response.status, code: body?.code, body,
+      retryAfter: response.headers.get('Retry-After'),
+    });
+  }
+  return body;
+}
+</code></pre>
+<h2 id="time-sizes-and-nulls">Waktu, ukuran, dan nol</h2>
+<ul>
+<li><code>createdAt</code>, <code>updatedAt</code>, <code>finishedAt</code>, dan stempel waktu akun/sumber daya serupa adalah string ISO 8601
+dengan offset. Perlakukan tidak hadir atau <code>null</code> nilai opsional sebagai tidak tersedia.</li>
+<li><code>ctx.now</code>, <code>summary.deadline</code>, daftar sesi <code>deadline</code>, Dan <code>/time.serverTime</code> adalah bilangan bulat Unix
+<strong>milidetik</strong>. Konversi dengan <code>new Date(value)</code>, bukan <code>Date.parse(value)</code>.</li>
+<li>Nilai batas dalam byte adalah byte, bukan karakter Base64. Unggahan JSON Base64 lebih besar dari aslinya
+isi yang diterjemahkan. Gunakan batas efektif yang dilaporkan oleh titik akhir bila tersedia.</li>
+<li>Kelalaian, <code>null</code>, dan objek kosong tidak setara secara universal. Pengaturan <code>PATCH</code> menghapus a
+bernama kunci dengan <code>null</code>; pengaturan satu tombol <code>PUT</code> toko <code>null</code> sebagai sebuah nilai. Koleksi <code>PUT</code> menggantikan
+seluruh peta. Baca aturan pembaruan setiap titik akhir.</li>
+<li>Patch pengaturan digabungkan <strong>kunci tingkat atas</strong>. Nilai objek yang diberikan menggantikan nilai kunci tersebut;
+itu tidak menggabungkan properti bersarang secara rekursif.</li>
+</ul>
+<h2 id="pagination">Paginasi</h2>
+<p>Paging berbasis satu tempat <code>page</code>/<code>pageSize</code> didukung. API yang berbeda sengaja dibuat berbeda
+amplop tanggapan; jangan menggunakan kembali parser yang menggunakan nama kolom hitungan tunggal.</p>
+<table>
+<thead>
+<tr>
+<th>Daerah</th>
+<th>Bentuk koleksi</th>
+<th>Ukuran halaman default/maksimum</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Judul dan build perangkat lunak</td>
+<td><code>{ items, totalCount, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>Pesan obrolan</td>
+<td><code>{ conversationId, items, totalCount, page, pageSize }</code></td>
+<td>50 / 100</td>
+</tr>
+<tr>
+<td>Entri papan peringkat</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>Perangkat lunak eksternal</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20; minta ukuran halaman positif kecil</td>
+</tr>
+<tr>
+<td>Laporan, catatan kerusakan kontainer, daftar moderasi</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>Sesi, teman, daftar permainan, prestasi</td>
+<td>Array</td>
+<td>Batasan khusus titik akhir; tidak ada kursor halaman berikutnya yang umum</td>
+</tr>
+<tr>
+<td>Umpan penarikan moderasi</td>
+<td>Berbasis kursor</td>
+<td>Pertahankan kursor yang dikembalikan; pulih dari <code>410</code> seperti yang didokumentasikan</td>
+</tr>
+</tbody>
+</table>
+<p>Metadata halaman respons mencerminkan halaman yang ditayangkan jika tersedia. <a href="/id/#api-reference">Halaman referensi</a>
+Dan <a href="/id/docs/api/contracts.html">kontrak yang dapat dibaca mesin</a> menjelaskan parameter kueri khusus titik akhir.</p>
+<h2 id="retry-and-concurrency">Coba lagi dan konkurensi</h2>
+<table>
+<thead>
+<tr>
+<th>Situasi</th>
+<th>Tindakan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Token akses akun ditolak dengan <code>401</code></td>
+<td>Segarkan sekali, menggunakan satu permintaan penyegaran bersama; lalu masuk jika ditolak</td>
+</tr>
+<tr>
+<td>Token peluncuran sudah habis masa berlakunya</td>
+<td>Dapatkan token baru melalui masuk/peluncur; token yang kadaluwarsa tidak dapat memperbarui dirinya sendiri</td>
+</tr>
+<tr>
+<td><code>403 terms_acceptance_required</code></td>
+<td>Tampilkan dan terima persyaratan saat ini secara eksplisit, lalu coba lagi</td>
+</tr>
+<tr>
+<td>Lainnya <code>403</code></td>
+<td>Menyelesaikan cakupan, keanggotaan, izin, atau status akun; jangan menyegarkan dalam satu lingkaran</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>Menyelesaikan konflik duplikat/status/revisi; baca ulang sebelum mengubah sumber daya</td>
+</tr>
+<tr>
+<td>Hemat cloud <code>412</code></td>
+<td>Muat versi yang lebih baru dan biarkan game menggabungkan atau mengadopsinya</td>
+</tr>
+<tr>
+<td><code>429</code> atau sementara <code>503</code></td>
+<td>Menghormati <code>Retry-After</code>, tambahkan jitter, dan percobaan ulang terikat</td>
+</tr>
+<tr>
+<td>Kegagalan jaringan saat menulis</td>
+<td>Hasilnya mungkin tidak diketahui; periksa status sumber daya sebelum mengulangi tindakan</td>
+</tr>
+</tbody>
+</table>
+<p><code>Retry-After</code> bisa dalam hitungan detik atau tanggal HTTP. Jangan membuat header idempotensi: API tidak melakukannya
+menjanjikan mekanisme kunci idempotensi umum. Percobaan ulang pembuatan sesi atau undangan dapat dibuat
+sumber daya lain atau konflik dengan sumber daya pertama. Lebih suka membaca dan operasi idempoten secara eksplisit
+percobaan ulang otomatis. Segarkan rotasi, selesaikan unggahan, persetujuan persyaratan, dan hasil permainan terminal masing-masing
+mempunyai aturan sendiri.</p>
+<p>Untuk penulisan bandingkan-dan-tukar, gunakan ETag penyimpanan cloud, ruangan <code>expectedRevision</code>, atau revisi moderasi
+jika didukung. Penulisan yang berhasil belum tentu merupakan penerapan container yang selesai; verifikasi itu
+status sebelum mengirim pemain ke build baru. Melihat <a href="/id/docs/troubleshooting.html">pemecahan masalah</a>.</p>
+
+{% endraw %}

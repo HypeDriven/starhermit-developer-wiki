@@ -1,0 +1,848 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Permainan GitHub"
+source_url: "/docs/api/github-games.html"
+source_path: "docs/api/github-games.md"
+source_hash: "3ac05be03d6f084237353cccfe3c7a2c060046dd000d68711193907a1b4c6263"
+translation: "machine"
+permalink: "/id/docs/api/github-games.html"
+---
+{% raw %}
+<h1 id="github-games">Permainan GitHub</h1>
+<p>Publikasikan game dari repositori GitHub ke <a href="https://starhermit.com">Pertapa Bintang</a>, atau daftarkan game web yang sudah dihosting. Untuk permainan repositori, platform membaca <code>starhermit.txt</code>, mengkloning repo, dan menyajikannya di <code>&lt;slug&gt;.starhermit.com</code>. Karena <code>/api</code> Dan <code>/ws</code> diproksi dengan asal yang sama dari subdomain tersebut, yang dibutuhkan oleh game yang dihosting platform <strong>tidak ada konfigurasi berbasis CORS atau API</strong>. Komit yang disematkan mengontrol versi repositori mana yang aktif. Itu <a href="/id/docs/tutorials/chess-walkthrough.html">implementasi referensi catur</a> diterbitkan dengan cara ini dan berfungsi sebagai contoh referensi model.</p>
+<p>URL Dasar: <code>https://api.starhermit.com</code>. Semua rute berada di bawah <code>api/v1/...</code> dan memerlukan JWT kecuali disebutkan.</p>
+<p>File klien yang dihosting dapat dideklarasikan <a href="/id/docs/starhermit-txt.html#browser-asset-caching">masa pakai cache folder</a>
+Dan <a href="/id/docs/starhermit-txt.html#allowing-another-website-to-access-your-hosted-game">asal CORS tambahan</a>
+di dalam <code>starhermit.txt</code>. Kebijakan tersebut dipublikasikan dengan file klien; penggabungan bebas manifes tetap dipertahankan
+pengaturan yang ada, sementara manifes yang disediakan menggantikannya.</p>
+<h2 id="the-manifest-starhermittxt">Manifesnya: <code>starhermit.txt</code></h2>
+<p>Tempat <code>starhermit.txt</code> di root repo. Format: <code>key=value</code> garis, <code>#</code> memulai komentar.</p>
+<pre><code class="language-text">name=Your Game
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html        # repo-relative HTML entry
+cover=art/cover.png      # optional cover art for the library tile; or an https:// URL
+description=One-line pitch\nSecond line   # optional; or description.file=DESCRIPTION.md
+release_notes.file=CHANGELOG.md          # optional; or release_notes=inline text
+owner=&lt;starhermit user id&gt;  # UUID from GET /api/v1/me; do not use username/nickname
+# Choose at most one authoritative backend, or omit both for a browser-only game:
+server=server.js         # sandboxed JavaScript; see game-scripts.md
+# container.image=ghcr.io/owner/game@sha256:&lt;64 lowercase hex&gt;; see container-games.md
+
+control.up=KeyW+ArrowUp | Move forward
+control.shoot=Space | Shoot
+</code></pre>
+<ul>
+<li>Tidak ada <code>slug</code> kunci: platform menetapkan uid dan menggunakannya sebagai subdomain (<code>&lt;uid&gt;.starhermit.com</code>) dan namespace API game (<code>/api/v1/games/&lt;uid&gt;/…</code>).</li>
+<li><code>cover</code> (alias <code>cover_art</code>, <code>coverart</code>) adalah karya seni yang ditampilkan di ubin perpustakaan game: jalur yang berhubungan dengan file peluncuran, atau jalur absolut <code>https://</code> URL. Opsional — tanpa ubin, ubin akan menampilkan favicon situs Anda. Baca ulang setiap penerapan, jadi mengubah baris akan mengubah sampulnya. Melihat <a href="#cover-art">Seni sampul</a> untuk tanaman ubin.</li>
+<li><code>description</code> / <code>release_notes</code> (atau <code>description.file</code> / <code>release_notes.file</code>, nama yang mana a <code>.md</code>/<code>.markdown</code>/<code>.txt</code> file relatif terhadap manifes) adalah teks opsional untuk game Anda. Mereka dibaca ulang pada setiap penerapan <code>cover</code>. Melihat <a href="#description-and-release-notes">Deskripsi dan catatan rilis</a>.</li>
+<li><code>server</code> mendeklarasikan backend JavaScript yang di-sandbox; melihat <a href="/id/docs/api/game-scripts.html">game-scripts.md</a>.</li>
+<li><code>container.image</code> mendeklarasikan backend kontainer; melihat <a href="/id/docs/api/container-games.html">container-games.md</a>. Itu harus disematkan intisari, dihosting di namespace pemilik GitHub yang terverifikasi pada registri yang diizinkan, dan dapat disertai dengan <code>container.port</code>, <code>container.health</code>, <code>container.memory_mb</code>, <code>container.cpu</code>, dan bukan rahasia <code>container.env.*</code> nilai-nilai.</li>
+<li>Kedua kunci backend bersifat opsional untuk permainan browser murni, namun keduanya saling eksklusif satu sama lain.</li>
+</ul>
+<h3 id="default-control-bindings">Pengikatan kontrol default</h3>
+<p>Sebuah game dapat mendeklarasikan nol atau lebih tindakan browser desktop:</p>
+<pre><code class="language-text">control.&lt;action&gt;=&lt;code&gt;[+&lt;code&gt;...][ | &lt;label&gt;]
+</code></pre>
+<ul>
+<li>Tindakannya menggunakan huruf kecil <code>[a-z0-9_]{1,32}</code> pengidentifikasi dan mempertahankan urutan nyata.</li>
+<li>Kode adalah <code>KeyboardEvent.code</code> nilai-nilai; <code>+</code> memisahkan kunci alternatif untuk satu tindakan.</li>
+<li>Label opsional ditampilkan di UI pemetaan ulang kontrol dan defaultnya adalah id tindakan.</li>
+<li>Sebuah manifes dapat mendeklarasikan hingga 32 tindakan dan 4 kode per tindakan. Kode tidak dapat digunakan oleh
+dua tindakan. Garis kontrol yang tidak valid diabaikan.</li>
+<li>Game dengan no <code>control.*</code> deklarasi tidak memiliki kontrol API/UI (<code>404 "This game declares no controls."</code>). Deklarasi dibaca ulang dari setiap build yang diterbitkan — setiap penerapan, unggahan folder
+dan mengganti bundle push. Langkah demi langkah: <a href="/id/docs/tutorials/game-controls.html">Tutorial: tambahkan kontrol ke game Anda</a>.</li>
+</ul>
+<p>Pemain dapat mengganti default ini per game melalui
+<a href="/id/docs/api/games.html#per-player-control-bindings">Game mengontrol API</a>.</p>
+<h2 id="endpoints">Titik akhir</h2>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/me/github-games</code></td>
+<td>JWT</td>
+<td>Daftarkan game dari URL repo → <code>201 GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/me/github-games/upload</code></td>
+<td>JWT</td>
+<td><strong>Tambahkan game dari folder lokal</strong> — tidak ada repositori sama sekali → <code>201 { game, bytesReceived }</code></td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/me/github-games/{id}/claim</code></td>
+<td>JWT</td>
+<td>Ambil kepemilikan setelah membuktikan kontrol repositori melalui tautan GitHub atau pemilik manifes → <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>MELETAKKAN</td>
+<td><code>/api/v1/me/github-games/{id}/url</code></td>
+<td>JWT</td>
+<td>Arahkan game yang ada ke URL lain; uid dan waktu bermain bertahan</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/github-games</code></td>
+<td>JWT</td>
+<td>Daftarkan game GitHub Anda yang terdaftar → <code>GitHubGameDto[]</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/github-games/{id}/stats</code></td>
+<td>JWT (pemilik)</td>
+<td><strong>Jumlah penonton untuk game yang Anda tambahkan</strong> → <code>GameStatsDto</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/github-games/{id}/sessions</code></td>
+<td>JWT (pemilik)</td>
+<td>Sesi langsung dari server game ini</td>
+</tr>
+<tr>
+<td>MENGHAPUS</td>
+<td><code>/api/v1/me/github-games/{id}/sessions/{sessionId}</code></td>
+<td>JWT (pemilik)</td>
+<td>Akhiri satu sesi langsung (<code>abandoned</code> / <code>operator_ended</code>)</td>
+</tr>
+<tr>
+<td>DAPATKAN/POSTING</td>
+<td><code>/api/v1/me/github-games/{id}/achievements</code></td>
+<td>JWT (pemilik)</td>
+<td><a href="/id/docs/api/achievements.html#achievements-created-by-the-games-owner">Prestasi permainan Anda</a>: daftar semua, buat satu</td>
+</tr>
+<tr>
+<td>MASUKKAN/HAPUS</td>
+<td><code>/api/v1/me/github-games/{id}/achievements/{achievementId}</code></td>
+<td>JWT (pemilik)</td>
+<td>Perbarui/hapus yang Anda buat</td>
+</tr>
+<tr>
+<td>DAPATKAN/POSTING</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards</code></td>
+<td>JWT (pemilik)</td>
+<td><a href="/id/docs/api/leaderboards.html#your-games-own-leaderboards">Papan peringkat game Anda</a>: daftar semua, buat satu</td>
+</tr>
+<tr>
+<td>MASUKKAN/HAPUS</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards/{leaderboardId}</code></td>
+<td>JWT (pemilik)</td>
+<td>Perbarui / hapus satu</td>
+</tr>
+<tr>
+<td>MENGHAPUS</td>
+<td><code>/api/v1/me/github-games/{id}/players/{userId}/elo</code></td>
+<td>JWT (pemilik)</td>
+<td><a href="/id/docs/api/leaderboards.html#resetting-a-players-rating">Setel ulang peringkat satu pemain</a> sampai 1200</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/me/github-games/{id}/transfer</code></td>
+<td>JWT</td>
+<td>Mentransfer game ke pengguna lain → <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>MENGHAPUS</td>
+<td><code>/api/v1/me/github-games/{id}</code></td>
+<td>JWT</td>
+<td>Hapus game yang terdaftar → <code>204</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/github-games/removed</code></td>
+<td>JWT</td>
+<td>Game yang Anda hapus: <code>restorable</code> (permainan yang diunggah), <code>filesKept</code></td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/me/github-games/{id}/restore</code></td>
+<td>JWT</td>
+<td>Memulihkan game yang diunggah dan dihapus: id dan riwayat yang sama, filenya jika belum diklaim kembali (30 hari); <code>409</code> untuk game yang memiliki sumber — tambahkan lagi URL-nya</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/me/github-games/{id}/bundle</code></td>
+<td>JWT</td>
+<td>Publikasikan mentah <code>.tar.gz</code> berisi file klien dan/atau gambar kontainer yang disimpan. <code>?mode=merge</code> menambal file klien langsung alih-alih menggantinya</td>
+</tr>
+<tr>
+<td>WS</td>
+<td><code>/ws/v1/game-upload</code></td>
+<td>JWT (<code>?access_token=</code>)</td>
+<td><strong>Dua unggahan yang sama melalui WebSocket</strong> — transportasi yang digunakan untuk apa pun yang melebihi ~100 MB</td>
+</tr>
+<tr>
+<td>MELETAKKAN</td>
+<td><code>/api/v1/me/github-games/{id}/hosting</code></td>
+<td>JWT</td>
+<td>Aktifkan/nonaktifkan hosting ("Disebarkan ke pertapa bintang") → <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/github-games/{id}/deployment</code></td>
+<td>JWT</td>
+<td>Baca status penerapan/hosting → <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>MELETAKKAN</td>
+<td><code>/api/v1/me/github-games/{id}/deployment</code></td>
+<td>JWT</td>
+<td>Sematkan komit/cabang; mengantri pemindahan → <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/github-games</code></td>
+<td>JWT</td>
+<td>Penjelajahan publik game GitHub bersama → <code>SharedGitHubGameDto[]</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/github-games/{id}/release-notes</code></td>
+<td>JWT</td>
+<td>Catatan rilis game dari manifesnya → <code>GitHubGameReleaseNotesDto</code>, atau <code>404</code> untuk game yang tidak diketahui atau dihapus</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/github-games/{id}/icon</code></td>
+<td>Anonim</td>
+<td>Byte gambar ikon game (favicon atau avatar pemilik); <code>ResponseCache</code> 86400</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/github-games/{id}/cover</code></td>
+<td>Anonim</td>
+<td><strong>Byte gambar seni sampul</strong>, atau <code>404</code> ketika permainan tidak memilikinya; <code>ResponseCache</code> 3600</td>
+</tr>
+<tr>
+<td>MELETAKKAN</td>
+<td><code>/api/v1/me/github-games/{id}/cover</code></td>
+<td>JWT (pemilik)</td>
+<td>Unggah sampul depan, ganti sampul manifes <code>cover=</code> → <code>204</code></td>
+</tr>
+<tr>
+<td>MENGHAPUS</td>
+<td><code>/api/v1/me/github-games/{id}/cover</code></td>
+<td>JWT (pemilik)</td>
+<td>Jatuhkan sampul yang diunggah, kembali ke manifes → <code>204</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/github</code></td>
+<td>JWT</td>
+<td>Status tautan identitas GitHub → <code>{ linked, login }</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="register-a-game">Daftarkan permainan</h3>
+<p><code>POST /api/v1/me/github-games</code></p>
+<pre><code class="language-json">{
+  "repoUrl": "https://github.com/HypeDriven/starhermit-chess",
+  "displayName": "StarHermit Chess",
+  "launchPath": "index.html"
+}
+</code></pre>
+<p>Terlepas dari nama historisnya, <code>repoUrl</code> menerima tiga sumber peluncuran:</p>
+<ol>
+<li>A <code>github.com/&lt;owner&gt;/&lt;repo&gt;</code> gudang. Backend membaca manifesnya dan dapat menyebarkannya
+ke hosting StarHermit.</li>
+<li>URL Halaman GitHub yang sudah dihosting seperti <code>https://owner.github.io/game/</code>. Gudang
+identitas disimpulkan dari URL; URL itu sendiri diluncurkan, tanpa kloning atau pemasangan.</li>
+<li>Publik lainnya <code>http://</code> atau <code>https://</code> URL permainan web yang dihosting. Ini diluncurkan secara langsung dan
+tidak berpartisipasi dalam klaim kepemilikan GitHub.</li>
+</ol>
+<ul>
+<li><code>displayName</code> Dan <code>launchPath</code> adalah fallback opsional. Mereka berguna untuk repo pihak ketiga
+tanpa metadata manifes tepercaya; URL yang dihosting langsung adalah lokasi peluncurannya.</li>
+<li>Untuk pemilik repositori terverifikasi, platform akan memvalidasi <code>starhermit.txt</code>.</li>
+<li>Sebuah opsional <code>server=</code> naskah atau <code>container.image=</code> penyediaan backend permainan yang berwibawa; melihat <a href="/id/docs/api/game-scripts.html">game-scripts.md</a> Dan <a href="/id/docs/api/container-games.html">container-games.md</a>. Hosting kontainer terbuka untuk semua pengguna yang masuk di starhermit.com; penerapan yang dihosting sendiri dapat membatasinya ke daftar yang diizinkan operator.</li>
+<li><strong>Backend server yang dinyatakan memerlukan pemilik yang terbukti.</strong> Mengirimkan repo yang menyatakan <code>server=</code> atau <code>container.image=</code> tanpa login GitHub atau <code>owner=</code> buktinya adalah <code>403</code> (menyebutkan kedua bukti), bukan daftar khusus browser yang berpura-pura memiliki backend.</li>
+<li>Batasan: 100 game per pengguna (dapat diganti oleh operator per akun). Mendaftarkan pengembalian duplikat <code>409</code>.</li>
+</ul>
+<p>Status pendaftaran/penempatan meliputi: <code>InvalidUrl</code>, <code>LimitReached</code>, <code>Duplicate</code>, <code>MissingManualMetadata</code>, <code>MissingStarhermitTxt</code>, <code>InvalidLaunchPath</code>, <code>InvalidServerScriptPath</code>, <code>InvalidContainerImage</code>, <code>ServerProvisionConflict</code>, <code>RemovedByOwner</code>.</p>
+<p>Kesalahan menggunakan bentuk standar:</p>
+<pre><code class="language-json">{ "error": "..." }
+</code></pre>
+<h3 id="add-a-game-from-a-local-folder">Tambahkan game dari folder lokal</h3>
+<p><code>POST /api/v1/me/github-games/upload</code> → <code>201</code></p>
+<p>Mitra untuk mendaftarkan URL: <strong>tidak ada repositori</strong>, dan tidak ada yang dikloning. Foldernya
+bepergian sebagai satu kesatuan <code>.tar.gz</code> pada badan permintaan dan platform menghosting isinya. Arsip yang sama
+format sebagai <a href="#push-a-game-bundle">mendorong bungkusan</a>, jadi kemasan yang sama bisa digunakan untuk keduanya.</p>
+<p>Game yang dibuat memiliki a <code>gameSlug</code> dari awal, baik mendeklarasikan server atau tidak, jadi a
+unggahan khusus browser dapat digunakan <a href="/id/docs/api/games.html#per-player-control-bindings">kontrol</a>,
+<a href="/id/docs/api/games.html#per-player-game-settings">pengaturan per pemain</a>, dia
+<a href="/id/docs/api/catalog.html#saving-from-inside-a-game-launch-token">slot penyimpanan cloud</a>, <a href="/id/docs/api/realtime.html">ruangan waktu nyata</a>
+dan meluncurkan token seperti game lainnya.</p>
+<pre><code class="language-text">client/           the game's files, published as-is
+starhermit.txt    name= and launch= instead of the query parameters
+</code></pre>
+<p>Manifes bersifat opsional <em>titik akhir ini</em> — parameter kueri dapat memberikan nilai yang sama — dan
+klien StarHermit selalu mengirimkannya, dibuat dari bidang manifesnya. Pengiriman file di dalamnya
+build Anda masih layak dilakukan: build tersebut membuat build mendeskripsikan dirinya sendiri dan mengisi kolom tersebut terlebih dahulu, jadi begitulah
+dapat diunggah ulang tanpa mengingat nilai mana yang diperlukan. Melihat
+<a href="/id/docs/starhermit-txt.html">Itu <code>starhermit.txt</code> tampak</a> untuk formatnya, dan perhatikan itu <strong>semuanya
+berdekatan dengan manifes diunggah</strong> — unggah bangunan yang dapat didistribusikan, bukan pohon sumber.</p>
+<p>Kirim byte secara langsung — bukan data formulir multi-bagian — dengan <code>Content-Type: application/gzip</code>:</p>
+<pre><code class="language-bash">tar -czf game.tar.gz client/ starhermit.txt
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/upload?displayName=My%20Game" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game.tar.gz
+</code></pre>
+<pre><code class="language-json">{
+  "game": { "id": "...", "displayName": "My Game", "launchPath": "index.html", "hosting": { "hostingEnabled": true } },
+  "bytesReceived": 4194304
+}
+</code></pre>
+<p>Metadata diselesaikan dalam urutan ini, sehingga sebagian besar folder tidak memerlukan parameter kueri sama sekali:</p>
+<ol>
+<li><code>?displayName=</code> / <code>?launchPath=</code> atas permintaan.</li>
+<li><code>name=</code> / <code>launch=</code> di sebuah <code>starhermit.txt</code> di root arsip.</li>
+<li><code>index.html</code> di akar <code>client/</code> — digunakan sebagai jalur peluncuran ketika tidak ada nama lain yang menyebutkannya.</li>
+</ol>
+<p>Catatan khusus untuk rute ini:</p>
+<ul>
+<li><strong>Permainan ini disiarkan langsung segera setelah panggilan kembali.</strong> Tidak ada hosting atau penerapan terpisah
+langkah: <code>deployStatus</code> adalah <code>live</code> Dan <code>deployedCommitSha</code> adalah <code>null</code>, karena tidak ada komitmen.</li>
+<li><strong>File tidak dapat dibuat ulang</strong>, sehingga platform tidak pernah memindahkannya dari mana pun. Sebuah permainan
+menambahkan cara ini membawa <code>contentSource: upload</code> dan mempertahankan versi yang diunggah hingga Anda memublikasikannya
+satu lagi. Dorong bangunan baru dengan
+<a href="#push-a-game-bundle">titik akhir bundel</a> atau unggah folder itu lagi.</li>
+<li><strong>Tidak ada repositori berarti tidak ada klaim.</strong> <code>ownerLogin</code> kosong, jadi tidak ada login GitHub yang bisa menandinginya;
+<code>repoUrl</code> membawa sintetis <code>upload:&lt;id&gt;</code> nilai daripada URL.</li>
+<li><strong>A <code>server/image.tar</code> ditolak di sini</strong> (<code>422</code>). Gambar server memerlukan permainan yang tersedia
+lampirkan, yang tidak ada sampai game tersebut ada — buat gamenya terlebih dahulu, lalu dorong gambarnya
+untuk <code>/{id}/bundle</code>.</li>
+<li>Jalur peluncuran yang memberi nama file yang tidak terdapat dalam arsip ditolak (<code>422</code>) saat unggahan sedang berlangsung
+masih dalam tahap, daripada menjadi 404 untuk setiap pemain.</li>
+</ul>
+<p>Batasannya sama dengan dorongan lainnya: lihat <a href="#upload-limits">Batas unggahan</a>.</p>
+<h4 id="an-uploaded-folder-can-bring-its-own-server-backend">Folder yang diunggah dapat membawa backend servernya sendiri</h4>
+<p>Jika arsipnya <a href="/id/docs/starhermit-txt.html"><code>starhermit.txt</code></a> mendeklarasikan logika server, unggahan
+menyediakannya juga — hal yang sama dilakukan oleh aliran repositori, tanpa repositori. Pilih satu
+gaya; menyatakan keduanya ditolak.</p>
+<table>
+<thead>
+<tr>
+<th>Pernyataan</th>
+<th>Apa yang terjadi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server=path/to/server.js</code></td>
+<td>Bagian belakang skrip. File tersebut berpindah <strong>di dalam folder yang Anda unggah</strong>, jadi sumbernya dibaca langsung dari arsip — tidak ada yang bisa diambil. Melihat <a href="/id/docs/api/game-scripts.html">game-scripts.md</a>.</td>
+</tr>
+<tr>
+<td><code>container.image=name@sha256:…</code></td>
+<td>Backend kontainer, disematkan seperti biasa. Melihat <a href="/id/docs/api/container-games.html">container-games.md</a>. Gambar itu sendiri kemudian didorong ke <code>/{id}/bundle</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Penolakan di sini menggagalkan keseluruhan pembuatan — tidak ada baris permainan setengah jadi yang bertahan:</p>
+<ul>
+<li><code>server=</code> memberi nama file yang tidak terdapat dalam arsip.</li>
+<li><code>server=</code> menunjuk ke luar file klien (<code>../</code>).</li>
+<li>Mendeklarasikan keduanya <code>server=</code> Dan <code>container.image=</code>.</li>
+<li>Meminta kontainer yang kontainernya dinonaktifkan, atau dari pemilik yang tidak menyetujuinya.</li>
+</ul>
+<h3 id="cover-art">Seni sampul</h3>
+<p>Gambar yang ditampilkan pada ubin game Anda di perpustakaan. Aturlah dengan cara apa pun — apa pun yang Anda gunakan, itu
+anonim <code>GET /api/v1/github-games/{id}/cover</code> itulah yang menyajikannya:</p>
+<ul>
+<li><strong>Di bangunan Anda</strong> — a <code>cover=</code> masuk <code>starhermit.txt</code>, memberi nama gambar yang berhubungan dengan peluncurannya
+file atau mutlak <code>https://</code> URL. Baca ulang setiap penerapan, sehingga repositori Anda tetap menjadi sumber kebenaran.</li>
+<li><strong>Diunggah</strong> — <code>PUT /api/v1/me/github-games/{id}/cover</code> dengan gambar yang dikodekan base64. Ini adalah
+apa dasbor webnya <em>Kelola → Seni sampul</em> lakukan, dan apa yang dapat dilakukan operator StarHermit untuk Anda.</li>
+</ul>
+<pre><code class="language-http">PUT /api/v1/me/github-games/{id}/cover
+Authorization: Bearer &lt;token&gt;
+Content-Type: application/json
+
+{ "imageBase64": "iVBORw0KGgoAAAANSUhEUg..." }
+</code></pre>
+<p>Sebuah unggahan <strong>menimpa</strong> manifesnya, dengan sengaja: penerapan yang membaca ulang <code>starhermit.txt</code> harus
+jangan pernah membatalkan karya seni yang dipilih seseorang dengan tangan. <code>DELETE /api/v1/me/github-games/{id}/cover</code> adalah jalan kembali -
+itu menghapus unggahan dan manifesnya <code>cover=</code> berlaku lagi.</p>
+<p>PNG, JPEG, GIF, WEBP, BMP atau SVG, hingga <strong>4 MB</strong>. Tipenya diendus dari byte, jadi a
+<code>Content-Type</code> Anda tegaskan tidak diperlukan atau dipercaya, dan byte yang bukan merupakan gambar yang dapat didekodekan
+ditolak dengan <code>400</code>. Seorang kerabat <code>cover=</code> jalan harus berakhir di <code>.png</code>, <code>.jpg</code>/<code>.jpeg</code>, <code>.gif</code>,
+<code>.webp</code> atau <code>.svg</code> (TIDAK <code>..</code>, tidak memimpin <code>/</code>); nilai yang tidak dapat digunakan dihilangkan daripada gagal
+permainan.</p>
+<p>Seni sampul adalah seni poster: kedua perpustakaan <strong>skalakan untuk mengisi ubin dan tanaman tengah</strong> apa pun fungsinya
+tidak cocok. Bentuk ubinnya tidak sama.</p>
+<table>
+<thead>
+<tr>
+<th>Permukaan</th>
+<th>Ubin</th>
+<th>Tanaman</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>klien Windows</td>
+<td>Potret 96×128 (3:4)</td>
+<td>Mengisi potret; seni yang lebih luas kehilangan sisinya</td>
+</tr>
+<tr>
+<td>Dasbor web</td>
+<td>Persegi</td>
+<td>Mengisi kotak; seni yang lebih tinggi kehilangan bagian atas dan bawah</td>
+</tr>
+</tbody>
+</table>
+<p>Pertahankan subjek di tengah sehingga kedua potongan terlihat tepat. Sampul SVG ditampilkan di perpustakaan web; itu
+Klien Windows tidak dapat memecahkan kode SVG, sehingga ubin malah menampilkan favicon. Sebuah permainan tanpa penutup
+semua kembali ke faviconnya (<code>GET /api/v1/github-games/{id}/icon</code>). Ikon diselesaikan dari
+URL yang Anda kirimkan dan, saat platform menghosting game tersebut, dari salinan yang disajikan
+<code>&lt;uid&gt;.starhermit.com</code> — jadi bundel yang diunggah dengan favicon di filenya masih mendapat ikon.</p>
+<h3 id="audience-figures-for-your-game">Angka penonton untuk game Anda</h3>
+<p><code>GET /api/v1/me/github-games/{id}/stats</code> → <code>GameStatsDto</code></p>
+<p>Berapa banyak orang yang memainkan permainan <strong>kamu menambahkan</strong>. Terbatas untuk pemilik game — siapa pun bisa <code>404</code>,
+jawaban yang sama seperti permainan yang tidak ada.</p>
+<pre><code class="language-json">{
+  "totalPlayers": 42,
+  "playingNow": 3,
+  "totalSessions": 130,
+  "totalPlaytimeMinutes": 8140,
+  "lastPlayedAt": "2026-07-29T08:45:24Z",
+  "livenessWindowHours": 4
+}
+</code></pre>
+<ul>
+<li><strong>Hanya agregat.</strong> Anda mempelajari jumlah audiens Anda, bukan siapa saja yang ada di dalamnya.</li>
+<li><code>totalPlayers</code> penting <strong>orang yang berbeda</strong>, bukan sesi — seseorang yang bermain enam kali adalah satu
+pemain.</li>
+<li><code>playingNow</code> menghitung pemain berbeda yang sesinya belum berakhir <em>Dan</em> dimulai di dalam
+<code>livenessWindowHours</code>. Jendela itu penting: klien yang mogok atau kehilangan jaringannya tidak pernah mengirim
+sesi berakhir, dan tanpanya, baris-baris tersebut akan terbaca karena orang-orang masih bermain tanpa batas waktu.</li>
+<li><code>totalPlaytimeMinutes</code> penting <strong>sesi yang diselesaikan saja</strong>, mencocokkan angka waktu bermain per pengguna
+di <a href="/id/docs/api/activity.html">activity.md</a>. Sesi dalam penerbangan belum memberikan kontribusi apa pun.</li>
+<li><code>lastPlayedAt</code> adalah <code>null</code> untuk permainan yang belum pernah dimainkan siapa pun.</li>
+</ul>
+<p>Angka-angka tersebut berasal dari buku besar peluncuran yang sama yang ditulis setiap klien (lihat <a href="/id/docs/api/activity.html">activity.md</a>), jadi a
+game yang pemainnya tidak pernah melaporkan peluncurannya akan dibaca sebagai nol.</p>
+<h3 id="claim-ownership">Klaim kepemilikan</h3>
+<p><code>POST /api/v1/me/github-games/{id}/claim</code> → <code>GitHubGameDto</code></p>
+<p>Ambil alih listingan yang ada saat Anda mengontrol repositorinya. Buktikan kepemilikan dengan menghubungkan
+login GitHub pribadi yang cocok dengan pemilik repositori, atau dengan melakukan
+<code>owner=&lt;your StarHermit user ID&gt;</code> ke repositori <code>starhermit.txt</code>. <code>owner</code> seharusnya menjadi
+UUID yang tidak dapat diubah dikembalikan sebagai <code>id</code> oleh <code>GET /api/v1/me</code>, <strong>bukan</strong> nama pengguna atau nama panggilan. Manifes
+metode mendukung repositori milik organisasi, yang tidak disimpulkan dari organisasi GitHub pribadi
+keanggotaan.</p>
+<p>Jika berhasil, listingan yang ada akan menyimpan ID/riwayatnya, dikelola oleh penggugat, dan diperbarui
+metadata dan deklarasi backend yang dikontrol repositori, dan mengantri hosting jika tersedia. Itu
+pengirim sebelumnya kehilangan akses pengelolaan cakupan pemilik. Mengklaim listingan yang sudah Anda kelola
+menyinkronkannya kembali daripada mengembalikan konflik.</p>
+<p>Penyimpanan metadata identitas GitHub <code>{"login":"…"}</code>; tautkan akun GitHub Anda melalui alur OAuth (lihat
+<a href="/id/docs/api/auth.html">auth.md</a>). Periksa status tautan dengan <code>GET /api/v1/me/github</code> → <code>{ linked, login }</code>. Lihat
+<a href="/id/docs/tutorials/claim-existing-game.html">tutorial klaim langkah demi langkah</a> untuk penemuan, keduanya bukti
+metode, validasi, pengambilalihan, dan pemecahan masalah.</p>
+<h3 id="transfer-ownership">Mentransfer kepemilikan</h3>
+<p><code>POST /api/v1/me/github-games/{id}/transfer</code></p>
+<pre><code class="language-json">{ "toUserId": "&lt;user id&gt;" }
+</code></pre>
+<h3 id="push-a-game-bundle">Dorong bundel game</h3>
+<p><code>POST /api/v1/me/github-games/{id}/bundle</code> menerbitkan keluaran yang dibuat tanpa meminta StarHermit
+mengkloningnya lagi. Penelepon harus memiliki game yang terdaftar. Kirim <code>.tar.gz</code> byte secara langsung—tidak
+data formulir multi bagian—dengan <code>Content-Type: application/gzip</code>:</p>
+<pre><code class="language-text">client/            optional static client files; must include the registered launch file
+server/image.tar   optional output from `docker save`
+starhermit.txt     optional manifest copy for bundle portability
+remove.txt         merge only: client-relative paths to delete, one per line
+</code></pre>
+<p>Setidaknya <code>client/</code> atau <code>server/image.tar</code> harus ada (penggabungan juga mungkin saja <code>remove.txt</code>). File klien ditukar secara atom. SEBUAH
+gambar server dimuat, intisari disematkan oleh platform, dan mengantrikan penerapan kontainer
+restart pada gambar itu. Gambar yang diunggah lebih diutamakan daripada referensi registri manifes,
+dan lebih dari a <code>server=</code> garis; sebuah manifes yang menyatakan keduanya <code>server=</code> Dan <code>container.image=</code> ditolak
+sebelum apa pun dimuat. Apa pun yang ada di arsip akan diabaikan.</p>
+<p><strong>Mengunggah gambar itu sendiri merupakan deklarasi.</strong> Jika game belum memiliki backend server — an
+folder yang diunggah yang menyatakan tidak ada — mendorong <code>server/image.tar</code> ketentuan satu dari intisari saja
+dimuat, di bawah <code>gameSlug</code> permainan sudah ada. Anda tidak perlu memberi nama pada gambar yang diberi pin intisari di a
+manifes pertama, yang berbentuk lingkaran: definisi harus ada sebelum dapat menerima gambar,
+dan gambar adalah satu-satunya hal yang dapat menggambarkannya.</p>
+<p><strong>Pendorongan ulang akan menerapkan kenop kontainer yang dinyatakan manifesnya, dan hanya itu saja.</strong> Termasuk
+<code>starhermit.txt</code> dalam bundel dengan yang diubah <code>container.port</code>, <code>container.health</code>,
+<code>container.memory_mb</code> atau <code>container.cpu</code> dan penerapan mengambilnya saat restart; tinggalkan kenop dan
+itu menyimpan apa pun yang Anda atur terakhir kali. Hilangkan seluruh manifes dan jangan tinggalkan apa pun tentang penerapannya
+berubah kecuali gambar.</p>
+<p>Klien StarHermit membuat bundel ini untuk Anda, dari sebuah folder <strong>atau satu <code>.tar</code></strong>:</p>
+<ul>
+<li><strong>File klien</strong> — folder distribusi permainan, atau a <code>.tar</code> itu. Sebuah folder dikemas di bawah
+<code>client/</code>; a <code>.tar</code>Entrinya ditempatkan kembali di sana (arsip sudah ada di bawah <code>client/</code> tersisa
+sendirian). hanya ustar — Arsip nama panjang GNU dan PAX ditolak, karena berarti menyimpannya kembali
+menulis ulang blok metadata yang memberi nama entri berikut.</li>
+<li><strong>Server khusus</strong> — folder distribusi server, atau <code>docker save</code> <code>.tar</code> dengan sendirinya.
+Dari folder hanya manifes dan <code>image.tar</code> diunggah: gambar sudah berisi milik Anda
+file milik server sendiri, jadi mengemas sisanya akan mengirimkan gigabyte untuk dibuang oleh platform.</li>
+</ul>
+<p>Dalam kedua kasus tersebut <a href="/id/docs/starhermit-txt.html"><code>starhermit.txt</code></a> dapat diedit dalam dialog. Apapun itu
+build yang dipilih membawa mengisi kolom terlebih dahulu, dan apa pun yang disimpannya ditulis di root bundel - jadi
+sebuah build tanpa manifes dapat dipublikasikan, dan build yang dikirimkan sebagai a <code>.tar</code> masih bisa mendapatkan manifesnya
+diperbarui.</p>
+<pre><code class="language-bash">docker save my-game-server:release -o image.tar
+mkdir -p bundle/server
+mv image.tar bundle/server/image.tar
+cp starhermit.txt bundle/
+tar -C bundle -czf game-bundle.tar.gz .
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game-bundle.tar.gz
+</code></pre>
+<pre><code class="language-json">{
+  "clientPublished": false,
+  "serverImageLoaded": true,
+  "imageDigest": "sha256:...",
+  "bytesReceived": 318767104,
+  "mode": "replace",
+  "filesRemoved": 0
+}
+</code></pre>
+<h4 id="partial-updates-modemerge">Pembaruan sebagian: <code>?mode=merge</code></h4>
+<p>Dorongan adalah a <strong>mengganti</strong> kecuali Anda bertanya sebaliknya: arsip adalah keseluruhan permainan, dan apa pun yang tidak ada di dalamnya
+itu hilang. <code>?mode=merge</code> (HTTP dan soket unggahan sama) menjadikannya a <strong>tambalan</strong> dari klien langsung
+files — jawaban untuk mengunggah ulang gigabyte aset yang tidak diubah untuk perbaikan satu file.</p>
+<pre><code class="language-bash">printf '%s\n' '# one client-relative path per line; a directory removes everything under it' \
+    'assets/old-music.ogg' 'levels/cut/' &gt; remove.txt
+tar czf patch.tar.gz client/index.html client/js/app.js remove.txt
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle?mode=merge" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @patch.tar.gz
+</code></pre>
+<p>Dengan <code>mode=merge</code>:</p>
+<ul>
+<li>file di bawah <code>client/</code> ditambahkan atau ditimpa</li>
+<li>jalur di root <code>remove.txt</code> (<code>#</code> komentar; suatu direktori menghapus seluruh subpohonnya) dihapus</li>
+<li>setiap file langsung lainnya tetap sama seperti aslinya</li>
+</ul>
+<p>Pohon yang digabungkan dipentaskan sebagai salinan dan ditukar secara atom — pemain melihat game lama atau game tersebut
+yang benar-benar baru, belum pernah dicampur. Hasilnya dibatasi oleh <strong>pertandingan</strong> tunjangan, bukan uploadnya, jadi
+sebuah game tidak bisa berkembang melewati batasnya satu patch kecil dalam satu waktu. Penggabungan hanya tentang file klien; A
+<code>server/image.tar</code> dimuat persis seperti pada penggantian. Sebuah tambalan yang membawa no <code>starhermit.txt</code> daun
+sampul seni seperti itu.</p>
+<p>Penggabungan ditolak (<code>409</code>/<code>422</code>, tidak ada yang berubah) saat game belum dipublikasikan, kapan
+akan menghapus file peluncuran, atau kapan <code>remove.txt</code> poin di luar permainan. A <code>remove.txt</code> di a
+penggantian biasa juga ditolak (<code>422</code>), karena itu hanya bisa berarti sesuatu yang tidak Anda maksudkan
+berniat. <code>mode</code> harus <code>replace</code> (standar) atau <code>merge</code>; hal lainnya adalah <code>400</code>.</p>
+<p>Parameter yang sama berfungsi pada soket: <code>ws/v1/game-upload?gameId=…&amp;mode=merge</code>. Itu <code>ready</code> bingkai
+menggemakannya sebagai <code>"apply":"merge"</code>.</p>
+<p>Titik akhir memperbarui game terdaftar yang sudah ada; itu tidak pernah membuat rekor permainan — untuk itu, lihat
+<a href="#add-a-game-from-a-local-folder">menambahkan game dari folder lokal</a>. Dia <em>Bisa</em> penyediaan permainan
+backend server, sebagai efek samping memuat gambar server ke dalam game yang tidak ada. Lihat
+<a href="/id/docs/tutorials/dedicated-server-onboarding.html">tutorial penerbitan server khusus</a>.</p>
+<h3 id="upload-from-cicd">Unggah dari CI/CD</h3>
+<p>Jangan menyimpan token OAuth interaktif dalam rahasia repositori. Masuk melalui OAuth sekali dan gunakan
+sesi itu untuk menambahkan kunci penerapan yang diberi label terpisah <code>POST /api/v1/me/public-keys</code>. CI
+pekerjaan kemudian dapat menandatangani <code>/auth/public-key/challenge</code>, tukarkan di <code>/auth/public-key/complete</code>, dan gunakan
+token akses 15 menit yang dikembalikan pada titik akhir bundel ini.</p>
+<p>Kunci penerapan bertindak sebagai akun pemiliknya, sehingga akun tersebut harus memiliki game target. Itu tidak bisa
+tambahkan kunci lain atau cabut kunci lainnya. Ia dapat mencabut dirinya sendiri melalui <code>/me/public-keys/current</code>;
+mengelola pendaftaran dan kunci lain dari sesi yang diautentikasi OAuth. Gunakan satu kunci per
+lingkungan sehingga satu alur kerja dapat dinonaktifkan tanpa menghentikan alur kerja lainnya. Arsip selesai secara kasar
+100 MB harus menggunakan transport WebSocket dibawah ini.</p>
+<p>Melihat <a href="/id/docs/tutorials/ci-cd-build-upload.html">Unggah build dari CI/CD dengan kunci publik terdaftar OAuth</a>
+untuk pembuatan kunci, penyiapan rahasia GitHub, skrip penandatanganan/pengunggah tantangan lengkap, statis dan
+tata letak bundel kontainer, dan alur kerja Tindakan GitHub.</p>
+<h3 id="upload-over-a-websocket">Unggah melalui WebSocket</h3>
+<p><code>GET /ws/v1/game-upload</code> (meningkatkan) - <strong>gunakan ini untuk apa pun yang berukuran lebih dari 100 MB.</strong></p>
+<p>CDN di depan API menolak isi permintaan HTTP secara kasar <strong>100 MB</strong> dengan a <code>413</code> itu
+sendiri. Penolakan itu tidak pernah sampai ke platform, jadi tidak ada gunanya <code>limitBytes</code> dan muncul di no log Anda
+dapat membaca - a <code>413</code> dengan tidak <code>limitBytes</code> bidangnya adalah CDN, bukan tunjangan permainan Anda, yaitu dua
+lipat lebih besar. Benar-benar realistis <code>docker save</code> akan memukulnya.</p>
+<p>Bingkai yang dikirim setelah pemutakhiran WebSocket bukan merupakan isi permintaan, jadi batas atas tidak berlaku.
+<strong>Hanya transportasinya yang berbeda.</strong> Bingkai biner digabungkan menjadi byte yang sama dengan rute HTTP
+membaca, melalui jalur yang sama, dan setiap penolakan, izin, dan badan keberhasilan adalah HTTP
+rute akan dihasilkan - sehingga klien dapat berbagi satu jalur kode di keduanya.</p>
+<pre><code class="language-text">wss://api.starhermit.com/ws/v1/game-upload?gameId=$GAME_ID&amp;access_token=$TOKEN
+wss://api.starhermit.com/ws/v1/game-upload?gameId=$GAME_ID&amp;mode=merge&amp;access_token=$TOKEN
+wss://api.starhermit.com/ws/v1/game-upload?displayName=My%20Game&amp;launchPath=index.html&amp;access_token=$TOKEN
+</code></pre>
+<p>Lulus <code>gameId</code> untuk mendorong ke game yang Anda miliki (the <code>/{id}/bundle</code> rute); hilangkan dan lewati
+<code>displayName</code>/<code>launchPath</code> untuk membuatnya dari folder (the <code>/upload</code> rute). Tokennya masuk ke dalam
+string kueri karena browser tidak dapat menyetel <code>Authorization</code> header pada jabat tangan WebSocket; itu
+diperiksa sekali, saat jabat tangan, sehingga unggahan yang umur token aksesnya lebih lama tetap selesai.</p>
+<table>
+<thead>
+<tr>
+<th>Arah</th>
+<th>Bingkai</th>
+<th>Arti</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>pelayan →</td>
+<td><code>{"type":"ready","mode":"bundle","apply":"replace","limitBytes":N,"heartbeatSeconds":15}</code></td>
+<td>Tunjangan diselesaikan dan ruang kosong diperiksa. Mulai mengirim. <code>mode</code> adalah <code>bundle</code> atau <code>create</code>. <code>apply</code> adalah <code>merge</code> ketika Anda meminta pembaruan sebagian.</td>
+</tr>
+<tr>
+<td>→ pelayan</td>
+<td><em>biner</em></td>
+<td>Arsipkan byte, dipotong sesuka Anda — server tidak pernah menyusun ulang pesan, jadi 256 KB–1 MB adalah ukuran default yang bagus. Jika digabungkan, bingkai Anda harus persis seperti itu <code>.tar.gz</code>.</td>
+</tr>
+<tr>
+<td>pelayan →</td>
+<td><code>{"type":"ack","bytesReceived":N}</code></td>
+<td>Kemajuan penerimaan, kira-kira setiap 8 MB. Dorong bilah kemajuan Anda dari ini.</td>
+</tr>
+<tr>
+<td>→ pelayan</td>
+<td><code>{"type":"complete"}</code></td>
+<td>Arsip telah dikirim secara lengkap.</td>
+</tr>
+<tr>
+<td>→ pelayan</td>
+<td><code>{"type":"abort"}</code></td>
+<td>Menyerah. Dijawab dengan <code>status: 499</code>; tidak ada yang dipublikasikan.</td>
+</tr>
+<tr>
+<td>pelayan →</td>
+<td><code>{"type":"progress","phase":"publishing","bytesReceived":N}</code></td>
+<td>Detak jantung setiap 15 detik saat unggahan mendarat. Abaikan mereka, tapi harapkan mereka.</td>
+</tr>
+<tr>
+<td>pelayan →</td>
+<td><code>{"type":"result","status":200,...}</code></td>
+<td>Kesuksesan. Objek lainnya adalah isi respons HTTP kata demi kata (<code>status</code> adalah <code>201</code> untuk membuat).</td>
+</tr>
+<tr>
+<td>pelayan →</td>
+<td><code>{"type":"error","status":413,"error":"...","limitBytes":N}</code></td>
+<td>Penolakan. <code>status</code> dan isi adalah apa yang akan dijawab oleh rute HTTP.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Tidak ada yang dipublikasikan sampai <code>{"type":"complete"}</code> tiba.</strong> Ini adalah satu-satunya perilaku tanpa HTTP
+setara, dan ini disengaja: penanda akhir arsip tetap hidup <em>di dalam</em> byte tar, jadi
+platform selesai membaca arsip yang tampak lengkap tanpa koneksi berakhir. Sebuah soket
+yang hilang begitu saja setelah byte terakhir akan diterbitkan persis seperti yang selesai -
+diam-diam mengganti permainan langsung dengan dorongan yang ditinggalkan. Menutup soket tanpa mengunggah bingkai
+tidak ada apa-apa.</p>
+<p>Publikasi setelah byte terakhir Anda dapat memakan waktu, terutama untuk gambar server. Mengharapkan <code>progress</code>
+detak jantung saat itu selesai; jangan menganggap interval tenang sebagai kegagalan pengunggahan.</p>
+<h3 id="upload-limits">Batas unggahan</h3>
+<p>Semua rute unggahan — baik titik akhir HTTP maupun WebSocket — memiliki aturan yang sama.</p>
+<table>
+<thead>
+<tr>
+<th>Membatasi</th>
+<th>Nilai</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tunjangan disk per game</td>
+<td><strong>2 GB</strong> di starhermit.com (tunjangan dapat bervariasi berdasarkan game/penerapan)</td>
+</tr>
+<tr>
+<td>File yang dihosting per akun</td>
+<td><strong>20 GB</strong> di semua permainan akun (dapat disesuaikan oleh operator per akun)</td>
+</tr>
+<tr>
+<td>Penyebaran repositori</td>
+<td><strong>50 MB</strong> arsip</td>
+</tr>
+<tr>
+<td><code>starhermit.txt</code> / <code>remove.txt</code></td>
+<td><strong>256 KB</strong> setiap; <code>remove.txt</code> mencantumkan paling banyak 10.000 jalur (<code>422</code>)</td>
+</tr>
+<tr>
+<td>Pelaksanaan</td>
+<td>terapan <strong>saat streaming</strong>, jadi dorongan yang terlalu besar akan terhenti di tengah penerbangan</td>
+</tr>
+</tbody>
+</table>
+<p>Upload atau push dipotong sesuai sisa kuota hosting akun (<code>413</code> dengan
+<code>limitBytes</code>), dan penerapan repositori yang akan meneruskannya gagal dengan alasan menyebutkan tunjangan.
+Per-push dan per-game adalah nomor yang sama pada pergantian. Penggabungan dibatasi oleh <strong>dihasilkan</strong>
+ukuran permainan, jadi tambalan kecil yang akan membuat pohon hidup melebihi yang diijinkan akan ditolak.</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Arti</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td><code>mode</code> bukan keduanya <code>replace</code> juga bukan <code>merge</code>.</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>Penggabungan terhadap game yang belum memiliki file yang dipublikasikan.</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>Atas tunjangan. Tubuh membawa <code>{ "error", "limitBytes" }</code>. A <code>413</code> <strong>tanpa</strong> <code>limitBytes</code> adalah batas badan CDN ~100 MB, bukan ini — <a href="#upload-over-a-websocket">gunakan soket unggah</a>.</td>
+</tr>
+<tr>
+<td><code>422</code></td>
+<td>Arsip rusak, atau konten tidak dapat digunakan (file peluncuran tidak ada, no <code>client/</code>, a <code>server/image.tar</code> pada rute pembuatan, penggabungan yang akan menghapus file peluncuran, <code>remove.txt</code> pada penggantian). Juga sebuah <strong>terpotong</strong> arsip — akibat biasa dari koneksi terputus di tengah pengunggahan.</td>
+</tr>
+<tr>
+<td><code>507</code></td>
+<td>Server tidak memiliki ruang saat ini. Ditolak <strong>sebelum tubuh dibaca</strong> ketika kapasitas publikasi tidak tersedia; coba lagi nanti.</td>
+</tr>
+</tbody>
+</table>
+<p>Arsip tidak boleh lepas dari akarnya atau berisi tautan, dan hanya file dan direktori biasa saja yang lolos
+diekstraksi — symlink, hard link, dan node perangkat ditolak. <code>git archive</code> Header global PAX,
+<code>./</code>-nama awalan dari <code>tar -czf game.tgz .</code>, dan nama file yang hanya berisi <code>..</code>
+(<code>sprite..png</code>) diterima. A <code>..</code> segmen jalur masih ditolak.</p>
+<h3 id="rate-limit">Batas tarif</h3>
+<p>Kirim, klaim, ubah URL, hosting, dan penerapan semuanya mencapai GitHub pada satu token platform
+bersama-sama mereka dibatasi hingga 10 permintaan per menit per akun (<code>429</code>, dengan <code>Retry-After</code>). Sebuah
+operator dapat menaikkannya untuk satu akun.</p>
+<h3 id="enable-hosting">Aktifkan hosting</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/hosting</code> → <code>GameHostingView</code> ("Disebarkan ke pertapa bintang")</p>
+<pre><code class="language-json">{ "enabled": true }
+</code></pre>
+<h3 id="pin-a-deployment">Sematkan penerapan</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/deployment</code> → <code>GameHostingView</code></p>
+<pre><code class="language-json">{ "commit": "&lt;sha or branch&gt;" }
+</code></pre>
+<p><code>commit</code> adalah opsional. Menyematkan sha/cabang akan mengantri pemindahan; pemilihan <code>GET /api/v1/me/github-games/{id}/deployment</code> untuk status.</p>
+<p>Ini ditolak untuk permainan yang tidak menyebutkan nama repositori (bundel yang diunggah): menyematkan komit adalah apa
+memindahkan game ke repositorinya, dan game yang dibuat bundel tidak memilikinya. Menyebarkan ulang game yang diunggah
+memverifikasi file masih dalam volume daripada mengambil github.com.</p>
+<h3 id="move-a-game-to-a-new-url">Pindahkan game ke URL baru</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/url</code></p>
+<pre><code class="language-json">{ "repoUrl": "https://github.com/you/new-repo", "displayName": "optional for a hosted URL" }
+</code></pre>
+<p>Baris tersebut bertahan — uid, <code>&lt;uid&gt;.starhermit.com</code>, waktu bermain, peringkat — dan diterapkan ulang dari
+tujuan. Tujuan github harus merupakan tujuan yang dapat dibuktikan oleh penelepon bahwa mereka dapat mengontrolnya (<code>403</code> jika tidak),
+dan itu <code>starhermit.txt</code> tidak boleh menyebutkan nama a <em>berbeda</em> <code>owner=</code> (<code>403</code>). Sebuah skrip atau wadah
+backend dinonaktifkan kecuali tujuan menyatakannya.</p>
+<h3 id="live-sessions-owner">Sesi langsung (pemilik)</h3>
+<p><code>GET /api/v1/me/github-games/{id}/sessions</code> mencantumkan sesi aktif server game.
+<code>DELETE .../sessions/{sessionId}</code> mengakhiri satu melalui jalur pengabaian platform (tidak ada pemenang, tidak
+ya, alasan <code>operator_ended</code>). Itu mengembalikan kapasitas kursi yang diadakan sesi yang macet.</p>
+<h3 id="leaderboards-and-achievements-owner">Papan peringkat dan prestasi (pemilik)</h3>
+<p>Pemilik sebuah game adalah penerbitnya: Anda dapat membuat <strong>papan peringkat</strong> Dan <strong>prestasi</strong> untuk itu
+di bawah <code>/me/github-games/{id}/leaderboards</code> Dan <code>/achievements</code> tanpa akun penerbit. Hanya saja
+server game Anda menulis kepada mereka, jadi game tersebut memerlukan a <code>server=</code> naskah atau <code>container.image=</code>
+backend — game yang hanya dapat diakses oleh browser <code>409</code>. Melihat <a href="/id/docs/api/leaderboards.html#your-games-own-leaderboards">Papan peringkat</a>,
+<a href="/id/docs/api/achievements.html#achievements-created-by-the-games-owner">Prestasi</a> dan itu
+<a href="/id/docs/tutorials/game-leaderboards-achievements.html">tutorial</a>.</p>
+<h2 id="dtos">DTO</h2>
+<pre><code class="language-json">// GitHubGameDto
+{
+  "id": "...",
+  "repoUrl": "...",
+  "ownerLogin": "...",
+  "repoName": "...",
+  "displayName": "...",
+  "launchPath": "index.html",
+  "serverScriptPath": "server.js",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "serverRuntime": "script",
+  "isVerifiedOwner": true,
+  "metadataSource": "...",
+  "createdAt": "...",
+  "coverArtSource": "manifest",
+  "coverArtUpdatedAt": "...",
+  "hosting": { "hostingEnabled": true },
+  "description": "Tend a garden on a drifting asteroid.",
+  "releaseNotesUpdatedAt": "..."
+}
+</code></pre>
+<ul>
+<li><code>serverScriptPath</code> hanya ada untuk backend JavaScript. DTO saat ini tidak memaparkan referensi gambar kontainer.</li>
+<li><code>gameSlug</code> hadir untuk setiap game yang ditambahkan dari folder lokal dan setiap game yang ditambahkan oleh pemilik terverifikasi, <strong>dengan atau tanpa backend server</strong> — ini membahas kontrol game, pengaturan, slot penyimpanan cloud, ruangan, dan token peluncuran. Dia <code>null</code> hanya untuk penyerahan repositori yang tidak terbukti pemiliknya. Itu tidak memberi tahu Anda apakah game tersebut memiliki backend; <code>serverRuntime</code> melakukan.</li>
+<li><code>serverRuntime</code> menyatakan apakah game tersebut memiliki backend server: <code>"script"</code>, <code>"container"</code>, atau <code>null</code> untuk game khusus browser. Itu setuju dengan <code>GET /api/v1/games/{gameSlug}</code>, yang menjawab <code>404</code> tepatnya kapan itu terjadi <code>null</code>.</li>
+<li>Untuk game yang ditambahkan dari folder lokal, <code>repoUrl</code> adalah sintetis <code>upload:&lt;id&gt;</code> penanda dan <code>ownerLogin</code>/<code>repoName</code> kosong — tidak ada repositori yang dapat disebutkan namanya, dan pemilik yang kosonglah yang membuat listingan tersebut tidak dapat diklaim.</li>
+<li><code>coverArtSource</code> adalah <code>"upload"</code>, <code>"manifest"</code> atau <code>null</code>, Dan <code>coverArtUpdatedAt</code> adalah saat penutup terakhir diubah — gunakan untuk melakukan cache-bust <code>/cover</code> URL. Apa pun yang bukan nol berarti game tersebut memiliki gambar sampul untuk diambil; <code>null</code> berarti jatuh kembali ke <code>/icon</code>. Kedua sumber tersebut tidak sama: sebuah unggahan selalu menang, dan itu adalah satu-satunya <code>DELETE /cover</code> dapat menghapus.</li>
+<li><code>description</code> adalah deskripsi manifes, atau <code>null</code>. <code>releaseNotesUpdatedAt</code> adalah saat catatan rilis terakhir <em>mengubah teks</em> (<code>null</code> ketika permainan tidak memilikinya). Menyebarkan ulang catatan yang identik tidak memindahkannya, jadi aman untuk mengemudi a "Apa yang baru" lencana: ingat nilai yang terakhir dilihat pemain dan bandingkan. Catatan itu sendiri tidak ada dalam daftar; melihat <a href="#description-and-release-notes">Deskripsi dan catatan rilis</a>.</li>
+<li><code>SharedGitHubGameDto</code> meluas <code>GitHubGameDto</code> dengan <code>submittedByUserId</code> Dan <code>submittedByUsername</code>.</li>
+</ul>
+<h3 id="description-and-release-notes">Deskripsi dan catatan rilis</h3>
+<p>Keduanya berasal dari permainan <code>starhermit.txt</code>; melihat
+<a href="/id/docs/starhermit-txt.html#description-and-release-notes">referensi manifes</a> untuk cara menulisnya.
+Deskripsinya ada pada daftar game di atas. Catatan rilis dapat mencapai 20.000 karakter, begitu pula
+tidak dimasukkan dalam daftar penelusuran, yang mengembalikan setiap game sekaligus, dan diambil per game:</p>
+<pre><code class="language-http">GET /api/v1/github-games/{id}/release-notes
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<pre><code class="language-json">// GitHubGameReleaseNotesDto
+{
+  "id": "...",
+  "releaseNotes": "- New: night cycle\n- Fixed: seeds vanishing after a reload",
+  "updatedAt": "2026-09-27T10:15:00+00:00",
+  "commitSha": "4f2a…"
+}
+</code></pre>
+<ul>
+<li><code>releaseNotes</code> Dan <code>updatedAt</code> adalah <code>null</code> ketika permainan menyatakan tidak ada nada.</li>
+<li><code>commitSha</code> adalah komit yang diterapkan untuk permainan repositori, dan <code>null</code> untuk bangunan yang diunggah.</li>
+<li>Hanya tanyakan kapan <code>releaseNotesUpdatedAt</code> dalam daftar lebih baru dari yang terakhir Anda tunjukkan.</li>
+<li>Teks dikembalikan persis seperti yang ditulis pengembang (biasanya penurunan harga). Merendernya
+pilihan klien, dan itu harus diperlakukan sebagai masukan tidak tepercaya seperti teks pengguna lainnya.</li>
+</ul>
+<pre><code class="language-json">// GameHostingView
+{
+  "hostingEnabled": true,
+  "hostedUrl": "https://yourgame.starhermit.com",
+  "deployStatus": "...",
+  "pinnedCommitSha": "...",
+  "deployedCommitSha": "...",
+  "deployError": null,
+  "deployedAt": "..."
+}
+</code></pre>
+<p><code>hostedUrl</code>, <code>pinnedCommitSha</code>, <code>deployedCommitSha</code>, <code>deployError</code>, Dan <code>deployedAt</code> bersifat opsional.</p>
+<pre><code class="language-json">// GameStatsDto  (GET /api/v1/me/github-games/{id}/stats — owner only)
+{
+  "totalPlayers": 42,
+  "playingNow": 3,
+  "totalSessions": 130,
+  "totalPlaytimeMinutes": 8140,
+  "lastPlayedAt": "2026-07-29T08:45:24Z",
+  "livenessWindowHours": 4
+}
+</code></pre>
+<h2 id="publish-your-own-game-walkthrough">Publikasikan game Anda sendiri: panduan</h2>
+<p>Ada dua rute masuk. Jika game Anda berada di repositori git, ikuti langkah-langkah bernomor di bawah.
+Jika itu hanya sebuah folder di mesin Anda, satu panggilan akan menyelesaikan semuanya:
+<a href="#add-a-game-from-a-local-folder">tambahkan game dari folder lokal</a> mendaftarkan permainan, menerbitkan
+file, dan membiarkannya tetap aktif — tidak ada pengalih hosting dan tidak ada pin komit, karena tidak ada repositori untuk itu
+jalur.</p>
+<ol>
+<li><strong>Pilih sumber</strong>: mendorong repo yang berisi <code>starhermit.txt</code> di root (opsional mendeklarasikan a <code>server.js</code> skrip atau gambar kontainer), atau siapkan URL publik dari game browser yang sudah dihosting.</li>
+<li><strong>Tautkan identitas GitHub Anda</strong> melalui aliran OAuth (lihat <a href="/id/docs/api/auth.html">auth.md</a>); verifikasi dengan <code>GET /api/v1/me/github</code>.</li>
+<li><strong>Daftarkan permainannya</strong>: <code>POST /api/v1/me/github-games</code> dengan repositori atau URL game yang dihosting <code>repoUrl</code>.</li>
+<li><strong>Hanya permainan repositori — aktifkan hosting</strong>: <code>PUT /api/v1/me/github-games/{id}/hosting</code> dengan <code>{ "enabled": true }</code>.</li>
+<li><strong>Hanya permainan repositori — sematkan komit</strong>: <code>PUT /api/v1/me/github-games/{id}/deployment</code> dengan <code>{ "commit": "&lt;sha&gt;" }</code>. Komit yang disematkan mengontrol versi langsung.</li>
+<li><strong>Pemain meluncurkan permainan</strong>: permainan repositori yang diterapkan disajikan di <code>&lt;slug&gt;.starhermit.com</code>; permainan yang dihosting langsung membuka URL yang dikirimkannya. Setiap pertandingan dengan a <code>gameSlug</code> — backend atau tidak — menerima token peluncuran dari <code>POST /api/v1/games/&lt;slug&gt;/launch-token</code> di fragmen URL (opsional dengan <code>&amp;session_id=&lt;guid&gt;</code> untuk mengundang tautan dalam).</li>
+</ol>
+<p>Untuk kontrak sisi klien selengkapnya — cara game membaca token peluncuran dan berkomunikasi dengan API — lihat <a href="/id/docs/tutorials/chess-walkthrough.html">panduan catur</a> implementasi referensi.</p>
+<h2 id="see-also">Lihat juga</h2>
+<ul>
+<li><a href="/id/docs/api/games.html">games.md</a> — titik akhir game, token peluncuran</li>
+<li><a href="/id/docs/api/game-scripts.html">game-scripts.md</a> — server game JavaScript dengan kotak pasir</li>
+<li><a href="/id/docs/api/container-games.html">container-games.md</a> — server game yang dihosting kontainer</li>
+<li><a href="/id/docs/api/auth.html">auth.md</a> — Tautan identitas JWT dan OAuth</li>
+<li><a href="/id/docs/tutorials/chess-walkthrough.html">tutorial/chess-walkthrough.md</a> — implementasi referensi ujung ke ujung</li>
+<li><a href="/id/docs/tutorials/claim-existing-game.html">tutorial/klaim-yang ada-game.md</a> — ambil alih listingan milik Anda yang sudah ada</li>
+</ul>
+<p>Dibagikan <a href="/id/docs/api/conventions.html">konvensi API</a> menjelaskan penguraian respons, stempel waktu, penomoran halaman, dan percobaan ulang.</p>
+<p>Melihat <a href="/id/docs/credentials.html">kompatibilitas kredensial</a> Dan <a href="/id/docs/api/contracts.html">kontrak yang dapat dibaca mesin</a>.</p>
+
+{% endraw %}

@@ -1,0 +1,251 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Tablas de clasificación"
+source_url: "/docs/api/leaderboards.html"
+source_path: "docs/api/leaderboards.md"
+source_hash: "8dc804e92e296ca450fe1e537cab9b10deabd2f397a82763791d66544f8a5eff"
+translation: "machine"
+permalink: "/es/docs/api/leaderboards.html"
+---
+{% raw %}
+<h1 id="leaderboards">Tablas de clasificación</h1>
+<p>Definiciones y entradas de la tabla de clasificación. Las lecturas son anónimas; enviar una puntuación requiere un JWT.</p>
+<p>URL básica: <code>https://api.starhermit.com</code>. Todas las rutas están bajo <code>/api/v1/...</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Camino</th>
+<th>autenticación</th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/leaderboards</code></td>
+<td>Anónimo</td>
+<td>Definiciones de lista (consulta <code>scope</code>, <code>region</code>, <code>titleId</code>)</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/leaderboards/{id}</code></td>
+<td>Anónimo</td>
+<td>Obtener una definición</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/leaderboards/{id}/entries?scope=&amp;region=&amp;friendsOnly=&amp;page=&amp;pageSize=</code></td>
+<td>Anónimo</td>
+<td>Entradas paginadas; <code>friendsOnly=true</code> requiere autenticación</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/leaderboards/{id}/submit</code></td>
+<td>JWT</td>
+<td>Enviar una partitura (solo tableros de catálogo)</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/games/{slug}/leaderboards</code></td>
+<td>Portador</td>
+<td>Los propios tableros activos de tu juego (se acepta token de inicio)</td>
+</tr>
+<tr>
+<td>OBTENER/PUBLICAR</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards</code></td>
+<td>JWT (propietario del juego)</td>
+<td>Listar / crear los tableros de tu juego</td>
+</tr>
+<tr>
+<td>PONER/ELIMINAR</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards/{leaderboardId}</code></td>
+<td>JWT (propietario del juego)</td>
+<td>Actualizar/eliminar uno</td>
+</tr>
+</tbody>
+</table>
+<p>Las definiciones son <code>LeaderboardDefinitionDto[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "id": "…",
+    "softwareTitleId": "…",
+    "gameDefinitionId": null,
+    "key": null,
+    "name": "…",
+    "scoreType": "…",
+    "sortDirection": "…",
+    "resetSchedule": "weekly",
+    "currentPeriodStartedAt": "2026-10-12T00:00:00+00:00",
+    "nextResetAt": "2026-10-19T00:00:00+00:00",
+    "minScore": 0,
+    "maxScore": 100,
+    "scope": "…",
+    "region": "…",
+    "isActive": true,
+    "createdAt": "…",
+    "updatedAt": "…"
+  }
+]
+</code></pre>
+<p>Respuesta de las entradas:</p>
+<pre><code class="language-json">{
+  "items": [
+    {
+      "id": "…",
+      "userId": "…",
+      "username": "…",
+      "score": 1500,
+      "rank": 1,
+      "region": "…",
+      "submittedAt": "…"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 20
+}
+</code></pre>
+<p>Enviar cuerpo:</p>
+<pre><code class="language-json">{
+  "score": 1500
+}
+</code></pre>
+<p>La puntuación se valida con respecto a la definición. <code>minScore</code>/<code>maxScore</code> y reglas del editor; la respuesta es el resultado de la entrada.</p>
+<h2 id="authoritative-games-and-elo">Juegos autorizados y Elo.</h2>
+<p>Cada juego autorizado tiene una tabla de clasificación elo; su identificación proviene de <code>GET /api/v1/games/{slug}</code> → <code>leaderboardId</code> (ver <a href="/es/docs/api/games.html">games.md</a>). Las partituras son escritas ÚNICAMENTE por la plataforma a partir del guión. <code>eloUpdates</code> o el canal de control de contenedores: se rechaza el envío directo. Los clientes del juego leen las entradas a través del punto final paginado estándar; por ejemplo, la implementación de referencia de ajedrez solicita:</p>
+<pre><code>GET /api/v1/leaderboards/{leaderboardId}/entries?friendsOnly=true&amp;page=1&amp;pageSize=10
+</code></pre>
+<p>Los tokens de lanzamiento del juego pueden leer la tabla de clasificación de su propio juego. La clasificación del lado del editor CRUD vive en <a href="/es/docs/api/publisher.html">publisher.md</a>.</p>
+<h3 id="resetting-a-players-rating">Restablecer la calificación de un jugador</h3>
+<p>El propietario del juego puede devolver la calificación de un jugador al inicio. <strong>1200</strong> — para un pitufo, un potenciado
+cuenta, o una calificación de un error dañado:</p>
+<pre><code>DELETE /api/v1/me/github-games/{id}/players/{userId}/elo      → 200 { "userId": "…", "elo": 1200 }
+</code></pre>
+<p>Restablece la calificación de pares de emparejamiento, elimina la fila del jugador del tablero elo (vuelve
+con su siguiente partida clasificada), y establece un valor numérico de nivel superior <strong><code>elo</code></strong> en el documento del reproductor de su script
+a 1200, porque su secuencia de comandos calcula la siguiente calificación a partir de su propio documento, restableciendo solo la
+La copia de la plataforma se desharía en el próximo partido. Todo lo demás en el documento (victorias, historial)
+se queda solo. Si su guión mantiene su calificación bajo cualquier otro nombre, es <strong>no</strong> reescrito: mantener
+ITIN <code>playerStates[id].elo</code> para obtener reinicios de forma gratuita. Un partido que ya está en curso aún puede informar un
+calificación calculada antes del reinicio. <code>404</code> cuando el juego no es tuyo o el jugador no tiene calificación en
+eso. La calificación también está sujeta a la <a href="/es/docs/api/games.html#limits">reglas elo</a>.</p>
+<h2 id="reset-schedules">Restablecer horarios</h2>
+<p>Cualquier tabla de clasificación (el tablero de un juego o el de un título de catálogo) puede comenzar de nuevo según un cronograma:</p>
+<table>
+<thead>
+<tr>
+<th><code>resetSchedule</code></th>
+<th>comienza de nuevo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>daily</code></td>
+<td>todos los días a las 00:00 UTC</td>
+</tr>
+<tr>
+<td><code>weekly</code></td>
+<td>todos los lunes a las 00:00 UTC</td>
+</tr>
+<tr>
+<td><code>monthly</code></td>
+<td>el día 1 de cada mes a las 00:00 UTC</td>
+</tr>
+<tr>
+<td>omitido, <code>null</code> o <code>"never"</code></td>
+<td>nunca</td>
+</tr>
+</tbody>
+</table>
+<p>Cualquier otro valor es un <code>400</code>. Los informes de definición. <code>currentPeriodStartedAt</code> y <code>nextResetAt</code> (ambos
+<code>null</code> para una placa que nunca se reinicia), para que un cliente pueda mostrar "se reinicia en 2 días".</p>
+<p>Se aplica un reinicio cuando la placa está <strong>leer</strong>: el punto final de entradas muestra solo las puntuaciones enviadas desde
+comenzó el período actual y las clasificaciones se calculan dentro del período. No se elimina nada en el
+límite, por lo que el reinicio entra en vigor exactamente a las 00:00 UTC. También significa que el horario se puede cambiar.
+en cualquier momento: cambia qué entradas se muestran, no cuáles se conservan. Los períodos anteriores no son
+legible a través de la API.</p>
+<h2 id="your-games-own-leaderboards">Las tablas de clasificación propias de tu juego</h2>
+<p>Al lado de su tablero elo, un juego con un <code>server=</code> guión o <code>container.image=</code> el backend puede tener
+tablas de clasificación propias (puntuación más alta, vuelta más rápida, mayor número de muertes) creadas por <strong>el dueño del juego</strong>.
+No necesitas una cuenta de editor: ser propietario del juego te convierte en su editor.</p>
+<p>Como el tablero elo, <strong>sólo el servidor de tu juego les escribe.</strong> Tu guión regresa
+<code>scores: { "&lt;key&gt;": { "&lt;userId&gt;": score } }</code> desde cualquier gancho (ver
+<a href="/es/docs/api/game-scripts.html#leaderboards">Guiones del juego: tablas de clasificación</a>), o su contenedor envía un
+<a href="/es/docs/api/container-games.html#control-channel"><code>scores</code> mensaje de control</a>. <code>POST /leaderboards/{id}/submit</code> es
+rechazado, por lo que un cliente modificado no puede publicar una puntuación.</p>
+<h3 id="create-one--post-apiv1megithub-gamesidleaderboards">Crea uno - <code>POST /api/v1/me/github-games/{id}/leaderboards</code></h3>
+<pre><code class="language-json">{
+  "key": "high-score",
+  "name": "High score",
+  "scoreType": "integer",
+  "sortDirection": "desc",
+  "minScore": 0,
+  "maxScore": 1000000,
+  "isActive": true
+}
+</code></pre>
+<p>Devoluciones <code>201</code> con un <code>LeaderboardDefinitionDto</code> cuyo <code>gameDefinitionId</code> y <code>key</code> están establecidos.</p>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>key</code></td>
+<td><strong>Requerido.</strong> El nombre con el que envía su servidor: 1 a 64 letras, dígitos, <code>.</code>, <code>_</code>, <code>-</code>. Único por juego.</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td><strong>Requerido.</strong> Nombre para mostrar, máximo 200 caracteres.</td>
+</tr>
+<tr>
+<td><code>scoreType</code></td>
+<td><code>integer</code> (por defecto), <code>decimal</code>, o <code>time-ms</code> (un número entero no negativo de milisegundos)</td>
+</tr>
+<tr>
+<td><code>sortDirection</code></td>
+<td><code>desc</code> (predeterminado: cuanto más alto, mejor) o <code>asc</code> (cuanto más bajo, mejor, por ejemplo, tiempos de vuelta)</td>
+</tr>
+<tr>
+<td><code>minScore</code> / <code>maxScore</code></td>
+<td>Límites opcionales; una puntuación fuera de ellos se ignora</td>
+</tr>
+<tr>
+<td><code>isActive</code></td>
+<td>Por defecto <code>true</code>. Un tablero inactivo no acepta puntuaciones y no aparece en la lista para los jugadores.</td>
+</tr>
+<tr>
+<td><code>resetSchedule</code></td>
+<td>Opcional: <code>daily</code>, <code>weekly</code> o <code>monthly</code> - ver <a href="#reset-schedules">Restablecer horarios</a>. Valor predeterminado: nunca se reinicia.</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>key</code>, <code>scoreType</code> y <code>sortDirection</code> no se puede cambiar después de la creación</strong>: su servidor envía por clave,
+y las puntuaciones ya almacenadas fueron elegidas por los otros dos. ¿Necesitas uno diferente? Crea un nuevo tablero.
+<code>PUT .../leaderboards/{leaderboardId}</code> acepta <code>name</code>, <code>minScore</code>, <code>maxScore</code>, <code>isActive</code> y
+<code>resetSchedule</code> (enviar <code>"never"</code> para dejar de reiniciar); <code>DELETE</code> quita el tablero <strong>y sus entradas</strong> -
+colocar <code>isActive: false</code> para retirarlo y conservarlos. Un juego puede tener como máximo <strong>2048</strong> tableros.</p>
+<h3 id="how-scores-are-kept">Cómo se mantienen las puntuaciones</h3>
+<ul>
+<li><strong>Una entrada por jugador: lo mejor.</strong> "Mejor" sigue el tablero <code>sortDirection</code>. Presentando un
+Una peor puntuación no cambia nada, así que informa después de cada partido sin comprobarlo primero. en un tablero con
+un horario de reinicio, es lo mejor <strong>este periodo</strong>: la primera puntuación después de un reinicio siempre cuenta,
+por muy bueno que haya sido el resultado del jugador en el último periodo.</li>
+<li>Sólo se pueden puntuar los jugadores de la sesión; el asiento de IA y cualquier otra persona son ignorados.</li>
+<li>Una puntuación que infringe las reglas del tablero (fuera de rango, una fracción en un <code>integer</code> tablero, un negativo
+<code>time-ms</code>) se ignora, al igual que una clave sin tablero activo. No se informa nada a su servidor.</li>
+</ul>
+<h3 id="show-them-in-your-game">Muéstralos en tu juego</h3>
+<p><code>GET /api/v1/games/{slug}/leaderboards</code> enumera los tableros activos del juego con sus <code>id</code> y <code>key</code>,
+y funciona con el token de inicio del juego. Leer entradas con el punto final paginado estándar arriba:
+<code>GET /api/v1/leaderboards/{id}/entries</code> – que el token de lanzamiento también puede alcanzar para estos tableros.</p>
+<p>Paso a paso: <a href="/es/docs/tutorials/game-leaderboards-achievements.html">Tutorial: tablas de clasificación y logros para tu juego</a>.</p>
+<p>Ver <a href="/es/docs/api/conventions.html#requests-and-responses">Convenciones API</a> para el análisis de errores.</p>
+<p>Ver <a href="/es/docs/credentials.html">compatibilidad de credenciales</a> y <a href="/es/docs/api/contracts.html">contratos legibles por máquina</a>.</p>
+
+{% endraw %}

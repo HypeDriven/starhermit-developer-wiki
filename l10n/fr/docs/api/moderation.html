@@ -1,0 +1,303 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "Modération du contenu"
+source_url: "/docs/api/moderation.html"
+source_path: "docs/api/moderation.md"
+source_hash: "74f2579a081e00899406ae9d3a8f7551387f487818070f44fd4616907fdae6fe"
+translation: "machine"
+permalink: "/fr/docs/api/moderation.html"
+---
+{% raw %}
+<h1 id="content-moderation">Modération du contenu</h1>
+<p>Les jeux vérifient le texte partagé, les documents JSON et les images PNG/JPEG/WebP avant de les montrer à d'autres
+joueurs. Seulement un courant <code>allow</code> autorise le partage. <code>review</code>, <code>block</code>, inconnu, en attente, en échec,
+Les résultats de stratégie expirés et incompatibles gardent tous le contenu masqué.</p>
+<p><strong>Les contrôles de modération ne sont actuellement pas disponibles sur le déploiement public.</strong> Lire découverte avant
+permettant le partage. Retour des chèques <code>503 overloaded</code> avec <code>Retry-After: 300</code>; cela ne promet pas
+disponibilité après cinq minutes. Gardez le contenu masqué jusqu'à ce que vous receviez une décision d'autorisation actuelle.
+La génération est aussi <a href="/fr/docs/availability.html#reserved-generation-routes">indisponible</a>.</p>
+<p>Le contrat ci-dessous décrit les appels de modération pris en charge et leur comportement lorsqu'ils sont disponibles. Seulement
+les preuves accessibles et filtrées sont renvoyées via les API d'examen par le propriétaire.</p>
+<h2 id="callers-and-routes">Appelants et itinéraires</h2>
+<p>Le préfixe du joueur est <code>/api/v1/games/{slug}/moderation</code>. Les JWT et les jetons de lancement transportent le joueur&#160;;
+un jeton de lancement doit correspondre à ce jeu. Un jeton de serveur de conteneur en direct doit également correspondre au jeu. Natif
+les clients utilisent l'URL de base de l'API&#160;; les jeux par navigateur peuvent utiliser l'origine de leur jeu <code>/api</code> procuration.</p>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Suffixe</th>
+<th>Demandeur</th>
+<th>Résultat</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OBTENIR</td>
+<td>(racine)</td>
+<td>Joueur ou serveur</td>
+<td>Disponibilité, limites effectives, contenu pris en charge et politique actuelle</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/check</code></td>
+<td>Joueur ou serveur</td>
+<td><code>200</code> lot complet ou <code>202</code> chèque en attente</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/checks/{checkId}</code></td>
+<td>Joueur attribué ou serveur de jeu créateur</td>
+<td><code>200</code> statut; <code>410</code> après conservation des résultats</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/decisions/lookup</code></td>
+<td>Joueur ou serveur</td>
+<td><code>200</code> hachages qualifiés connus/inconnus</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/flags</code></td>
+<td>Joueur</td>
+<td><code>201</code> reçu de drapeau&#160;; les serveurs ne peuvent pas déposer de drapeaux</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/removed?since=&amp;pageSize=</code></td>
+<td>Joueur ou serveur</td>
+<td>Retraits paginés et curseur suivant</td>
+</tr>
+</tbody>
+</table>
+<p>Les joueurs ne peuvent pas checker en tant qu'autre joueur. Un serveur envoie normalement <code>sessionId</code> et <code>participantUserId</code>;
+le participant doit être dans une session active de ce jeu et son tarif de contrôle est facturé. Pour un
+Revérification persistante du monde sans personne en ligne, envoyez <code>attribution: "game"</code> et omettez les deux champs.
+Cela consomme un taux de serveur distinct et le budget du jeu, n'enregistre aucun joueur et permet d'interroger
+uniquement par l'identité du serveur autorisé du jeu. L'actualisation du jeton ne modifie pas cette identité logique.</p>
+<h2 id="availability">Disponibilité</h2>
+<p><code>GET /api/v1/games/{slug}/moderation</code> renvoie&#160;:</p>
+<pre><code class="language-json">{
+  "checksAvailable": false,
+  "contentReportingAvailable": false,
+  "disabledReason": "moderation_not_configured",
+  "policyVersion": "&lt;current effective version&gt;",
+  "supportedKinds": ["text", "image"],
+  "supportedContexts": ["chat", "name", "generated-content", "user-content"],
+  "limits": { "moderation.check.items": 20, "moderation.decision.allow_ttl_seconds": 3600 },
+  "acceptedPreviousPolicyVersion": null,
+  "previousPolicyValidUntil": null,
+  "deliveredContentGraceSeconds": 0
+}
+</code></pre>
+<p><code>limits</code> contient les valeurs effectives du registre de modération, au-delà des deux illustrées. Joueur
+les valeurs incluent les remplacements de ce joueur&#160;; La découverte du serveur révèle les allocations du jeu, jamais une autre
+celui du joueur. Un budget d'objet de jeu nul désactive également la vérification (<code>game_budget_disabled</code>). Utilisez les valeurs de chevauchement de politique et de grâce renvoyées&#160;; les valeurs par défaut ne fournissent ni l'un ni l'autre.</p>
+<h2 id="check-exact-content">Vérifier le contenu exact</h2>
+<pre><code class="language-http">POST /api/v1/games/{slug}/moderation/check
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  "items": [
+    { "id": "story", "kind": "text", "context": "user-content", "text": "abc" }
+  ]
+}
+</code></pre>
+<p>Les identifiants d'article sont uniques au sein d'un lot et comportent au maximum 128&#160;caractères. Le texte porte uniquement <code>text</code>; photos
+porter <code>contentType</code> et norme stricte rembourrée <code>dataBase64</code>, sans espace. Image déclarée
+les types doivent correspondre à leurs en-têtes, et les octets et les pixels sont limités. WAV, Ogg Vorbis,
+Les modèles et polices glTF ne sont pas pris en charge (<code>415 unsupported_kind</code>); le support audio est différé.</p>
+<p>Le hachage est <code>sha256:</code> suivi de 64 chiffres hexadécimaux minuscules de SHA-256 sur les octets de contenu exact&#160;:</p>
+<ul>
+<li>Pour le texte, décodez la chaîne en JSON et encodez ses valeurs scalaires Unicode au format UTF-8 sans nomenclature.
+Préserver les espaces, les fins de ligne et la normalisation Unicode&#160;; rejeter les mères porteuses non appariées.</li>
+<li>Un document JSON soumis sous forme de texte est haché comme sa chaîne de document exacte, sans analyse,
+le réorganiser ou le resérialiser.</li>
+<li>Pour une image, hachez les octets décodés avant le redimensionnement, le transcodage ou les modifications de métadonnées.</li>
+</ul>
+<p>Les trois octets ASCII <code>abc</code> hacher pour
+<code>sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad</code>.
+L'ajout d'une nouvelle ligne modifie le hachage. L'enveloppe de la demande, l'ID de l'élément, le contexte, le type de média et la base64
+l'encodage n'est pas une entrée de hachage. La plateforme calcule les hachages soumis&#160;; recevoir des jeux doit également
+hachez les octets qu'ils contiennent réellement et comparez l'identifiant.</p>
+<p>Un article complet a <code>status: "complete"</code>, <code>contentHash</code>, <code>decision</code>, catégories, révision,
+<code>checkedAt</code> et <code>decisionPolicyVersion</code>. Seul un permis porte <code>validUntil</code>. L'enveloppe de réponse
+a le courant efficace <code>policyVersion</code>. La validation refuse l'ensemble du lot si un article est
+mal formé. Un élément accepté peut échouer séparément, avec <code>status: "failed"</code>, un code et aucune décision.</p>
+<p>Le délai de synchronisation est par défaut de deux secondes. Produits inachevés <code>202</code> avec <code>checkId</code>,
+<code>pollAfterSeconds</code>, <code>expiresAt</code> et <code>Retry-After</code>. Relevez le chèque&#160;; les éléments en attente n'ont aucune décision.
+Le délai en arrière-plan est par défaut de 60 secondes, puis un élément inachevé échoue avec <code>timeout</code> et
+son entrée ordinaire est effacée. Les résultats du terminal restent lisibles pendant une heure par défaut.</p>
+<p>L'interrogation d'un élément terminé permet de consulter la décision qualifiée en direct, la politique actuelle et la conservation.
+Un ancien chèque ne peut pas renouveler une approbation retirée. Les blocs/avis actuels sont renvoyés tels quels&#160;;
+Les décisions périmées, expirées ou absentes donnent lieu à un élément échoué sans validité renouvelée.</p>
+<h2 id="lookup-and-withdrawal-recovery">Recherche et récupération de retrait</h2>
+<pre><code class="language-json">{
+  "hashes": ["sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"],
+  "kind": "text",
+  "context": "user-content"
+}
+</code></pre>
+<p>Envoyez ceci à <code>/decisions/lookup</code>. Les recherches d'images nomment également <code>contentType</code>. L'approbation est qualifiée par
+jeu, genre, type de média validé et contexte. Les entrées sont <code>known</code> avec une décision, une révision,
+<code>decisionPolicyVersion</code> et permettre la validité, ou <code>unknown</code> avec <code>not_checked</code>, <code>policy_changed</code> ou
+<code>expired</code>. Les blocages humains restent efficaces après les changements de politique et la conservation des décisions ordinaires.</p>
+<p>Autoriser la validité par défaut à une heure et peut être abaissée par l'opérateur. Revalider avant expiration&#160;;
+il n’y a pas de période de grâce activée pour une panne et aucune version de base précédente acceptée. Changer
+une politique de jeu invalide immédiatement les approbations antérieures. Un permis humain ne survit qu'à une nouvelle vérification
+pour des résultats identiques qui dépassent toujours la référence actuelle dans le cadre de la même politique.</p>
+<p>Sondage <code>/removed</code> avant de distribuer un pack partagé et régulièrement pendant le jeu. Masquer les hachages correspondants
+et arrêter la distribution en cas de retrait&#160;; les suppressions incluent à la fois les drapeaux maintenus et la reclassification
+de permettre à réviser/bloquer. Les entrées de flux incluent les qualificatifs, la portée, la décision, la révision, la politique,
+le temps de retrait et une raison sûre. Les curseurs sont des marqueurs d'ordre opaques&#160;; utilisez le curseur renvoyé plutôt que d'en dériver un à partir d'une heure.</p>
+<p>Un curseur expiré revient <code>410 cursor_expired</code>. Récupère un nouveau curseur sans <code>since</code>, recherche par lots
+tous les hachages partagés chargés et ne reprennent qu'une fois validés. L'absence du flux n'est jamais une approbation.
+Une copie locale enregistrée n'autorise pas la redistribution. Le flux contient par défaut 90 jours d'historique&#160;;
+les blocs humains durables lui survivent.</p>
+<h2 id="flags-and-owner-review">Drapeaux et examen du propriétaire</h2>
+<p>Un joueur envoie <code>/flags</code> a <code>reason</code> (au maximum 64&#160;caractères), facultatif limité <code>note</code>, et le contenu,
+un joueur cible, ou les deux. La preuve de contenu utilise la même forme d'élément qu'un chèque. Si <code>contentHash</code>
+est également fourni, la plateforme le recalcule et exige l'égalité. Un simple hachage ne constitue pas une preuve&#160;;
+les références de travail/vérification ne sont pas implémentées. Un drapeau cible de joueur nécessite un <code>sessionId</code> dont la liste
+comprend à la fois le journaliste et la cible. Le dépôt d'un signalement ne modifie pas une décision ni automatiquement
+bloque n'importe qui.</p>
+<p>Les preuves de contenu sont réservées et stockées en quarantaine avant d'être classées pour le routage. Retardé,
+Le filtrage échoué ou indisponible n’ouvre jamais l’accès du propriétaire. Un contrôle actuel sécurisé par le propriétaire permet
+listing/détail/téléchargement/triage. Les conclusions du personnel masquent le signalement et restreignent les signalements et avis existants.
+de la même preuve. Sans classificateur, les indicateurs de contenu reviennent <code>403 content_reporting_disabled</code>
+sans avis de nouvelle tentative ni preuves conservées&#160;; les drapeaux réservés aux joueurs restent utilisables.</p>
+<p>Les itinéraires propriétaires nécessitent un JWT complet et la propriété du jeu, sous <code>/api/v1/me/github-games/{id}/moderation</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Suffixe</th>
+<th>Comportement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OBTENIR / METTRE</td>
+<td><code>/policy</code></td>
+<td>Lire/définir la note et les seuils de catégorie plus stricts avec <code>expectedVersion</code></td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/flags</code> / <code>/flags/{flagId}</code></td>
+<td>Métadonnées filtrées paginées / un indicateur accessible</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/flags/{flagId}/evidence</code></td>
+<td>Téléchargement contrôlé&#160;; <code>410</code> après l'expiration des preuves</td>
+</tr>
+<tr>
+<td>CORRECTIF</td>
+<td><code>/flags/{flagId}</code></td>
+<td><code>action: "uphold"</code> ou <code>"dismiss"</code>, note facultative et <code>expectedRevision</code></td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/reviews</code> / <code>/reviews/{reviewId}</code></td>
+<td>Métadonnées paginées des avis suspendus/un avis accessible</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/reviews/{reviewId}/content</code></td>
+<td>Téléchargement contrôlé&#160;; <code>410 review_expired</code> en cas d'indisponibilité</td>
+</tr>
+<tr>
+<td>CORRECTIF</td>
+<td><code>/reviews/{reviewId}</code></td>
+<td><code>action: "allow"</code> ou <code>"block"</code>, note facultative et <code>expectedRevision</code></td>
+</tr>
+</tbody>
+</table>
+<p>Les listes prennent <code>status</code>, <code>page</code> et <code>pageSize</code> (par défaut 20, maximum 100). Seule la politique plus stricte d'un propriétaire
+le maintien qui dépasse actuellement la ligne de base de la plate-forme peut être autorisé&#160;; Les prises de base nécessitent une plate-forme
+examen en dehors de l'API du propriétaire du jeu. Les preuves restreintes ne sont jamais visibles par le propriétaire.
+Une révision obsolète est <code>409 revision_conflict</code>. Décider qu'un avis efface son contenu détenu&#160;; expiration également
+empêche son téléchargement ou son approbation. Ignorer un drapeau n'annule pas un autre bloc, et aucun propriétaire
+la route lève un blocage humain.</p>
+<p>La preuve est un <code>application/octet-stream</code> pièce jointe avec <code>nosniff</code>, CSP sandbox et <code>no-store</code>.
+Conservez les notes/raisons sous forme de texte non fiable dans votre interface utilisateur de révision. Ne les affichez pas sous forme de balisage et ne les utilisez pas comme
+URL des pièces jointes.</p>
+<h2 id="default-limits-and-errors">Limites et erreurs par défaut</h2>
+<p>Les opérateurs peuvent ajuster les limites du jeu&#160;; Les tarifs des joueurs prennent également en charge les remplacements par utilisateur. Lire la découverte pour
+les valeurs réelles en vigueur.</p>
+<table>
+<thead>
+<tr>
+<th>Limite</th>
+<th>Défaut</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Articles/hachages de recherche par demande</td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>Texte/image/octets de contenu total</td>
+<td>64 Ko / 5 Mo / 10 Mo</td>
+</tr>
+<tr>
+<td>Pixels de l'image</td>
+<td>20 millions</td>
+</tr>
+<tr>
+<td>Vérifications des joueurs / vérifications du serveur attribuées au jeu par minute</td>
+<td>30 / 30</td>
+</tr>
+<tr>
+<td>L'appelant lit par minute</td>
+<td>60</td>
+</tr>
+<tr>
+<td>Articles vérifiés ou filtrés par match et par jour</td>
+<td>10,000</td>
+</tr>
+<tr>
+<td>Drapeaux par joueur par match par jour / drapeaux ouverts par match</td>
+<td>20 / 1,000</td>
+</tr>
+<tr>
+<td>Indicateur d'octets de note</td>
+<td>4 Ko</td>
+</tr>
+<tr>
+<td>Preuve de drapeau en attente/conservée par match</td>
+<td>64&#160;Mio/256&#160;Mio</td>
+</tr>
+<tr>
+<td>Preuves de signalement en attente/conservées sur toute la plateforme</td>
+<td>1 Gio/4 Gio</td>
+</tr>
+<tr>
+<td>Appels de classificateur simultanés sur toute la plateforme</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Vérifier la livraison / autoriser la validité</td>
+<td>1 heure / 1 heure</td>
+</tr>
+<tr>
+<td>Suspension d'examen ordinaire/conservation du signalement</td>
+<td>7 jours / 30 jours</td>
+</tr>
+</tbody>
+</table>
+<p>L'épuisement des files d'attente et du stockage refuse de nouvelles preuves plutôt que d'expulser les dossiers actifs. Respecter le
+l'accessibilité et l'expiration signalées par chaque point final de preuve/examen.</p>
+<p>Les erreurs sont <code>{ error, code, retryAfterSeconds? }</code>. <code>400</code> couvre le contenu/qualificatif mal formé, <code>401</code>
+authentification manquante, <code>403</code> portée/délégation ou restrictions de base, <code>404</code> absent/inaccessible
+les enregistrements, <code>409</code> conflits de hachage/révision/politique, <code>410</code> contenu/chèques/curseurs expirés, <code>413</code> octet/élément/
+limites de pixels, et <code>415</code> types/types non pris en charge. <code>429</code> couvre les tarifs/budgets/files d'attente/stockage avec
+<code>Retry-After</code>. Les pannes du classificateur sont <code>503 moderation_unavailable</code>; le courant non configuré
+l'espace réservé reste <code>503 overloaded</code>. Aucune erreur, nouvelle tentative ou paiement ne remplace une décision d’autorisation.</p>
+<p>Commun <a href="/fr/docs/api/conventions.html">Conventions API</a> décrire l'analyse des réponses, les horodatages, la pagination et les tentatives.</p>
+<p>Voir <a href="/fr/docs/credentials.html">compatibilité des informations d'identification</a> et <a href="/fr/docs/api/contracts.html">contrats lisibles par machine</a>.</p>
+
+{% endraw %}

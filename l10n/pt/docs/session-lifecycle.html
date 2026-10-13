@@ -1,0 +1,152 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Sessões, mundos e recuperação"
+source_url: "/docs/session-lifecycle.html"
+source_path: "docs/session-lifecycle.md"
+source_hash: "ce490b04789602ff10857e6496e4e3847230ac0bd33619cb5beb61051dc65c85"
+translation: "machine"
+permalink: "/pt/docs/session-lifecycle.html"
+---
+{% raw %}
+<h1 id="sessions-worlds-and-recovery">Sessões, mundos e recuperação</h1>
+<p>Uma sessão oficial é criada por meio de matchmaking, aceitação de convite, prática ou início
+de uma sala em tempo real com um back-end de servidor. Uma sala é um lobby com assentos; isso é <code>gameSessionId</code> identifica
+a sessão separada executando o jogo. Ver <a href="/pt/docs/api/games.html">Jogos</a> e <a href="/pt/docs/api/realtime.html">Salas em tempo real</a>.</p>
+<h2 id="lifecycle">Vida útil</h2>
+<p><img src="/docs/images/pt/session-lifecycle.svg" alt="As sessões passam de ativas para pausadas e vice-versa, ou terminam por meio de um resultado, saída explícita, ação do proprietário ou expiração da retenção."></p>
+<p><code>status</code> é <code>active</code> ou <code>finished</code>. A pausa não introduz um terceiro status: <code>pausedAt</code> marca um
+sessão persistente pausada. Uma sessão finalizada não pode ser reproduzida novamente. Replays, se ativados, são lidos
+através de seus próprios endpoints.</p>
+<table>
+<thead>
+<tr>
+<th>Evento</th>
+<th>Partida normal</th>
+<th>Sessão persistente</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>O último soquete de jogo foi desconectado</td>
+<td>Termina após cerca de 5 minutos sem retorno</td>
+<td>Pausa após cerca de 15 segundos</td>
+</tr>
+<tr>
+<td>Nenhuma atividade do jogador por 24 horas</td>
+<td>Pode ser aposentado</td>
+<td>Pausa em vez de terminar por inatividade</td>
+</tr>
+<tr>
+<td>Jogador solicita outra sessão</td>
+<td>Pode retirar uma partida mais antiga vazia</td>
+<td>Não aposenta seus mundos estacionados</td>
+</tr>
+<tr>
+<td>O jogador se reconecta</td>
+<td>Somente enquanto ainda estiver ativo</td>
+<td>Retoma antes do primeiro comando</td>
+</tr>
+<tr>
+<td>Backend retorna um resultado</td>
+<td>Acabamentos</td>
+<td>Acabamentos</td>
+</tr>
+<tr>
+<td>Proprietário encerra a sessão</td>
+<td>Termina sem vencedor/mudança de classificação</td>
+<td>Mesmo</td>
+</tr>
+</tbody>
+</table>
+<p>Os limites de tempo e recuperação podem variar de acordo com a implantação. Mundos pausados contam contra o jogador
+limite de sessão simultânea. Ofereça uma maneira de deixar ou terminar explicitamente os mundos.</p>
+<h2 id="disconnecting-and-leaving-are-different">Desconectar e sair são diferentes</h2>
+<p>Fechar um soquete preserva a adesão para que o jogador possa retornar. Um explícito <strong>Sair do mundo</strong> dá
+adesão e acesso ao seu soquete de jogo.</p>
+<p>Para uma sessão persistente <strong>sem quarto</strong>:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/sessions/{sessionId}/leave
+Authorization: Bearer &lt;player-token&gt;
+</code></pre>
+<p>Não há corpo de solicitação. O sucesso é <code>204</code>. O jogo é notificado sobre a mudança de associação e o
+os soquetes de jogo do abandonador se fecham. Quando o último membro humano partir, o mundo acabará com
+<code>players_left</code>. <code>404</code> significa nenhuma sessão, <code>403</code> significa que não é membro, <code>410</code> significa já terminado, e
+<code>409</code> significa que este não é um mundo persistente ou pertence a uma sala.</p>
+<p>Por um <strong>sessão vinculada à sala</strong>, usar <code>POST /api/v1/realtime/rooms/{roomId}/leave</code>. Em um
+sala join-in-progress isso desocupa a vaga e remove a associação da sessão. Em uma partida de escalação fixa,
+o assento se torna AI e a sessão pode manter sua associação original. Siga as regras da sala;
+não chame o endpoint de saída de sessão independente.</p>
+<p>Um mundo de adesão em andamento pode permanecer listado após a saída do último visitante. Um membro de um
+O mundo persistente também pode usar outro lobby comum. Descubra as assinaturas atuais através
+<code>GET /api/v1/realtime/rooms/joined</code>, não apenas <code>/rooms/mine</code>.</p>
+<h2 id="read-recovery-information">Ler informações de recuperação</h2>
+<p>Os jogadores na sessão e o dono do jogo podem ligar para:</p>
+<pre><code class="language-http">GET /api/v1/games/{slug}/sessions/{sessionId}/recovery
+Authorization: Bearer &lt;player-or-owner-token&gt;
+</code></pre>
+<p>A resposta descreve os limites efetivos de recuperação e transporte desta sessão:</p>
+<table>
+<thead>
+<tr>
+<th>Campos</th>
+<th>Significado / unidade</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sessionId</code>, <code>status</code>, <code>runtime</code>, <code>persistent</code></td>
+<td>Identidade e tipo de sessão; o tempo de execução é <code>script</code> ou <code>container</code></td>
+</tr>
+<tr>
+<td><code>pausedAt</code>, <code>pausedMillis</code></td>
+<td>Pausar o carimbo de data/hora ISO de início; tempo de pausa acumulado em milissegundos</td>
+</tr>
+<tr>
+<td><code>snapshotBytes</code>, <code>stateBudgetBytes</code>, <code>lastSnapshotAt</code></td>
+<td>Tamanho/orçamento do documento de recuperação em bytes e tempo ISO do snapshot mais recente</td>
+</tr>
+<tr>
+<td><code>snapshotIntervalSeconds</code>, <code>maxSnapshotPushHz</code></td>
+<td>Cadência do ponto de verificação do contêiner e teto de empurrão; <code>null</code> para roteiros</td>
+</tr>
+<tr>
+<td><code>maxRestoreStalenessSeconds</code></td>
+<td>Idade máxima do snapshot da correspondência do contêiner; <code>null</code> quando não aplicável, incluindo mundos persistentes</td>
+</tr>
+<tr>
+<td><code>maxRestores</code>, <code>restoreWindowMinutes</code>, <code>restoreCount</code></td>
+<td>Permissão para tentativas de recuperação, sua janela e a contagem de restauração relatada</td>
+</tr>
+<tr>
+<td><code>retentionDays</code>, <code>recoveryDataExpiresAt</code></td>
+<td>Retenção de mundo pausado; <code>0</code> e <code>null</code> significa que não há expiração configurada</td>
+</tr>
+<tr>
+<td><code>transport.maxMessageBytes</code>, <code>transport.maxRealtimeInputsPerSecond</code></td>
+<td>Limites de quadro/entrada de jogo</td>
+</tr>
+<tr>
+<td><code>transport.tickRateHz</code>, <code>transport.pacingRateHz</code></td>
+<td>Taxas efetivas de tick e transporte em Hz</td>
+</tr>
+</tbody>
+</table>
+<p>Leia esses valores em vez de prometer retenção indefinida ou uma janela fixa de retrocesso de travamento. Um
+positivo <code>retentionDays</code> permite que um mundo pausado expire. Mostrar <code>recoveryDataExpiresAt</code> quando definido;
+expiração encerra a sessão com <code>retention_expired</code>.</p>
+<h2 id="restoring-client-and-server-state">Restaurando o estado do cliente e do servidor</h2>
+<p>Em uma reconexão de soquete, solicite a mensagem de estado completo do seu jogo. Sobre <code>resumed</code>, descarte a interpolação
+e previsão baseada no estado anterior; <code>lostMs</code> relata a lacuna de recuperação. Não assuma um movimento
+cujo reconhecimento foi perdido pode ser reenviado com segurança.</p>
+<p>Os scripts retornam documentos de estado completos. Os contêineres devem reconstruir uma sessão inteira a partir de um instantâneo
+e escalação atual, incluindo jogadores admitidos desde um instantâneo anterior. Empurre os pontos de verificação depois
+eventos importantes, dentro do teto informado. Uma pausa remove a sessão ativa de um contêiner e depois
+recria-o a partir do instantâneo salvo. O tempo de jogo pausado pode usar <code>ctx.now - ctx.pausedMs</code>.</p>
+<p>Um currículo com falha deixa o mundo em pausa e fecha o soquete após um erro; recue e tente novamente.
+Uma recuperação com falha pode encerrar uma sessão. terminal <code>abandoned</code> razões incluem <code>players_left</code>,
+<code>idle_no_players</code>, <code>superseded</code>, <code>server_failure</code>, <code>restore_failed</code>, <code>operator_ended</code>, e
+<code>retention_expired</code>. Mostre o motivo e pare de reconectar. O abandono não concede nenhuma mudança ao vencedor ou ao Elo.</p>
+<p>Ver <a href="/pt/docs/tutorials/persistent-sessions.html">sessões persistentes</a> para código do servidor e
+<a href="/pt/docs/troubleshooting.html#websockets">solução de problemas</a> para reconectar decisões.</p>
+
+{% endraw %}

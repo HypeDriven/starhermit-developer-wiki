@@ -1,0 +1,848 @@
+---
+layout: "wiki"
+lang: "ur"
+title: "گٹ ہب گیمز"
+source_url: "/docs/api/github-games.html"
+source_path: "docs/api/github-games.md"
+source_hash: "3ac05be03d6f084237353cccfe3c7a2c060046dd000d68711193907a1b4c6263"
+translation: "machine"
+permalink: "/ur/docs/api/github-games.html"
+---
+{% raw %}
+<h1 id="github-games">گٹ ہب گیمز</h1>
+<p>گٹ ہب ریپوزٹری سے ایک گیم شائع کریں۔ <a href="https://starhermit.com">StarHermit</a>، یا پہلے سے میزبان ویب گیم کو رجسٹر کریں۔ ریپوزٹری گیمز کے لیے، پلیٹ فارم پڑھتا ہے۔ <code>starhermit.txt</code>، ریپو کو کلون کرتا ہے، اور اس پر کام کرتا ہے۔ <code>&lt;slug&gt;.starhermit.com</code>. کیونکہ <code>/api</code> اور <code>/ws</code> اس ذیلی ڈومین سے پراکسیڈ ایک جیسے ہیں، پلیٹ فارم کی میزبانی والے گیم کی ضرورت ہے۔ <strong>کوئی CORS یا API بیس کنفیگریشن نہیں ہے۔</strong>. ایک پِنڈ کمٹ کنٹرول کرتا ہے کہ کون سا ریپوزٹری ورژن لائیو ہے۔ دی <a href="/ur/docs/tutorials/chess-walkthrough.html">شطرنج کے حوالہ کا نفاذ</a> اس طرح شائع کیا جاتا ہے اور ماڈل کی حوالہ مثال کے طور پر کام کرتا ہے۔</p>
+<p>بنیادی URL: <code>https://api.starhermit.com</code>. تمام راستے نیچے ہیں۔ <code>api/v1/...</code> اور JWT کی ضرورت ہے جب تک کہ نوٹ نہ کیا جائے۔</p>
+<p>میزبان کلائنٹ کی فائلیں اعلان کر سکتی ہیں۔ <a href="/ur/docs/starhermit-txt.html#browser-asset-caching">فولڈر کیشے کی زندگی بھر</a>
+اور <a href="/ur/docs/starhermit-txt.html#allowing-another-website-to-access-your-hosted-game">اضافی CORS ماخذ</a>
+میں <code>starhermit.txt</code>. وہ پالیسیاں کلائنٹ فائلوں کے ساتھ شائع ہوتی ہیں۔ ایک مینی فیسٹ فری انضمام برقرار رہتا ہے۔
+موجودہ ترتیبات، جبکہ ایک فراہم کردہ مینی فیسٹ ان کی جگہ لے لیتا ہے۔</p>
+<h2 id="the-manifest-starhermittxt">منشور: <code>starhermit.txt</code></h2>
+<p>جگہ <code>starhermit.txt</code> ریپو روٹ پر۔ فارمیٹ: <code>key=value</code> لائنیں <code>#</code> ایک تبصرہ شروع کرتا ہے.</p>
+<pre><code class="language-text">name=Your Game
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html        # repo-relative HTML entry
+cover=art/cover.png      # optional cover art for the library tile; or an https:// URL
+description=One-line pitch\nSecond line   # optional; or description.file=DESCRIPTION.md
+release_notes.file=CHANGELOG.md          # optional; or release_notes=inline text
+owner=&lt;starhermit user id&gt;  # UUID from GET /api/v1/me; do not use username/nickname
+# Choose at most one authoritative backend, or omit both for a browser-only game:
+server=server.js         # sandboxed JavaScript; see game-scripts.md
+# container.image=ghcr.io/owner/game@sha256:&lt;64 lowercase hex&gt;; see container-games.md
+
+control.up=KeyW+ArrowUp | Move forward
+control.shoot=Space | Shoot
+</code></pre>
+<ul>
+<li>نہیں ہے <code>slug</code> کلید: پلیٹ فارم ایک uid تفویض کرتا ہے اور اسے دونوں ذیلی ڈومین کے طور پر استعمال کرتا ہے (<code>&lt;uid&gt;.starhermit.com</code>) اور گیم API نام کی جگہ (<code>/api/v1/games/&lt;uid&gt;/…</code>).</li>
+<li><code>cover</code> (عرف <code>cover_art</code>, <code>coverart</code>) گیم کی لائبریری ٹائل پر دکھایا گیا آرٹ ورک ہے: لانچ فائل سے متعلق ایک راستہ، یا مطلق <code>https://</code> URL اختیاری - ایک کے بغیر ٹائل آپ کی سائٹ کا فیویکن دکھاتا ہے۔ ہر تعیناتی پر دوبارہ پڑھیں، لہذا لائن کو تبدیل کرنے سے کور بدل جاتا ہے۔ دیکھیں <a href="#cover-art">کور آرٹ</a> ٹائل فصلوں کے لئے.</li>
+<li><code>description</code> / <code>release_notes</code> (یا <code>description.file</code> / <code>release_notes.file</code>، کون سا نام a <code>.md</code>/<code>.markdown</code>/<code>.txt</code> مینی فیسٹ سے متعلق فائل) آپ کے گیم کے لیے اختیاری متن ہیں۔ وہ ہر تعیناتی پر دوبارہ پڑھے جاتے ہیں۔ <code>cover</code>. دیکھیں <a href="#description-and-release-notes">تفصیل اور ریلیز نوٹس</a>.</li>
+<li><code>server</code> ایک سینڈ باکس شدہ جاوا اسکرپٹ پسدید کا اعلان کرتا ہے۔ دیکھیں <a href="/ur/docs/api/game-scripts.html">game-scripts.md</a>.</li>
+<li><code>container.image</code> کنٹینر پسدید کا اعلان کرتا ہے؛ دیکھیں <a href="/ur/docs/api/container-games.html">container-games.md</a>. اس کا ڈائجسٹ پن ہونا ضروری ہے، تصدیق شدہ GitHub کے مالک کے نام کی جگہ پر اجازت یافتہ رجسٹری پر میزبانی کی گئی ہے، اور اس کے ساتھ ہو سکتا ہے <code>container.port</code>, <code>container.health</code>, <code>container.memory_mb</code>, <code>container.cpu</code>، اور غیر خفیہ <code>container.env.*</code> اقدار</li>
+<li>دونوں بیک اینڈ کیز خالص براؤزر گیم کے لیے اختیاری ہیں، لیکن وہ ایک دوسرے کے ساتھ باہمی طور پر خصوصی ہیں۔</li>
+</ul>
+<h3 id="default-control-bindings">ڈیفالٹ کنٹرول بائنڈنگز</h3>
+<p>ایک گیم صفر یا اس سے زیادہ ڈیسک ٹاپ براؤزر کی کارروائیوں کا اعلان کر سکتا ہے:</p>
+<pre><code class="language-text">control.&lt;action&gt;=&lt;code&gt;[+&lt;code&gt;...][ | &lt;label&gt;]
+</code></pre>
+<ul>
+<li>اعمال چھوٹے حروف میں ہیں۔ <code>[a-z0-9_]{1,32}</code> شناخت کنندگان اور مینی فیسٹ آرڈر کو برقرار رکھیں۔</li>
+<li>کوڈز ہیں۔ <code>KeyboardEvent.code</code> اقدار <code>+</code> ایک عمل کے لیے متبادل چابیاں الگ کرتا ہے۔</li>
+<li>اختیاری لیبل کو کنٹرول ری میپنگ UIs میں دکھایا گیا ہے اور ایکشن آئی ڈی پر ڈیفالٹ ہے۔</li>
+<li>ایک مینی فیسٹ 32 ایکشنز اور فی ایکشن 4 کوڈز تک کا اعلان کر سکتا ہے۔ ایک کوڈ کی طرف سے استعمال نہیں کیا جا سکتا
+دو اعمال. غلط کنٹرول لائنوں کو نظر انداز کر دیا گیا ہے۔</li>
+<li>نمبر کے ساتھ گیمز <code>control.*</code> اعلانات کا کوئی کنٹرول API/UI نہیں ہے (<code>404 "This game declares no controls."</code>)۔ اعلانات ہر شائع شدہ تعمیر سے دوبارہ پڑھے جاتے ہیں - ہر ایک تعیناتی، فولڈر اپ لوڈ
+اور بنڈل پش کو تبدیل کرنا۔ مرحلہ وار: <a href="/ur/docs/tutorials/game-controls.html">ٹیوٹوریل: اپنے گیم میں کنٹرولز شامل کریں۔</a>.</li>
+</ul>
+<p>کھلاڑی ان ڈیفالٹس کو فی گیم کے ذریعے اوور رائیڈ کر سکتے ہیں۔
+<a href="/ur/docs/api/games.html#per-player-control-bindings">گیمز API کو کنٹرول کرتا ہے۔</a>.</p>
+<h2 id="endpoints">اینڈ پوائنٹس</h2>
+<table>
+<thead>
+<tr>
+<th>طریقہ</th>
+<th>راستہ</th>
+<th>تصنیف</th>
+<th>تفصیل</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>پوسٹ</td>
+<td><code>/api/v1/me/github-games</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>ریپو یو آر ایل → سے گیم رجسٹر کریں۔ <code>201 GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/api/v1/me/github-games/upload</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td><strong>مقامی فولڈر سے ایک گیم شامل کریں۔</strong> — بالکل بھی کوئی ذخیرہ نہیں → <code>201 { game, bytesReceived }</code></td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/api/v1/me/github-games/{id}/claim</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>GitHub لنک یا مینی فیسٹ مالک → کے ذریعے ریپوزٹری کنٹرول ثابت کرنے کے بعد ملکیت حاصل کریں۔ <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>ڈالو</td>
+<td><code>/api/v1/me/github-games/{id}/url</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>موجودہ گیم کو مختلف URL پر پوائنٹ کریں؛ uid اور پلے ٹائم زندہ رہنا</td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/api/v1/me/github-games</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>اپنے رجسٹرڈ GitHub گیمز کی فہرست بنائیں → <code>GitHubGameDto[]</code></td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/api/v1/me/github-games/{id}/stats</code></td>
+<td>JWT (مالک)</td>
+<td><strong>آپ کے شامل کردہ گیم کے سامعین کے اعداد و شمار</strong> → <code>GameStatsDto</code></td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/api/v1/me/github-games/{id}/sessions</code></td>
+<td>JWT (مالک)</td>
+<td>اس گیم کے سرور کے لائیو سیشنز</td>
+</tr>
+<tr>
+<td>حذف کریں۔</td>
+<td><code>/api/v1/me/github-games/{id}/sessions/{sessionId}</code></td>
+<td>JWT (مالک)</td>
+<td>ایک لائیو سیشن ختم کریں (<code>abandoned</code> / <code>operator_ended</code>)</td>
+</tr>
+<tr>
+<td>حاصل کریں/پوسٹ کریں۔</td>
+<td><code>/api/v1/me/github-games/{id}/achievements</code></td>
+<td>JWT (مالک)</td>
+<td><a href="/ur/docs/api/achievements.html#achievements-created-by-the-games-owner">آپ کے کھیل کی کامیابیاں</a>: سب کی فہرست بنائیں، ایک بنائیں</td>
+</tr>
+<tr>
+<td>ڈالیں / حذف کریں۔</td>
+<td><code>/api/v1/me/github-games/{id}/achievements/{achievementId}</code></td>
+<td>JWT (مالک)</td>
+<td>آپ کی تخلیق کردہ کو اپ ڈیٹ / حذف کریں۔</td>
+</tr>
+<tr>
+<td>حاصل کریں/پوسٹ کریں۔</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards</code></td>
+<td>JWT (مالک)</td>
+<td><a href="/ur/docs/api/leaderboards.html#your-games-own-leaderboards">آپ کے گیم کے لیڈر بورڈز</a>: سب کی فہرست بنائیں، ایک بنائیں</td>
+</tr>
+<tr>
+<td>ڈالیں / حذف کریں۔</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards/{leaderboardId}</code></td>
+<td>JWT (مالک)</td>
+<td>ایک کو اپ ڈیٹ / حذف کریں۔</td>
+</tr>
+<tr>
+<td>حذف کریں۔</td>
+<td><code>/api/v1/me/github-games/{id}/players/{userId}/elo</code></td>
+<td>JWT (مالک)</td>
+<td><a href="/ur/docs/api/leaderboards.html#resetting-a-players-rating">ایک کھلاڑی کی ریٹنگ ری سیٹ کریں۔</a> 1200 تک</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/api/v1/me/github-games/{id}/transfer</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>گیم کو دوسرے صارف کو منتقل کریں → <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>حذف کریں۔</td>
+<td><code>/api/v1/me/github-games/{id}</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>رجسٹرڈ گیم کو ہٹا دیں → <code>204</code></td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/api/v1/me/github-games/removed</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>آپ کے ہٹائے گئے گیمز: <code>restorable</code> (اپ لوڈ کردہ گیمز) <code>filesKept</code></td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/api/v1/me/github-games/{id}/restore</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>ہٹائے گئے اپ لوڈ کردہ گیم کو بحال کریں: وہی آئی ڈی اور ہسٹری، اس کی فائلیں اگر ابھی تک دوبارہ دعوی نہیں کی گئی ہیں (30 دن)؛ <code>409</code> ماخذ والی گیم کے لیے — اس کا URL دوبارہ شامل کریں۔</td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/api/v1/me/github-games/{id}/bundle</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>ایک خام شائع کریں۔ <code>.tar.gz</code> کلائنٹ فائلوں اور/یا محفوظ کردہ کنٹینر کی تصویر پر مشتمل۔ <code>?mode=merge</code> براہ راست کلائنٹ فائلوں کو تبدیل کرنے کے بجائے پیچ کرتا ہے۔</td>
+</tr>
+<tr>
+<td>ڈبلیو ایس</td>
+<td><code>/ws/v1/game-upload</code></td>
+<td>جے ڈبلیو ٹی (<code>?access_token=</code>)</td>
+<td><strong>ویب ساکٹ پر ایک ہی دو اپ لوڈز</strong> - ~ 100 MB سے زیادہ کسی بھی چیز کے لیے استعمال کرنے کے لیے ٹرانسپورٹ</td>
+</tr>
+<tr>
+<td>ڈالو</td>
+<td><code>/api/v1/me/github-games/{id}/hosting</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>ہوسٹنگ کو فعال/غیر فعال کریں ("سٹار ہرمیٹ پر تعینات کریں۔") → <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/api/v1/me/github-games/{id}/deployment</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>تعیناتی/ ہوسٹنگ حالت پڑھیں → <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>ڈالو</td>
+<td><code>/api/v1/me/github-games/{id}/deployment</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>کمٹ/برانچ پن کریں؛ دوبارہ تعیناتی → کو قطار میں کھڑا کرتا ہے۔ <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/api/v1/github-games</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>مشترکہ GitHub گیمز کا عوامی براؤز → <code>SharedGitHubGameDto[]</code></td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/api/v1/github-games/{id}/release-notes</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>اس کے مینی فیسٹ سے گیم کے ریلیز نوٹس → <code>GitHubGameReleaseNotesDto</code>، یا <code>404</code> کسی نامعلوم یا ہٹائے گئے گیم کے لیے</td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/api/v1/github-games/{id}/icon</code></td>
+<td>گمنام</td>
+<td>گیم آئیکن امیج بائٹس (فیویکن یا مالک اوتار)؛ <code>ResponseCache</code> 86400</td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/api/v1/github-games/{id}/cover</code></td>
+<td>گمنام</td>
+<td><strong>کور آرٹ امیج بائٹس</strong>، یا <code>404</code> جب کھیل میں کوئی نہیں ہوتا ہے۔ <code>ResponseCache</code> 3600</td>
+</tr>
+<tr>
+<td>ڈالو</td>
+<td><code>/api/v1/me/github-games/{id}/cover</code></td>
+<td>JWT (مالک)</td>
+<td>مینی فیسٹ کو اوور رائیڈ کرتے ہوئے کور آرٹ اپ لوڈ کریں۔ <code>cover=</code> → <code>204</code></td>
+</tr>
+<tr>
+<td>حذف کریں۔</td>
+<td><code>/api/v1/me/github-games/{id}/cover</code></td>
+<td>JWT (مالک)</td>
+<td>مینی فیسٹ → پر واپس آتے ہوئے اپ لوڈ کردہ کور کو گرا دیں۔ <code>204</code></td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/api/v1/me/github</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>GitHub شناختی لنک کی حیثیت → <code>{ linked, login }</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="register-a-game">ایک گیم رجسٹر کریں۔</h3>
+<p><code>POST /api/v1/me/github-games</code></p>
+<pre><code class="language-json">{
+  "repoUrl": "https://github.com/HypeDriven/starhermit-chess",
+  "displayName": "StarHermit Chess",
+  "launchPath": "index.html"
+}
+</code></pre>
+<p>اپنے تاریخی نام کے باوجود، <code>repoUrl</code> تین لانچ ذرائع کو قبول کرتا ہے:</p>
+<ol>
+<li>A <code>github.com/&lt;owner&gt;/&lt;repo&gt;</code> ذخیرہ پسدید اس کا مینی فیسٹ پڑھتا ہے اور اسے تعینات کر سکتا ہے۔
+StarHermit ہوسٹنگ کے لیے۔</li>
+<li>پہلے سے میزبان GitHub صفحات کا URL جیسے <code>https://owner.github.io/game/</code>. مخزن
+شناخت کا اندازہ URL سے لگایا گیا ہے۔ URL بذات خود لانچ کیا گیا ہے، بغیر کسی کلون یا انسٹال کے۔</li>
+<li>کوئی اور عوام <code>http://</code> یا <code>https://</code> میزبان ویب گیم یو آر ایل۔ یہ براہ راست شروع کیا جاتا ہے اور
+GitHub ملکیت کے دعوی میں حصہ نہیں لیتا ہے۔</li>
+</ol>
+<ul>
+<li><code>displayName</code> اور <code>launchPath</code> اختیاری فال بیکس ہیں۔ وہ تھرڈ پارٹی ریپو کے لیے مفید ہیں۔
+قابل اعتماد مینی فیسٹ میٹا ڈیٹا کے بغیر؛ ایک براہ راست میزبانی شدہ URL بذات خود لانچ کا مقام ہے۔</li>
+<li>تصدیق شدہ ذخیرہ کے مالکان کے لیے پلیٹ فارم کی توثیق ہوتی ہے۔ <code>starhermit.txt</code>.</li>
+<li>ایک اختیاری۔ <code>server=</code> سکرپٹ یا <code>container.image=</code> پسدید دفعات ایک مستند کھیل؛ دیکھیں <a href="/ur/docs/api/game-scripts.html">game-scripts.md</a> اور <a href="/ur/docs/api/container-games.html">container-games.md</a>. starhermit.com پر کسی بھی سائن ان صارف کے لیے کنٹینر ہوسٹنگ کھلا ہے۔ ایک خود میزبان تعیناتی اسے آپریٹر کی اجازت کی فہرست تک محدود کر سکتی ہے۔</li>
+<li><strong>ایک اعلان کردہ سرور پسدید کو ایک ثابت شدہ مالک کی ضرورت ہے۔</strong> ایک ریپو جمع کرانا جو اعلان کرتا ہے۔ <code>server=</code> یا <code>container.image=</code> GitHub-login کے بغیر یا <code>owner=</code> ثبوت ہے <code>403</code> (دونوں ثبوتوں کا نام دینا)، صرف براؤزر کی فہرست نہیں ہے جو بیک اینڈ ہونے کا بہانہ کرتی ہے۔</li>
+<li>حدود: فی صارف 100 گیمز (آپریٹر کے لیے اوور رائیڈ ایبل فی اکاؤنٹ)۔ ڈپلیکیٹ ریٹرن رجسٹر کرنا <code>409</code>.</li>
+</ul>
+<p>رجسٹریشن/تعیناتی کے حالات میں شامل ہیں: <code>InvalidUrl</code>, <code>LimitReached</code>, <code>Duplicate</code>, <code>MissingManualMetadata</code>, <code>MissingStarhermitTxt</code>, <code>InvalidLaunchPath</code>, <code>InvalidServerScriptPath</code>, <code>InvalidContainerImage</code>, <code>ServerProvisionConflict</code>, <code>RemovedByOwner</code>.</p>
+<p>غلطیاں معیاری شکل کا استعمال کرتی ہیں:</p>
+<pre><code class="language-json">{ "error": "..." }
+</code></pre>
+<h3 id="add-a-game-from-a-local-folder">مقامی فولڈر سے ایک گیم شامل کریں۔</h3>
+<p><code>POST /api/v1/me/github-games/upload</code> → <code>201</code></p>
+<p>یو آر ایل کو رجسٹر کرنے کا ہم منصب: <strong>کوئی ذخیرہ نہیں ہے</strong>، اور کچھ بھی کلون نہیں ہے۔ فولڈر
+ایک کے طور پر سفر کرتا ہے <code>.tar.gz</code> درخواست کے باڈی پر اور پلیٹ فارم میزبانی کرتا ہے کہ اس میں کیا ہے۔ وہی آرکائیو
+فارمیٹ کے طور پر <a href="#push-a-game-bundle">ایک بنڈل کو آگے بڑھانا</a>، لہذا ایک ہی پیکیجنگ دونوں کے لئے کام کرتی ہے۔</p>
+<p>تخلیق کردہ گیم میں ایک ہے۔ <code>gameSlug</code> شروع سے، چاہے یہ سرور کا اعلان کرے یا نہ کرے، تو a
+براؤزر صرف اپ لوڈ استعمال کر سکتے ہیں۔ <a href="/ur/docs/api/games.html#per-player-control-bindings">کنٹرول کرتا ہے</a>,
+<a href="/ur/docs/api/games.html#per-player-game-settings">فی کھلاڑی کی ترتیبات</a>اس کا
+<a href="/ur/docs/api/catalog.html#saving-from-inside-a-game-launch-token">کلاؤڈ سیو سلاٹ</a>, <a href="/ur/docs/api/realtime.html">حقیقی وقت کے کمرے</a>
+اور کسی دوسرے گیم کی طرح ٹوکن لانچ کریں۔</p>
+<pre><code class="language-text">client/           the game's files, published as-is
+starhermit.txt    name= and launch= instead of the query parameters
+</code></pre>
+<p>مینی فیسٹ اختیاری ہے۔ <em>یہ اختتامی نقطہ</em> - استفسار کے پیرامیٹرز ایک جیسی اقدار فراہم کر سکتے ہیں — اور
+StarHermit کلائنٹس ہمیشہ ایک بھیجتے ہیں، جو ان کے مینی فیسٹ فیلڈ سے بنایا گیا ہے۔ فائل اندر بھیج رہا ہے۔
+آپ کی تعمیر اب بھی کرنے کے قابل ہے: یہ تعمیر کو خود بیان کرتا ہے اور ان فیلڈز کو پہلے سے بھرتا ہے، لہذا یہ
+اسے یاد رکھے بغیر دوبارہ اپ لوڈ کیا جا سکتا ہے کہ اسے کن اقدار کی ضرورت ہے۔ دیکھیں
+<a href="/ur/docs/starhermit-txt.html">دی <code>starhermit.txt</code> ظاہر</a> فارمیٹ کے لیے، اور نوٹ کریں۔ <strong>سب کچھ
+مینی فیسٹ سے ملحق اپ لوڈ ہے۔</strong> - ایک قابل تقسیم تعمیر اپ لوڈ کریں، ذریعہ درخت نہیں۔</p>
+<p>بائٹس براہ راست بھیجیں — ملٹی پارٹ فارم ڈیٹا نہیں — کے ساتھ <code>Content-Type: application/gzip</code>:</p>
+<pre><code class="language-bash">tar -czf game.tar.gz client/ starhermit.txt
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/upload?displayName=My%20Game" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game.tar.gz
+</code></pre>
+<pre><code class="language-json">{
+  "game": { "id": "...", "displayName": "My Game", "launchPath": "index.html", "hosting": { "hostingEnabled": true } },
+  "bytesReceived": 4194304
+}
+</code></pre>
+<p>میٹا ڈیٹا اس ترتیب میں حل ہوتا ہے، لہذا زیادہ تر فولڈرز کو کسی بھی سوال کے پیرامیٹرز کی ضرورت نہیں ہوتی ہے۔</p>
+<ol>
+<li><code>?displayName=</code> / <code>?launchPath=</code> درخواست پر.</li>
+<li><code>name=</code> / <code>launch=</code> ایک میں <code>starhermit.txt</code> محفوظ شدہ دستاویزات کی جڑ میں.</li>
+<li><code>index.html</code> کی جڑ میں <code>client/</code> - لانچ کے راستے کے طور پر استعمال کیا جاتا ہے جب کوئی اور چیز کسی کا نام نہیں لیتی ہے۔</li>
+</ol>
+<p>اس راستے کے لیے مخصوص نوٹس:</p>
+<ul>
+<li><strong>کال واپس آتے ہی گیم لائیو ہو جاتا ہے۔</strong> کوئی علیحدہ ہوسٹنگ یا تعیناتی نہیں ہے۔
+قدم: <code>deployStatus</code> ہے <code>live</code> اور <code>deployedCommitSha</code> ہے <code>null</code>کیونکہ کوئی عہد نہیں ہے۔</li>
+<li><strong>فائلوں کو دوبارہ تخلیق نہیں کیا جا سکتا</strong>، لہذا پلیٹ فارم انہیں کبھی بھی کہیں سے دوبارہ تعینات نہیں کرتا ہے۔ ایک کھیل
+اس طرح لے جاتا ہے شامل کیا <code>contentSource: upload</code> اور اس کی اپ لوڈ کردہ تعمیر کو برقرار رکھتا ہے جب تک کہ آپ شائع نہیں کرتے ہیں۔
+ایک اور کے ساتھ ایک نئی تعمیر کو آگے بڑھائیں۔
+<a href="#push-a-game-bundle">بنڈل اختتامی نقطہ</a> یا فولڈر کو دوبارہ اپ لوڈ کریں۔</li>
+<li><strong>کوئی ذخیرہ نہیں مطلب کوئی دعوی نہیں.</strong> <code>ownerLogin</code> خالی ہے، لہذا کوئی بھی GitHub لاگ ان کبھی بھی اس سے میل نہیں کھا سکتا۔
+<code>repoUrl</code> ایک مصنوعی لے جاتا ہے <code>upload:&lt;id&gt;</code> یو آر ایل کے بجائے قدر۔</li>
+<li><strong>A <code>server/image.tar</code> یہاں انکار ہے</strong> (<code>422</code>)۔ سرور کی تصویر کو ایک فراہم کردہ گیم کی ضرورت ہے۔
+منسلک کریں، جو اس وقت تک موجود نہیں ہے جب تک کہ گیم نہ ہو — پہلے گیم بنائیں، پھر تصویر کو پش کریں۔
+کو <code>/{id}/bundle</code>.</li>
+<li>آرکائیو پر مشتمل فائل کا نام دینے والے لانچ پاتھ سے انکار کر دیا گیا ہے (<code>422</code>) جبکہ اپ لوڈ ہے۔
+ہر کھلاڑی کے لیے 404 بننے کے بجائے اب بھی اسٹیجنگ میں ہے۔</li>
+</ul>
+<p>حدود کسی دوسرے دھکے کی طرح ہیں: دیکھیں <a href="#upload-limits">اپ لوڈ کی حد</a>.</p>
+<h4 id="an-uploaded-folder-can-bring-its-own-server-backend">اپ لوڈ کردہ فولڈر اپنا سرور بیک اینڈ لا سکتا ہے۔</h4>
+<p>اگر محفوظ شدہ دستاویزات کی <a href="/ur/docs/starhermit-txt.html"><code>starhermit.txt</code></a> سرور لاجک، اپ لوڈ کا اعلان کرتا ہے۔
+اسے بھی فراہم کرتا ہے — وہی چیز جو ریپوزٹری فلو کرتا ہے، بغیر کسی ریپوزٹری کے۔ ایک چنو
+انداز دونوں کا اعلان کرنے سے انکار کر دیا گیا ہے۔</p>
+<table>
+<thead>
+<tr>
+<th>اعلامیہ</th>
+<th>کیا ہوتا ہے</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server=path/to/server.js</code></td>
+<td>ایک اسکرپٹ پسدید۔ فائل سفر کرتی ہے۔ <strong>اس فولڈر کے اندر جو آپ اپ لوڈ کرتے ہیں۔</strong>، لہذا اس کا ماخذ محفوظ شدہ دستاویزات سے سیدھا پڑھا جاتا ہے — لانے کے لئے کچھ نہیں ہے۔ دیکھیں <a href="/ur/docs/api/game-scripts.html">game-scripts.md</a>.</td>
+</tr>
+<tr>
+<td><code>container.image=name@sha256:…</code></td>
+<td>ایک کنٹینر پسدید، ہمیشہ کی طرح ڈائجسٹ-پِن۔ دیکھیں <a href="/ur/docs/api/container-games.html">container-games.md</a>. تصویر کو خود بعد میں دھکیل دیا جاتا ہے۔ <code>/{id}/bundle</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>یہاں انکار پوری تخلیق کو ناکام بناتا ہے - کوئی بھی آدھی بنی گیم قطار زندہ نہیں رہتی ہے:</p>
+<ul>
+<li><code>server=</code> کسی فائل کا نام دینا جو آرکائیو پر مشتمل نہیں ہے۔</li>
+<li><code>server=</code> کلائنٹ فائلوں کے باہر اشارہ کرنا (<code>../</code>).</li>
+<li>دونوں کا اعلان <code>server=</code> اور <code>container.image=</code>.</li>
+<li>ایسے کنٹینر کا مطالبہ کرنا جہاں کنٹینرز غیر فعال ہیں، یا کسی مالک سے ان کے لیے منظور شدہ نہیں۔</li>
+</ul>
+<h3 id="cover-art">کور آرٹ</h3>
+<p>لائبریری میں آپ کے گیم کے ٹائل پر دکھائی گئی تصویر۔ اسے کسی بھی طرح سے سیٹ کریں — جو بھی آپ استعمال کریں،
+گمنام <code>GET /api/v1/github-games/{id}/cover</code> وہ ہے جو اس کی خدمت کرتا ہے:</p>
+<ul>
+<li><strong>آپ کی تعمیر میں</strong> — a <code>cover=</code> لائن میں <code>starhermit.txt</code>، لانچ سے متعلق ایک تصویر کا نام دینا
+فائل یا مطلق <code>https://</code> URL ہر تعیناتی پر دوبارہ پڑھیں، تاکہ آپ کا ذخیرہ سچائی کا منبع رہے۔</li>
+<li><strong>اپ لوڈ کیا گیا</strong> — <code>PUT /api/v1/me/github-games/{id}/cover</code> تصویر base64-انکوڈ کے ساتھ۔ یہ ہے
+ویب ڈیش بورڈ کیا ہے۔ <em>نظم کریں → کور آرٹ</em> کرتا ہے، اور ایک StarHermit آپریٹر آپ کے لیے کیا کر سکتا ہے۔</li>
+</ul>
+<pre><code class="language-http">PUT /api/v1/me/github-games/{id}/cover
+Authorization: Bearer &lt;token&gt;
+Content-Type: application/json
+
+{ "imageBase64": "iVBORw0KGgoAAAANSUhEUg..." }
+</code></pre>
+<p>ایک اپ لوڈ <strong>اوور رائیڈ کرتا ہے۔</strong> منشور، جان بوجھ کر: ایک تعیناتی جو دوبارہ پڑھتا ہے۔ <code>starhermit.txt</code> ضروری ہے
+ہاتھ سے منتخب کردہ آرٹ کو کبھی بھی کالعدم نہ کریں۔ <code>DELETE /api/v1/me/github-games/{id}/cover</code> واپسی کا راستہ ہے -
+یہ اپ لوڈ اور مینی فیسٹ کو چھوڑ دیتا ہے۔ <code>cover=</code> دوبارہ لاگو ہوتا ہے.</p>
+<p>PNG، JPEG، GIF، WEBP، BMP یا SVG، تک <strong>4 MB</strong>. قسم کو بائٹس سے سونگھا جاتا ہے، لہذا a
+<code>Content-Type</code> آپ کا دعوی ہے کہ نہ تو ضرورت ہے اور نہ ہی یقین ہے، اور بائٹس جو ڈیکوڈ ایبل امیج نہیں ہیں۔
+کے ساتھ انکار کر رہے ہیں <code>400</code>. ایک رشتہ دار <code>cover=</code> راستہ ختم ہونا چاہئے <code>.png</code>, <code>.jpg</code>/<code>.jpeg</code>, <code>.gif</code>,
+<code>.webp</code> یا <code>.svg</code> (نہیں <code>..</code>، کوئی معروف نہیں <code>/</code>); ایک ناقابل استعمال قدر کو ناکام کرنے کے بجائے گرا دیا جاتا ہے۔
+کھیل</p>
+<p>کور آرٹ پوسٹر آرٹ ہے: دونوں لائبریریاں <strong>ٹائل اور درمیانی فصل کو بھرنے کے لیے اسے پیمانہ کریں۔</strong> جو بھی کرتا ہے
+فٹ نہیں ٹائلیں ایک جیسی نہیں ہیں۔</p>
+<table>
+<thead>
+<tr>
+<th>سطح</th>
+<th>ٹائل</th>
+<th>فصل</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ونڈوز کلائنٹ</td>
+<td>96×128 پورٹریٹ (3:4)</td>
+<td>پورٹریٹ بھرتا ہے؛ وسیع آرٹ اطراف کو کھو دیتا ہے۔</td>
+</tr>
+<tr>
+<td>ویب ڈیش بورڈ</td>
+<td>مربع</td>
+<td>مربع کو بھرتا ہے؛ لمبا فن اوپر اور نیچے کو کھو دیتا ہے۔</td>
+</tr>
+</tbody>
+</table>
+<p>موضوع کو مرکز میں رکھیں تاکہ دونوں فصلیں درست نظر آئیں۔ SVG کور ویب لائبریری پر دکھائے جاتے ہیں؛ دی
+ونڈوز کلائنٹ SVG کو ڈی کوڈ نہیں کر سکتا، اس لیے ٹائل اس کی بجائے فیویکن دکھاتا ہے۔ ایک کھیل جس میں کوئی کور نہیں ہے۔
+سب اس کے فیویکن پر واپس آتا ہے (<code>GET /api/v1/github-games/{id}/icon</code>)۔ آئیکن کو سے حل کیا جاتا ہے۔
+URL آپ نے جمع کرایا اور، جب پلیٹ فارم گیم کی میزبانی کرتا ہے، اس کاپی سے جس پر وہ پیش کرتا ہے۔
+<code>&lt;uid&gt;.starhermit.com</code> - لہذا اس کی فائلوں میں فیویکون کے ساتھ اپ لوڈ کردہ بنڈل اب بھی ایک آئیکن حاصل کرتا ہے۔</p>
+<h3 id="audience-figures-for-your-game">آپ کے کھیل کے لیے سامعین کے اعداد و شمار</h3>
+<p><code>GET /api/v1/me/github-games/{id}/stats</code> → <code>GameStatsDto</code></p>
+<p>کتنے لوگ ایک گیم کھیلتے ہیں۔ <strong>آپ نے شامل کیا۔</strong>. گیم کے مالک تک محدود - کسی اور کو ملتا ہے۔ <code>404</code>,
+ایک کھیل کے طور پر ایک ہی جواب ہے جو موجود نہیں ہے.</p>
+<pre><code class="language-json">{
+  "totalPlayers": 42,
+  "playingNow": 3,
+  "totalSessions": 130,
+  "totalPlaytimeMinutes": 8140,
+  "lastPlayedAt": "2026-07-29T08:45:24Z",
+  "livenessWindowHours": 4
+}
+</code></pre>
+<ul>
+<li><strong>صرف مجموعی۔</strong> آپ اپنے سامعین کا سائز سیکھتے ہیں، کبھی بھی اس میں کون نہیں ہے۔</li>
+<li><code>totalPlayers</code> شمار کرتا ہے <strong>الگ الگ لوگ</strong>، سیشن نہیں - جو چھ بار کھیلا وہ ایک ہے۔
+کھلاڑی</li>
+<li><code>playingNow</code> ان مخصوص کھلاڑیوں کو شمار کرتا ہے جن کا سیشن ختم نہیں ہوا ہے۔ <em>اور</em> اندر شروع ہوا
+<code>livenessWindowHours</code>. ونڈو اہم ہے: ایک کلائنٹ جو کریش ہو گیا ہو یا اپنا نیٹ ورک کھو گیا ہو وہ کبھی نہیں بھیجتا ہے۔
+سیشن کا اختتام، اور اس کے بغیر وہ قطاریں پڑھ جائیں گی کیونکہ لوگ اب بھی غیر معینہ مدت تک کھیل رہے ہیں۔</li>
+<li><code>totalPlaytimeMinutes</code> شمار کرتا ہے <strong>صرف مکمل سیشن</strong>، فی صارف پلے ٹائم کے اعداد و شمار سے مماثل
+میں <a href="/ur/docs/api/activity.html">activity.md</a>. پرواز میں ایک سیشن ابھی تک کچھ بھی نہیں دیتا ہے۔</li>
+<li><code>lastPlayedAt</code> ہے <code>null</code> اس کھیل کے لئے جو کسی نے نہیں کھیلا ہے۔</li>
+</ul>
+<p>اعداد و شمار اسی لانچ لیجر سے آتے ہیں جو ہر کلائنٹ لکھتا ہے (دیکھیں۔ <a href="/ur/docs/api/activity.html">activity.md</a>)، تو ایک
+وہ گیم جس کے کھلاڑی کبھی بھی لانچ کی اطلاع نہیں دیتے ہیں صفر کے طور پر پڑھا جائے گا۔</p>
+<h3 id="claim-ownership">ملکیت کا دعوی کریں۔</h3>
+<p><code>POST /api/v1/me/github-games/{id}/claim</code> → <code>GitHubGameDto</code></p>
+<p>جب آپ اس کے ذخیرے کو کنٹرول کرتے ہیں تو موجودہ فہرست کو سنبھال لیں۔ یا تو لنک کرکے ملکیت ثابت کریں۔
+ذاتی GitHub لاگ ان مخزن کے مالک سے مماثل ہے، یا کمٹمنٹ کے ذریعے
+<code>owner=&lt;your StarHermit user ID&gt;</code> مخزن کی طرف <code>starhermit.txt</code>. <code>owner</code> ہونا چاہئے
+ناقابل تبدیل UUID بطور واپس آیا <code>id</code> کی طرف سے <code>GET /api/v1/me</code>, <strong>نہیں</strong> ایک صارف نام یا عرفی نام۔ ظاہر
+طریقہ تنظیم کی ملکیت والے ذخیروں کی حمایت کرتا ہے، جن کا اندازہ ذاتی GitHub org سے نہیں لیا جاتا ہے۔
+رکنیت</p>
+<p>کامیابی پر، موجودہ فہرست اپنی ID/تاریخ کو برقرار رکھتی ہے، دعویدار کے زیر انتظام ہو جاتی ہے، ریفریش ہو جاتی ہے
+ریپوزٹری کے زیر کنٹرول میٹا ڈیٹا اور بیک اینڈ ڈیکلریشنز، اور جہاں دستیاب ہو وہاں ہوسٹنگ کی قطار۔ دی
+سابقہ جمع کنندہ مالک کے دائرہ کار میں انتظامی رسائی کھو دیتا ہے۔ ایسی فہرست کا دعوی کرنا جس کا آپ پہلے سے انتظام کرتے ہیں۔
+تنازعہ کو واپس کرنے کے بجائے اسے دوبارہ ہم آہنگ کرتا ہے۔</p>
+<p>GitHub شناختی میٹا ڈیٹا اسٹورز <code>{"login":"…"}</code>; اپنے GitHub اکاؤنٹ کو OAuth فلو کے ذریعے لنک کریں (دیکھیں۔
+<a href="/ur/docs/api/auth.html">auth.md</a>)۔ کے ساتھ لنک کی حیثیت چیک کریں۔ <code>GET /api/v1/me/github</code> → <code>{ linked, login }</code>. دیکھیں
+<a href="/ur/docs/tutorials/claim-existing-game.html">مرحلہ وار دعوی ٹیوٹوریل</a> دریافت کے لیے، دونوں ثبوت
+طریقے، توثیق، ٹیک اوور، اور خرابیوں کا سراغ لگانا۔</p>
+<h3 id="transfer-ownership">ملکیت منتقل کریں۔</h3>
+<p><code>POST /api/v1/me/github-games/{id}/transfer</code></p>
+<pre><code class="language-json">{ "toUserId": "&lt;user id&gt;" }
+</code></pre>
+<h3 id="push-a-game-bundle">گیم بنڈل کو پش کریں۔</h3>
+<p><code>POST /api/v1/me/github-games/{id}/bundle</code> StarHermit سے پوچھے بغیر بلٹ آؤٹ پٹ شائع کرتا ہے۔
+اسے دوبارہ کلون کریں. کال کرنے والے کو رجسٹرڈ گیم کا مالک ہونا چاہیے۔ بھیجیں۔ <code>.tar.gz</code> بائٹس براہ راست - نہیں
+ملٹی پارٹ فارم ڈیٹا — کے ساتھ <code>Content-Type: application/gzip</code>:</p>
+<pre><code class="language-text">client/            optional static client files; must include the registered launch file
+server/image.tar   optional output from `docker save`
+starhermit.txt     optional manifest copy for bundle portability
+remove.txt         merge only: client-relative paths to delete, one per line
+</code></pre>
+<p>کم از کم <code>client/</code> یا <code>server/image.tar</code> موجود ہونا ضروری ہے (ایک انضمام صرف ہو سکتا ہے <code>remove.txt</code>)۔ کلائنٹ فائلوں کو جوہری طور پر تبدیل کیا جاتا ہے۔ اے
+سرور امیج کو لوڈ کیا جاتا ہے، پلیٹ فارم کے ذریعے ڈائجسٹ پن کیا جاتا ہے، اور کنٹینر کی تعیناتی کو قطار میں کھڑا کیا جاتا ہے۔
+اس تصویر پر دوبارہ شروع کریں. اپ لوڈ کردہ تصویر مینی فیسٹ کے رجسٹری ریفرنس پر فوقیت رکھتی ہے،
+اور ایک سے زیادہ <code>server=</code> لائن دونوں کا اعلان کرنے والا ایک منشور <code>server=</code> اور <code>container.image=</code> انکار کر دیا ہے
+کسی بھی چیز کو لوڈ کرنے سے پہلے. آرکائیو میں موجود کسی بھی چیز کو نظر انداز کر دیا گیا ہے۔</p>
+<p><strong>تصویر اپ لوڈ کرنا بذات خود اعلان ہے۔</strong> اگر گیم کا ابھی تک کوئی سرور بیک اینڈ نہیں ہے - ایک
+اپ لوڈ کردہ فولڈر جس نے اعلان کیا کہ کوئی نہیں — آگے بڑھا رہا ہے۔ <code>server/image.tar</code> صرف ڈائجسٹ سے ایک کی فراہمی
+بھری ہوئی، کے تحت <code>gameSlug</code> کھیل پہلے سے ہی ہے. آپ کو a میں ڈائجسٹ پن والی تصویر کا نام دینے کی ضرورت نہیں ہے۔
+سب سے پہلے مینی فیسٹ، جو سرکلر تھا: اس سے پہلے کہ وہ تصویر حاصل کر سکے، تعریف کا موجود ہونا ضروری ہے،
+اور تصویر ہی واحد چیز تھی جو اسے بیان کر سکتی تھی۔</p>
+<p><strong>ایک دوبارہ دھکا لاگو ہوتا ہے کنٹینر knobs اس کے مینی فیسٹ کا اعلان کرتا ہے، اور صرف وہی۔</strong> شامل کریں۔
+<code>starhermit.txt</code> ایک تبدیل کے ساتھ بنڈل میں <code>container.port</code>, <code>container.health</code>,
+<code>container.memory_mb</code> یا <code>container.cpu</code> اور تعیناتی اسے دوبارہ شروع کرنے پر اٹھا لیتی ہے۔ ایک دستک چھوڑ دو اور
+یہ جو کچھ بھی آپ نے آخری بار سیٹ کیا اسے رکھتا ہے۔ مینی فیسٹ کو مکمل طور پر چھوڑ دیں اور تعیناتی کے بارے میں کچھ بھی نہیں۔
+تصویر کے علاوہ تبدیلیاں۔</p>
+<p>StarHermit کلائنٹس آپ کے لیے ایک فولڈر سے یہ بنڈل بناتے ہیں۔ <strong>یا ایک <code>.tar</code></strong>:</p>
+<ul>
+<li><strong>کلائنٹ کی فائلیں۔</strong> - گیم کا ڈسٹری بیوشن فولڈر، یا a <code>.tar</code> اس کا ایک فولڈر کے نیچے پیک کیا گیا ہے۔
+<code>client/</code>; a <code>.tar</code>کے اندراجات کو دوبارہ وہاں رکھا گیا ہے (ایک محفوظ شدہ دستاویزات پہلے سے ہی نیچے ہے۔ <code>client/</code> رہ گیا ہے
+تنہا)۔ صرف ustar — GNU طویل نام اور PAX آرکائیوز سے انکار کر دیا گیا ہے، کیونکہ ان کو دوبارہ گھر کرنے کا مطلب ہے
+مندرجہ ذیل اندراج کو نام دینے والے میٹا ڈیٹا بلاکس کو دوبارہ لکھنا۔</li>
+<li><strong>سرشار سرور</strong> - سرور کا ڈسٹری بیوشن فولڈر، یا <code>docker save</code> <code>.tar</code> اپنے طور پر
+ایک فولڈر سے صرف مینی فیسٹ اور <code>image.tar</code> اپ لوڈ کیے گئے ہیں: تصویر میں پہلے سے ہی آپ کی
+سرور کی اپنی فائلیں ہیں، لہذا باقی پیک کرنے سے پلیٹ فارم کو ضائع کرنے کے لیے گیگا بائٹس بھیجے جائیں گے۔</li>
+</ul>
+<p>دونوں صورتوں میں <a href="/ur/docs/starhermit-txt.html"><code>starhermit.txt</code></a> ڈائیلاگ میں قابل تدوین ہے۔ جو بھی ہو۔
+picked build کھیتوں کو پہلے سے بھرتا ہے، اور جو کچھ بھی ان کے پاس ہوتا ہے وہ بنڈل روٹ پر لکھا جاتا ہے۔
+بغیر کسی مینی فیسٹ کے ایک تعمیر قابل اشاعت ہے، اور ایک جو بطور a کے طور پر بھیجی جاتی ہے۔ <code>.tar</code> اب بھی اس کا اظہار ہو سکتا ہے
+اپ ڈیٹ</p>
+<pre><code class="language-bash">docker save my-game-server:release -o image.tar
+mkdir -p bundle/server
+mv image.tar bundle/server/image.tar
+cp starhermit.txt bundle/
+tar -C bundle -czf game-bundle.tar.gz .
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game-bundle.tar.gz
+</code></pre>
+<pre><code class="language-json">{
+  "clientPublished": false,
+  "serverImageLoaded": true,
+  "imageDigest": "sha256:...",
+  "bytesReceived": 318767104,
+  "mode": "replace",
+  "filesRemoved": 0
+}
+</code></pre>
+<h4 id="partial-updates-modemerge">جزوی اپ ڈیٹس: <code>?mode=merge</code></h4>
+<p>ایک دھکا ہے a <strong>تبدیل کریں</strong> جب تک کہ آپ دوسری صورت میں نہ پوچھیں: آرکائیو سارا کھیل ہے، اور کچھ بھی نہیں ہے۔
+یہ چلا گیا ہے. <code>?mode=merge</code> (HTTP اور اپ لوڈ ساکٹ یکساں) اسے بناتا ہے۔ <strong>پیچ</strong> لائیو کلائنٹ کے
+فائلیں - ایک فائل فکس کے لیے غیر تبدیل شدہ اثاثوں کے گیگا بائٹس کو دوبارہ اپ لوڈ کرنے کا جواب۔</p>
+<pre><code class="language-bash">printf '%s\n' '# one client-relative path per line; a directory removes everything under it' \
+    'assets/old-music.ogg' 'levels/cut/' &gt; remove.txt
+tar czf patch.tar.gz client/index.html client/js/app.js remove.txt
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle?mode=merge" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @patch.tar.gz
+</code></pre>
+<p>کے ساتھ <code>mode=merge</code>:</p>
+<ul>
+<li>کے تحت فائلیں <code>client/</code> شامل یا اوور رائٹ کیا جاتا ہے۔</li>
+<li>ایک جڑ میں راستے <code>remove.txt</code> (<code>#</code> تبصرے ایک ڈائریکٹری اپنے پورے ذیلی درخت کو ہٹا دیتی ہے) کو حذف کر دیا جاتا ہے۔</li>
+<li>ہر دوسری لائیو فائل بالکل ویسے ہی رہتی ہے۔</li>
+</ul>
+<p>ضم شدہ درخت کو ایک کاپی کے طور پر اسٹیج کیا جاتا ہے اور جوہری طور پر تبدیل کیا جاتا ہے - کھلاڑی پرانا کھیل یا
+بالکل نیا، کبھی مکس نہیں۔ نتیجہ کی طرف سے پابند ہے <strong>کھیل کی</strong> الاؤنس، اپ لوڈ کا نہیں، تو
+ایک کھیل ایک وقت میں ایک چھوٹے سے پیچ کی حد سے آگے نہیں بڑھ سکتا۔ انضمام صرف کلائنٹ فائلوں کے بارے میں ہے۔ a
+<code>server/image.tar</code> بالکل اسی طرح بھری ہوئی ہے جیسے بدلنے پر۔ ایک پیچ جس میں نمبر ہے۔ <code>starhermit.txt</code> پتے
+کور آرٹ جیسا تھا.</p>
+<p>انضمام سے انکار کر دیا گیا ہے (<code>409</code>/<code>422</code>، کچھ بھی نہیں بدلتا ہے) جب گیم میں ابھی تک کچھ بھی شائع نہیں ہوا ہے، جب یہ
+لانچ فائل کو ہٹا دے گا، یا کب <code>remove.txt</code> کھیل سے باہر پوائنٹس۔ اے <code>remove.txt</code> ایک میں
+سادہ بدلنے سے بھی انکار کر دیا گیا ہے (<code>422</code>) کیونکہ وہاں اس کا مطلب صرف وہی ہو سکتا ہے جو آپ نے نہیں کیا۔
+ارادہ <code>mode</code> ہونا ضروری ہے <code>replace</code> (پہلے سے طے شدہ) یا <code>merge</code>; کچھ اور ہے <code>400</code>.</p>
+<p>ایک ہی پیرامیٹر ساکٹ پر کام کرتا ہے: <code>ws/v1/game-upload?gameId=…&amp;mode=merge</code>. دی <code>ready</code> فریم
+کے طور پر اس کی بازگشت <code>"apply":"merge"</code>.</p>
+<p>اینڈ پوائنٹ ایک موجودہ رجسٹرڈ گیم کو اپ ڈیٹ کرتا ہے۔ یہ کبھی بھی گیم ریکارڈ نہیں بناتا - اس کے لیے دیکھیں
+<a href="#add-a-game-from-a-local-folder">مقامی فولڈر سے گیم شامل کرنا</a>. یہ <em>کر سکتے ہیں</em> کھیل کی فراہمی
+سرور پسدید، سرور کی تصویر کو کسی گیم میں لوڈ کرنے کے ضمنی اثر کے طور پر جس میں کوئی نہیں تھا۔ دیکھیں
+<a href="/ur/docs/tutorials/dedicated-server-onboarding.html">سرشار سرور پبلشنگ ٹیوٹوریل</a>.</p>
+<h3 id="upload-from-cicd">CI/CD سے اپ لوڈ کریں۔</h3>
+<p>ایک انٹرایکٹو OAuth ٹوکن کو مخزن خفیہ میں نہ رکھیں۔ OAuth کے ذریعے ایک بار سائن ان کریں اور استعمال کریں۔
+اس سیشن میں ایک علیحدہ لیبل والی تعیناتی کلید شامل کرنا ہے۔ <code>POST /api/v1/me/public-keys</code>. سی آئی
+نوکری پھر دستخط کر سکتے ہیں <code>/auth/public-key/challenge</code>پر اس کا تبادلہ کریں۔ <code>/auth/public-key/complete</code>، اور استعمال کریں۔
+اس بنڈل کے اختتامی نقطہ پر 15 منٹ تک رسائی کا ٹوکن واپس آیا۔</p>
+<p>تعیناتی کلید اپنے اکاؤنٹ کے طور پر کام کرتی ہے، اس لیے اس اکاؤنٹ کو ٹارگٹ گیم کا مالک ہونا چاہیے۔ یہ نہیں کر سکتا
+ایک اور کلید شامل کریں یا دوسری چابیاں منسوخ کریں۔ یہ خود کو منسوخ کر سکتا ہے۔ <code>/me/public-keys/current</code>;
+OAuth سے تصدیق شدہ سیشن سے اندراج اور دیگر کلیدوں کا نظم کریں۔ فی ایک کلید استعمال کریں۔
+ماحول تاکہ ایک ورک فلو دوسرے کو روکے بغیر غیر فعال کیا جا سکے۔ آرکائیوز تقریبا
+100 MB کے لیے نیچے دی گئی ویب ساکٹ ٹرانسپورٹ کا استعمال کرنا چاہیے۔</p>
+<p>دیکھیں <a href="/ur/docs/tutorials/ci-cd-build-upload.html">OAuth کے اندراج شدہ عوامی کلید کے ساتھ CI/CD سے تعمیرات اپ لوڈ کریں۔</a>
+کلیدی نسل کے لیے، GitHub خفیہ سیٹ اپ، ایک مکمل چیلنج سائننگ/اپ لوڈر اسکرپٹ، جامد اور
+کنٹینر بنڈل لے آؤٹ، اور ایک GitHub ایکشن ورک فلو۔</p>
+<h3 id="upload-over-a-websocket">ویب ساکٹ پر اپ لوڈ کریں۔</h3>
+<p><code>GET /ws/v1/game-upload</code> (اپ گریڈ) - <strong>اسے تقریباً 100 MB سے زیادہ کے لیے استعمال کریں۔</strong></p>
+<p>API کے سامنے موجود CDN تقریباً ایک HTTP درخواست کی باڈی سے انکار کرتا ہے۔ <strong>100 MB</strong> a کے ساتھ <code>413</code> اس کا
+اپنے وہ انکار کبھی بھی پلیٹ فارم تک نہیں پہنچتا، اس لیے اس میں نہیں ہوتا <code>limitBytes</code> اور آپ کو نو لاگ ان میں ظاہر ہوتا ہے۔
+پڑھ سکتے ہیں - a <code>413</code> نہیں کے ساتھ <code>limitBytes</code> فیلڈ CDN ہے، آپ کے گیم کا الاؤنس نہیں، جو کہ دو ہے۔
+بڑے پیمانے کے احکامات. کوئی بھی حقیقت پسندانہ <code>docker save</code> اسے مارے گا.</p>
+<p>WebSocket اپ گریڈ کرنے کے بعد بھیجے گئے فریم درخواست کی باڈی نہیں ہیں، اس لیے زیادہ سے زیادہ حد لاگو نہیں ہوتی۔
+<strong>صرف نقل و حمل میں فرق ہے۔</strong> بائنری فریم HTTP روٹس کے بالکل بائٹس میں جڑ جاتے ہیں۔
+پڑھیں، اسی پائپ لائن سے گزریں، اور ہر انکار، الاؤنس اور کامیابی کا باڈی HTTP ہے۔
+روٹ تیار ہوتا - لہذا ایک کلائنٹ دونوں میں ایک کوڈ کا راستہ بانٹ سکتا ہے۔</p>
+<pre><code class="language-text">wss://api.starhermit.com/ws/v1/game-upload?gameId=$GAME_ID&amp;access_token=$TOKEN
+wss://api.starhermit.com/ws/v1/game-upload?gameId=$GAME_ID&amp;mode=merge&amp;access_token=$TOKEN
+wss://api.starhermit.com/ws/v1/game-upload?displayName=My%20Game&amp;launchPath=index.html&amp;access_token=$TOKEN
+</code></pre>
+<p>پاس <code>gameId</code> اپنی ملکیت والے کھیل کو آگے بڑھانے کے لیے ( <code>/{id}/bundle</code> راستہ)؛ اسے چھوڑ دو اور پاس کرو
+<code>displayName</code>/<code>launchPath</code> فولڈر سے ایک بنانے کے لیے ( <code>/upload</code> راستہ)۔ ٹوکن میں جاتا ہے
+استفسار سٹرنگ کیونکہ براؤزر سیٹ نہیں کر سکتا <code>Authorization</code> ویب ساکٹ ہینڈ شیک پر ہیڈر؛ یہ ہے
+مصافحہ کے وقت ایک بار چیک کیا گیا، تو ایک اپ لوڈ جو اس کے رسائی ٹوکن سے باہر رہتا ہے اب بھی ختم ہوجاتا ہے۔</p>
+<table>
+<thead>
+<tr>
+<th>سمت</th>
+<th>فریم</th>
+<th>مطلب</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>سرور →</td>
+<td><code>{"type":"ready","mode":"bundle","apply":"replace","limitBytes":N,"heartbeatSeconds":15}</code></td>
+<td>الاؤنس طے ہوا اور خالی جگہ کی جانچ کی گئی۔ بھیجنا شروع کریں۔ <code>mode</code> ہے <code>bundle</code> یا <code>create</code>. <code>apply</code> ہے <code>merge</code> جب آپ نے جزوی اپ ڈیٹ کے لیے کہا۔</td>
+</tr>
+<tr>
+<td>→ سرور</td>
+<td><em>بائنری</em></td>
+<td>آرکائیو بائٹس، آپ کی پسند کے مطابق ٹکڑا ہوا — سرور کبھی بھی پیغامات کو دوبارہ نہیں جوڑتا ہے، اس لیے 256 KB–1 MB ٹھیک ڈیفالٹ ہے۔ مربوط، آپ کے فریم بالکل وہی ہونے چاہئیں <code>.tar.gz</code>.</td>
+</tr>
+<tr>
+<td>سرور →</td>
+<td><code>{"type":"ack","bytesReceived":N}</code></td>
+<td>رسید کی پیشرفت، تقریباً ہر 8 ایم بی۔ اس سے اپنا پروگریس بار چلائیں۔</td>
+</tr>
+<tr>
+<td>→ سرور</td>
+<td><code>{"type":"complete"}</code></td>
+<td>آرکائیو مکمل طور پر بھیج دیا گیا ہے۔</td>
+</tr>
+<tr>
+<td>→ سرور</td>
+<td><code>{"type":"abort"}</code></td>
+<td>ترک کر دیں۔ کے ساتھ جواب دیا۔ <code>status: 499</code>; کچھ بھی شائع نہیں ہوا.</td>
+</tr>
+<tr>
+<td>سرور →</td>
+<td><code>{"type":"progress","phase":"publishing","bytesReceived":N}</code></td>
+<td>دل کی دھڑکن ہر 15 سیکنڈ میں اپ لوڈ ہونے کے دوران۔ انہیں نظر انداز کریں، لیکن ان کی توقع کریں.</td>
+</tr>
+<tr>
+<td>سرور →</td>
+<td><code>{"type":"result","status":200,...}</code></td>
+<td>کامیابی باقی آبجیکٹ HTTP رسپانس باڈی verbatim ہے (<code>status</code> ہے <code>201</code> تخلیق کے لیے)۔</td>
+</tr>
+<tr>
+<td>سرور →</td>
+<td><code>{"type":"error","status":413,"error":"...","limitBytes":N}</code></td>
+<td>انکار۔ <code>status</code> اور جسم وہی ہے جو HTTP روٹ نے جواب دیا ہوگا۔</td>
+</tr>
+</tbody>
+</table>
+<p><strong>تک کچھ بھی شائع نہیں ہوتا <code>{"type":"complete"}</code> پہنچتا ہے</strong> یہ ایک ایسا سلوک ہے جس میں کوئی HTTP نہیں ہے۔
+مساوی، اور یہ جان بوجھ کر ہے: آرکائیو کا اختتام مارکر زندہ رہتا ہے۔ <em>اندر</em> ایک ٹار کی بائٹس، تو
+پلیٹ فارم کنکشن ختم ہونے کے بغیر مکمل نظر آنے والے آرکائیو کو پڑھتا ہے۔ ایک ساکٹ
+جو صرف آخری بائٹ کے بعد گرا تھا بصورت دیگر بالکل اسی طرح شائع ہو جائے گا جو ختم ہوا —
+خاموشی سے لائیو گیم کی جگہ ایک لاوارث دھکا لگانا۔ فریم اپ لوڈز کے بغیر ساکٹ کو بند کرنا
+کچھ نہیں</p>
+<p>آپ کے آخری بائٹ کے بعد اشاعت میں وقت لگ سکتا ہے، خاص طور پر سرور کی تصویر کے لیے۔ توقع کریں۔ <code>progress</code>
+دل کی دھڑکنیں ختم ہونے پر؛ خاموش وقفہ کو اپ لوڈ کی ناکامی نہ سمجھیں۔</p>
+<h3 id="upload-limits">اپ لوڈ کی حد</h3>
+<p>تمام اپ لوڈ روٹس — دونوں HTTP اینڈ پوائنٹس اور ویب ساکٹ — ایک جیسے اصولوں کا اشتراک کرتے ہیں۔</p>
+<table>
+<thead>
+<tr>
+<th>حد</th>
+<th>قدر</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>فی گیم ڈسک الاؤنس</td>
+<td><strong>2 جی بی</strong> starhermit.com پر (الاؤنس گیم/تعیناتی کے لحاظ سے مختلف ہو سکتا ہے)</td>
+</tr>
+<tr>
+<td>ہوسٹڈ فائلیں فی اکاؤنٹ</td>
+<td><strong>20 جی بی</strong> اکاؤنٹ کے تمام گیمز میں (آپریٹر-ٹیون ایبل فی اکاؤنٹ)</td>
+</tr>
+<tr>
+<td>مخزن کی تعیناتی۔</td>
+<td><strong>50 MB</strong> محفوظ شدہ دستاویزات</td>
+</tr>
+<tr>
+<td><code>starhermit.txt</code> / <code>remove.txt</code></td>
+<td><strong>256 KB</strong> ہر ایک <code>remove.txt</code> زیادہ سے زیادہ 10,000 راستوں کی فہرست (<code>422</code>)</td>
+</tr>
+<tr>
+<td>نفاذ</td>
+<td>لاگو <strong>سٹریمنگ کے دوران</strong>، تو ایک بڑے دھکے کو درمیانی پرواز سے کاٹ دیا جاتا ہے۔</td>
+</tr>
+</tbody>
+</table>
+<p>اکاؤنٹ کے ہوسٹنگ الاؤنس (<code>413</code> کے ساتھ
+<code>limitBytes</code>)، اور ایک ذخیرہ کی تعیناتی جو اسے پاس کرے گی الاؤنس کا نام دینے کی وجہ سے ناکام ہوجاتی ہے۔
+فی پش اور فی گیم بدلنے پر ایک ہی نمبر ہیں۔ ایک انضمام کی طرف سے پابند ہے <strong>نتیجے میں</strong>
+گیم کا سائز، لہذا ایک چھوٹا سا پیچ جو زندہ درخت کو الاؤنس سے زیادہ کر دے گا، انکار کر دیا گیا ہے۔</p>
+<table>
+<thead>
+<tr>
+<th>حیثیت</th>
+<th>مطلب</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td><code>mode</code> نہ ہی ہے <code>replace</code> نہ ہی <code>merge</code>.</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>ایک ایسے گیم کے خلاف ایک انضمام جس میں ابھی تک کوئی فائل شائع نہیں ہوئی ہے۔</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>الاؤنس سے زیادہ۔ جسم اٹھاتا ہے۔ <code>{ "error", "limitBytes" }</code>. A <code>413</code> <strong>بغیر</strong> <code>limitBytes</code> کیا CDN کا ~ 100 MB باڈی کیپ ہے، یہ نہیں — <a href="#upload-over-a-websocket">اپ لوڈ ساکٹ استعمال کریں۔</a>.</td>
+</tr>
+<tr>
+<td><code>422</code></td>
+<td>خراب شدہ آرکائیو، یا ناقابل استعمال مواد (لاپتہ فائل، نمبر <code>client/</code>, a <code>server/image.tar</code> تخلیق کے راستے پر، ایک انضمام جو لانچ فائل کو حذف کردے گا، <code>remove.txt</code> تبدیل کرنے پر)۔ اس کے علاوہ ایک <strong>کٹا ہوا</strong> آرکائیو - اپ لوڈ کے وسط میں گرے ہوئے کنکشن کا عام نتیجہ۔</td>
+</tr>
+<tr>
+<td><code>507</code></td>
+<td>سرور کے پاس ابھی کمرہ نہیں ہے۔ انکار کر دیا۔ <strong>جسم پڑھنے سے پہلے</strong> جب اشاعت کی گنجائش دستیاب نہ ہو؛ بعد میں دوبارہ کوشش کریں.</td>
+</tr>
+</tbody>
+</table>
+<p>آرکائیوز اپنی جڑ سے بچ نہیں سکتے یا لنکس پر مشتمل نہیں ہوسکتے ہیں، اور صرف باقاعدہ فائلیں اور ڈائریکٹریز ہیں۔
+نکالا گیا — سملنک، ہارڈ لنکس اور ڈیوائس نوڈس کو مسترد کر دیا گیا ہے۔ <code>git archive</code> PAX عالمی ہیڈرز،
+<code>./</code>- سے سابقہ ​​نام <code>tar -czf game.tgz .</code>، اور فائل کے نام جو صرف پر مشتمل ہیں۔ <code>..</code>
+(<code>sprite..png</code>) قبول ہیں۔ اے <code>..</code> راستہ طبقہ اب بھی انکار کر دیا گیا ہے.</p>
+<h3 id="rate-limit">شرح کی حد</h3>
+<p>جمع کروائیں، دعوی کریں، URL تبدیل کریں، ہوسٹنگ اور تعیناتی سبھی پلیٹ فارم کے ایک ٹوکن پر GitHub تک پہنچیں، لہذا
+ایک ساتھ وہ فی اکاؤنٹ 10 درخواستوں تک محدود ہیں (<code>429</code>کے ساتھ <code>Retry-After</code>)۔ ایک
+آپریٹر اسے ایک اکاؤنٹ کے لیے بڑھا سکتا ہے۔</p>
+<h3 id="enable-hosting">ہوسٹنگ کو فعال کریں۔</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/hosting</code> → <code>GameHostingView</code> ("سٹار ہرمیٹ پر تعینات کریں۔")</p>
+<pre><code class="language-json">{ "enabled": true }
+</code></pre>
+<h3 id="pin-a-deployment">ایک تعیناتی پن کریں۔</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/deployment</code> → <code>GameHostingView</code></p>
+<pre><code class="language-json">{ "commit": "&lt;sha or branch&gt;" }
+</code></pre>
+<p><code>commit</code> اختیاری ہے. شا/شاخ کو قطار میں لگانے سے دوبارہ تعیناتی ہوتی ہے۔ رائے شماری <code>GET /api/v1/me/github-games/{id}/deployment</code> حیثیت کے لئے.</p>
+<p>یہ ایک ایسے کھیل کے لیے انکار کر دیا گیا ہے جس میں کوئی ذخیرہ نام نہیں ہے (اپ لوڈ کردہ بنڈل): کمٹ پن کرنا کیا ہے
+ایک گیم کو اس کے ذخیرے پر منتقل کرتا ہے، اور بنڈل سے بنائے گئے گیم میں کوئی نہیں ہوتا ہے۔ اپ لوڈ کردہ گیم کو دوبارہ تعینات کرنا
+github.com کو بازیافت کرنے کے بجائے فائلوں کی اب بھی حجم پر تصدیق کرتا ہے۔</p>
+<h3 id="move-a-game-to-a-new-url">گیم کو ایک نئے URL میں منتقل کریں۔</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/url</code></p>
+<pre><code class="language-json">{ "repoUrl": "https://github.com/you/new-repo", "displayName": "optional for a hosted URL" }
+</code></pre>
+<p>قطار زندہ رہتی ہے - uid، <code>&lt;uid&gt;.starhermit.com</code>, پلے ٹائم، ریٹنگز — اور سے دوبارہ تعینات کیا گیا ہے۔
+منزل گیتھب کی منزل ایک ایسی ہونی چاہیے جو کال کرنے والا ثابت کر سکے کہ وہ کنٹرول کرتے ہیں (<code>403</code> ورنہ)
+اور اس کے <code>starhermit.txt</code> a کا نام نہیں لینا چاہئے۔ <em>مختلف</em> <code>owner=</code> (<code>403</code>)۔ اسکرپٹ یا کنٹینر
+پسدید غیر فعال ہے جب تک کہ منزل کسی کا اعلان نہ کرے۔</p>
+<h3 id="live-sessions-owner">لائیو سیشنز (مالک)</h3>
+<p><code>GET /api/v1/me/github-games/{id}/sessions</code> گیم کے سرور کے فعال سیشنز کی فہرست دیتا ہے۔
+<code>DELETE .../sessions/{sessionId}</code> پلیٹ فارم ترک کرنے کے راستے سے ایک کو ختم کرتا ہے (کوئی فاتح نہیں، نہیں۔
+elo، وجہ <code>operator_ended</code>)۔ یہ صلاحیت کی نشست واپس کرتا ہے جو ایک پھنسے ہوئے سیشن کا انعقاد کر رہا تھا۔</p>
+<h3 id="leaderboards-and-achievements-owner">لیڈر بورڈز اور کامیابیاں (مالک)</h3>
+<p>گیم کا مالک اس کا ناشر ہے: آپ اسے بنا سکتے ہیں۔ <strong>لیڈر بورڈز</strong> اور <strong>کامیابیاں</strong> اس کے لیے
+کے تحت <code>/me/github-games/{id}/leaderboards</code> اور <code>/achievements</code> پبلشر اکاؤنٹ کے بغیر۔ صرف
+آپ کے گیم کا سرور انہیں لکھتا ہے، لہذا گیم کو ایک کی ضرورت ہے۔ <code>server=</code> سکرپٹ یا <code>container.image=</code>
+بیک اینڈ - صرف براؤزر والا گیم ملتا ہے۔ <code>409</code>. دیکھیں <a href="/ur/docs/api/leaderboards.html#your-games-own-leaderboards">لیڈر بورڈز</a>,
+<a href="/ur/docs/api/achievements.html#achievements-created-by-the-games-owner">کامیابیاں</a> اور
+<a href="/ur/docs/tutorials/game-leaderboards-achievements.html">سبق</a>.</p>
+<h2 id="dtos">ڈی ٹی اوز</h2>
+<pre><code class="language-json">// GitHubGameDto
+{
+  "id": "...",
+  "repoUrl": "...",
+  "ownerLogin": "...",
+  "repoName": "...",
+  "displayName": "...",
+  "launchPath": "index.html",
+  "serverScriptPath": "server.js",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "serverRuntime": "script",
+  "isVerifiedOwner": true,
+  "metadataSource": "...",
+  "createdAt": "...",
+  "coverArtSource": "manifest",
+  "coverArtUpdatedAt": "...",
+  "hosting": { "hostingEnabled": true },
+  "description": "Tend a garden on a drifting asteroid.",
+  "releaseNotesUpdatedAt": "..."
+}
+</code></pre>
+<ul>
+<li><code>serverScriptPath</code> صرف جاوا اسکرپٹ بیک اینڈ کے لیے موجود ہے۔ موجودہ ڈی ٹی او کنٹینر امیج ریفرنس کو سامنے نہیں لاتا۔</li>
+<li><code>gameSlug</code> مقامی فولڈر سے شامل کردہ ہر گیم کے لیے موجود ہے اور ہر اس گیم کے لیے جو ایک تصدیق شدہ مالک نے شامل کیا ہے، <strong>سرور پسدید کے ساتھ یا اس کے بغیر</strong> - یہ گیم کے کنٹرولز، سیٹنگز، کلاؤڈ سیو سلاٹ، رومز اور لانچ ٹوکنز کو ایڈریس کرتا ہے۔ یہ ہے <code>null</code> صرف ایک ذخیرہ جمع کرنے کے لیے جس کا مالک ثابت نہیں ہے۔ یہ آپ کو نہیں بتاتا کہ آیا گیم کا بیک اینڈ ہے؛ <code>serverRuntime</code> کرتا ہے</li>
+<li><code>serverRuntime</code> کہتا ہے کہ آیا گیم میں سرور کا بیک اینڈ ہے: <code>"script"</code>, <code>"container"</code>، یا <code>null</code> صرف براؤزر گیم کے لیے۔ اس سے اتفاق کرتا ہے۔ <code>GET /api/v1/games/{gameSlug}</code>، جو جواب دیتا ہے۔ <code>404</code> بالکل جب یہ ہے <code>null</code>.</li>
+<li>مقامی فولڈر سے شامل کردہ گیم کے لیے، <code>repoUrl</code> ایک مصنوعی ہے <code>upload:&lt;id&gt;</code> مارکر اور <code>ownerLogin</code>/<code>repoName</code> خالی ہیں - نام کا کوئی ذخیرہ نہیں ہے، اور ایک خالی مالک وہ ہے جو فہرست کو ناقابل دعویٰ بناتا ہے۔</li>
+<li><code>coverArtSource</code> ہے <code>"upload"</code>, <code>"manifest"</code> یا <code>null</code>، اور <code>coverArtUpdatedAt</code> جب وہ کور آخری بار تبدیل ہوا — اسے کیش-بسٹ کرنے کے لیے استعمال کریں۔ <code>/cover</code> URL کوئی بھی چیز غیر صفر کا مطلب ہے کہ گیم میں لانے کے لیے کور آرٹ ہے۔ <code>null</code> کا مطلب ہے واپس گرنا <code>/icon</code>. دونوں ذرائع برابر نہیں ہیں: ایک اپ لوڈ ہمیشہ جیتتا ہے، اور یہ صرف ایک ہے۔ <code>DELETE /cover</code> ہٹا سکتے ہیں.</li>
+<li><code>description</code> مینی فیسٹ کی تفصیل ہے، یا <code>null</code>. <code>releaseNotesUpdatedAt</code> جب ریلیز کے نوٹ ختم ہوتے ہیں۔ <em>متن تبدیل کر دیا</em> (<code>null</code> جب گیم میں کوئی نہیں ہوتا ہے)۔ ایک جیسے نوٹوں کو دوبارہ تعینات کرنے سے یہ حرکت نہیں کرتا، اس لیے گاڑی چلانا محفوظ ہے۔ "نیا کیا ہے" بیج: وہ قدر یاد رکھیں جو ایک کھلاڑی نے آخری بار دیکھی اور موازنہ کریں۔ نوٹ خود فہرست میں نہیں ہیں؛ دیکھیں <a href="#description-and-release-notes">تفصیل اور ریلیز نوٹس</a>.</li>
+<li><code>SharedGitHubGameDto</code> توسیع کرتا ہے <code>GitHubGameDto</code> کے ساتھ <code>submittedByUserId</code> اور <code>submittedByUsername</code>.</li>
+</ul>
+<h3 id="description-and-release-notes">تفصیل اور ریلیز نوٹس</h3>
+<p>دونوں کھیل سے آتے ہیں۔ <code>starhermit.txt</code>; دیکھیں
+<a href="/ur/docs/starhermit-txt.html#description-and-release-notes">واضح حوالہ</a> ان کو کیسے لکھیں؟
+تفصیل اوپر دی گئی گیم لسٹنگ میں ہے۔ ریلیز نوٹ 20,000 حروف تک چل سکتے ہیں، لہذا وہ
+براؤز لسٹ سے باہر رکھا جاتا ہے، جو ہر گیم کو ایک ساتھ واپس کرتا ہے، اور فی گیم حاصل کیا جاتا ہے:</p>
+<pre><code class="language-http">GET /api/v1/github-games/{id}/release-notes
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<pre><code class="language-json">// GitHubGameReleaseNotesDto
+{
+  "id": "...",
+  "releaseNotes": "- New: night cycle\n- Fixed: seeds vanishing after a reload",
+  "updatedAt": "2026-09-27T10:15:00+00:00",
+  "commitSha": "4f2a…"
+}
+</code></pre>
+<ul>
+<li><code>releaseNotes</code> اور <code>updatedAt</code> ہیں <code>null</code> جب کھیل کوئی نوٹ نہیں دیتا ہے۔</li>
+<li><code>commitSha</code> ریپوزٹری گیم کے لیے تعینات کمٹ ہے، اور <code>null</code> اپ لوڈ کردہ تعمیر کے لیے۔</li>
+<li>صرف جب پوچھیں <code>releaseNotesUpdatedAt</code> فہرست میں جو آپ نے آخری بار دکھایا تھا اس سے نیا ہے۔</li>
+<li>متن بالکل اسی طرح لوٹا جاتا ہے جیسے ڈویلپر نے لکھا تھا (عام طور پر مارک ڈاؤن)۔ رینڈرنگ یہ ہے۔
+کلائنٹ کی پسند، اور اسے کسی بھی صارف کے متن کی طرح ناقابل اعتماد ان پٹ سمجھا جانا چاہیے۔</li>
+</ul>
+<pre><code class="language-json">// GameHostingView
+{
+  "hostingEnabled": true,
+  "hostedUrl": "https://yourgame.starhermit.com",
+  "deployStatus": "...",
+  "pinnedCommitSha": "...",
+  "deployedCommitSha": "...",
+  "deployError": null,
+  "deployedAt": "..."
+}
+</code></pre>
+<p><code>hostedUrl</code>, <code>pinnedCommitSha</code>, <code>deployedCommitSha</code>, <code>deployError</code>، اور <code>deployedAt</code> اختیاری ہیں.</p>
+<pre><code class="language-json">// GameStatsDto  (GET /api/v1/me/github-games/{id}/stats — owner only)
+{
+  "totalPlayers": 42,
+  "playingNow": 3,
+  "totalSessions": 130,
+  "totalPlaytimeMinutes": 8140,
+  "lastPlayedAt": "2026-07-29T08:45:24Z",
+  "livenessWindowHours": 4
+}
+</code></pre>
+<h2 id="publish-your-own-game-walkthrough">اپنا گیم شائع کریں: واک تھرو</h2>
+<p>اس میں دو راستے ہیں۔ اگر آپ کا گیم گٹ ریپوزٹری میں رہتا ہے تو نیچے دیے گئے نمبروں پر عمل کریں۔
+اگر یہ آپ کی مشین پر صرف ایک فولڈر ہے، تو ایک کال یہ سب کرتی ہے:
+<a href="#add-a-game-from-a-local-folder">مقامی فولڈر سے ایک گیم شامل کریں۔</a> گیم کو رجسٹر کرتا ہے، شائع کرتا ہے۔
+فائلیں، اور اسے زندہ چھوڑ دیتا ہے - کوئی ہوسٹنگ ٹوگل نہیں اور کوئی کمٹ پن نہیں، کیونکہ اس کا کوئی ذخیرہ نہیں ہے
+ٹریک</p>
+<ol>
+<li><strong>ایک ذریعہ منتخب کریں۔</strong>: پر مشتمل ریپو کو دبائیں <code>starhermit.txt</code> جڑ میں (اختیاری طور پر اعلان کرنا یا تو a <code>server.js</code> اسکرپٹ یا کنٹینر امیج) یا پہلے سے میزبان براؤزر گیم کا عوامی URL تیار کریں۔</li>
+<li><strong>اپنی GitHub شناخت کو لنک کریں۔</strong> OAuth بہاؤ کے ذریعے (دیکھیں۔ <a href="/ur/docs/api/auth.html">auth.md</a>); کے ساتھ تصدیق کریں <code>GET /api/v1/me/github</code>.</li>
+<li><strong>گیم کو رجسٹر کریں۔</strong>: <code>POST /api/v1/me/github-games</code> ریپوزٹری یا ہوسٹڈ گیم یو آر ایل کے ساتھ <code>repoUrl</code>.</li>
+<li><strong>صرف ریپوزٹری گیمز — ہوسٹنگ کو فعال کریں۔</strong>: <code>PUT /api/v1/me/github-games/{id}/hosting</code> کے ساتھ <code>{ "enabled": true }</code>.</li>
+<li><strong>صرف ریپوزٹری گیمز - ایک کمٹ پن کریں۔</strong>: <code>PUT /api/v1/me/github-games/{id}/deployment</code> کے ساتھ <code>{ "commit": "&lt;sha&gt;" }</code>. پن کیا ہوا کمٹ لائیو ورژن کو کنٹرول کرتا ہے۔</li>
+<li><strong>کھلاڑی گیم لانچ کرتے ہیں۔</strong>: ایک متعین ریپوزٹری گیم پیش کی جاتی ہے۔ <code>&lt;slug&gt;.starhermit.com</code>; براہ راست میزبانی کرنے والا گیم اپنا جمع کرایا گیا URL کھولتا ہے۔ a کے ساتھ ہر کھیل <code>gameSlug</code> - بیک اینڈ یا نہیں - سے لانچ ٹوکن موصول ہوتا ہے۔ <code>POST /api/v1/games/&lt;slug&gt;/launch-token</code> URL کے ٹکڑے میں (اختیاری طور پر کے ساتھ <code>&amp;session_id=&lt;guid&gt;</code> گہرے روابط کو مدعو کرنے کے لیے)۔</li>
+</ol>
+<p>مکمل کلائنٹ سائیڈ کنٹریکٹ کے لیے — گیم لانچ ٹوکن کو کیسے پڑھتا ہے اور API سے بات کرتا ہے — دیکھیں <a href="/ur/docs/tutorials/chess-walkthrough.html">شطرنج واک تھرو</a> حوالہ کے نفاذ کا۔</p>
+<h2 id="see-also">یہ بھی دیکھیں</h2>
+<ul>
+<li><a href="/ur/docs/api/games.html">games.md</a> - گیم اینڈ پوائنٹس، لانچ ٹوکنز</li>
+<li><a href="/ur/docs/api/game-scripts.html">game-scripts.md</a> - سینڈ باکسڈ جاوا اسکرپٹ گیم سرورز</li>
+<li><a href="/ur/docs/api/container-games.html">container-games.md</a> - کنٹینر کی میزبانی والے گیم سرورز</li>
+<li><a href="/ur/docs/api/auth.html">auth.md</a> - JWT اور OAuth شناخت کو جوڑنا</li>
+<li><a href="/ur/docs/tutorials/chess-walkthrough.html">tutorials/chess-walkthrough.md</a> - آخر سے آخر تک حوالہ کا نفاذ</li>
+<li><a href="/ur/docs/tutorials/claim-existing-game.html">tutorials/claim-existing-game.md</a> - آپ کی اپنی موجودہ فہرست کو سنبھال لیں۔</li>
+</ul>
+<p>مشترکہ <a href="/ur/docs/api/conventions.html">API کنونشنز</a> جوابی تجزیہ، ٹائم اسٹیمپ، صفحہ بندی، اور دوبارہ کوششوں کی وضاحت کریں۔</p>
+<p>دیکھیں <a href="/ur/docs/credentials.html">اسناد کی مطابقت</a> اور <a href="/ur/docs/api/contracts.html">مشین پڑھنے کے قابل معاہدے</a>.</p>
+
+{% endraw %}

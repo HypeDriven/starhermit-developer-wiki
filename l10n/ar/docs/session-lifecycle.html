@@ -1,0 +1,152 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "الجلسات والعوالم والتعافي"
+source_url: "/docs/session-lifecycle.html"
+source_path: "docs/session-lifecycle.md"
+source_hash: "ce490b04789602ff10857e6496e4e3847230ac0bd33619cb5beb61051dc65c85"
+translation: "machine"
+permalink: "/ar/docs/session-lifecycle.html"
+---
+{% raw %}
+<h1 id="sessions-worlds-and-recovery">الجلسات والعوالم والتعافي</h1>
+<p>يتم إنشاء جلسة موثوقة من خلال التوفيق أو قبول الدعوة أو التدريب أو البداية
+من غرفة حقيقية مع الخادم الخلفي. الغرفة عبارة عن ردهة بها مقاعد. إنه <code>gameSessionId</code> يحدد
+جلسة منفصلة لتشغيل اللعب. يرى <a href="/ar/docs/api/games.html">ألعاب</a> و <a href="/ar/docs/api/realtime.html">غرف الوقت الحقيقي</a>.</p>
+<h2 id="lifecycle">دورة الحياة</h2>
+<p><img src="/docs/images/ar/session-lifecycle.svg" alt="تنتقل الجلسات من نشطة إلى متوقفة مؤقتًا ثم تعود، أو تنتهي من خلال نتيجة أو مغادرة صريحة أو إجراء المالك أو انتهاء صلاحية الاحتفاظ."></p>
+<p><code>status</code> يكون <code>active</code> أو <code>finished</code>. التوقف لا يقدم حالة ثالثة: <code>pausedAt</code> علامات أ
+جلسة مستمرة متوقفة مؤقتا. لا يمكن تشغيل الجلسة المنتهية مرة أخرى. تتم قراءة الإعادة، إذا تم تمكينها
+من خلال نقاط النهاية الخاصة بهم.</p>
+<table>
+<thead>
+<tr>
+<th>حدث</th>
+<th>مباراة عادية</th>
+<th>جلسة مستمرة</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>تم قطع اتصال مأخذ توصيل اللعب الأخير</td>
+<td>وينتهي بعد حوالي 5 دقائق دون عودة</td>
+<td>يتوقف مؤقتًا بعد حوالي 15 ثانية</td>
+</tr>
+<tr>
+<td>لا يوجد نشاط للاعب لمدة 24 ساعة</td>
+<td>يمكن أن يتقاعد</td>
+<td>توقف مؤقت بدلاً من الانتهاء بسبب عدم النشاط</td>
+</tr>
+<tr>
+<td>يطلب اللاعب جلسة أخرى</td>
+<td>يمكن أن يتقاعد مباراة قديمة فارغة</td>
+<td>لا يتقاعد عوالمهم المتوقفة</td>
+</tr>
+<tr>
+<td>يقوم اللاعب بإعادة الاتصال</td>
+<td>فقط بينما لا تزال نشطة</td>
+<td>يستأنف قبل الأمر الأول</td>
+</tr>
+<tr>
+<td>الخلفية ترجع النتيجة</td>
+<td>التشطيبات</td>
+<td>التشطيبات</td>
+</tr>
+<tr>
+<td>ينهي المالك الجلسة</td>
+<td>ينتهي دون تغيير الفائز/التقييم</td>
+<td>نفس</td>
+</tr>
+</tbody>
+</table>
+<p>يمكن أن تختلف حدود التوقيت والاسترداد حسب النشر. يتم احتساب العوالم المتوقفة مؤقتًا مقابل كل لاعب
+حد الجلسة المتزامنة. قدم طريقة لمغادرة العوالم أو إنهائها بشكل صريح.</p>
+<h2 id="disconnecting-and-leaving-are-different">الانفصال والمغادرة مختلفان</h2>
+<p>يؤدي إغلاق المقبس إلى الحفاظ على العضوية حتى يتمكن اللاعب من العودة. صريحة <strong>اترك العالم</strong> يعطي
+حتى العضوية والوصول إلى مقبس اللعب الخاص به.</p>
+<p>لجلسة متواصلة <strong>بدون غرفة</strong>:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/sessions/{sessionId}/leave
+Authorization: Bearer &lt;player-token&gt;
+</code></pre>
+<p>لا توجد هيئة الطلب. النجاح هو <code>204</code>. يتم إخطار اللعبة بتغيير العضوية و
+تم إغلاق مآخذ اللعب الخاصة بـ leaver. عندما يغادر آخر عضو بشري، ينتهي العالم
+<code>players_left</code>. <code>404</code> يعني لا يوجد جلسة <code>403</code> يعني ليس عضوا <code>410</code> يعني انتهت بالفعل، و
+<code>409</code> يعني أن هذا ليس عالمًا ثابتًا أو أنه ينتمي إلى غرفة.</p>
+<p>ل <strong>جلسة مقيدة بالغرفة</strong>، يستخدم <code>POST /api/v1/realtime/rooms/{roomId}/leave</code>. في أ
+تؤدي غرفة الانضمام قيد التقدم إلى إخلاء المقعد وإزالة عضوية الجلسة. في مباراة قائمة ثابتة،
+يصبح المقعد AI وقد تحتفظ الجلسة بعضويتها الأصلية. اتبع قواعد الغرفة؛
+لا تستدعي نقطة نهاية إجازة الجلسة المستقلة.</p>
+<p>يمكن لعالم الانضمام قيد التقدم أن يظل مدرجًا بعد مغادرة آخر زائر له. عضو في أ
+يمكن للعالم المستمر أيضًا استخدام ردهة عادية أخرى. اكتشف العضويات الحالية من خلال
+<code>GET /api/v1/realtime/rooms/joined</code>وليس فقط <code>/rooms/mine</code>.</p>
+<h2 id="read-recovery-information">قراءة معلومات الاسترداد</h2>
+<p>يمكن للاعبين في الجلسة ومالك اللعبة الاتصال بـ:</p>
+<pre><code class="language-http">GET /api/v1/games/{slug}/sessions/{sessionId}/recovery
+Authorization: Bearer &lt;player-or-owner-token&gt;
+</code></pre>
+<p>تصف الاستجابة حدود الاسترداد والنقل الفعالة لهذه الجلسة:</p>
+<table>
+<thead>
+<tr>
+<th>الحقول</th>
+<th>المعنى / الوحدة</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sessionId</code>, <code>status</code>, <code>runtime</code>, <code>persistent</code></td>
+<td>هوية الجلسة ونوعها؛ وقت التشغيل هو <code>script</code> أو <code>container</code></td>
+</tr>
+<tr>
+<td><code>pausedAt</code>, <code>pausedMillis</code></td>
+<td>إيقاف مؤقت لبدء الطابع الزمني ISO؛ الوقت المتراكم للتوقف المؤقت بالمللي ثانية</td>
+</tr>
+<tr>
+<td><code>snapshotBytes</code>, <code>stateBudgetBytes</code>, <code>lastSnapshotAt</code></td>
+<td>حجم/ميزانية مستند الاسترداد بالبايت وأحدث لقطة بزمن ISO</td>
+</tr>
+<tr>
+<td><code>snapshotIntervalSeconds</code>, <code>maxSnapshotPushHz</code></td>
+<td>إيقاع نقطة تفتيش الحاويات ودفع السقف؛ <code>null</code> للنصوص</td>
+</tr>
+<tr>
+<td><code>maxRestoreStalenessSeconds</code></td>
+<td>الحد الأقصى لعمر اللقطة لمطابقة الحاوية؛ <code>null</code> عندما لا ينطبق ذلك، بما في ذلك العوالم المستمرة</td>
+</tr>
+<tr>
+<td><code>maxRestores</code>, <code>restoreWindowMinutes</code>, <code>restoreCount</code></td>
+<td>بدل محاولة الاسترداد، ونافذتها، وعدد الاستعادة المبلغ عنه</td>
+</tr>
+<tr>
+<td><code>retentionDays</code>, <code>recoveryDataExpiresAt</code></td>
+<td>الاحتفاظ بالعالم متوقف مؤقتًا؛ <code>0</code> و <code>null</code> يعني عدم وجود انتهاء صلاحية تكوينها</td>
+</tr>
+<tr>
+<td><code>transport.maxMessageBytes</code>, <code>transport.maxRealtimeInputsPerSecond</code></td>
+<td>إطار اللعب/حدود الإدخال</td>
+</tr>
+<tr>
+<td><code>transport.tickRateHz</code>, <code>transport.pacingRateHz</code></td>
+<td>معدلات سرعة القراد والنقل الفعالة بالهرتز</td>
+</tr>
+</tbody>
+</table>
+<p>اقرأ هذه القيم بدلاً من الوعد بالاحتفاظ لأجل غير مسمى أو نافذة إرجاع الأعطال الثابتة. أ
+إيجابي <code>retentionDays</code> يسمح بانتهاء صلاحية العالم المتوقف مؤقتًا. عرض <code>recoveryDataExpiresAt</code> عند الضبط؛
+انتهاء انتهاء الجلسة مع <code>retention_expired</code>.</p>
+<h2 id="restoring-client-and-server-state">استعادة حالة العميل والخادم</h2>
+<p>عند إعادة توصيل المقبس، اطلب رسالة الحالة الكاملة للعبتك. على <code>resumed</code>، تجاهل الاستيفاء
+والتنبؤ على أساس الحالة السابقة؛ <code>lostMs</code> تقارير فجوة الانتعاش. لا تفترض هذه الخطوة
+يمكن إعادة إرسال الشخص الذي فقد اعترافه بأمان.</p>
+<p>تقوم البرامج النصية بإرجاع مستندات الحالة الكاملة. يجب أن تقوم الحاويات بإعادة بناء جلسة كاملة من لقطة
+والقائمة الحالية، بما في ذلك اللاعبين الذين تم قبولهم منذ لقطة سابقة. دفع نقاط التفتيش بعد
+الأحداث الهامة، ضمن السقف المبلغ عنه. يؤدي الإيقاف المؤقت إلى إزالة الجلسة المباشرة للحاوية والإصدارات الأحدث
+يقوم بإعادة إنشائه من اللقطة المحفوظة الخاصة به. يمكن استخدام وقت اللعبة المتوقف مؤقتًا <code>ctx.now - ctx.pausedMs</code>.</p>
+<p>السيرة الذاتية الفاشلة تترك العالم متوقفًا مؤقتًا وتغلق المقبس بعد حدوث خطأ؛ التراجع وإعادة المحاولة.
+يمكن أن تؤدي عملية الاسترداد الفاشلة إلى إنهاء الجلسة بدلاً من ذلك. صالة <code>abandoned</code> تشمل الأسباب <code>players_left</code>,
+<code>idle_no_players</code>, <code>superseded</code>, <code>server_failure</code>, <code>restore_failed</code>, <code>operator_ended</code>، و
+<code>retention_expired</code>. أظهر السبب وأوقف إعادة الاتصال. التخلي لا يمنح فائزًا أو تغييرًا في Elo.</p>
+<p>يرى <a href="/ar/docs/tutorials/persistent-sessions.html">جلسات مستمرة</a> لرمز الخادم و
+<a href="/ar/docs/troubleshooting.html#websockets">استكشاف الأخطاء وإصلاحها</a> لقرارات إعادة الاتصال.</p>
+
+{% endraw %}

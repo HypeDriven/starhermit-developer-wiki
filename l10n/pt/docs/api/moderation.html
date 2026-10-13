@@ -1,0 +1,303 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Moderação de conteúdo"
+source_url: "/docs/api/moderation.html"
+source_path: "docs/api/moderation.md"
+source_hash: "74f2579a081e00899406ae9d3a8f7551387f487818070f44fd4616907fdae6fe"
+translation: "machine"
+permalink: "/pt/docs/api/moderation.html"
+---
+{% raw %}
+<h1 id="content-moderation">Moderação de conteúdo</h1>
+<p>Os jogos verificam textos compartilhados, documentos JSON e imagens PNG/JPEG/WebP antes de mostrá-los a outros
+jogadores. Apenas uma corrente <code>allow</code> autoriza o compartilhamento. <code>review</code>, <code>block</code>, desconhecido, pendente, com falha,
+resultados de políticas expiradas e incompatíveis mantêm o conteúdo oculto.</p>
+<p><strong>As verificações de moderação estão atualmente indisponíveis na implantação pública.</strong> Leia a descoberta antes
+permitindo o compartilhamento. Devolução de cheques <code>503 overloaded</code> com <code>Retry-After: 300</code>; isso não promete
+disponibilidade após cinco minutos. Mantenha o conteúdo oculto até receber uma decisão de permissão atual.
+A geração também é <a href="/pt/docs/availability.html#reserved-generation-routes">indisponível</a>.</p>
+<p>O contrato abaixo descreve as chamadas de moderação suportadas e seu comportamento quando disponíveis. Somente
+evidências acessíveis e selecionadas são retornadas por meio das APIs de revisão do proprietário.</p>
+<h2 id="callers-and-routes">Chamadores e rotas</h2>
+<p>O prefixo do jogador é <code>/api/v1/games/{slug}/moderation</code>. JWTs e tokens de lançamento carregam o jogador;
+um token de lançamento deve corresponder a este jogo. Um token de servidor de contêiner ativo também deve corresponder ao jogo. Nativo
+os clientes usam o URL base da API; jogos de navegador podem usar a origem do jogo <code>/api</code> procuração.</p>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Sufixo</th>
+<th>Chamador</th>
+<th>Resultado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PEGAR</td>
+<td>(raiz)</td>
+<td>Jogador ou servidor</td>
+<td>Disponibilidade, limites efetivos, conteúdo suportado e política atual</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/check</code></td>
+<td>Jogador ou servidor</td>
+<td><code>200</code> lote completo ou <code>202</code> cheque pendente</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/checks/{checkId}</code></td>
+<td>Jogador atribuído ou criação de servidor de jogo</td>
+<td><code>200</code> status; <code>410</code> após retenção do resultado</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/decisions/lookup</code></td>
+<td>Jogador ou servidor</td>
+<td><code>200</code> hashes qualificados conhecidos/desconhecidos</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/flags</code></td>
+<td>Jogador</td>
+<td><code>201</code> recibo de bandeira; servidores não podem arquivar sinalizadores</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/removed?since=&amp;pageSize=</code></td>
+<td>Jogador ou servidor</td>
+<td>Retiradas paginadas e próximo cursor</td>
+</tr>
+</tbody>
+</table>
+<p>Os jogadores não podem verificar como outro jogador. Um servidor normalmente envia <code>sessionId</code> e <code>participantUserId</code>;
+o participante deve estar em uma sessão ativa deste jogo, e sua taxa de cheque é cobrada. Por um
+verificação persistente do mundo sem ninguém online, envie <code>attribution: "game"</code> e omitir ambos os campos.
+Isso consome uma taxa de servidor separada e o orçamento do jogo, não registra nenhum jogador e permite pesquisas
+apenas pela identidade do servidor autorizado do jogo. A atualização do token não altera essa identidade lógica.</p>
+<h2 id="availability">Disponibilidade</h2>
+<p><code>GET /api/v1/games/{slug}/moderation</code> retorna:</p>
+<pre><code class="language-json">{
+  "checksAvailable": false,
+  "contentReportingAvailable": false,
+  "disabledReason": "moderation_not_configured",
+  "policyVersion": "&lt;current effective version&gt;",
+  "supportedKinds": ["text", "image"],
+  "supportedContexts": ["chat", "name", "generated-content", "user-content"],
+  "limits": { "moderation.check.items": 20, "moderation.decision.allow_ttl_seconds": 3600 },
+  "acceptedPreviousPolicyVersion": null,
+  "previousPolicyValidUntil": null,
+  "deliveredContentGraceSeconds": 0
+}
+</code></pre>
+<p><code>limits</code> contém os valores efetivos do registro de moderação, além dos dois ilustrados. Jogador
+os valores incluem as substituições desse jogador; descoberta de servidor revela permissões de jogo, nunca outra
+do jogador. Um orçamento zero para itens de jogo também desativa a verificação (<code>game_budget_disabled</code>). Use os valores retornados de sobreposição de política e tolerância; os padrões não fornecem nenhum dos dois.</p>
+<h2 id="check-exact-content">Verifique o conteúdo exato</h2>
+<pre><code class="language-http">POST /api/v1/games/{slug}/moderation/check
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  "items": [
+    { "id": "story", "kind": "text", "context": "user-content", "text": "abc" }
+  ]
+}
+</code></pre>
+<p>Os IDs dos itens são exclusivos em um lote e têm no máximo 128 caracteres. O texto carrega apenas <code>text</code>; imagens
+carregar <code>contentType</code> e padrão rigoroso acolchoado <code>dataBase64</code>, sem espaços em branco. Imagem declarada
+os tipos devem corresponder aos seus cabeçalhos e os bytes e pixels são limitados. WAV, Ogg Vorbis,
+Modelos e fontes glTF não são suportados (<code>415 unsupported_kind</code>); o suporte de áudio é adiado.</p>
+<p>O hash é <code>sha256:</code> seguido por 64 dígitos hexadecimais minúsculos de SHA-256 sobre os bytes de conteúdo exatos:</p>
+<ul>
+<li>Para texto, decodifique a string em JSON e codifique seus valores escalares Unicode como UTF-8 sem uma lista técnica.
+Preservar espaços em branco, finais de linha e normalização Unicode; rejeitar substitutos não pareados.</li>
+<li>Um documento JSON enviado como texto é hash como sua string de documento exata, sem análise,
+reordená-lo ou reserializá-lo.</li>
+<li>Para uma imagem, faça hash dos bytes decodificados antes de redimensionar, transcodificar ou alterar metadados.</li>
+</ul>
+<p>Os três bytes ASCII <code>abc</code> hash para
+<code>sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad</code>.
+Adicionar uma nova linha altera o hash. O envelope de solicitação, ID do item, contexto, tipo de mídia e base64
+codificação não é entrada hash. A plataforma calcula os hashes enviados; receber jogos também deve
+hash os bytes que eles realmente contêm e compare o identificador.</p>
+<p>Um item completo tem <code>status: "complete"</code>, <code>contentHash</code>, <code>decision</code>, categorias, revisão,
+<code>checkedAt</code> e <code>decisionPolicyVersion</code>. Somente uma permissão carrega <code>validUntil</code>. O envelope de resposta
+tem a corrente efetiva <code>policyVersion</code>. A validação recusa todo o lote se algum item for
+malformado. Um item aceito pode falhar separadamente, com <code>status: "failed"</code>, um código e nenhuma decisão.</p>
+<p>O prazo síncrono é padronizado como dois segundos. Itens inacabados são produzidos <code>202</code> com <code>checkId</code>,
+<code>pollAfterSeconds</code>, <code>expiresAt</code> e <code>Retry-After</code>. Pesquise o cheque; itens pendentes não têm decisão.
+O prazo padrão em segundo plano é 60 segundos, então um item inacabado falha com <code>timeout</code> e
+sua entrada normal é apagada. Os resultados do terminal permanecem legíveis por uma hora por padrão.</p>
+<p>A pesquisa de um item concluído consulta a decisão qualificada em tempo real, a política atual e a retenção.
+Um cheque antigo não pode renovar uma aprovação retirada. Os bloqueios/revisões atuais são retornados como tal;
+decisões obsoletas, expiradas ou ausentes geram um item com falha sem validade renovada.</p>
+<h2 id="lookup-and-withdrawal-recovery">Recuperação de pesquisa e retirada</h2>
+<pre><code class="language-json">{
+  "hashes": ["sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"],
+  "kind": "text",
+  "context": "user-content"
+}
+</code></pre>
+<p>Envie isto para <code>/decisions/lookup</code>. Pesquisas de imagens também nomeiam <code>contentType</code>. A aprovação é qualificada por
+jogo, tipo, tipo de mídia validado e contexto. As entradas são <code>known</code> com uma decisão, revisão,
+<code>decisionPolicyVersion</code> e permitir validade, ou <code>unknown</code> com <code>not_checked</code>, <code>policy_changed</code> ou
+<code>expired</code>. Os bloqueios humanos permanecem eficazes após mudanças políticas e retenção normal de decisões.</p>
+<p>A validade padrão é de uma hora e pode ser reduzida pela operadora. Revalidar antes do vencimento;
+não há período de carência habilitado para uma interrupção e nenhuma versão de linha de base anterior aceita. Mudando
+uma política de jogo invalida imediatamente aprovações anteriores. Uma permissão humana sobrevive apenas a uma nova verificação
+para resultados idênticos que ainda ultrapassam a linha de base atual sob a mesma política.</p>
+<p>Enquete <code>/removed</code> antes de distribuir um pacote compartilhado e regularmente durante o jogo. Ocultar hashes correspondentes
+e interromper a distribuição em caso de retirada; as remoções incluem sinalizações mantidas e reclassificação
+de permitir para revisar/bloquear. As entradas do feed incluem qualificadores, escopo, decisão, revisão, política,
+tempo de remoção e um motivo seguro. Os cursores são marcadores de ordenação opacos; use o cursor retornado em vez de derivar um de cada vez.</p>
+<p>Um cursor expirado retorna <code>410 cursor_expired</code>. Busque um novo cursor sem <code>since</code>, pesquisa em lote
+todos os hashes compartilhados carregados e retomados somente quando validados. Ausência no feed nunca é aprovação.
+Uma cópia local salva não autoriza a redistribuição. O feed tem como padrão 90 dias de histórico;
+blocos humanos duráveis ​​sobrevivem a isso.</p>
+<h2 id="flags-and-owner-review">Sinalizadores e avaliação do proprietário</h2>
+<p>Um jogador envia <code>/flags</code> a <code>reason</code> (no máximo 64 caracteres), opcionalmente limitado <code>note</code>e conteúdo,
+um jogador alvo, ou ambos. A evidência de conteúdo usa o mesmo formato de item de um cheque. Se <code>contentHash</code>
+também é fornecido, a plataforma o recalcula e exige igualdade. Um hash simples não é evidência;
+referências de trabalho/verificação não são implementadas. Uma bandeira jogador-alvo requer um <code>sessionId</code> cuja lista
+inclui repórter e alvo. Apresentar uma sinalização não altera uma decisão nem automaticamente
+bloqueia qualquer um.</p>
+<p>A evidência de conteúdo é reservada e armazenada em quarentena antes da classificação para roteamento. Atrasado,
+a triagem com falha ou indisponível nunca abre o acesso do proprietário. Uma triagem atual segura para o proprietário permite
+listagem/detalhe/download/triagem. As descobertas da equipe ocultam o sinalizador e restringem sinalizadores e revisões existentes
+da mesma prova. Sem um classificador, os sinalizadores de conteúdo retornam <code>403 content_reporting_disabled</code>
+sem aconselhamento de nova tentativa ou provas retidas; sinalizadores somente para jogadores permanecem utilizáveis.</p>
+<p>As rotas do proprietário exigem JWT completo e propriedade do jogo, de acordo com <code>/api/v1/me/github-games/{id}/moderation</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Sufixo</th>
+<th>Comportamento</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OBTER / COLOCAR</td>
+<td><code>/policy</code></td>
+<td>Ler/definir classificação e limites de categoria mais rígidos com <code>expectedVersion</code></td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/flags</code> / <code>/flags/{flagId}</code></td>
+<td>Metadados filtrados paginados/um sinalizador acessível</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/flags/{flagId}/evidence</code></td>
+<td>Download controlado; <code>410</code> após expiração da evidência</td>
+</tr>
+<tr>
+<td>CORREÇÃO</td>
+<td><code>/flags/{flagId}</code></td>
+<td><code>action: "uphold"</code> ou <code>"dismiss"</code>, nota opcional e <code>expectedRevision</code></td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/reviews</code> / <code>/reviews/{reviewId}</code></td>
+<td>Metadados de revisão retida paginados/uma revisão acessível</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/reviews/{reviewId}/content</code></td>
+<td>Download controlado; <code>410 review_expired</code> quando indisponível</td>
+</tr>
+<tr>
+<td>CORREÇÃO</td>
+<td><code>/reviews/{reviewId}</code></td>
+<td><code>action: "allow"</code> ou <code>"block"</code>, nota opcional e <code>expectedRevision</code></td>
+</tr>
+</tbody>
+</table>
+<p>As listas levam <code>status</code>, <code>page</code> e <code>pageSize</code> (padrão 20, máximo 100). Apenas uma política mais rigorosa do proprietário
+a retenção que atualmente ultrapassa a linha de base da plataforma pode ser permitida; retenções de linha de base exigem plataforma
+revisão fora da API do proprietário do jogo. A evidência restrita nunca é visível ao proprietário.
+Uma revisão obsoleta é <code>409 revision_conflict</code>. Decidir uma revisão apaga seu conteúdo retido; expiração também
+impede o download ou a aprovação. Dispensar um sinalizador não desfaz outro bloco e nenhum proprietário
+rota levanta um bloqueio humano.</p>
+<p>A evidência é um <code>application/octet-stream</code> apego com <code>nosniff</code>, sandbox CSP e <code>no-store</code>.
+Mantenha notas/motivos como texto não confiável em sua IU de revisão. Não os renderize como marcação nem os use como
+URLs de anexo.</p>
+<h2 id="default-limits-and-errors">Limites e erros padrão</h2>
+<p>Os operadores podem ajustar os limites do jogo; as taxas dos jogadores também suportam substituições por usuário. Leia a descoberta para
+os valores reais em vigor.</p>
+<table>
+<thead>
+<tr>
+<th>Limite</th>
+<th>Padrão</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Itens/hashes de pesquisa por solicitação</td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>Texto/imagem/total de bytes de conteúdo</td>
+<td>64 KiB/5 MiB/10 MiB</td>
+</tr>
+<tr>
+<td>Pixels de imagem</td>
+<td>20 milhões</td>
+</tr>
+<tr>
+<td>Verificações de jogadores/verificações de servidores atribuídas ao jogo por minuto</td>
+<td>30 / 30</td>
+</tr>
+<tr>
+<td>O chamador lê por minuto</td>
+<td>60</td>
+</tr>
+<tr>
+<td>Itens verificados ou selecionados por jogo por dia</td>
+<td>10,000</td>
+</tr>
+<tr>
+<td>Bandeiras por jogador, por jogo, por dia / bandeiras abertas por jogo</td>
+<td>20 / 1,000</td>
+</tr>
+<tr>
+<td>Sinalizar bytes de nota</td>
+<td>4 KiB</td>
+</tr>
+<tr>
+<td>Evidência de bandeira pendente/retida por jogo</td>
+<td>64 MiB/256 MiB</td>
+</tr>
+<tr>
+<td>Evidência de sinalização pendente/retida em toda a plataforma</td>
+<td>1 GiB / 4 GiB</td>
+</tr>
+<tr>
+<td>Chamadas simultâneas do classificador em toda a plataforma</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Verifique a entrega/permita validade</td>
+<td>1 hora / 1 hora</td>
+</tr>
+<tr>
+<td>Suspensão de revisão normal/retenção de sinalização</td>
+<td>7 dias / 30 dias</td>
+</tr>
+</tbody>
+</table>
+<p>O esgotamento da fila/armazenamento recusa novas evidências em vez de despejar casos ativos. Respeite o
+acessibilidade e expiração relatadas por cada parâmetro de evidência/revisão.</p>
+<p>Erros são <code>{ error, code, retryAfterSeconds? }</code>. <code>400</code> cobre conteúdo/qualificadores malformados, <code>401</code>
+falta de autenticação, <code>403</code> escopo/delegação ou restrições básicas, <code>404</code> ausente/inacessível
+registros, <code>409</code> conflitos de hash/revisão/política, <code>410</code> conteúdo/verificações/cursores expirados, <code>413</code> byte/item/
+limites de pixels e <code>415</code> tipos/tipos não suportados. <code>429</code> cobre tarifas/orçamentos/filas/armazenamento com
+<code>Retry-After</code>. As interrupções do classificador são <code>503 moderation_unavailable</code>; o atual não configurado
+espaço reservado permanece <code>503 overloaded</code>. Nenhum erro, nova tentativa ou pagamento substitui uma decisão de permissão.</p>
+<p>Compartilhado <a href="/pt/docs/api/conventions.html">Convenções de API</a> descreve a análise de resposta, carimbos de data/hora, paginação e novas tentativas.</p>
+<p>Ver <a href="/pt/docs/credentials.html">compatibilidade de credenciais</a> e <a href="/pt/docs/api/contracts.html">contratos legíveis por máquina</a>.</p>
+
+{% endraw %}

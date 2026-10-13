@@ -1,0 +1,345 @@
+---
+layout: "wiki"
+lang: "ur"
+title: "JavaScript SDK (براؤزر گیمز)"
+source_url: "/docs/sdk/javascript.html"
+source_path: "docs/sdk/javascript.md"
+source_hash: "4d041431633ef4a5afd148d1259d70f562c53aa7ae80afaf101ba1b9e35320a5"
+translation: "machine"
+permalink: "/ur/docs/sdk/javascript.html"
+---
+{% raw %}
+<h1 id="javascript-sdk-browser-games">JavaScript SDK (براؤزر گیمز)</h1>
+<p><a href="/docs/sdk/starhermit-sdk.js"><code>starhermit-sdk.js</code></a> براؤزر گیمز کے لیے ایک واحد فائل، انحصار سے پاک کلائنٹ ہے۔
+StarHermit پر شائع ہوا۔ یہ لانچ ٹوکن پڑھتا ہے، اس کی تجدید کرتا رہتا ہے، اور عام لوگوں کے لیے مددگار فراہم کرتا ہے۔
+گیم اسکوپڈ لانچ ٹوکن APIs: شناخت، کلاؤڈ سیو، فی کھلاڑی کی ترتیبات اور کنٹرولز،
+دعوتیں، میچ میکنگ، سیشنز اور گیم پلے ساکٹ، کامیابیاں، لیڈر بورڈ، ری پلے، چیٹ،
+آواز اور حقیقی وقت کے کمرے۔</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>فائل</td>
+<td><a href="/docs/sdk/starhermit-sdk.js"><code>docs/sdk/starhermit-sdk.js</code></a> - اسے بغیر کسی تبدیلی کے اپنے گیم میں کاپی کریں۔</td>
+</tr>
+<tr>
+<td>عالمی</td>
+<td><code>window.StarHermit</code> (بھی <code>module.exports</code> نوڈ کے تحت، ٹیسٹ کے لیے)</td>
+</tr>
+<tr>
+<td>انحصار</td>
+<td>کوئی نہیں - یہ براؤزر کا اپنا استعمال کرتا ہے۔ <code>fetch</code>, <code>WebSocket</code> اور (کمپریسڈ سیو پڑھنے کے لیے) <code>DecompressionStream</code></td>
+</tr>
+<tr>
+<td>API بیس لائن</td>
+<td>REST v1 اور WebSocket v1، صرف لانچ ٹوکن سطح</td>
+</tr>
+</tbody>
+</table>
+<p>SDK ایک کلائنٹ ہے، پلیٹ فارم کا دوسرا نفاذ نہیں۔ اسکور اور کامیابی کھل جاتی ہے۔
+صرف گیم کے سرور کے ذریعہ لکھا جاتا ہے (اسکرپٹ کا نتیجہ یا کنٹینر کنٹرول پیغام) - ایک کلائنٹ
+انہیں کبھی بھی پوسٹ نہیں کر سکتا، اور SDK انہیں صرف پڑھتا ہے۔ باقی سب کچھ سرور سے مستند رہتا ہے۔
+بالکل اسی طرح جیسے پر دستاویزی ہے۔ <a href="/ur/#api-reference">API صفحات</a>.</p>
+<p><strong>تصدیق شدہ مددگار لانچ ٹوکن کے بغیر کوئی API درخواستیں نہیں کرتے ہیں۔</strong> پڑھتا ہے عام طور پر حل
+کو <code>null</code>, <code>[]</code>، یا ایک خالی نقشہ؛ لکھنے سے حل ہوسکتا ہے۔ <code>null</code>/<code>false</code> اور ڈیباؤنس شدہ بچتوں کا کوئی فوری نہیں ہے۔
+واپسی کی قیمت ایک ساکٹ منقطع رہتا ہے۔ اگر کھلاڑی نے انتخاب کیا ہے تو اسٹینڈ اسٹون پیشرفت کو میموری میں رکھیں
+غیر ٹریک شدہ کھیل کال کریں۔ <code>signOut()</code> اکاؤنٹ پلے سے اس موڈ میں سوئچ کرنے سے پہلے تاکہ تجدید رک جائے۔</p>
+<h2 id="install">انسٹال کریں۔</h2>
+<p>فائل کو اپنے گیم کے دیگر جامد اسکرپٹس کے ساتھ کاپی کریں — جہاں بھی آپ کی بلڈ انہیں بھیجتی ہے — اور لوڈ کریں
+یہ آپ کے اپنے کوڈ سے پہلے:</p>
+<pre><code class="language-html">&lt;script src="starhermit-sdk.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  StarHermit.init();          // as early as possible: it reads and strips the token from the URL fragment
+&lt;/script&gt;
+</code></pre>
+<p>کال کریں۔ <code>init()</code> ایک بار، کسی بھی راؤٹر کو چھونے سے پہلے <code>location.hash</code>. اختیارات:
+<code>init({ base, gameId, autoRefresh, launcherUrl })</code> — <code>base</code> پوائنٹس REST کالز ایک مجاز اصل پر
+مقامی ترقی کے دوران (پلیٹ فارم کی میزبانی والے گیمز ایک ہی اصل کا استعمال کرتے ہیں)۔ <code>gameId</code>اگر فراہم کیا جائے تو مماثل ہونا چاہیے۔
+سائن ان کے لیے میزبان UUID؛ مقامی/بیرونی صفحات درست گیم سائن ان کی واپسی کی اصل نہیں ہیں۔ <code>autoRefresh: false</code> ٹوکن کی تجدید کو ایک گیم میں چھوڑ دیتا ہے۔
+اپنی زنجیر چلاتا ہے، اور <code>launcherUrl</code> جہاں اوور رائیڈ کرتا ہے۔ <code>relaunch()</code> پلیئر بھیجتا ہے (default
+<code>https://dashboard.starhermit.com/</code>).</p>
+<h2 id="sign-in-and-identity">سائن ان اور شناخت</h2>
+<table>
+<thead>
+<tr>
+<th>ضرورت</th>
+<th>کال کریں۔</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>کیا کوئی کھلاڑی سائن ان ہے؟</td>
+<td><code>StarHermit.signedIn</code>, <code>StarHermit.userId</code>, <code>StarHermit.slug</code></td>
+</tr>
+<tr>
+<td>سائن ان / سائن آؤٹ / ختم ہونے پر رد عمل ظاہر کریں۔</td>
+<td><code>StarHermit.on('auth', ({ signedIn, reason }) =&gt; …)</code></td>
+</tr>
+<tr>
+<td>دکھائیں a <strong>سائن ان کریں۔</strong> بٹن</td>
+<td>صرف جب <code>StarHermit.canSignIn()</code> (ٹوکن کے بغیر گیم UUID ذیلی ڈومین پر درست)؛ کلک پر <code>StarHermit.signIn()</code></td>
+</tr>
+<tr>
+<td>کھلاڑی کا نام / اوتار</td>
+<td><code>await StarHermit.profile()</code> → <code>{ userId, username, nickname, displayName }</code>; <code>StarHermit.avatarUrl()</code></td>
+</tr>
+<tr>
+<td>دوستو</td>
+<td><code>await StarHermit.friends()</code></td>
+</tr>
+</tbody>
+</table>
+<p>SDK لانچ کی دونوں شکلیں ہینڈل کرتا ہے۔ <code>#game_token=&lt;jwt&gt;[&amp;session_id=…]</code> لائبریری سے یا ایک
+دعوت دیں، اور <code>#access_token=&lt;jwt&gt;</code> براہ راست سائن ان سے واپس آنا — اور ٹوکن کے ذریعے تجدید کرتا ہے۔
+<code>POST /api/v1/games/{slug}/launch-token</code> اس کی میعاد ختم ہونے سے پہلے (دیکھیں۔
+<a href="/ur/docs/api/auth.html">ٹوکن لانچ کریں</a>)۔ ڈسپلے کا نام پروفائل ہے۔ <code>nickname</code>; <code>/api/v1/me</code> نہیں ہے
+لانچ ٹوکن کے ساتھ قابل رسائی۔</p>
+<h2 id="cloud-saves">کلاؤڈ سیوز</h2>
+<p>کھیل کی سلاٹ ہے <code>game:&lt;slug&gt;</code> (<a href="/ur/docs/api/catalog.html">catalog: کھیل کے اندر سے بچت</a>); SDK
+راستہ بناتا ہے، پے لوڈ کو زپ کرتا ہے اور ہینڈل کرتا ہے۔ <code>/info</code> چیک کریں</p>
+<pre><code class="language-js">const remote = await StarHermit.loadJSON();          // null: empty slot, signed out — or a failed read
+if (StarHermit.saveLoadFailed()) showSyncError();    // tell those apart when it matters
+else if (remote &amp;&amp; isNewer(remote, local)) adopt(remote);
+
+StarHermit.saveJSON(state);                          // debounced (2 s) checkpoint upload
+addEventListener('pagehide', () =&gt; StarHermit.flushSave(true));   // keepalive flush
+StarHermit.on('saved', ok =&gt; setSyncIndicator(ok));
+</code></pre>
+<p><strong>محفوظ کرنے سے پہلے لوڈ کریں۔</strong> کسی بھی تحریر تک پہنچنے سے پہلے کلاؤڈ کاپی کا موازنہ کریں اور اسے اپنا لیں۔
+<code>saveJSON</code> - بشمول ترتیبات، عرفی نام یا چیک پوائنٹ بوٹ پر لکھتا ہے - یا باسی مقامی کاپی کر سکتے ہیں۔
+کسی دوسرے آلے پر بنائے گئے نئے سیو کو اوور رائٹ کریں۔ ابتدائی بچت کو اس وقت تک روکیں جب تک کہ اسٹارٹ اپ لوڈ ختم نہ ہوجائے۔</p>
+<p>SDK اس ریس کے دوسرے نصف حصے کی حفاظت کرتا ہے: جب کوئی پڑھنا ناکام ہوجاتا ہے (نیٹ ورک یا سرور کی خرابی، جیسا کہ
+ایک خالی سلاٹ کے خلاف) یہ سیٹ کرتا ہے۔ <code>saveLoadFailed()</code>، خارج کرتا ہے۔ <code>saveerror</code>، اور انکار جب تک لکھتا ہے۔
+<code>/info</code> اس بات کی تصدیق کرتا ہے کہ سلاٹ خالی ہے یا بعد میں <code>loadSave()</code> کامیاب ہوتا ہے ایک انکار شدہ تحریر حل ہو جاتی ہے۔
+<code>false</code> اور خارج کرتا ہے <code>saved</code> کے ساتھ <code>false</code>.</p>
+<p><strong>بوجھ کے بعد لکھنا مشروط ہے۔</strong> SDK کو ورژن یاد ہے (<code>ETag</code>) اسے آخری محفوظ کریں
+پڑھیں یا لکھیں اور اسے واپس بھیج دیں، لہذا ایک تحریر صرف اس محفوظ پر اترتی ہے جس پر یہ مبنی تھا — یا، ایک سلاٹ کے لیے
+وہ خالی تھا، صرف اس وقت تک جب یہ اب بھی ہے۔ جب درمیان میں کوئی دوسرا آلہ محفوظ ہو جاتا ہے تو لکھنے سے انکار کر دیا جاتا ہے۔
+(<code>412</code>) SDK خارج کرتا ہے۔ <code>saveconflict</code>، سیٹ <code>saveConflicted()</code>، اور انکار مزید لکھتا ہے جب تک کہ a
+<code>loadSave()</code> گیم کو ضم کرنے یا نئے سیو کو اپنانے دیتا ہے۔ ایک کھیل جو کبھی لوڈ نہیں ہوتا لکھتا ہے۔
+غیر مشروط طور پر، پہلے کی طرح.</p>
+<pre><code class="language-js">StarHermit.on('saveconflict', async () =&gt; {
+  const remote = await StarHermit.loadJSON();       // lifts the block
+  StarHermit.saveJSON(merge(remote, local));        // conditional on the version just loaded
+});
+</code></pre>
+<p>نچلی سطح: <code>loadSave()</code> / <code>writeSave(text)</code> خام تاروں کے لیے، <code>saveInfo()</code> کے لیے
+<code>{ exists, sizeBytes, updatedAt, etag }</code>.</p>
+<h2 id="crash-and-bug-reports">کریش اور بگ رپورٹس</h2>
+<p>کھلاڑی کھیل کے اندر سے مسائل کی اطلاع دے سکتے ہیں۔ مالک ان کے ذریعے ٹرائی کرتا ہے۔
+<a href="/ur/docs/api/reports.html">رپورٹس API</a>.</p>
+<pre><code class="language-js">await StarHermit.reportBug('Score did not save', 'Finished level 3, score shows 0', {
+  clientVersion: '1.4.2',
+  attachments: [{ fileName: 'state.json', contentType: 'application/json', data: JSON.stringify(state) }],
+});
+StarHermit.captureCrashes({ clientVersion: '1.4.2' });   // opt-in: uncaught errors become crash reports
+const mine = await StarHermit.myReports();               // [{ id, kind, status, title, ... }]
+</code></pre>
+<p><code>report(kind, title, description, opts)</code> عام شکل ہے (<code>reportBug</code> اور <code>reportCrash</code> ٹھیک کریں
+قسم)۔ <code>captureCrashes</code> فائلیں زیادہ سے زیادہ ایک رپورٹ فی الگ پیغام اور تین فی صفحہ لوڈ، لہذا a
+کریش لوپ کھلاڑی کے یومیہ الاؤنس (20 فی گیم بطور ڈیفالٹ) استعمال نہیں کر سکتا۔ اس سے پہلے کھلاڑی سے پوچھیں۔
+کسی بھی ذاتی چیز کو منسلک کرنا۔</p>
+<h2 id="settings-and-controls">ترتیبات اور کنٹرولز</h2>
+<table>
+<thead>
+<tr>
+<th>ضرورت</th>
+<th>کال کریں۔</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>فی کھلاڑی کی ترجیحات (حجم، گرافکس پیش سیٹ، زبان، رسائی…)</td>
+<td><code>getSettings()</code>, <code>getSetting(key)</code>, <code>setSetting(key, value)</code>, <code>patchSettings({…})</code> (a <code>null</code> قدر کلید کو ہٹا دیتا ہے) <code>deleteSetting(key)</code>, <code>clearSettings()</code></td>
+</tr>
+<tr>
+<td>کی بورڈ بائنڈنگز کا اعلان کر دیا گیا۔ <code>starhermit.txt</code> کے طور پر <code>control.&lt;action&gt;=…</code></td>
+<td><code>await loadBindings(defaults)</code> → <code>{ action: codes[] }</code> پلیئر کے اوور رائیڈز لاگو ہونے کے ساتھ</td>
+</tr>
+<tr>
+<td>ایک ری بائنڈنگ اسکرین</td>
+<td><code>getControls()</code>, <code>setControl(action, codes)</code>, <code>setControls(bindings)</code>, <code>resetControls()</code></td>
+</tr>
+</tbody>
+</table>
+<p>راستہ <code>keydown</code> کے ذریعے <code>event.code</code> اور سے پابندیاں <code>loadBindings</code>. دیکھیں
+<a href="/ur/docs/tutorials/game-controls.html">اپنے گیم میں کنٹرولز شامل کریں۔</a> اور
+<a href="/ur/docs/starhermit-txt.html"><code>starhermit.txt</code> ظاہر</a>.</p>
+<p>گرافکس مینو کے لیے، <a href="/docs/sdk/graphics-options.js"><code>graphics-options.js</code></a> سیٹنگز کالز کے اوپر بیٹھتا ہے:
+یہ معیار کے پیش سیٹ کا خود بخود پتہ لگاتا ہے، کھلاڑی کی پسند کو برقرار رکھتا ہے۔ <code>localStorage</code> اور ان کا فی گیم
+ترتیبات، اور ایک ریڈی میڈ پینل بھیجتا ہے۔ دیکھیں
+<a href="/ur/docs/tutorials/graphics-options.html">خود کار طریقے سے پتہ چلنے والے معیار کے ساتھ گرافکس کے اختیارات</a>.</p>
+<p>آڈیو سیکشن کے لیے، دیکھیں <a href="/ur/docs/tutorials/audio-options.html">آڈیو کے اختیارات جس میں خود بخود پتہ چلنے والی آواز کی حد ہے۔</a>:
+تجویز کردہ حجم اور آواز کے کنٹرول، خالص <a href="/docs/sdk/audio-options.js"><code>audio-options.js</code></a> مددگار،
+اور آپ کے مکسر کے ذریعہ نافذ کردہ پلے بیک کیپ۔</p>
+<h2 id="multiplayer-invites-and-social">ملٹی پلیئر، دعوتیں اور سماجی</h2>
+<p>سیشن گیم پلے، میچ میکنگ، گیم کی کامیابیوں، لیڈر بورڈز، اور ری پلے کو سرور کی ضرورت ہے۔
+(<a href="/ur/docs/api/game-scripts.html">سکرپٹ</a> یا <a href="/ur/docs/api/container-games.html">کنٹینر</a>)۔ ریئل ٹائم کمرے اور
+دوست نہیں کرتے. سیشن چیٹ اور آواز کو متعلقہ گفتگو کی رکنیت کی ضرورت ہے۔</p>
+<table>
+<thead>
+<tr>
+<th>علاقہ</th>
+<th>کالز</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>سیشنز</td>
+<td><code>mySessions()</code>, <code>getSession(id)</code>, <code>sessionRecovery(id)</code>, <code>leaveSession(id)</code>, <code>startAiSession()</code>; <code>StarHermit.launchSessionId</code> دعوت کے آغاز کے بعد</td>
+</tr>
+<tr>
+<td>گیم پلے ساکٹ</td>
+<td><code>const conn = connect(sessionId, { onGame, onError, onPresence, onAchievement, onResumed, onAbandoned, onOpen, onClose, onAuthLost })</code>، پھر <code>conn.send(data)</code>; بیک آف کے ساتھ دوبارہ جڑتا ہے، پہلے ٹوکن کی تجدید کرتا ہے، اور نارمل/پالیسی/اوور سائز بند ہونے پر رک جاتا ہے (1000/1008/1009)، 4403/4404، یا جب تجدید سے انکار کر دیا جاتا ہے (دیکھیں <a href="#reconnecting-and-expired-tokens">دوبارہ جوڑ رہا ہے</a>)</td>
+</tr>
+<tr>
+<td>میچ میکنگ</td>
+<td><code>queues()</code>, <code>joinQueue([keys])</code>, <code>matchStatus()</code>, <code>cancelMatch()</code>, <code>waitForMatch(opts)</code></td>
+</tr>
+<tr>
+<td>دعوت دیتا ہے۔</td>
+<td><code>sendInvite(toUserId[, sessionId])</code> (ایک کے ساتھ <code>sessionId</code> دوست اس رننگ سیشن میں شامل ہوتا ہے) <code>invites()</code>, <code>acceptInvite(id)</code>, <code>declineInvite(id)</code>; <code>inviteLink(query)</code> شیئر لنک کے لیے</td>
+</tr>
+<tr>
+<td>اپنے لیڈر بورڈز پر رن ​​پوسٹ کریں۔</td>
+<td><code>submitScores({ boardKey: number })</code> → قبول شدہ چابیاں (دیکھیں۔ <a href="#single-player-leaderboards">سنگل پلیئر لیڈر بورڈز</a>)</td>
+</tr>
+<tr>
+<td>کامیابیاں اور لیڈر بورڈ (صرف پڑھنے کے لیے)</td>
+<td><code>achievements()</code>, <code>linkedAchievements(otherSlug)</code>, <code>leaderboards()</code>, <code>leaderboard(key, opts)</code>, <code>leaderboardEntries(boardId, opts)</code>; کے ذریعے ٹوسٹس کو غیر مقفل کریں۔ <code>on('achievement', …)</code></td>
+</tr>
+<tr>
+<td>ری پلے کرتا ہے۔</td>
+<td><code>myReplays(limit)</code>, <code>getReplay(id)</code></td>
+</tr>
+<tr>
+<td>سیشن چیٹ</td>
+<td><code>chatMessages(id)</code>, <code>sendChat(id, text)</code>, <code>pollChat(id, onMessages, intervalMs)</code> - صرف لانچ ٹوکن کے لیے آرام اور پولنگ</td>
+</tr>
+<tr>
+<td>وائس / ریئل ٹائم کمرے</td>
+<td><code>StarHermit.voice.*</code> (باقی؛ WebRTC سگنلنگ گیم پر چھوڑ دی گئی ہے) <code>StarHermit.realtime.*</code> (کمرے پلس <code>ws/v1/realtime</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>کوئی بھی چیز لپیٹ نہیں ہے ایک کال کی دوری پر ہے: <code>StarHermit.api(path, { method, body })</code> ایک بھیجتا ہے
+تصدیق شدہ JSON درخواست (حل کرتی ہے۔ <code>null</code> 404/204 پر یا سائن آؤٹ ہونے پر، مسترد کر دیتا ہے۔
+<code>{ status, message }</code> دوسری ناکامیوں پر، 401 پر ایک بار تجدید)۔</p>
+<h2 id="single-player-leaderboards">سنگل پلیئر لیڈر بورڈز</h2>
+<p>ایک کلائنٹ کبھی بھی اسکور پوسٹ نہیں کر سکتا — صرف گیم کا سرور کر سکتا ہے — اس لیے سنگل پلیئر گیم کی ضرورت ہوتی ہے۔
+اپنے بورڈز کے مالک ہونے کے لیے چھوٹا پلیٹ فارم اسکرپٹ۔ <a href="/docs/sdk/score-script.js"><code>score-script.js</code></a> ایک ہے: اسے اگلا کاپی کریں۔
+اپنے کھیل میں، اس کا اعلان کریں۔ <a href="/ur/docs/starhermit-txt.html"><code>starhermit.txt</code></a> کے طور پر <code>server=score-script.js</code>، اور
+صرف اس میں ترمیم کریں۔ <code>BOARDS</code> بلاک، جو ہر بورڈ کو آپ کے طور پر درج کرتا ہے۔
+<a href="/ur/docs/tutorials/game-leaderboards-achievements.html#1-create-the-leaderboards">اسے بنائیں</a>:</p>
+<pre><code class="language-js">var BOARDS = {
+  "high-score": { "name": "High score", "scoreType": "integer", "sortDirection": "desc", "minScore": 0, "maxScore": 1000000 }
+};
+</code></pre>
+<p>جب رن ختم ہو جائے تو اسے پوسٹ کریں اور کھلاڑی کی جگہ دکھائیں:</p>
+<pre><code class="language-js">const accepted = await StarHermit.submitScores({ 'high-score': total });   // [] when signed out or refused
+if (accepted.includes('high-score')) {
+  const board = await StarHermit.leaderboard('high-score', { pageSize: 100 });
+  const me = board.items.find(e =&gt; e.userId === StarHermit.userId);
+  showRank(me &amp;&amp; me.rank);
+}
+</code></pre>
+<p><code>submitScores</code> ایک پریکٹس سیشن کھولتا ہے (<code>POST .../sessions/ai</code>)، بھیجتا ہے۔ <code>{type:'result', scores}</code> پر
+گیم پلے ساکٹ، اور اسکرپٹ کی قبول کردہ بورڈ کیز کو حل کرتا ہے۔ یہ بھی خارج کرتا ہے <code>scores</code> کے ساتھ
+وہ فہرست. اسکرپٹ ایک اسکور کو گراتا ہے جو بورڈ کی قسم کا نمبر نہیں ہے یا اس سے باہر آتا ہے۔
+<code>minScore</code>/<code>maxScore</code>، باقی اس کے ذریعے پوسٹ کرتا ہے۔ <code>scores</code> واپسی، اور سیشن ختم. کلائنٹ
+اب بھی نتیجہ کی اطلاع دیتا ہے. رینج میں ایجاد کردہ سکور گزر سکتا ہے۔ یہ بورڈ آرام دہ اور پرسکون کے لئے موزوں ہیں
+کھیلیں مقابلے کے لیے، انعام دینے سے پہلے اسکرپٹ یا کنٹینر میں رن کی توثیق کریں۔ اعتراف
+اسکرپٹ سے منظور شدہ کلیدوں کی فہرست۔ یہ اس بات کا ثبوت نہیں ہے کہ ہر بورڈ فعال تھا یا ایک نیا ذاتی بہترین
+ذخیرہ کیا گیا تھا. دیکھیں <a href="/ur/docs/availability.html#what-makes-a-result-trustworthy">اعتماد اور دستیابی</a>.</p>
+<h2 id="reconnecting-and-expired-tokens">دوبارہ منسلک اور میعاد ختم ہونے والے ٹوکن</h2>
+<p>ایک ساکٹ اپنے URL میں لانچ ٹوکن رکھتا ہے، اور اس سے پہلے ختم شدہ ٹوکن کے ساتھ مصافحہ کرنے سے انکار کر دیا جاتا ہے۔
+اپ گریڈ - براؤزر صرف قریبی کوڈ کی اطلاع دیتا ہے۔ <code>1006</code>بالکل نیٹ ورک ڈراپ کی طرح۔ تو ایک ناکام
+دوبارہ جڑنا ایک توثیق کی ناکامی ہو سکتی ہے، اور اسی URL کو دوبارہ کوشش کرنے سے کبھی بھی بازیافت نہیں ہو سکتی۔ تجدید صرف کام کرتی ہے۔
+جبکہ موجودہ ٹوکن درست ہے اور اصل لانچ کے 12 گھنٹے کے اندر؛ اس کے بعد صرف
+لانچر ایک نیا ٹوکن لگا سکتا ہے۔</p>
+<p><code>connect()</code> اسے خود ہینڈل کرتا ہے: ہر دوبارہ جڑنے سے پہلے یہ ٹوکن کی تجدید کرتا ہے۔
+<code>POST /api/v1/games/{slug}/launch-token</code> (جب تک کہ ساکٹ کھلنے کے بعد سے اس کی تجدید نہ ہو) اور دوبارہ کھل جائے۔
+نئے کے ساتھ. تجدید کے دوران نیٹ ورک یا سرور کی خرابی پیچھے ہٹ جاتی ہے اور دوبارہ تجدید ہوتی ہے - ایسا کبھی نہیں ہوتا ہے۔
+پرانے URL کو دوبارہ کھولتا ہے۔ جب تجدید سے انکار کر دیا جاتا ہے یا ٹوکن کی میعاد ختم ہو جاتی ہے، تو SDK سائن آؤٹ ہو جاتا ہے (<code>auth</code> کے ساتھ
+<code>reason: 'expired'</code>)، دوبارہ جڑنا اور کال کرنا بند کر دیتا ہے۔ <code>onAuthLost()</code>:</p>
+<pre><code class="language-js">const conn = StarHermit.connect(sessionId, {
+  onGame, onClose,
+  onAuthLost: () =&gt; showReconnectPanel(),   // e.g. "Session expired — Back to StarHermit"
+});
+backButton.onclick = () =&gt; StarHermit.relaunch();
+</code></pre>
+<p><code>relaunch()</code> پلیئر کو ایک تازہ لانچ ٹوکن کے لیے واپس بھیجتا ہے: گیم کھولنے پر سائن ان کے ذریعے
+اس طرح (<code>StarHermit.launchKind === 'sign-in'</code>)، بصورت دیگر لانچر کو۔ لانچر کے اندر
+گیم فریم یہ سب سے اوپر والی ونڈو کو نیویگیٹ کرتا ہے، جسے براؤزر صرف صارف کے اشارے سے اجازت دیتے ہیں، لہذا اسے کال کریں۔
+ایک کلک سے؛ یہ واپس آتا ہے <code>false</code> جب نیویگیشن سے انکار کر دیا گیا تھا۔</p>
+<p>ایک براؤزر ختم سیشن، شرائط، رکنیت، یا ناکامیوں کو اس طرح چھپا سکتا ہے۔ <code>1006</code>. ایک سے پہلے
+خودکار دوبارہ کوشش، <code>connect()</code> REST کے ذریعے سیشن کی حالت چیک کرتا ہے اور، کب <code>opts.build</code> فراہم کیا جاتا ہے،
+گیم کی معلومات سے اس کا موازنہ کرتا ہے۔ <code>onUnavailable(error)</code> مستقل REST کی ناکامی یا ختم ہو گئی۔
+سیشن <code>onTermsRequired(body)</code> واضح شرائط کی قبولیت کی درخواست کرتا ہے۔ اس کے بعد نیا کنکشن بنائیں
+ان کو حل کرنا. <code>onClose(1008)</code> اس کا مطلب ہے کہ کنکشن ختم یا پالیسی کی خلاف ورزی کی گئی تھی۔ نہ کرو
+خود بخود اسے دوبارہ کھولیں.</p>
+<p>ساکٹ آپ کا گیم خود کھلتا ہے (<code>realtime.socketUrl(roomId)</code>, <code>voice.socketUrl(roomId)</code>) کی ضرورت ہے
+ایک ہی اصول ایک کو دوبارہ کھولنے سے پہلے، کال کریں۔ <code>renewForReconnect()</code> اور اس کے نتیجے پر عمل کریں:</p>
+<pre><code class="language-js">async function reopen() {
+  const r = await StarHermit.renewForReconnect();
+  if (r === 'renewed') ws = new WebSocket(StarHermit.realtime.socketUrl(roomId)); // fresh token in the URL
+  else if (r === 'retry') setTimeout(reopen, backoff());                         // renewal itself failed
+  else if (r === 'terms-required') showTermsPanel();                              // explicit acceptance
+  else showReconnectPanel();                                                     // 'relaunch'
+}
+</code></pre>
+<p>ہم وقتی تجدید ایک درخواست کا اشتراک کرتے ہیں۔ <code>terms-required</code> پلیئر ٹوکن کو محفوظ رکھتا ہے اور خارج کرتا ہے۔
+<code>termsrequired</code>; ڈسپلے <code>getTerms()</code> اور کال کریں <code>acceptTerms(displayed.hash)</code> صرف کھلاڑی پر
+کارروائی قبول کریں، پھر دوبارہ کوشش کریں۔ آپ کے گیم کا انتظام کرنے والے ساکٹ کو بھی ختم شدہ وسائل کے لیے REST چیک کی ضرورت ہوتی ہے۔
+اور پالیسی بند ہونے پر رکنا چاہیے۔ دیکھیں <a href="/ur/docs/troubleshooting.html#websockets">خرابیوں کا سراغ لگانا</a>.</p>
+<h2 id="events">واقعات</h2>
+<p><code>StarHermit.on(type, fn)</code> ایک ان سبسکرائب فنکشن واپس کرتا ہے؛ <code>off(type, fn)</code> بھی کام کرتا ہے.</p>
+<table>
+<thead>
+<tr>
+<th>واقعہ</th>
+<th>پے لوڈ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>auth</code></td>
+<td><code>{ signedIn, userId }</code> سائن ان پر؛ <code>{ signedIn: false, reason }</code> سائن آؤٹ یا ختم ہونے پر (<code>reason: 'expired'</code> جب تجدید سے انکار کر دیا جاتا ہے - پیشکش <code>relaunch()</code>)</td>
+</tr>
+<tr>
+<td><code>saved</code></td>
+<td><code>true</code> / <code>false</code> ہر بادل کے بعد لکھیں۔</td>
+</tr>
+<tr>
+<td><code>saveerror</code></td>
+<td><code>{ op: 'load' }</code> ناکام پڑھنے کے بعد؛ <code>{ op: 'write', blocked: true }</code> انکار شدہ تحریر کے لیے</td>
+</tr>
+<tr>
+<td><code>achievement</code></td>
+<td>گیم پلے ساکٹ پر ایک انلاک دھکیل دیا گیا۔</td>
+</tr>
+<tr>
+<td><code>scores</code></td>
+<td>بورڈ کی چابیاں قبول کی گئیں۔ <code>submitScores</code> (<code>[]</code> جب کچھ پوسٹ نہیں کیا گیا تھا)</td>
+</tr>
+<tr>
+<td><code>saveconflict</code></td>
+<td><code>{ etag }</code> جب کسی دوسرے آلے نے بچت کو تبدیل کیا؛ ضم/محفوظ کرنے سے پہلے دوبارہ لوڈ کریں۔</td>
+</tr>
+<tr>
+<td><code>termsrequired</code></td>
+<td>شرائط کی خرابی لانچ ٹوکن کی تجدید کے ذریعے واپس آئی۔ ٹوکن کو محفوظ رکھیں اور رضامندی کی درخواست کریں۔</td>
+</tr>
+</tbody>
+</table>
+<h2 id="keeping-your-copy-current">اپنی کاپی کو تازہ رکھنا</h2>
+<p>فائل کے ساتھ وینڈرڈ کے طور پر سلوک کریں: اسے بغیر کسی تبدیلی کے کاپی کریں، اپنی کاپی میں کبھی بھی ترمیم نہیں کریں، اور اسے تھوک فروخت کرنے پر تبدیل کریں۔
+اس صفحہ کی فائل تبدیل ہو جاتی ہے۔ اس بات کو یقینی بنائیں کہ آپ کی تعمیر یا پیکیجنگ مرحلہ اسے گیم کے ساتھ بھیجتا ہے۔
+دیگر جامد فائلیں.</p>
+
+{% endraw %}

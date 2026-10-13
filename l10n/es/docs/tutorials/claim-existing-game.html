@@ -1,0 +1,250 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Reclama un juego que alguien más agregó"
+source_url: "/docs/tutorials/claim-existing-game.html"
+source_path: "docs/tutorials/claim-existing-game.md"
+source_hash: "fc2b52c67cda7e6fd24b0791208c1511aafea7d1f6e61e1cf9b61cc9d6eb1003"
+translation: "machine"
+permalink: "/es/docs/tutorials/claim-existing-game.html"
+---
+{% raw %}
+<h1 id="claim-a-game-someone-else-added">Reclama un juego que alguien más agregó</h1>
+<p>Si alguien ya agregó su juego público de GitHub a StarHermit, no necesita crear un
+segundo listado. Reclame el listado existente para convertirse en su propietario verificado y administrar sus metadatos.
+alojamiento, implementación, servidor backend y transferencias futuras.</p>
+<p>La reclamación está protegida por el control del repositorio. No basta con conocer el ID del juego o la URL del repositorio.
+Debe demostrar control de una de dos maneras:</p>
+<ol>
+<li>Vincular la cuenta personal de GitHub propietaria del repositorio; o</li>
+<li>Confirme su ID de usuario inmutable de StarHermit como <code>owner=</code> en el repositorio <code>starhermit.txt</code>.</li>
+</ol>
+<p>El segundo método es especialmente útil para los repositorios propiedad de la organización, porque la actual
+La verificación de inicio de sesión de GitHub coincide con los propietarios del repositorio personal y no infiere la membresía de la organización.</p>
+<h2 id="what-claiming-changes">¿Qué cambios de reclamo?</h2>
+<p>Un reclamo exitoso:</p>
+<ul>
+<li>mantiene el ID del juego/listado existente y su historial acumulado;</li>
+<li>le cambia el usuario administrador de StarHermit del listado;</li>
+<li>marca el listado como <code>isVerifiedOwner: true</code>;</li>
+<li>actualiza metadatos y controles confiables desde <code>starhermit.txt</code> donde se aplica;</li>
+<li>aprovisiona o actualiza un script/contenedor backend declarado;</li>
+<li>permite el alojamiento de la plataforma cuando esté disponible y pone en cola la implementación según sea necesario <code>pending</code>;</li>
+<li>elimina el acceso de administración de la persona que envió originalmente ese listado.</li>
+</ul>
+<p>El reclamo no le da al remitente anterior acceso a su cuenta de GitHub y no se fusiona
+Cuentas de usuario de StarHermit. Transfiere la gestión de ese listado específico.</p>
+<h2 id="before-you-begin">Antes de comenzar</h2>
+<p>Necesitas:</p>
+<ul>
+<li>Una cuenta de StarHermit y un token de acceso completo de usuario, no un token de lanzamiento específico para el juego.</li>
+<li>Acceso de escritura al repositorio si se utiliza el <code>owner=</code> método de prueba.</li>
+<li>El ID de listado de StarHermit existente.</li>
+<li>Para un juego de repositorio clonado, un válido <code>starhermit.txt</code> en la raíz del repositorio.</li>
+</ul>
+<p>Solo <code>github.com/&lt;owner&gt;/&lt;repo&gt;</code> Los repositorios y sus sitios de páginas de GitHub participan en este reclamo.
+fluir. Una URL alojada arbitraria no tiene propiedad del repositorio de GitHub para demostrarlo y no se puede reclamar así.
+manera.</p>
+<p>Ejemplos de uso a continuación:</p>
+<pre><code class="language-bash">API=https://api.starhermit.com
+ACCESS_TOKEN='your-full-user-access-token'
+OWNER='your-github-login'
+REPO='your-game-repository'
+</code></pre>
+<p>Los tokens de acceso duran 15 minutos. Actualiza el tuyo antes de comenzar si está a punto de caducar.</p>
+<h2 id="step-1-find-the-existing-listing">Paso 1: busque el listado existente</h2>
+<p>Lista de juegos compartidos:</p>
+<pre><code class="language-bash">curl -sS "$API/api/v1/github-games" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>Cada artículo incluye el listado inmutable. <code>id</code>, normalizado <code>repoUrl</code>, <code>ownerLogin</code>, <code>repoName</code>, el
+remitente actual y estado de propiedad:</p>
+<pre><code class="language-json">{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "repoUrl": "https://github.com/octocat/orbit-league",
+  "ownerLogin": "octocat",
+  "repoName": "orbit-league",
+  "displayName": "Orbit League",
+  "isVerifiedOwner": false,
+  "submittedByUserId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "submittedByUsername": "someone-else"
+}
+</code></pre>
+<p>Coincidencia en ambos <code>ownerLogin</code> y <code>repoName</code>; no seleccione un juego sólo porque su nombre para mostrar es
+similar. Con <code>jq</code>:</p>
+<pre><code class="language-bash">GAME_ID=$(
+  curl -sS "$API/api/v1/github-games" \
+    -H "Authorization: Bearer $ACCESS_TOKEN" |
+  jq -r --arg owner "$OWNER" --arg repo "$REPO" \
+    '.[] | select((.ownerLogin | ascii_downcase) == ($owner | ascii_downcase)
+               and (.repoName | ascii_downcase) == ($repo | ascii_downcase)) | .id' |
+  head -n1
+)
+
+printf 'Listing ID: %s\n' "$GAME_ID"
+</code></pre>
+<p>Deténgase si el resultado está vacío. No llame al reclamo con una identificación copiada de un listado no relacionado.</p>
+<h2 id="step-2-choose-how-to-prove-ownership">Paso 2: elige cómo demostrar la propiedad</h2>
+<h3 id="option-a-link-the-repository-owners-github-account">Opción A: vincular la cuenta de GitHub del propietario del repositorio</h3>
+<p>Úselo cuando el repositorio sea propiedad directa de su inicio de sesión personal de GitHub.</p>
+<p>Desde el flujo de configuración/cuenta de StarHermit, inicie GitHub OAuth en <strong>enlace</strong> modo mientras estás registrado en el
+Cuenta de StarHermit que debería gestionar el juego. Vincular es diferente a crear accidentalmente un
+segunda cuenta de StarHermit con inicio de sesión en GitHub.</p>
+<p>El flujo de API comienza en:</p>
+<pre><code class="language-text">GET /api/v1/auth/oauth/github/authorize?link=true
+</code></pre>
+<p>Está controlado por el navegador y utiliza una cookie de estado de corta duración. La vinculación requiere StarHermit reciente
+autenticación. Complete la autorización de GitHub en la misma sesión del navegador que la inició.</p>
+<p>Verifique el resultado:</p>
+<pre><code class="language-bash">curl -sS "$API/api/v1/me/github" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>Esperado:</p>
+<pre><code class="language-json">{ "linked": true, "login": "octocat" }
+</code></pre>
+<p>El inicio de sesión devuelto debe coincidir con el del listado existente. <code>ownerLogin</code>, sin distinguir entre mayúsculas y minúsculas. un personal
+El inicio de sesión en GitHub no prueba la membresía de una organización propietaria del repositorio. para un
+repositorio propiedad de la organización, utilice la opción B.</p>
+<h3 id="option-b-add-owner-to-starhermittxt">Opción B: agregar <code>owner=</code> a <code>starhermit.txt</code></h3>
+<p>Esto demuestra control porque sólo alguien capaz de publicar contenido del repositorio puede agregar valor.
+Colocar <code>owner</code> a su ID de usuario inmutable de StarHermit (UUID), <strong>no</strong> su nombre de usuario o apodo.</p>
+<p>Obtenga su identificación:</p>
+<pre><code class="language-bash">STARHERMIT_USER_ID=$(
+  curl -sS "$API/api/v1/me" \
+    -H "Authorization: Bearer $ACCESS_TOKEN" |
+  jq -r '.id'
+)
+</code></pre>
+<p>En la raíz del repositorio, cree o actualice <code>starhermit.txt</code>:</p>
+<pre><code class="language-ini">name=Orbit League
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6
+</code></pre>
+<p>Reemplace el propietario de ejemplo con <code>STARHERMIT_USER_ID</code>. No pongas aquí tu nombre de usuario o apodo;
+estos pueden cambiar, mientras que la identificación de usuario es el identificador de propiedad estable.</p>
+<p>Para un juego autorizado, conserve exactamente una declaración de backend:</p>
+<pre><code class="language-ini"># JavaScript runtime:
+server=server.js
+
+# OR container runtime, never both:
+# container.image=ghcr.io/your-org/orbit-server@sha256:&lt;64-lowercase-hex&gt;
+</code></pre>
+<p>Confirme y envíe el manifiesto al repositorio/versión que StarHermit puede leer:</p>
+<pre><code class="language-bash">git add starhermit.txt
+git commit -m "Declare StarHermit game ownership"
+git push
+</code></pre>
+<p>Antes de reclamar, abra el archivo raw del repositorio. <code>starhermit.txt</code> URL en un navegador no autenticado y
+Confirme que el nuevo valor sea legible públicamente. Claiming lee el repositorio en el momento de la solicitud; un
+El cambio local no impulsado no puede probar nada.</p>
+<h2 id="step-3-validate-the-manifest">Paso 3: validar el manifiesto</h2>
+<p>Para un juego de repositorio clonado normal, reclamar requiere:</p>
+<ul>
+<li><code>starhermit.txt</code> en la raíz del repositorio;</li>
+<li>no vacío <code>name=</code>;</li>
+<li><code>launch=</code> apuntando a un repositorio relativo <code>.html</code> o <code>.htm</code> archivo;</li>
+<li>una opción válida <code>server=</code> camino que termina en <code>.js</code>/<code>.mjs</code>, o un válido <code>container.image=</code> declaración;</li>
+<li>nunca ambos tiempos de ejecución del servidor a la vez.</li>
+</ul>
+<p>Una lista de páginas de GitHub mantiene su URL alojada como destino de lanzamiento y no requiere un manifiesto.
+cuando se demuestra la propiedad personal de GitHub, aunque un nombre de manifiesto válido aún puede actualizar su
+nombre para mostrar.</p>
+<p>Si el juego declara un contenedor, su imagen debe cumplir con el registro, el espacio de nombres del propietario y el resumen.
+reglas en <a href="/es/docs/api/container-games.html">Servidores de juegos alojados en contenedores</a>. El alojamiento de contenedores también puede ser
+restringido por el operador de la plataforma.</p>
+<h2 id="step-4-claim-the-listing">Paso 4: reclama el listado</h2>
+<p>La solicitud de reclamación no tiene cuerpo:</p>
+<pre><code class="language-bash">curl -sS -X POST \
+  "$API/api/v1/me/github-games/$GAME_ID/claim" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>Un exitoso <code>200</code> devuelve el juego actualizado:</p>
+<pre><code class="language-json">{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "repoUrl": "https://github.com/octocat/orbit-league",
+  "ownerLogin": "octocat",
+  "repoName": "orbit-league",
+  "displayName": "Orbit League",
+  "launchPath": "index.html",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "isVerifiedOwner": true,
+  "metadataSource": "starhermit.txt",
+  "hosting": {
+    "hostingEnabled": true,
+    "deployStatus": "pending"
+  }
+}
+</code></pre>
+<p>La identificación debe ser la misma que se encontró en el Paso 1. No cree una lista nueva después de un reclamo exitoso.</p>
+<p>Se permite intencionalmente reclamar un listado que ya administras. Vuelve a leer el manifiesto,
+vuelve a aprovisionar el backend y vuelve a poner en cola el alojamiento, de modo que la misma llamada pueda usarse para resincronizar un
+Juego administrado por el propietario después de cambios en el repositorio.</p>
+<h2 id="step-5-verify-takeover-and-deployment">Paso 5: verificar la adquisición y la implementación</h2>
+<p>Confirma que el juego ahora aparece en tu lista administrada:</p>
+<pre><code class="language-bash">curl -sS "$API/api/v1/me/github-games" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" |
+jq --arg id "$GAME_ID" '.[] | select(.id == $id)'
+</code></pre>
+<p>Verifique el estado de implementación:</p>
+<pre><code class="language-bash">curl -sS \
+  "$API/api/v1/me/github-games/$GAME_ID/deployment" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>Un reclamo comúnmente pone en cola una implementación, por lo que <code>pending</code> inmediatamente después del reclamo es normal. Encuesta con
+retroceder hasta que alcance el estado activo/éxito del entorno o se exponga <code>deployError</code>.</p>
+<p>Después de la adquisición, los puntos finales de administración disponibles para usted incluyen:</p>
+<pre><code class="language-text">PUT    /api/v1/me/github-games/{id}/deployment  pin a commit/branch and redeploy
+POST   /api/v1/me/github-games/{id}/bundle      upload built client/container output
+PUT    /api/v1/me/github-games/{id}/hosting     requeue hosting where supported
+POST   /api/v1/me/github-games/{id}/transfer    transfer management deliberately
+DELETE /api/v1/me/github-games/{id}             remove the game
+</code></pre>
+<p>El remitente original ya no ve este listado en <code>GET /api/v1/me/github-games</code> y no puedo
+utilice estos puntos finales de administración con ámbito de propietario para ello.</p>
+<h2 id="troubleshooting">Solución de problemas</h2>
+<h3 id="403-link-the-repository-owner-or-add-owner"><code>403</code>: vincular el propietario del repositorio o agregar <code>owner=</code></h3>
+<p>El inicio de sesión de GitHub vinculado no coincide <code>ownerLogin</code>, o el manifiesto <code>owner</code> no coincide exactamente
+su ID de usuario de StarHermit.</p>
+<ul>
+<li>Controlar <code>GET /api/v1/me/github</code>.</li>
+<li>comprobar el exacto <code>ownerLogin</code> devuelto por la cotización pública.</li>
+<li>Para repositorios de organizaciones, utilice <code>owner=&lt;your StarHermit user ID&gt;</code> en el repositorio.</li>
+<li>Confirme que envió el manifiesto y que su URL sin formato es legible públicamente.</li>
+</ul>
+<h3 id="404-no-shared-game-with-that-id"><code>404</code>: no hay juego compartido con ese ID</h3>
+<p>La identificación es incorrecta o se eliminó la lista. Repita el paso 1. Los listados eliminados no son reclamables.</p>
+<h3 id="400-missing-or-invalid-starhermittxt"><code>400</code>: faltante o inválido <code>starhermit.txt</code></h3>
+<p>Para un repositorio clonado, asegúrese de que el manifiesto raíz tenga valores válidos. <code>name</code> y HTML <code>launch</code> valores. también
+validar declaraciones de script/contenedor opcionales. La reclamación no confía en los metadatos originalmente.
+ingresado por un no propietario; lo reemplaza con metadatos controlados por el repositorio.</p>
+<h3 id="claim-fails-around-the-slugbackend">El reclamo falla alrededor del slug/backend</h3>
+<p>Es posible que el script no sea válido o que el alojamiento del contenedor no esté disponible. Verifique el error devuelto y
+la declaración de backend, luego llame al reclamo nuevamente. La plataforma asigna el UUID del juego como slug;
+no hay ninguna babosa manifiesta que elegir o resolver.</p>
+<h3 id="github-was-linked-but-the-wrong-starhermit-account-owns-the-link">GitHub fue vinculado pero la cuenta StarHermit incorrecta posee el enlace</h3>
+<p>Inicie sesión en la cuenta StarHermit deseada y complete OAuth <strong>enlace</strong> fluir allí. no reclamar
+desde una segunda cuenta temporal de StarHermit y luego depender de la fusión de cuentas; el juego de transferencias API
+gestión, no identidades de usuarios.</p>
+<h2 id="security-notes">Notas de seguridad</h2>
+<ul>
+<li>Nunca acepte un enlace de reclamo o una identificación de listado como prueba de propiedad del repositorio.</li>
+<li>No coloque tokens de acceso de GitHub, credenciales de contenedor u otros secretos en <code>starhermit.txt</code>.</li>
+<li>Utilice siempre el ID de usuario inmutable de StarHermit en <code>owner=</code>; no utilice un nombre de usuario o apodo.</li>
+<li>Revise el listado existente y la URL del repositorio antes de realizar el reclamo; Los nombres para mostrar no son únicos.</li>
+<li>Si luego transfieres el juego, el destinatario se convierte en administrador, pero el estado de propietario verificado es
+restablecer. Deben ejecutar el flujo de reclamos ellos mismos si controlan el repositorio.</li>
+</ul>
+<h2 id="reference-pages">Páginas de referencia</h2>
+<ul>
+<li><a href="/es/docs/api/github-games.html">API de juegos de GitHub</a></li>
+<li><a href="/es/docs/api/auth.html#oauth">Autenticación y GitHub OAuth</a></li>
+<li><a href="/es/docs/api/game-scripts.html">Guiones de juego</a></li>
+<li><a href="/es/docs/api/container-games.html">Servidores de juegos alojados en contenedores</a></li>
+<li><a href="/es/docs/tutorials/dedicated-server-onboarding.html">Publicación en servidor dedicado</a></li>
+</ul>
+
+{% endraw %}

@@ -1,0 +1,251 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Papan peringkat"
+source_url: "/docs/api/leaderboards.html"
+source_path: "docs/api/leaderboards.md"
+source_hash: "8dc804e92e296ca450fe1e537cab9b10deabd2f397a82763791d66544f8a5eff"
+translation: "machine"
+permalink: "/id/docs/api/leaderboards.html"
+---
+{% raw %}
+<h1 id="leaderboards">Papan peringkat</h1>
+<p>Definisi dan entri papan peringkat. Bacaan bersifat anonim; mengirimkan skor membutuhkan JWT.</p>
+<p>URL Dasar: <code>https://api.starhermit.com</code>. Semua rute berada di bawah <code>/api/v1/...</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/leaderboards</code></td>
+<td>Anonim</td>
+<td>Definisi daftar (query <code>scope</code>, <code>region</code>, <code>titleId</code>)</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/leaderboards/{id}</code></td>
+<td>Anonim</td>
+<td>Dapatkan satu definisi</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/leaderboards/{id}/entries?scope=&amp;region=&amp;friendsOnly=&amp;page=&amp;pageSize=</code></td>
+<td>Anonim</td>
+<td>Entri halaman; <code>friendsOnly=true</code> membutuhkan autentikasi</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/leaderboards/{id}/submit</code></td>
+<td>JWT</td>
+<td>Kirimkan skor (hanya papan katalog)</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/leaderboards</code></td>
+<td>Pembawa</td>
+<td>Papan aktif milik game Anda (token peluncuran diterima)</td>
+</tr>
+<tr>
+<td>DAPATKAN/POSTING</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards</code></td>
+<td>JWT (pemilik permainan)</td>
+<td>Daftar / buat papan permainan Anda</td>
+</tr>
+<tr>
+<td>MASUKKAN/HAPUS</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards/{leaderboardId}</code></td>
+<td>JWT (pemilik permainan)</td>
+<td>Perbarui / hapus satu</td>
+</tr>
+</tbody>
+</table>
+<p>Definisinya adalah <code>LeaderboardDefinitionDto[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "id": "…",
+    "softwareTitleId": "…",
+    "gameDefinitionId": null,
+    "key": null,
+    "name": "…",
+    "scoreType": "…",
+    "sortDirection": "…",
+    "resetSchedule": "weekly",
+    "currentPeriodStartedAt": "2026-10-12T00:00:00+00:00",
+    "nextResetAt": "2026-10-19T00:00:00+00:00",
+    "minScore": 0,
+    "maxScore": 100,
+    "scope": "…",
+    "region": "…",
+    "isActive": true,
+    "createdAt": "…",
+    "updatedAt": "…"
+  }
+]
+</code></pre>
+<p>Tanggapan entri:</p>
+<pre><code class="language-json">{
+  "items": [
+    {
+      "id": "…",
+      "userId": "…",
+      "username": "…",
+      "score": 1500,
+      "rank": 1,
+      "region": "…",
+      "submittedAt": "…"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 20
+}
+</code></pre>
+<p>Kirimkan isi:</p>
+<pre><code class="language-json">{
+  "score": 1500
+}
+</code></pre>
+<p>Skor tersebut divalidasi berdasarkan definisi <code>minScore</code>/<code>maxScore</code> dan aturan penerbit; responnya adalah hasil entri.</p>
+<h2 id="authoritative-games-and-elo">Game resmi dan Elo</h2>
+<p>Setiap game resmi memiliki papan peringkat elo; idnya berasal <code>GET /api/v1/games/{slug}</code> → <code>leaderboardId</code> (melihat <a href="/id/docs/api/games.html">games.md</a>). Skor HANYA ditulis oleh platform dari skrip <code>eloUpdates</code> atau saluran kendali kontainer — pengiriman langsung ditolak. Klien game membaca entri melalui titik akhir halaman standar; misalnya, permintaan implementasi referensi catur:</p>
+<pre><code>GET /api/v1/leaderboards/{leaderboardId}/entries?friendsOnly=true&amp;page=1&amp;pageSize=10
+</code></pre>
+<p>Token peluncuran dalam cakupan game dapat membaca papan peringkat game mereka sendiri. CRUD berada di papan peringkat sisi penerbit <a href="/id/docs/api/publisher.html">publisher.md</a>.</p>
+<h3 id="resetting-a-players-rating">Menyetel ulang peringkat pemain</h3>
+<p>Pemilik game dapat mengembalikan rating satu pemain ke awal <strong>1200</strong> — untuk smurf, dikuatkan
+akun, atau peringkat bug rusak:</p>
+<pre><code>DELETE /api/v1/me/github-games/{id}/players/{userId}/elo      → 200 { "userId": "…", "elo": 1200 }
+</code></pre>
+<p>Ini mengatur ulang peringkat pasangan perjodohan, menghapus baris pemain dari papan elo (mengembalikan
+dengan peringkat pertandingan berikutnya), dan menetapkan angka tingkat atas <strong><code>elo</code></strong> dalam dokumen pemutar skrip Anda
+hingga 1200 — karena skrip Anda menghitung peringkat berikutnya dari dokumennya sendiri, dan hanya menyetel ulang
+salinan platform akan dibatalkan pada pertandingan berikutnya. Segala sesuatu yang lain dalam dokumen (kemenangan, sejarah)
+ditinggal sendirian. Jika skrip Anda mempertahankan peringkatnya dengan nama lain, itu benar <strong>bukan</strong> ditulis ulang: simpan
+itu masuk <code>playerStates[id].elo</code> untuk mendapatkan reset secara gratis. Pertandingan yang sudah berlangsung mungkin masih melaporkan a
+peringkat dihitung sebelum reset. <code>404</code> ketika game tersebut bukan milik Anda atau pemain tidak memiliki rating
+itu. Peringkat tersebut juga tunduk pada <a href="/id/docs/api/games.html#limits">aturan elo</a>.</p>
+<h2 id="reset-schedules">Atur ulang jadwal</h2>
+<p>Papan peringkat apa pun — papan milik game, atau milik judul katalog — dapat dimulai kembali sesuai jadwal:</p>
+<table>
+<thead>
+<tr>
+<th><code>resetSchedule</code></th>
+<th>Dimulai dari awal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>daily</code></td>
+<td>setiap hari pada pukul 00:00 UTC</td>
+</tr>
+<tr>
+<td><code>weekly</code></td>
+<td>setiap hari Senin pukul 00:00 UTC</td>
+</tr>
+<tr>
+<td><code>monthly</code></td>
+<td>pada tanggal 1 setiap bulan pukul 00:00 UTC</td>
+</tr>
+<tr>
+<td>dihilangkan, <code>null</code> atau <code>"never"</code></td>
+<td>tidak pernah</td>
+</tr>
+</tbody>
+</table>
+<p>Nilai lainnya adalah a <code>400</code>. Laporan definisi <code>currentPeriodStartedAt</code> Dan <code>nextResetAt</code> (keduanya
+<code>null</code> untuk papan yang tidak pernah direset), sehingga klien dapat menampilkannya "reset dalam 2 hari".</p>
+<p>Reset diterapkan saat papan berada <strong>membaca</strong>: titik akhir entri hanya menampilkan skor yang dikirimkan sejak itu
+periode saat ini dimulai, dan peringkat dihitung dalam periode tersebut. Tidak ada yang dihapus di
+batas, jadi pengaturan ulang akan berlaku tepat pada pukul 00:00 UTC. Artinya jadwalnya juga bisa diubah
+kapan saja — ini mengubah entri mana yang ditampilkan, bukan entri mana yang disimpan. Periode sebelumnya tidak
+dapat dibaca melalui API.</p>
+<h2 id="your-games-own-leaderboards">Papan peringkat game Anda sendiri</h2>
+<p>Di samping papan elo-nya, ada permainan dengan a <code>server=</code> naskah atau <code>container.image=</code> backend dapat memiliki
+papan peringkatnya sendiri — skor tinggi, putaran tercepat, pembunuhan terbanyak — dibuat oleh <strong>pemilik permainan</strong>.
+Anda tidak memerlukan akun penerbit: memiliki game menjadikan Anda penerbitnya.</p>
+<p>Seperti papan elo, <strong>hanya server game Anda yang menulis kepada mereka.</strong> Skrip Anda kembali
+<code>scores: { "&lt;key&gt;": { "&lt;userId&gt;": score } }</code> dari kait apa pun (lihat
+<a href="/id/docs/api/game-scripts.html#leaderboards">Skrip Game — Papan Peringkat</a>), atau kontainer Anda mengirimkan a
+<a href="/id/docs/api/container-games.html#control-channel"><code>scores</code> pesan kontrol</a>. <code>POST /leaderboards/{id}/submit</code> adalah
+ditolak, jadi klien yang dimodifikasi tidak dapat memposting skor.</p>
+<h3 id="create-one--post-apiv1megithub-gamesidleaderboards">Buat satu — <code>POST /api/v1/me/github-games/{id}/leaderboards</code></h3>
+<pre><code class="language-json">{
+  "key": "high-score",
+  "name": "High score",
+  "scoreType": "integer",
+  "sortDirection": "desc",
+  "minScore": 0,
+  "maxScore": 1000000,
+  "isActive": true
+}
+</code></pre>
+<p>Kembali <code>201</code> dengan a <code>LeaderboardDefinitionDto</code> yang <code>gameDefinitionId</code> Dan <code>key</code> sudah diatur.</p>
+<table>
+<thead>
+<tr>
+<th>Bidang</th>
+<th>Arti</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>key</code></td>
+<td><strong>Diperlukan.</strong> Nama yang dikirimkan server Anda: 1–64 huruf, angka, <code>.</code>, <code>_</code>, <code>-</code>. Unik per game.</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td><strong>Diperlukan.</strong> Nama tampilan, maksimal 200 karakter.</td>
+</tr>
+<tr>
+<td><code>scoreType</code></td>
+<td><code>integer</code> (bawaan), <code>decimal</code>, atau <code>time-ms</code> (bilangan bulat non-negatif dalam milidetik)</td>
+</tr>
+<tr>
+<td><code>sortDirection</code></td>
+<td><code>desc</code> (default — lebih tinggi lebih baik) atau <code>asc</code> (lebih rendah lebih baik, misalnya waktu putaran)</td>
+</tr>
+<tr>
+<td><code>minScore</code> / <code>maxScore</code></td>
+<td>Batasan opsional; skor di luarnya diabaikan</td>
+</tr>
+<tr>
+<td><code>isActive</code></td>
+<td>Bawaan <code>true</code>. Papan yang tidak aktif tidak menerima skor dan tidak dicantumkan kepada pemain.</td>
+</tr>
+<tr>
+<td><code>resetSchedule</code></td>
+<td>Opsional: <code>daily</code>, <code>weekly</code> atau <code>monthly</code> - melihat <a href="#reset-schedules">Atur ulang jadwal</a>. Default: tidak pernah diatur ulang.</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>key</code>, <code>scoreType</code> Dan <code>sortDirection</code> tidak dapat berubah setelah penciptaan</strong>: server Anda mengirimkan berdasarkan kunci,
+dan skor yang sudah disimpan dipilih oleh dua lainnya. Butuh yang lain? Buat papan baru.
+<code>PUT .../leaderboards/{leaderboardId}</code> menerima <code>name</code>, <code>minScore</code>, <code>maxScore</code>, <code>isActive</code> Dan
+<code>resetSchedule</code> (mengirim <code>"never"</code> untuk berhenti mengatur ulang); <code>DELETE</code> menghapus papan <strong>dan entri-entrinya</strong> -
+mengatur <code>isActive: false</code> untuk pensiun dan mempertahankannya. Sebuah game mungkin memiliki paling banyak <strong>2048</strong> papan.</p>
+<h3 id="how-scores-are-kept">Bagaimana skor disimpan</h3>
+<ul>
+<li><strong>Satu entri per pemain: yang terbaik.</strong> "Terbaik" mengikuti papan <code>sortDirection</code>. Mengirimkan a
+skor yang lebih buruk tidak mengubah apa pun, jadi laporkan setelah setiap pertandingan tanpa memeriksa terlebih dahulu. Di papan dengan
+jadwal reset, itu yang terbaik <strong>periode ini</strong>: skor pertama setelah reset selalu dihitung,
+betapapun bagusnya skor pemain pada periode terakhir.</li>
+<li>Hanya pemain dalam sesi tersebut yang dapat mencetak gol; kursi AI dan siapa pun diabaikan.</li>
+<li>Skor yang melanggar peraturan papan (di luar jangkauan, pecahan per satu <code>integer</code> papan, negatif
+<code>time-ms</code>) diabaikan, begitu pula kunci tanpa papan aktif. Tidak ada yang dilaporkan kembali ke server Anda.</li>
+</ul>
+<h3 id="show-them-in-your-game">Tunjukkan pada game Anda</h3>
+<p><code>GET /api/v1/games/{slug}/leaderboards</code> mencantumkan papan aktif permainan dengan papannya <code>id</code> Dan <code>key</code>,
+dan berfungsi dengan token peluncuran game. Baca entri dengan titik akhir halaman standar di atas —
+<code>GET /api/v1/leaderboards/{id}/entries</code> — yang mungkin juga dijangkau oleh token peluncuran ke papan ini.</p>
+<p>Langkah demi langkah: <a href="/id/docs/tutorials/game-leaderboards-achievements.html">Tutorial: papan peringkat dan pencapaian untuk game Anda</a>.</p>
+<p>Melihat <a href="/id/docs/api/conventions.html#requests-and-responses">konvensi API</a> untuk penguraian kesalahan.</p>
+<p>Melihat <a href="/id/docs/credentials.html">kompatibilitas kredensial</a> Dan <a href="/id/docs/api/contracts.html">kontrak yang dapat dibaca mesin</a>.</p>
+
+{% endraw %}

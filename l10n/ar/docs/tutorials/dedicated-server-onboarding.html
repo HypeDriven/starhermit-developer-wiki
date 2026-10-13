@@ -1,0 +1,441 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "انشر خادم ألعاب مخصصًا ولاعبين مدمجين داخل اللعبة"
+source_url: "/docs/tutorials/dedicated-server-onboarding.html"
+source_path: "docs/tutorials/dedicated-server-onboarding.md"
+source_hash: "aa70f7fec680b797ff8479b56586e37fd9a16ee3031398235d457e97f83a90aa"
+translation: "machine"
+permalink: "/ar/docs/tutorials/dedicated-server-onboarding.html"
+---
+{% raw %}
+<h1 id="publish-a-dedicated-game-server-and-onboard-players-in-game">انشر خادم ألعاب مخصصًا ولاعبين مدمجين داخل اللعبة</h1>
+<p>يوضح هذا البرنامج التعليمي كيفية:</p>
+<ol>
+<li>انشر أو قم بتحديث حاوية خادم الألعاب المخصصة باستخدام واجهة برمجة تطبيقات تحميل الحزمة الخاصة بـ StarHermit.</li>
+<li>احتفظ برمز خادم StarHermit الخاص بالحاوية طويلة الأمد متجددًا.</li>
+<li>لاعبين مدمجين من Steam أو Epic أو GOG أو إصدار مستقل دون إرسالهم عبر
+مزود OAuth أو يطلب منهم زيارة لوحة معلومات StarHermit.</li>
+<li>امنح هؤلاء اللاعبين إمكانية الوصول إلى جلسات StarHermit والتوفيق بين اللاعبين ولوحات المتصدرين والإنجازات،
+دردشة الجلسة والصوت والأصدقاء والحضور والإعادة.</li>
+</ol>
+<p>واجهة برمجة التطبيقات التي تواجه اللاعب هي نفسها سواء كان الملف القابل للتنفيذ يأتي من Steam أو Epic أو GOG أو من جهازك الخاص
+قاذفة، أو <code>https://&lt;slug&gt;.starhermit.com</code>.</p>
+<h2 id="important-boundary-embedded-is-not-silent">حدود مهمة: المضمنة ليست صامتة</h2>
+<p>StarHermit لا يعرض حاليًا أي امتيازات "إنشاء لاعب تعسفي" نقطة النهاية للعبة
+الخادم. حاوية <code>STARHERMIT_SERVER_TOKEN</code> ليس لديه هوية لاعب عمدًا ولا يمكنه سك العملة
+حسابات اللاعبين أو انتحال شخصية اللاعبين.</p>
+<p>يتطلب تسجيل المفتاح العام أيضًا بريدًا إلكترونيًا صالحًا ورابطًا للتحقق لمرة واحدة. لذلك:</p>
+<ul>
+<li>أنت <strong>يستطيع</strong> استمر في التسجيل داخل واجهة المستخدم الخاصة بلعبتك وتجنب Google/GitHub OAuth و
+لوحة القيادة ستارهيرميت.</li>
+<li>أنت <strong>لا أستطيع</strong> قم بإنشاء حساب StarHermit بصمت من خلال معرف Steam أو معرف حساب Epic أو GOG فقط
+معرف. يجب على اللاعب الموافقة وتقديم بريد إلكتروني وتأكيده مرة واحدة.</li>
+<li>قم بإنشاء وتخزين المفتاح الخاص لكل لاعب على أجهزتهم. لا تولد مفتاح كل لاعب
+في خادمك المخصص، أو قم بتحميل المفاتيح الخاصة، أو احتفظ بقاعدة بيانات مفاتيح الحراسة إلا إذا كنت كذلك
+تحمل عمدا المسؤولية عن كل تلك الحسابات.</li>
+</ul>
+<p>بالنسبة للعبة أصلية، فإن التجربة المدعومة الأكثر سلاسة هي: تقوم لوحة الحساب داخل اللعبة بإنشاء
+المفتاح، ويطلب البريد الإلكتروني والموافقة، وينتظر حتى يؤكد اللاعب الرابط في صندوق الوارد الخاص به، ثم يسجل الدخول
+باستخدام المفتاح ويحتفظ برمز التحديث في مخزن بيانات اعتماد نظام التشغيل. لا يحتاج اللاعب إلى ذلك أبدًا
+تصفح موقع StarHermit.
+لا يمكن للاعب الذي لا يمكنه تقديم بريد إلكتروني والتحقق منه إكمال هذا التدفق باستخدام واجهة برمجة التطبيقات الحالية.</p>
+<h2 id="architecture-and-trust-boundaries">حدود العمارة والثقة</h2>
+<pre><code class="language-text">Steam/Epic/GOG/native client
+  ├─ owns the player's private key
+  ├─ performs public-key registration/login
+  ├─ holds player access + rotating refresh token
+  ├─ optionally links the external platform identity
+  └─ uses a game-scoped launch token for game/social APIs
+                  │
+                  │ REST + ws/v1/games
+                  ▼
+StarHermit API ───────── authenticated command ────────► your container
+  ├─ creates sessions and matchmaking                     ├─ owns simulation
+  ├─ stamps the trusted StarHermit user id                 ├─ never trusts payload identity
+  ├─ persists snapshots/results/elo/achievements           └─ uses narrow server token only
+  └─ supplies session chat, voice, friends, and replays
+</code></pre>
+<p>يثبت عميل اللعبة من هو اللاعب. يقوم StarHermit بختم تلك الهوية على حركة المرور المرسلة إلى
+حاوية. لا تقبل الحاوية مطلقًا معرف Steam أو معرف المستخدم المقدم داخل طريقة اللعب JSON كدليل
+الهوية.</p>
+<h2 id="prerequisites">المتطلبات الأساسية</h2>
+<p>أنت بحاجة إلى:</p>
+<ul>
+<li>حساب مطور StarHermit ورمز الوصول الكامل.</li>
+<li>لعبة مسجلة تملكها، مع <code>gameSlug</code> والخلفية الرسمية. نقطة نهاية الحزمة
+تحديثات لعبة موجودة؛ لا يقوم بإنشاء سجل لعبة أو حجز سبيكة.</li>
+<li>تم تمكين استضافة الحاوية لحسابك.</li>
+<li>Docker أو أي أداة أخرى قادرة على إنتاج ملف متوافق مع Docker <code>docker save</code> أرشيف.</li>
+<li>تنفيذ حاوية <a href="/ar/docs/api/container-games.html#protocol-v1">بروتوكول اللعبة v1</a>.</li>
+</ul>
+<p>للتسجيل الأولي للخدمة الذاتية، استخدم مستودع GitHub الذي تم التحقق منه <code>starhermit.txt</code> و أ
+صالح <code>container.image</code> الإعلان كما هو موضح في <a href="/ar/docs/api/github-games.html">ألعاب جيثب</a>. مرة واحدة
+اللعبة موجودة، ويمكن لعمليات دفع الحزمة نشر إصدارات لاحقة من العميل والخادم مباشرةً.</p>
+<h2 id="part-1-implement-the-container-contract">الجزء الأول: تنفيذ عقد الحاوية</h2>
+<p>يجب أن تستمع عمليتك <code>PORT</code> وتنفيذ:</p>
+<table>
+<thead>
+<tr>
+<th>نقطة النهاية</th>
+<th>مسؤولية</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /health</code></td>
+<td>يعود <code>200</code> فقط عندما يمكن قبول الجلسات</td>
+</tr>
+<tr>
+<td><code>GET /describe</code></td>
+<td>أعلن البروتوكول <code>1</code>، ومعدل/سعة التجزئة المطلوبة، والإنجازات</td>
+</tr>
+<tr>
+<td><code>POST /sessions</code></td>
+<td>قم بإنشاء جلسة أو استعادتها من <code>snapshot</code></td>
+</tr>
+<tr>
+<td><code>GET /sessions/{id}/snapshot</code></td>
+<td>قم بإرجاع نقطة استعادة دائمة كاملة</td>
+</tr>
+<tr>
+<td><code>DELETE /sessions/{id}</code></td>
+<td>الافراج عن الجلسة</td>
+</tr>
+<tr>
+<td><code>WS /stream</code></td>
+<td>تلقي أوامر اللاعب المصادق عليها وإصدار حمولات اللعبة</td>
+</tr>
+<tr>
+<td><code>WS /control</code></td>
+<td>ادفع اللقطات والإنجازات والإيلو والنتائج والضغط الخلفي</td>
+</tr>
+</tbody>
+</table>
+<p>التحقق من صحة <code>X-Starhermit-Invoke-Key</code> على كل طلب HTTP وترقية WebSocket مقابل
+<code>STARHERMIT_INVOKE_KEY</code>. يؤدي هذا إلى مصادقة StarHermit على عمليتك.</p>
+<p>الحد الأدنى للإعلان هو:</p>
+<pre><code class="language-json">{
+  "protocol": 1,
+  "tickRateHz": 20,
+  "maxSessions": 48,
+  "replays": true,
+  "achievements": [
+    {
+      "key": "first-win",
+      "name": "First Win",
+      "description": "Win a match.",
+      "points": 10
+    }
+  ]
+}
+</code></pre>
+<p><code>replays</code> يطلب من المنصة الاحتفاظ بالحالة الأخيرة لكل جلسة منتهية، وهي ما
+<code>GET /api/v1/games/{slug}/replays/{sessionId}</code> يخدم. أعلن ذلك فقط إذا كانت لعبتك تريد إعادة العرض؛
+بدونها لا يتم الاحتفاظ بأي شيء بمجرد انتهاء المباراة. يرى
+<a href="/ar/docs/api/container-games.html#get-describe">خوادم ألعاب الحاويات — <code>GET /describe</code></a>.</p>
+<p>تستخدم إطارات دفق اللعب:</p>
+<pre><code class="language-text">[1 byte type][16 byte sessionId][16 byte userId][payload...]
+</code></pre>
+<p>يكتب <code>1</code> هو أمر وارد. تم ختم معرف المستخدم الخاص به من مشغل StarHermit المصادق عليه.
+يكتب <code>2</code> هي حمولة JSON صادرة موجهة إلى هذا اللاعب، أو إلى الجميع عندما يكون معرف المستخدم
+جميع الأصفار.</p>
+<p>تستمر التأثيرات الدائمة <code>/control</code>:</p>
+<pre><code class="language-json">{ "type": "snapshot", "sessionId": "...", "state": { "round": 4 } }
+{ "type": "achievements", "sessionId": "...", "unlocks": { "&lt;userId&gt;": ["first-win"] } }
+{ "type": "elo", "sessionId": "...", "updates": { "&lt;userId&gt;": 1248 } }
+{ "type": "result", "sessionId": "...", "result": { "kind": "win", "winner": "&lt;userId&gt;" } }
+</code></pre>
+<p>يقوم StarHermit بتصفية هذه التحديثات للمشاركين في الجلسة ومفاتيح الإنجاز المعلنة. والنتيجة هي
+محطة. يرى <a href="/ar/docs/api/container-games.html">خوادم الألعاب المستضافة بالحاويات</a> للبروتوكول الكامل،
+عقد اللقطة والعزل والاسترداد.</p>
+<h2 id="part-2-register-the-game-once">الجزء الثاني: قم بتسجيل اللعبة مرة واحدة</h2>
+<p>ضع بيانًا في المستودع الذي تم التحقق منه والمستخدم للتسجيل الأولي:</p>
+<pre><code class="language-ini">name=Orbit League
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6  # your user ID from GET /api/v1/me, not username
+
+container.image=ghcr.io/your-github-login/orbit-server@sha256:&lt;64-lowercase-hex&gt;
+container.port=8080
+container.health=/health
+container.memory_mb=1024
+container.cpu=1.0
+</code></pre>
+<p>تعيين <code>owner</code> إلى غير القابل للتغيير <code>id</code> عاد بواسطة <code>GET /api/v1/me</code>. لا تستخدم اسم مستخدم الحساب أو
+لقب؛ هذه هي قيم العرض وقد تتغير.</p>
+<p>قم بتسجيله:</p>
+<pre><code class="language-bash">API=https://api.starhermit.com
+ACCESS_TOKEN='developer-access-token'
+
+curl -sS -X POST "$API/api/v1/me/github-games" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repoUrl":"https://github.com/your-github-login/orbit-league"
+  }'
+</code></pre>
+<p>حفظ عاد <code>id</code> مثل <code>GAME_ID</code> و <code>gameSlug</code> مثل <code>GAME_SLUG</code>، ثم تأكد من وجود الواجهة الخلفية:
+<code>GET $API/api/v1/games/$GAME_SLUG</code> إجابات <code>200</code> بمجرد أن يحدث ذلك. هدية <code>gameSlug</code> وحده لا
+إثبات ذلك - تحتوي كل لعبة تم التحقق منها على لعبة واحدة متضمنة في المتصفح فقط. التسجيل الذي يعلن أ
+يتم رفض الحاوية دون إثبات ملكيتك للمستودع <code>403</code>، والتسجيل الأولي
+قد تفشل أيضًا عندما تكون استضافة الحاوية غير متاحة أو مقيدة.</p>
+<p>الصورة المدعومة بالتسجيل في البيان كافية لنشر الإصدار الأول. القسم التالي
+يغطي مسار التحميل المباشر، وهو مفيد لـ CI وللإصدارات التي لا تريدها
+منصة للاستنساخ أو السحب مرة أخرى.</p>
+<h2 id="part-3-publish-a-client-and-dedicated-server-bundle">الجزء 3: نشر حزمة العميل والخادم المخصص</h2>
+<h3 id="build-the-archive">بناء الأرشيف</h3>
+<p>التحميل عبارة عن أرشيف tar واحد مضغوط بصيغة gzip بهذا التخطيط:</p>
+<pre><code class="language-text">client/            optional static web client, including the registered launch file
+server/image.tar   optional `docker save` output
+starhermit.txt     the manifest
+</code></pre>
+<p>على الأقل <code>client/</code> أو <code>server/image.tar</code> يجب أن يكون حاضرا.</p>
+<p>إذا قمت بالنشر من خلال لوحة معلومات الويب StarHermit أو عميل Windows بدلاً من التجعيد، فإنك لا تفعل ذلك
+بناء هذا الأرشيف باليد. اختر إما أ <strong>مجلد توزيع الخادم</strong> (عقد <code>starhermit.txt</code>
+و <code>image.tar</code>) أو <strong>ال <code>image.tar</code> من تلقاء نفسها</strong>، ويقوم العميل بحزم التخطيط أعلاه. ال
+<a href="/ar/docs/starhermit-txt.html"><code>starhermit.txt</code></a> القيم - اسم العرض و <code>container.*</code> المقابض - هي
+الحقول الموجودة في مربع الحوار، والتي يتم ملؤها مسبقًا من بيان المجلد عندما يكون هناك واحد، لذا فهي عارية <code>image.tar</code>
+ينشر كذلك.</p>
+<pre><code class="language-bash">rm -rf bundle game-bundle.tar.gz
+mkdir -p bundle/client bundle/server
+
+# Optional hosted web client.
+cp -R dist/. bundle/client/
+
+# Dedicated server image.
+docker build -t orbit-server:release -f Dockerfile.server .
+docker save orbit-server:release -o bundle/server/image.tar
+
+# Keeps the artifact self-describing, and is what the dashboard/desktop clients require.
+cp starhermit.txt bundle/starhermit.txt
+
+tar -C bundle -czf game-bundle.tar.gz .
+</code></pre>
+<p>يجب أن تعمل الصورة مع نظام ملفات جذر للقراءة فقط، ومستخدم غير جذر قسري، ولا توجد إمكانيات، ولا
+مجلدات، لا يوجد إنترنت، وفقط صغيرة قابلة للكتابة <code>/tmp</code>. تبعيات البائع في الصورة.</p>
+<h3 id="upload-it">قم بتحميله</h3>
+<p><code>POST /api/v1/me/github-games/{id}/bundle</code> يأخذ الأرشيف باعتباره نص الطلب الأولي، وليس كملف
+شكل متعدد الأجزاء:</p>
+<pre><code class="language-bash">curl -sS -X POST "$API/api/v1/me/github-games/$GAME_ID/bundle" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game-bundle.tar.gz
+</code></pre>
+<blockquote>
+<p><strong>لن تتمكن الحزمة التي يزيد حجمها عن 100 ميجابايت من المرور عبر هذا المسار.</strong> CDN أمام API
+يرفض هيئة طلب كبيرة مع أ <code>413</code> خاصة بها - واحدة لا تراها المنصة أبدًا، لذا فهي تحملها
+لا <code>limitBytes</code> ويظهر في أي سجل يمكنك قراءته. أ <code>docker save</code> من صورة الخادم الحقيقية تصل
+هذا الحجم بسهولة. إذا رأيت أ <code>413</code> مع لا <code>limitBytes</code>، هذه هذه وليست لعبتك
+البدل، وهو غيغابايت.</p>
+<p>أرسل نفس الأرشيف
+<a href="/ar/docs/api/github-games.html#upload-over-a-websocket"><code>ws/v1/game-upload</code></a> بدلاً من ذلك — إطارات بعد أ
+ترقية WebSocket ليست نص طلب، لذلك لا يتم تطبيق الحد الأقصى. نفس تخطيط الأرشيف، نفسه
+البدل، نفس إجابات JSON؛ الإضافة الوحيدة هي أنه يجب عليك إرسال <code>{"type":"complete"}</code> متى
+لقد انتهى البايت الأخير، لأنه لن يتم نشر أي شيء حتى تقوم بذلك.</p>
+</blockquote>
+<p>مثال للرد:</p>
+<pre><code class="language-json">{
+  "clientPublished": true,
+  "serverImageLoaded": true,
+  "imageDigest": "sha256:4e7d...",
+  "bytesReceived": 318767104
+}
+</code></pre>
+<p>المنصة:</p>
+<ul>
+<li>مبادلة ذرية في <code>client/</code>، لذلك لا يرى المستخدمون الإصدار الذي تم تحميله جزئيًا؛</li>
+<li>الأحمال <code>server/image.tar</code>، ويحسب ملخصه غير القابل للتغيير، ويعيد تثبيت النشر؛</li>
+<li>وضع الحاوية القديمة في قائمة الانتظار لتحل محلها الصورة التي تم تحميلها؛</li>
+<li>يستعيد الجلسات النشطة المؤهلة من اللقطات المستمرة.</li>
+</ul>
+<p>يمكنك تحميل العميل فقط أو صورة الخادم فقط. استخدام تصحيحات العميل فقط
+<code>?mode=merge</code> على نفس نقطة النهاية (انظر
+<a href="/ar/docs/api/github-games.html#partial-updates-modemerge">تحديثات جزئية</a>); صورة في عملية الدمج لا تزال
+محملة بالكامل. بدل قرص اللعبة هو <strong>2 جيجابايت</strong> على starhermit.com (عامل التشغيل قابل للضبط) ويمكن
+يتم ضبطها لكل لعبة؛ لأن الدفع يستبدل محتوى اللعبة بدلاً من الإضافة إليه، وهذا هو الأمران معًا
+أكبر دفعة وأكبر قرص يمكن أن تشغله اللعبة. <code>413</code> يشمل <code>limitBytes</code>; غير صالح
+إرجاع الأرشيف أو الصورة <code>422</code>; و <code>507</code> يعني أن الخادم ليس به مكان في الوقت الحالي — فقد تم فحصه
+قبل أن تتم قراءة جسدك، لذلك يتم رفض التحميل المحكوم عليه بالفشل بدلاً من الوصول إلى نصفه. لا تضع روابط رمزية،
+الروابط الصلبة أو اجتياز المسار أو الملفات خارج التخطيط الموثق في الأرشيف.</p>
+<p>لا يعني التحميل الناجح أن العملية الجديدة قد اجتازت اختبارات السلامة حتى الآن. استطلاع الموجود
+<code>GET /api/v1/me/github-games/{id}/deployment</code> عرض واختبار جلسة حقيقية قبل الترويج لل
+بناء. يؤدي تثبيت التزام المستودع لاحقًا إلى تبديل النشر مرة أخرى إلى محتوى المستودع بشكل صريح.</p>
+<h3 id="switching-an-existing-game-from-server-to-a-container">تبديل لعبة موجودة من <code>server=</code> إلى حاوية</h3>
+<p>مدعوم، ويحافظ على اللعبة: نفس المعرف، سبيكة، <code>&lt;uid&gt;.starhermit.com</code> عنوان اللاعبين,
+المتصدرين والإنجازات. لا توجد خطوة تسجيل منفصلة.</p>
+<ol>
+<li>يستبدل <code>server=...</code> مع الخاص بك <code>container.*</code> منع في <code>starhermit.txt</code>. الاثنان متبادلان
+حصريا؛ تم رفض بيان يعلن كلاهما.</li>
+<li>دفع حزمة واحدة تحمل <code>client/</code> (بهذا البيان) <strong>و</strong> <code>server/image.tar</code>، زيادة
+<code>ws/v1/game-upload</code> إذا كانت كبيرة.</li>
+<li>الصورة التي تقوم بتحميلها هي الصورة التي يتم تشغيلها. أ <code>container.image=</code> السطر في نفس البيان هو
+من الجيد الاحتفاظ به، لكن الملخص الذي تم تحميله يفوز به.</li>
+<li>استطلاع <code>GET /api/v1/me/github-games/{id}/deployment</code> حتى يقرأ <code>running</code>، ثم ابدأ حقيقيًا
+غرفة أو مباراة.</li>
+</ol>
+<h2 id="part-4-renew-the-containers-platform-token">الجزء 4: تجديد الرمز المميز لمنصة الحاوية</h2>
+<p>عند بدء التشغيل تتلقى الحاوية:</p>
+<pre><code class="language-text">STARHERMIT_API_BASE
+STARHERMIT_GAME_SLUG
+STARHERMIT_SERVER_TOKEN
+STARHERMIT_SERVER_TOKEN_EXPIRES_IN
+STARHERMIT_REFRESH_KEY
+STARHERMIT_INVOKE_KEY
+</code></pre>
+<p><code>STARHERMIT_SERVER_TOKEN</code> ضيقة: فهي تمثل خادم اللعبة، وليس اللاعب. وتنتهي بعد
+24 ساعة بشكل افتراضي. تجديد الجدول الزمني في ما يقرب من نصف
+<code>STARHERMIT_SERVER_TOKEN_EXPIRES_IN</code>:</p>
+<pre><code class="language-http">POST {STARHERMIT_API_BASE}/api/v1/games/{STARHERMIT_GAME_SLUG}/server/token
+X-Starhermit-Refresh-Key: {STARHERMIT_REFRESH_KEY}
+</code></pre>
+<pre><code class="language-json">{ "token": "eyJhbGciOi...", "expiresInSeconds": 86400 }
+</code></pre>
+<p>لا يلزم وجود رمز حامل لنقطة النهاية هذه. وهذا يسمح بالاسترداد حتى لو كان الرمز القديم موجودًا
+انتهت صلاحيتها بالفعل. استبدل الرمز المميز الموجود في الذاكرة تلقائيًا وقم بجدولة التجديد التالي من الجديد
+<code>expiresInSeconds</code>.</p>
+<p>أبقِ سرّي النشر منفصلين:</p>
+<ul>
+<li><code>STARHERMIT_INVOKE_KEY</code> يصادق على طلبات StarHermit إلى الحاوية الخاصة بك.</li>
+<li><code>STARHERMIT_REFRESH_KEY</code> يقوم بمصادقة الحاوية الخاصة بك عند تجديد رمز StarHermit الخاص بها.</li>
+</ul>
+<p>كلاهما يدور عند كل إعادة تشغيل للحاوية. لا تقم بتسجيلهم أبدًا، قم بإعادتهم <code>/describe</code>، ضعهم في
+لقطة، أو إرسالها إلى لاعب.</p>
+<h2 id="part-5-onboard-a-non-starhermit-player-without-oauth">الجزء 5: على متن لاعب غير StarHermit بدون OAuth</h2>
+<p>قم بتشغيل هذا التدفق في اللعبة الأصلية أو المشغل، وليس في الحاوية المخصصة. الشرح كاملا,
+مع رمز العميل الذي تم اختباره، هو <a href="/ar/docs/tutorials/public-key-onboarding.html">البرنامج التعليمي: لاعبين على متن الطائرة بمفتاح عام</a>;
+باختصار:</p>
+<ol>
+<li><strong>إنشاء مفتاح لكل تثبيت</strong> عند الإطلاق لأول مرة (يوصى باستخدام Ed25519) واحتفظ بالمفتاح الخاص
+في مخزن بيانات اعتماد نظام التشغيل. لا تقم أبدًا بتحميله، ولا تقم أبدًا بإنشاء مفاتيح اللاعبين على الخادم الخاص بك.</li>
+<li><strong>اطلب الموافقة وعنوان البريد الإلكتروني</strong>، ثم <code>POST /api/v1/auth/public-key/register</code> مع
+<code>{ email, keyType, keyData }</code> من جهاز اللاعب . يتم اختناقه لتسجيل واحد لكل
+العنوان ولكل IP كل 24 ساعة (<code>429</code> مع <code>Retry-After</code>)، لذلك لا تقم أبدًا بتوكيله من خلالك
+الخادم - سيشارك كل لاعب عنوان IP الخاص به.</li>
+<li><strong>انتظر حتى يؤكد اللاعب.</strong> يفتح الرابط المرسل بالبريد الإلكتروني صفحة لا تغير شيئًا حتى
+يضغط اللاعب على تأكيد، مما يؤدي إلى إنشاء الحساب وإرفاق المفتاح؛ على starhermit.com
+ثم تصل بعد ذلك إلى لوحة معلومات StarHermit، لذلك لا تتلقى لعبتك هذه الرموز. بدلا من ذلك <strong>يسجل الدخول بالمفتاح حتى ينجح ذلك</strong>: <code>challenge</code>، وقع على StarHermit
+<a href="/ar/docs/tutorials/public-key-onboarding.html#3-sign-in-with-the-key">بايت التحدي الدقيق</a>, <code>complete</code>. حتى
+يؤكد اللاعب <code>complete</code> إجابات <code>401 "Public key not registered or revoked."</code>.</li>
+<li><strong>احتفظ بالجلسة</strong> مع <code>POST /api/v1/auth/refresh</code>، وقم بتسجيل الدخول باستخدام المفتاح مرة أخرى في أي وقت
+فشل التحديث. قبول الشروط الحالية عندما <code>GET /api/v1/me</code> التقارير <code>termsAcceptanceRequired</code>
+(يمكن لكل من جلسات الحساب والرموز المميزة لإطلاق اللاعب - انظر
+<a href="/ar/docs/api/profile.html#terms-acceptance">قبول الشروط</a>). رمز النشر الخاص بالحاوية الخاصة بك هو
+معفاة من الشروط؛ لا يمتد هذا الإعفاء إلى لاعبيه.</li>
+</ol>
+<p><strong>المزيد من الأجهزة.</strong> يقوم كل تثبيت بتسجيل مفتاحه الخاص باستخدام عنوان البريد الإلكتروني نفسه للاعب
+المفتاح ينضم إلى الحساب الحالي. <code>POST /api/v1/me/public-keys</code> ليس خيارًا لهؤلاء اللاعبين:
+فهو يتطلب جلسة تم تسجيل دخولها من خلال موفر OAuth.</p>
+<h3 id="5-add-a-player-facing-name-and-external-identity">5. قم بإضافة اسم مواجهة اللاعب وهوية خارجية</h3>
+<p>يبدأ الحساب الذي تم إنشاؤه بـ <code>pk-...</code> اسم المستخدم. السماح للاعب باختيار لقب:</p>
+<pre><code class="language-http">PATCH /api/v1/me
+Authorization: Bearer &lt;access-token&gt;
+Content-Type: application/json
+
+{ "nickname": "RookPilot" }
+</code></pre>
+<p>يمكنك ربط الحساب بالنظام الأساسي الذي يعمل عليه الملف القابل للتنفيذ ضمن:</p>
+<pre><code class="language-http">POST /api/v1/me/identities
+Authorization: Bearer &lt;access-token&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  "provider": "epic",
+  "providerUserId": "epic-account-id",
+  "metadata": "{\"displayName\":\"RookPilot\"}"
+}
+</code></pre>
+<p>استخدم أ <strong>غير محفوظة</strong> اسم المزود (<code>epic</code>, <code>gog</code>، أو معرف واجهة المتجر الخاصة بك). يفعل <strong>لا</strong> يستخدم
+<code>steam</code>, <code>google</code>, <code>github</code>أو أي اسم آخر يتعامل معه النظام الأساسي كموفر OAuth - هؤلاء
+يتم رفضها حتى لو لم يتم تكوين هذا الموفر. احصل على المعرف الخارجي من تلك المنصة
+جلسة SDK/جلسة مصادق عليها، وليس من مدخلات المشغل القابلة للتحرير. نقطة النهاية هذه تربط الهوية
+مع حساب StarHermit؛ فهو ليس في حد ذاته دليلاً على ملكية واجهة المتجر ويجب ألا يحل محله
+التحقق من التذاكر الخاصة بالمنصة لعمليات الشراء أو الحظر.</p>
+<p>تعد واجهة برمجة تطبيقات المكتبة الخارجية المنفصلة اختيارية وتستخدم حاليًا المزامنة التجريبية أثناء توفيرها
+تم الانتهاء من عمليات التكامل؛ ليس مطلوبًا للعب على خادم مخصص.</p>
+<h2 id="part-6-enter-the-game-and-use-starhermit-services">الجزء السادس: أدخل إلى اللعبة واستخدم خدمات StarHermit</h2>
+<p>يستبدل <code>{slug}</code> في أمثلة HTTP أدناه مع <code>GAME_SLUG</code>، اللعبة UUID التي حصلت عليها من
+التسجيل. اسم المستودع <code>orbit-league</code> هو اسم العرض/المصدر، وليس سبيكة API.</p>
+<h3 id="mint-a-least-privilege-game-token">صك رمز اللعبة الأقل امتيازًا</h3>
+<p>استخدم رمز الوصول الكامل مرة واحدة لسك رمز مميز مسور للعبتك:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/launch-token
+Authorization: Bearer &lt;access-token&gt;
+</code></pre>
+<pre><code class="language-json">{ "token": "eyJhbGciOi...", "expiresInSeconds": 3600 }
+</code></pre>
+<p>استخدم رمز الإطلاق المميز للعب وواجهات برمجة التطبيقات الاجتماعية للجلسة المسموح بها. قم بتحديثه قبل انتهاء الصلاحية.
+احتفظ برمز الحساب الكامل بعيدًا عن رمز اللعب حيثما أمكن ذلك.</p>
+<h3 id="matchmaking">التوفيق بين</h3>
+<pre><code class="language-http">POST /api/v1/games/{slug}/matchmaking
+Authorization: Bearer &lt;game-token&gt;
+</code></pre>
+<p>استطلاع <code>GET /api/v1/games/{slug}/matchmaking</code> حتى <code>status</code> يكون <code>matched</code>، ثم قم بالاتصال:</p>
+<pre><code class="language-text">wss://api.starhermit.com/ws/v1/games?sessionId=&lt;sessionId&gt;&amp;access_token=&lt;game-token&gt;
+</code></pre>
+<p>تظل رسائل العميل بتنسيق JSON:</p>
+<pre><code class="language-json">{ "type": "cmd", "data": { "type": "input", "throttle": 0.8 } }
+</code></pre>
+<p>يقوم StarHermit بتحويل الأمر إلى دفق الحاوية ويختم StarHermit المصادق عليه
+معرف المستخدم. تُرجع الحاوية الخاصة بك حمولات اللعبة الرسمية من خلال إطارات التدفق من النوع 2.</p>
+<h3 id="leaderboards-and-achievements">المتصدرين والإنجازات</h3>
+<p>تحصل كل لعبة موثوقة على لوحة صدارة Elo. ترسل الحاوية الخاصة بك تغييرات Elo وتعلن عنها
+يفتح الإنجاز أكثر <code>/control</code>; يقرأ العملاء حالة النظام الأساسي الناتجة فقط:</p>
+<pre><code class="language-text">GET /api/v1/games/{slug}/achievements
+GET /api/v1/leaderboards/{leaderboardId}/entries
+</code></pre>
+<p>لا يمكن لعميل Steam/Epic/GOG المعدل إرسال نتائج لوحة صدارة اللعبة مباشرة أو المطالبة بـ
+الإنجاز المملوكة للعبة.</p>
+<h3 id="session-chat-and-voice">جلسة الدردشة والصوت</h3>
+<p><code>GET /api/v1/games/{slug}/sessions/{sessionId}</code> يعود <code>chatConversationId</code>. جلسة
+تسمح المحادثات للمشاركين بالدردشة واستخدام الصوت حتى عندما لا يكونون أصدقاء.</p>
+<p>التدفق الصوتي النموذجي:</p>
+<ol>
+<li><code>GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;</code>.</li>
+<li>إذا لزم الأمر، <code>POST /api/v1/voice/rooms</code> مع معرف المحادثة</li>
+<li><code>POST /api/v1/voice/rooms/{roomId}/join</code>.</li>
+<li>يتصل <code>wss://api.starhermit.com/ws/v1/voice?roomId=&lt;roomId&gt;&amp;access_token=&lt;game-token&gt;</code>.</li>
+</ol>
+<p>يقوم نفس الحساب أيضًا بتمكين الأصدقاء والتواجد ودعوات اللعبة وعمليات الإعادة وهوية الملف الشخصي
+جميع بنيات واجهة المتجر. احتفظ بمفتاح/حساب StarHermit واحد لكل إنسان بدلاً من إنشاء حساب جديد
+لكل مباراة أو كل إطلاق لواجهة المتجر.</p>
+<h2 id="production-checklist">قائمة مرجعية الإنتاج</h2>
+<h3 id="publishing">نشر</h3>
+<ul>
+<li>[ ] اللعبة المملوكة الحالية لا تحتوي على قيمة فارغة <code>gameSlug</code>.</li>
+<li>[ ] ترفض الحاوية مفتاح استدعاء خاطئ أو مفقود.</li>
+<li>[ ] تتم قراءة مفتاح الاستدعاء ومفتاح التحديث والرمز المميز للخادم من البيئة عند بدء العملية، ولا يتم تخزينها مطلقًا في الصورة أو تخزينها مؤقتًا على القرص (يتم تدوير الثلاثة جميعًا عند كل بداية حاوية).</li>
+<li>[ ] <code>/health</code> لا يعود <code>200</code> قبل أن يتم قبول الدولة.</li>
+<li>[ ] تستخدم الحزمة الخام <code>application/gzip</code>، وليس ترميز متعدد الأجزاء.</li>
+<li>[ ] تعمل الصورة للقراءة فقط، وبدون الجذر، وبدون اتصال بالإنترنت، وبدون مجلدات.</li>
+<li>[ ] يتم اختبار حالة النشر وجلسة التوفيق الحقيقية بعد التحميل.</li>
+<li>[ ] يتم تشغيل تحديث الرمز المميز للخادم قبل نصف عمره ويتبادل الرموز المميزة تلقائيًا.</li>
+<li>[ ] لا يتم تسجيل سر النشر أو استمراره في اللقطات.</li>
+</ul>
+<h3 id="player-onboarding">تأهيل اللاعب</h3>
+<ul>
+<li>[ ] يتم إنشاء زوج المفاتيح على جهاز المشغل ويستخدم المفتاح الخاص مساحة تخزين آمنة.</li>
+<li>[ ] يتم الإفصاح عن إنشاء الحساب والموافقة عليه.</li>
+<li>[ ] يتم إكمال التحقق من البريد الإلكتروني مرة واحدة؛ <code>429 Retry-After</code> محترم.</li>
+<li>[ ] لا تمر رموز التسجيل واللاعب عبر الخادم المخصص.</li>
+<li>[ ] يتم تخزين رموز الوصول/التحديث بشكل آمن ويتم إجراء تسلسل لتدوير التحديث.</li>
+<li>[ ] تأتي المعرفات الخارجية من حالة Steam/Epic/GOG SDK المصادق عليها.</li>
+<li>[ ] تستخدم طريقة اللعب رمزًا مميزًا على نطاق اللعبة بعد الإعداد الأولي للحساب.</li>
+<li>[ ] مقابض العميل <code>achievement</code>, <code>resumed</code>، و <code>abandoned</code> إطارات اللعب.</li>
+</ul>
+<h2 id="reference-pages">الصفحات المرجعية</h2>
+<ul>
+<li><a href="/ar/docs/api/auth.html">المصادقة</a></li>
+<li><a href="/ar/docs/api/container-games.html">خوادم الألعاب المستضافة بالحاويات</a></li>
+<li><a href="/ar/docs/api/github-games.html#push-a-game-bundle">ألعاب GitHub وتحميل الحزمة</a></li>
+<li><a href="/ar/docs/api/games.html">واجهة برمجة تطبيقات الألعاب</a></li>
+<li><a href="/ar/docs/api/profile.html">الملف الشخصي والهويات المرتبطة</a></li>
+<li><a href="/ar/docs/api/leaderboards.html">المتصدرين</a></li>
+<li><a href="/ar/docs/api/achievements.html">الإنجازات</a></li>
+<li><a href="/ar/docs/api/chat.html">محادثة</a></li>
+<li><a href="/ar/docs/api/voice.html">صوت</a></li>
+</ul>
+
+{% endraw %}

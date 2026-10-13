@@ -1,0 +1,597 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "实时房间"
+source_url: "/docs/api/realtime.html"
+source_path: "docs/api/realtime.md"
+source_hash: "9ba1c7babc144fc3452532ed6c2cfd2092bc5ad1db8ee2ea833b22fabcc8fffe"
+translation: "machine"
+permalink: "/zh-CN/docs/api/realtime.html"
+---
+{% raw %}
+<h1 id="realtime-rooms">实时房间</h1>
+<p>实时房间是快节奏多人游戏的通用大厅：房间创建、朋友邀请、快速加入配对、按需 AI 玩家加上 AI 座位回填以及角色感知实时传输（<code>ws/v1/realtime</code>）。该子系统故意与游戏无关——房间的范围是根据游戏而定的，房间 <code>metadata</code> 是一个不透明的每游戏 JSON blob，并且 <code>teamCount = 1</code> 模型免费为所有游戏。</p>
+<p>一场比赛以两种方式之一进行：</p>
+<ul>
+<li><strong>主机路由（默认）</strong> — 平台服务器是一个智能传输，而不是模拟器：房间创建者的客户端是 <strong>主持人</strong> 并运行权威的游戏模拟；其他客户端（来宾）将输入发送到主机并接收主机的快照。服务器强制执行路由、角色、容量、速率限制和身份——客户端不能互相欺骗，并且只有服务器分配的主机可以广播。</li>
+<li><strong>房间限制会话（服务器权威）</strong> - 对于发布的游戏 <code>server=</code> 脚本或 <a href="/zh-CN/docs/api/container-games.html">容器</a>：当房间启动时，平台会创建一个绑定的N人会话（<a href="/zh-CN/docs/api/game-scripts.html#room-bound-sessions">脚本化的</a> 或容器）运行模拟服务器端。然后游戏玩法就结束了 <code>ws/v1/games</code> 实时 WS 仅用于大厅/名册。看 <a href="#room-bound-sessions">桥</a> 以下。</li>
+</ul>
+<p>将此与 <a href="/zh-CN/docs/api/relay.html">对等中继</a> （不透明扇出绑定到现有房间/会话名册，默认情况下禁用）和普通 <a href="/zh-CN/docs/api/games.html">脚本游戏</a> （服务器权威，有会话匹配和邀请，但没有房间大厅）。实时房间是 <strong>默认启用</strong>.</p>
+<p>所有 REST 端点都需要身份验证，并使用完整的用户令牌和游戏范围的启动令牌。错误体各不相同；看 <a href="/zh-CN/docs/api/conventions.html#requests-and-responses">API约定</a>.</p>
+<p><img src="/docs/images/zh-CN/multiplayer-routing.svg" alt="主机路由的房间向主机发送输入并返回快照。服务器权威房间使用游戏套接字创建单独的游戏会话。"></p>
+<h2 id="data-model">数据模型</h2>
+<p><strong>房间</strong> 生命周期： <code>Lobby</code> → <code>Open</code> （对接会）→ <code>Playing</code> （名单冻结，空座位用 AI 回填至房间限额）→ <code>Closed</code>。创建的房间 <a href="#join-in-progress"><code>joinInProgress</code></a> 不断地吸引玩家 <code>Playing</code>.</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "hostUserId": "&lt;guid&gt;",
+  "status": "Lobby",
+  "gameSessionId": null,
+  "config": {
+    "teamCount": 2,
+    "seatsPerTeam": 5,
+    "backfillAfterSeconds": 30,
+    "aiPlayers": 0,
+    "backfillAiPlayers": null,
+    "joinInProgress": false,
+    "metadata": { "map": "arena" }
+  },
+  "participants": [
+    {
+      "id": "&lt;guid&gt;",
+      "userId": "&lt;guid&gt;",
+      "username": "ada",
+      "isAi": false,
+      "isHost": true,
+      "team": 0,
+      "slot": 0,
+      "joinedAt": "2026-07-22T07:00:00Z",
+      "leftAt": null
+    }
+  ],
+  "name": "Friday night",
+  "joinCode": "K7MP2X",
+  "isVisible": false,
+  "revision": 1,
+  "createdAt": "2026-07-22T07:00:00Z",
+  "openedAt": null,
+  "startedAt": null,
+  "closedAt": null,
+  "result": null
+}
+</code></pre>
+<ul>
+<li><code>config.metadata</code> 是平台从不解释的不透明 JSON blob。它，以及提交的
+结果的元数据，最多可能为 16 KB (<code>413</code>），一个房间最多有100个座位；操作员可以
+为一场比赛改变其中任何一个。</li>
+<li><code>config.aiPlayers</code> 是创建者要求比赛开始时有多少位 AI 玩家 - 他们在创建房间时就座（请参阅 <a href="#ai-players">以下</a>）。它记录请求；这 <code>participants</code> 花名册对于实际拥有席位的人具有权威性。</li>
+<li>人工智能参与者有 <code>userId: null</code>, <code>isAi: true</code>，以及服务器生成的随机昵称，在房间内是唯一的。</li>
+<li><code>(team, slot)</code> 是参与者的座位坐标；人类按连接顺序就座。</li>
+<li><code>gameSessionId</code> 是绑定的游戏会话，当房间开始进行带有服务器后端的游戏时设置 - a <code>server=</code> 脚本或 <a href="/zh-CN/docs/api/container-games.html">容器</a> （看 <a href="#room-bound-sessions">桥</a>); <code>null</code> 否则。它也包含在名册推送中。</li>
+<li><code>result</code> 是结果，在房间关闭时设置 - 对于主机路由的游戏由主机提交，对于房间限制的会话由脚本返回。</li>
+<li><code>joinCode</code> 是六个字符（已删除相似读对）。这是邀请函 <code>join-by-code</code>。列表中从不包含它。</li>
+<li><code>isVisible</code> 列出房间 <code>GET /rooms</code>。开放（快速加入）和上市是独立的。</li>
+<li><code>revision</code> 仅当主机编辑配置时才会发生碰撞（<code>PATCH</code>），绝不会在座位已满时。将其传递为 <code>expectedRevision</code> 在 <code>PATCH</code> 用于比较和交换（<code>409</code> 关于冲突）。</li>
+</ul>
+<p><strong>邀请</strong>: <code>{ "id", "roomId", "gameSlug", "fromUserId", "fromUsername", "toUserId", "status", "createdAt", "notified" }</code> 和 <code>status</code> 之一 <code>pending</code> | <code>accepted</code> | <code>declined</code> | <code>expired</code> （当房间在得到答复之前关闭或开始时，邀请就会过期）。 <code>notified</code> 出现在对的响应中 <code>POST /rooms/{id}/invites</code> 并报告受邀者的通知是否到达实时连接；这是 <code>null</code> 上市时。</p>
+<h2 id="rest-endpoints">REST 端点</h2>
+<p>根据： <code>https://api.starhermit.com/api/v1/realtime</code> - 所以
+<code>POST /rooms</code> 下面是 <code>POST /api/v1/realtime/rooms</code>.</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>WHO</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>邮政</td>
+<td><code>/rooms</code></td>
+<td>任何人</td>
+<td>创建一个大厅，可以选择配备人工智能玩家；呼叫者成为主持人</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/rooms?gameSlug=[&amp;includeInProgress=true]</code></td>
+<td>任何人</td>
+<td>浏览仍然有座位的已开放、已列出的房间，并在被询问时运行正在加入的房间（无代码，无名册；最多 50 个）</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/rooms/join-by-code</code></td>
+<td>任何人</td>
+<td>使用房间的加入代码入座（适用于未列出的/仍在大堂的房间）</td>
+</tr>
+<tr>
+<td>修补</td>
+<td><code>/rooms/{id}</code></td>
+<td>主持人</td>
+<td>重命名、列出/取消列出、替换元数据、切换 <code>joinInProgress</code>，设置回填余量（<code>expectedRevision</code> 化学文摘社）</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/rooms/{id}/matchmake</code></td>
+<td>主持人、大堂</td>
+<td>将整个名单作为一个团体/团队进行排队</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/rooms/{id}</code></td>
+<td>参与者+受邀者</td>
+<td>房间+名册</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/realtime/connection-tickets</code></td>
+<td>任何人</td>
+<td>一度 <code>?ticket=</code> 用于实时（和其他）套接字</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/rooms/{id}/invites</code></td>
+<td>参与者</td>
+<td>邀请朋友；通知他们（<code>409</code> 一式两份）</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/rooms/invites</code></td>
+<td>任何人</td>
+<td>呼叫者待处理的房间邀请（跨游戏）</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/rooms/invites/{inviteId}/accept</code></td>
+<td>受邀者</td>
+<td>加入房间（已分配座位）</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/rooms/invites/{inviteId}/decline</code></td>
+<td>受邀者</td>
+<td>衰退 （<code>204</code>)</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/rooms/{id}/open</code></td>
+<td>主持人</td>
+<td>开放对接会；开始回填倒计时</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/rooms/quick-join</code></td>
+<td>任何人</td>
+<td>加入最古老的开放房间，获得免费游戏席位，可选择匹配过滤器</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/rooms/{id}/start</code></td>
+<td>主持人</td>
+<td>用 AI 填补空位、状态 → <code>Playing</code></td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/rooms/{id}/leave</code></td>
+<td>参与者</td>
+<td>离开;在“大厅/开放”中，座位被移除，在“游戏”中，座位会转换为 AI 参与者，或者在“加入”房间中，座位会被腾出</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/rooms/{id}/seats</code></td>
+<td>主持人</td>
+<td>比赛开始前重新平衡座位</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/rooms/{id}/result</code></td>
+<td>主持人</td>
+<td>提交结果；房间 → <code>Closed</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/rooms/mine</code></td>
+<td>任何人</td>
+<td>呼叫者的活动房间（如果有）（重新连接）</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/rooms/joined[?gameSlug=]</code></td>
+<td>任何人</td>
+<td>呼叫者在每个房间都有一个座位，包括世界（如果没有，则为空列表）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-room--post-rooms">创建一个房间—— <code>POST /rooms</code></h3>
+<pre><code class="language-json">{ "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "teamCount": 2, "seatsPerTeam": 5, "backfillAfterSeconds": 30, "aiPlayers": 0, "backfillAiPlayers": 4, "name": "Friday night", "isVisible": false, "metadata": { "map": "arena" } }
+</code></pre>
+<ul>
+<li><code>gameSlug</code> 完整用户令牌是必需的。对于游戏范围的启动令牌，slug 是从令牌的 <code>game_scope</code> （不匹配的主体值被拒绝 <code>403</code>).</li>
+<li>上限： <code>teamCount</code> 1–2, <code>seatsPerTeam</code> 1–100，总座位数 ≤ 100（一组 100 人，或两队 50 人）。 <code>backfillAfterSeconds</code> 默认为 <code>30</code> 并且必须是
+至少 <code>1</code> (<code>400</code> 否则）;有 <strong>无上限</strong> 超出 32 位整数的大小。一个长
+不过，倒计时仅在有人保持联系时才有效： <code>Open</code> 没有人的房间
+<code>ws/v1/realtime</code> 60 分钟后关闭（参见 <a href="#automatic-room-lifecycle">自动房间生命周期</a>),
+因此，只有当参与者保持套接字打开时，才会达到比该时间更长的倒计时。
+大房间受带宽限制，而不是座位限制：每个客人的帧都会发送到主机，每个主机帧都会复制到每个客人​​ - 请参阅 <a href="#sizing-a-large-room">确定大房间的尺寸</a>.</li>
+<li><code>aiPlayers</code> 默认为 <code>0</code>。范围 <code>0</code>–<code>(teamCount × seatsPerTeam) − 1</code> — 主持人总是需要座位，所以全人工智能房间是 <code>400</code>.</li>
+<li><code>backfillAiPlayers</code> 限制比赛开始时仍空着的座位数给 AI — 请参阅 <a href="#backfill-allowance">回填余量</a>。省略或 <code>null</code> 充满了它们。</li>
+<li><code>joinInProgress</code> （默认 <code>false</code>）在开始后保持房间占用玩家 - 请参阅 <a href="#join-in-progress">加入进行中</a>.</li>
+<li>每个用户一个活动房间：当您在任何非活动房间时创建或加入<code>Closed</code> 房间返还 <code>409</code>.</li>
+<li>创建者成为主持人，坐在第 0 队、第 0 号位置。返回房间。</li>
+</ul>
+<h4 id="ai-players">人工智能玩家</h4>
+<p><code>aiPlayers</code> 说有多少 AI 玩家 <strong>比赛应该开始于</strong>。它们不是稍后兑现的承诺 - 服务器会立即就座它们，因此您返回的房间已经包含它们：</p>
+<ul>
+<li>他们是普通参与者（<code>isAi: true</code>, <code>userId: null</code>，独特的昵称）并出现在名册和每个 <code>roster</code> 从房间存在的那一刻起就推动。</li>
+<li>他们 <strong>占座</strong>，因此它们减少了留给人类的容量：邀请和快速加入仅填充剩余的容量，并且 <code>POST /rooms/invites/{id}/accept</code> 回报 <code>409</code> 一旦没有空闲座位。你得到的人工智能数量正是你所要求的——再也不会从匹配中得到更多。</li>
+<li>放置位置填充 <strong>最空的队伍优先</strong> （排名较低的球队指数），最低的空闲位置。所以一个 <code>teamCount: 2, seatsPerTeam: 1</code> 房间有 <code>aiPlayers: 1</code> 将人工智能置于主机对面，更大的房间可以保持平衡。按照您喜欢的方式重新安装它们 <code>POST /rooms/{id}/seats</code> 比赛开始前。</li>
+<li>它们与开始时回填是分开的，开始时回填会填充房间开始时没有人占用的座位 - 直到房间的 <a href="#backfill-allowance">回填津贴</a>.</li>
+</ul>
+<h4 id="backfill-allowance">回填余量</h4>
+<p>当房间启动时——在回填截止日期、一旦填满或在主机强制启动时——
+没有人坐的座位给了AI玩家。 <code>backfillAiPlayers</code> 决定多少：</p>
+<table>
+<thead>
+<tr>
+<th><code>backfillAiPlayers</code></th>
+<th>开始时</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>省略/ <code>null</code> （默认）</td>
+<td>每个空位都成为AI玩家</td>
+</tr>
+<tr>
+<td><code>0</code></td>
+<td>无AI：比赛开始时座位空着</td>
+</tr>
+<tr>
+<td><code>n</code></td>
+<td>最多 <code>n</code> 空座位变成AI；除此之外的任何内容都留空</td>
+</tr>
+</tbody>
+</table>
+<p>上限 AI 转到 <strong>最空的队伍优先</strong> （与较低的团队指数相关），所以 <code>2 × 3</code> 房间有
+一台主机和 <code>backfillAiPlayers: 3</code> 开始2对2。范围 <code>0</code>–<code>teamCount × seatsPerTeam</code>， 别的 <code>400</code>。
+主持人可以在比赛前更改它 <code>PATCH /rooms/{id}</code> (<code>"backfillAiPlayers": 2</code>），或
+返回到填满每个座位 <code>"backfillAllEmptySeats": true</code>。不影响 <code>aiPlayers</code>,
+创建房间时谁就座。</p>
+<p>如果你的游戏注定要玩得不够充分——一场混战，八人中有六人就可以了
+玩家——使用 <code>0</code> 让你的游戏处理空座位。默认情况下，房间永远不会启动
+有一个空座位。</p>
+<p><strong>与电脑单人对战</strong> 因此是两个调用——创建一个房间，其中每个其他座位都是 AI，然后启动它：</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms
+{ "gameSlug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94", "teamCount": 2, "seatsPerTeam": 1, "aiPlayers": 1 }
+
+POST /api/v1/realtime/rooms/{id}/start
+</code></pre>
+<p>人工智能座位是身份和座位预订，而不是机器人服务——平台上没有任何东西可以为你播放它们。主机路由的游戏在自己的模拟中驱动它们；一个游戏 <code>server=</code> 脚本找到它们 <code>ctx.room.roster</code> 标记的 <code>ai: true</code> 并在脚本中播放它们（参见 <a href="/zh-CN/docs/api/game-scripts.html#room-bound-sessions">游戏脚本</a>).</p>
+<h3 id="invites">邀请</h3>
+<p><code>POST /rooms/{id}/invites</code> 和 <code>{ "toUserId": "&lt;guid&gt;" }</code>。邀请是 <strong>仅限好友</strong> (<code>403</code> 否则;与游戏邀请相同的友谊规则），仅限参与者，并且仅当房间需要加入时： <code>Lobby</code>/<code>Open</code>， 或者 <code>Playing</code> 和 <a href="#join-in-progress"><code>joinInProgress</code></a>. <code>409</code> 如果用户已经在房间中或已有待处理的邀请； <code>400</code> 邀请自己的时候。返回邀请。</p>
+<p><strong>受邀者会收到通知。</strong> 发送房间邀请会发出 <a href="/zh-CN/docs/api/chat.html#game_invite-one-event-for-both-invite-systems"><code>game_invite</code> 推</a> 在被邀请者的聊天套接字上并将邀请添加到 <code>GET /api/v1/me/game-invites</code>，因此 StarHermit 仪表板（或除您的游戏之外的任何地方）中的朋友仍然会听说它。你做 <strong>不是</strong> 还需要发送游戏 API 邀请——这会通知两次。响应的 <code>notified</code> 告诉您推送是否达到实时连接； <code>false</code> 只是意味着被邀请者现在尚未连接，而是会从收件箱中看到邀请。</p>
+<p>由于一个通知涵盖了两个邀请系统，因此其有效负载携带 <code>kind: "room"</code> 加 <code>roomId</code> 和 <code>acceptPath</code>/<code>declinePath</code> 为了 <strong>这</strong> 邀请。在下面的实时端点应答房间邀请 - 房间邀请 ID 在以下位置无效 <code>/games/{slug}/invites/...</code> 反之亦然。</p>
+<p><code>GET /rooms/invites</code> 列出呼叫者在所有游戏中待处理的房间邀请（启动令牌只能看到自己游戏的房间邀请）。将其用作游戏客户端轮询的房间邀请收件箱。统一邀请收件箱位于 <code>GET /api/v1/me/game-invites</code> 也返回这些。</p>
+<p><code>POST /rooms/invites/{inviteId}/accept</code> 让呼叫者入座并返回房间。 <strong>派对固定</strong>：邀请加入的人会在主持人的团队中就座，空间有限，然后溢出到其他团队。 <code>409</code> 如果房间已满，已经开始/关闭，或者呼叫者在另一个活动房间（<a href="#worlds-do-not-count-as-your-room">世界</a> 除外）。接受呼叫者已经坐在的房间的邀请只是接受它。</p>
+<p><code>POST /rooms/invites/{inviteId}/decline</code> → <code>204</code>.</p>
+<h3 id="matchmaking">对接会</h3>
+<p><code>POST /rooms/{id}/open</code> （仅主机）： <code>Lobby</code> → <code>Open</code>， 套 <code>openedAt</code>，并开始回填倒计时。幂等虽然已经 <code>Open</code>; <code>409</code> 一次 <code>Playing</code>/<code>Closed</code>.</p>
+<p>一个 <code>Open</code> 房间不会等待一次倒计时 <strong>每个座位都有人</strong> ——由人类或人工智能玩家在创建时配置。它从那里开始，然后，所以响应 <code>open</code> （或填充最后一个座位的连接）可以已经是 <code>Playing</code> 房间有 <code>startedAt</code> 放。每个座位上都有人工智能创建的房间，但主人的座位在打开的那一刻就开始了。</p>
+<p><code>GET /rooms?gameSlug=</code> 浏览该游戏开放的、列出的仍然有座位的房间，最早开放的房间在前，上限为 50。每行都有名称、主机名称、玩家/容量计数， <code>freeSeats</code>、元数据、 <code>startedAt</code> 和 <code>joinInProgress</code> — <strong>没有加入代码，也没有名册</strong>。添加 <code>includeInProgress=true</code> 还列出正在运行的 <a href="#join-in-progress">正在进行中的加入</a> 房间有空位，之后每个房间还都满了。</p>
+<p><code>POST /rooms/join-by-code</code> 和 <code>{ "joinCode": "K7MP2X" }</code> 坐下。代码不区分空格和大小写。与快速加入不同，这适用于仍处于未列出状态的房间 <code>Lobby</code>。当房间关闭时，代码就会被释放。</p>
+<p><code>PATCH /rooms/{id}</code> （主持人）： <code>{ "name", "isVisible", "metadata", "joinInProgress", "backfillAiPlayers", "backfillAllEmptySeats", "expectedRevision" }</code>。省略的字段将被保留；发送 <code>name: ""</code> 清除名称。一个 <code>Playing</code> 房间仍然可以重命名、列出或不列出、替换其元数据并切换 <code>joinInProgress</code>;回填设置被拒绝（<code>409</code>）比赛开始后。</p>
+<p><code>POST /rooms/{id}/matchmake</code> （主持人， <code>Lobby</code> 仅）排队房间的 <strong>人类</strong> 名册为一
+政党/团队；预先入座的人工智能参与者不是党员。使用默认策略时，聚会规模
+必须等于所选队列的 <code>teamSize</code>。与一个 <a href="/zh-CN/docs/starhermit-txt.html#starting-matchmaking-before-every-human-seat-is-filled">清单开始截止日期</a>,
+较小的一方可以在截止日期前占据较大的团队；剩余席位成为AI最多
+游戏配置的上限，然后留空。各方保持在一起，门票不会合并为一组。</p>
+<p>使用 <code>?queue=duos</code> 对于一种形状或重复 <code>?queues=</code> 允许子集，如 Games API 中：</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms/{id}/matchmake?queues=duos&amp;queues=trios
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<p>返回 <a href="/zh-CN/docs/api/games.html#post-apiv1gamesslugmatchmaking">婚介票</a>， 包括 <code>status</code> 和
+<code>sessionId</code> 当匹配时。主持人投票 <code>GET /api/v1/games/{slug}/matchmaking</code> 并取消
+<code>DELETE</code> 在那条路上。已经排队的房间或派对不适合任何允许的形状
+回报 <code>409</code>。这种权威的配对流程与开房间快速加入是分开的
+及其房间级回填倒计时。</p>
+<p><code>POST /rooms/quick-join</code> 和 <code>{ "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "seats": 1 }</code> 将调用者置于 <strong>最古老的开放式房间，有空闲座位</strong> 对于该游戏 slug，AI 座位算作已占用，因此剩余座位全部为 AI 的房间将被跳过。 <code>404</code> 当没有房间符合条件时，客户应该创建自己的房间并打开它。仅支持单座快速加入（<code>seats</code> 必须是 <code>1</code>).</p>
+<p><strong>过滤器。</strong> 添加其中任何一个即可仅加入适合的房间；给定的每个过滤器都必须保持，并且
+上面的行为没有给出：</p>
+<pre><code class="language-json">{ "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "seats": 1, "teamCount": 2, "seatsPerTeam": 4, "metadata": { "mode": "ranked", "map": "arena" }, "includeInProgress": true }
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>筛选</th>
+<th>匹配的房间…</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>teamCount</code></td>
+<td>队伍人数就是这样</td>
+</tr>
+<tr>
+<td><code>seatsPerTeam</code></td>
+<td>每队的座位就是这样</td>
+</tr>
+<tr>
+<td><code>metadata</code></td>
+<td>元数据包含 <strong>每一个</strong> 给予的财产，具有同等价值。您未命名的属性将被忽略，因此 <code>{"mode":"ranked"}</code> 比赛 <code>{"mode":"ranked","map":"desert"}</code>。值以 JSON 形式进行比较：按值排列数字 (<code>1</code> 等于 <code>1.0</code>），无论键顺序如何，对象都是按顺序排列的。必须是一个对象 (<code>400</code> 否则）。</td>
+</tr>
+</tbody>
+</table>
+<p><code>includeInProgress: true</code> 还考虑上市、运行 <a href="#join-in-progress">正在进行中的加入</a> 有空座的房间；不管怎样，仍然入住的房间是第一位的。如果没有它，则永远不会加入正在运行的匹配，因此早于加入进行中的客户端永远不会加入其中。一个 <code>metadata</code> 过滤器携带您的游戏放入房间元数据中的 ID，这就是客户端加入的方式 <strong>一个特定的</strong> 列出的房间，因为列表没有加入代码。</p>
+<p>最古老且有空闲座位的匹配开放房间获胜。当没有匹配时， <code>404</code> 说
+<code>"No open room with free seats matches those filters."</code> — 创建和打开房间的常见提示
+您自己使用该元数据，以便下一个玩家的过滤快速加入找到它。</p>
+<h3 id="start-seats-leave-result">开始、座位、离开、结果</h3>
+<p><code>POST /rooms/{id}/start</code> （仅限主机）：填写 <strong>仍然空着</strong> 座位 - 所有座位，或取决于房间的座位数 <a href="#backfill-allowance">回填津贴</a> — 与人工智能参与者 (<code>isAi: true</code>, <code>userId: null</code>，独特的随机昵称） - 坐在创建位置的人工智能玩家保留他们的ID，昵称和座位 - 冻结名单，集 <code>status: "Playing"</code>，并返回冻结的名单。如果游戏有服务器后端（ <code>server=</code> 脚本或容器），这也会创建房间限制的会话（请参阅 <a href="#room-bound-sessions">桥</a>）；返回的房间和名册推送进行 <code>gameSessionId</code>. A <strong>容器</strong> 无法创建的会话（最常见的是部署仍从空闲状态唤醒）使房间未启动： <code>start</code> 回答该错误（重试），并且满室或回填清扫在下一次扫描时重试。脚本失败仍会启动房间主机路由。 <strong>幂等</strong> — 开始一个 <code>Playing</code> room再次返回名册。当回填截止日期过后，房间可能会自动启动。</p>
+<p><code>POST /rooms/{id}/seats</code> （仅限主机， <code>Lobby</code>/<code>Open</code> 仅）重新安排参与者：</p>
+<pre><code class="language-json">{ "seats": [ { "participantId": "&lt;guid&gt;", "team": 1, "slot": 0 } ] }
+</code></pre>
+<p><code>400</code> 对于房间团队/时段范围之外的座位或未知参与者； <code>409</code> 如果两个参与者共享一个座位。</p>
+<p><code>POST /rooms/{id}/leave</code> 根据房间状态表现：</p>
+<ul>
+<li><strong>大堂/开放</strong>: 座椅已拆除。如果 <strong>主持人</strong> 离开，主持人角色转移给剩余时间最长的人类参与者；如果没有人留下，房间就 <code>Closed</code>.</li>
+<li><strong>玩， <a href="#join-in-progress">正在进行中的加入</a> 房间</strong>: 座位是 <strong>腾出</strong> （不提供给AI），玩家被从绑定会话中删除（他们的 <code>ws/v1/games</code> 插座关闭）并告知游戏。当最后一个人离开且绑定会话仍处于活动状态时，房间将处于活动状态 <strong>不是</strong> 关闭：世界保持列出状态并可加入，第一个回来的玩家担任主机角色。</li>
+<li><strong>玩（AI接管）</strong>：比赛继续——离开者的座位变成AI座位： <code>isAi: true</code>, <code>userId: null</code>，具有新鲜独特的昵称和相同的参与者 <code>id</code>, <code>team</code>, <code>slot</code>， 和 <code>joinedAt</code>。离开者立即被释放（单活动房间规则不再计算他们，因此他们可以创建或加入另一个房间），而花名册推送告诉每个客户，人工智能现在占据了该席位。如果离职者​​是 <strong>主持人</strong> 和至少一名其他人类遗骸，主人角色转移到加入时间最长的剩余人类，房间保持不变 <code>Playing</code> （客户端主机迁移是游戏关心的）；如果没有人留下，房间就 <code>Closed</code>.</li>
+</ul>
+<p>返回房间。</p>
+<p><code>POST /rooms/{id}/result</code> （仅限主机， <code>Playing</code> 仅）记录结果，关闭房间，并通过 WebSocket 将结果扇出。 <strong>仅限主机路由的游戏</strong> — 当脚本返回时，具有绑定脚本会话的房间结束 <code>result</code>，它会自动关闭房间（参见 <a href="#room-bound-sessions">桥</a>).</p>
+<pre><code class="language-json">{ "teamScores": [3, 1], "metadata": { "durationSeconds": 360 } }
+</code></pre>
+<p><code>teamScores</code> 每个团队必须只有一个参赛作品；每个分数都被合理限制在 0-50 之间。钳位结果存储在房间的 <code>result</code> 并作为连接的参与者推送 <code>{"type":"result"}</code> 控制框架。</p>
+<p><code>GET /rooms/mine</code> 返回调用者当前的非<code>Closed</code> 房间（用于重新连接），或 <code>404</code>。一名球员
+谁也属于 <a href="#worlds-do-not-count-as-your-room">世界</a> 得到占据他们的房间，否则
+他们最近加入的世界。</p>
+<p><code>GET /rooms/joined</code> 列表 <strong>每一个</strong> 呼叫者坐在房间里，最新的在前——他们的世界
+以及占据他们的一个房间 - 作为完整的房间（包括名册和加入代码）。发射
+令牌只能看到自己的游戏房间；具有完整的令牌， <code>?gameSlug=</code> 缩小它。它回答一个空
+列表，不是一个 <code>404</code>，因此客户端可以在每次启动时询问，而不会记录错误。</p>
+<h3 id="join-in-progress">加入进行中</h3>
+<p>创建的房间（或 <code>PATCH</code>编辑）与 <code>"joinInProgress": true</code> 不断地吸引玩家 <code>start</code>。
+邀请， <code>join-by-code</code> 并快速加入 <code>includeInProgress: true</code> 然后做一个 <code>Playing</code> 房间
+与一个 <strong>空缺</strong> 座位——里面没有人，不是人工智能——所以这样的房间通常是这样开始的
+<code>"backfillAiPlayers": 0</code>。如果没有标志，启动的房间将像以前一样拒绝每次连接。</p>
+<ul>
+<li><strong>比赛决定。</strong> 如果房间绑定了游戏会话，则新人可以进入该房间
+保留座位之前的会话：平台询问脚本的 <code>game.onMembershipChange(ctx)</code> 或一个
+集装箱的 <a href="/zh-CN/docs/api/container-games.html#post-sessionssessionidmembers"><code>POST /sessions/{id}/members</code></a>。一场比赛
+拒绝（或两者都没有）获得座位靠背，并且连接是 <code>409</code>;已接受的邀请将保留
+待定。一旦被接纳，该玩家在任何意义上都是会话玩家——有效于 <code>ws/v1/games</code>,
+在恢复和重新连接中。</li>
+<li><strong>离开时腾出座位</strong> 并将玩家从会话中删除，并告知游戏。</li>
+<li><strong>世界比它的访客更长寿。</strong> 当最后一个人离开且会话仍处于活动状态时，
+房间保持开放、列出且可加入；第一个回来的玩家成为主持人。一个房间绑定到一个
+活动会话也不会因其主机离线而关闭（请参阅
+<a href="#the-60-second-host-rule-and-room-bound-sessions">60秒主持人规则</a>）。会话自己的
+生命周期决定何时结束——a <a href="/zh-CN/docs/tutorials/persistent-sessions.html">执着的</a> 游戏暂停
+而不是结束——房间也随之关闭。</li>
+<li><strong>找一个。</strong> <code>GET /rooms?includeInProgress=true</code> 列出正在运行且有空闲房间的加入进程
+座位； <code>POST /rooms/quick-join</code> 和 <code>includeInProgress: true</code> 连接一个（添加一个 <code>metadata</code> 过滤到
+选择一个特定的房间）。快速加入会跳过呼叫者已经所在的房间。</li>
+</ul>
+<h4 id="worlds-do-not-count-as-your-room">世界不算是你的房间</h4>
+<p>一个玩家可能处于 <strong>一次一个活动房间</strong>：创建、通过代码加入、快速加入或
+接受邀请是 <code>409 "You are already in an active room."</code> 当他们在另一个座位上占据座位时
+未关闭的房间。一个座位在一个 <strong>世界</strong> 不算：a <code>Playing</code>, <code>joinInProgress</code> 房间限制
+到一个活动会话 <a href="/zh-CN/docs/tutorials/persistent-sessions.html">执着的</a> 游戏。世界持续多久
+由于其会议和房间在最后一位访客离开后仍保持开放，因此其中的一个座位是会员资格，
+不是玩家所在的大厅 - 他们可以在任何游戏中属于多个世界，并且仍然使用
+一间普通房间。正在进行中的比赛如果不是持久的，仍然有效：它结束了，而
+它运行时玩家就在其中。同一房间的第二个座位被拒绝（<code>409</code>）在每条路径上。列出一个
+玩家的世界 <a href="#start-seats-leave-result"><code>GET /rooms/joined</code></a>.</p>
+<h2 id="websocket-wsv1realtime">网络套接字： <code>ws/v1/realtime</code></h2>
+<p>连接到 <code>wss://api.starhermit.com/ws/v1/realtime?roomId=&lt;guid&gt;</code> 通过 JWT <code>Authorization</code> 标头， <code>?ticket=</code> 从 <code>POST /api/v1/realtime/connection-tickets</code>， 或者 <code>?access_token=</code>。更喜欢门票：它是一次性的，并且是秒有效的。 <strong>仅限参与者</strong> (<code>403</code> 否则）;启动令牌的 <code>game_scope</code> 必须等于房间的 <code>gameSlug</code>。最新的连接取代了用户之前的连接——旧的套接字被关闭 <code>PolicyViolation</code> ("被更新的连接取代").</p>
+<h3 id="binary-frames-gameplay">二进制帧（游戏玩法）</h3>
+<p>二进制帧是游戏通道 <strong>主机路由</strong> 游戏（房间内的脚本会话结束 <code>ws/v1/games</code> 相反 - 请参阅 <a href="#room-bound-sessions">桥</a>）。服务器 <strong>从不解析</strong> 它们的有效负载——主机权限是游戏的合同——但它强制执行路由和身份：</p>
+<ul>
+<li>服务器 <strong>在每个帧前面加上发送者的 16 字节参与者 ID 前缀</strong> （.NET 字节顺序的参与者 GUID）。客户端必须剥离前 16 个字节，并且决不能信任有效负载内的发件人 ID。</li>
+<li><strong>主人→房间</strong>：主机的帧分散到每个其他连接的参​​与者（快照）。</li>
+<li><strong>仅限客人 → 主持人</strong>：访客的帧被传递给主机，而不是其他人（输入）。</li>
+<li>框架尺寸上限： <strong>8KB</strong>。速率限制： <strong>每个连接每秒 30 条消息</strong>，令牌桶具有 1 秒的 2× 突发裕度。违规会关闭套接字 <code>PolicyViolation</code>.</li>
+</ul>
+<h3 id="json-text-control-frames">JSON 文本控制框架</h3>
+<p>小 JSON 帧 (≤ <strong>4KB</strong>) 进行大厅和比赛活动：</p>
+<pre><code class="language-json">{ "type": "ready" }
+{ "type": "chat", "text": "Ready to race" }
+{ "type": "event", "kind": "countdown", "goInMs": 3000 }
+</code></pre>
+<ul>
+<li>这 <strong>主持人</strong> 可以发送 <code>event</code>, <code>chat</code>， 和 <code>ready</code>;帧被广播给所有其他参与者。</li>
+<li><strong>嘉宾</strong> 只能发送 <code>ready</code> 和 <code>chat</code> （同时广播），速率限制为 <strong>每分钟 10 个</strong>.</li>
+<li>服务器 <strong>重新标记每个控制帧</strong> 发送者的参与者 ID：客户端提供的 <code>from</code> 被剥离并替换为 <code>"from": "&lt;participantId&gt;"</code>.</li>
+<li>无法解析的框架，未知的 <code>type</code>，或者发送者的角色可能不会发送的类型关闭套接字 <code>PolicyViolation</code>.</li>
+</ul>
+<h3 id="server-pushes">服务器推送</h3>
+<p>服务器自行推送 JSON 文本帧：</p>
+<ul>
+<li><code>{"type":"presence","userId":"&lt;guid&gt;","online":true|false}</code> — 每次连接/断开时。</li>
+<li><code>{"type":"roster","roomId":"&lt;guid&gt;","status":"Playing","participants":[ ... ]}</code> — 连接插座以及整个房间的连接、离开、座位更换、打开和启动。名单推后 <code>start</code> 是冻结的比赛名单，包括AI席位，并携带 <code>gameSessionId</code> 当房间有绑定的脚本会话时。</li>
+<li><code>{"type":"result","roomId":"&lt;guid&gt;","teamScores":[3,1],"metadata":{...}}</code> — 当主机提交结果时，或者当绑定脚本返回结果时。</li>
+</ul>
+<h3 id="close-codes">关闭代码</h3>
+<table>
+<thead>
+<tr>
+<th>代码</th>
+<th>什么时候</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>NormalClosure</code></td>
+<td>客户端发起的关闭</td>
+</tr>
+<tr>
+<td><code>MessageTooBig</code></td>
+<td>框架超过 8 KB（二进制）/4 KB（文本）上限</td>
+</tr>
+<tr>
+<td><code>PolicyViolation</code></td>
+<td>速率限制违规、不允许/无效的控制帧、连接被更新的连接取代</td>
+</tr>
+</tbody>
+</table>
+<h2 id="sizing-a-large-room">确定大房间的尺寸</h2>
+<p>一个房间最多可容纳 100 名玩家，但实际限制是带宽。二进制通道是
+主机路由：</p>
+<ul>
+<li>每个访客帧都会发送给主机；</li>
+<li>每个主机帧都被复制到每个来宾；</li>
+<li>每个帧携带 16 字节的发送者前缀。</li>
+</ul>
+<p>接下来有两件事：</p>
+<ul>
+<li><strong>主人的下载量随着客人数量的增加而增长。</strong> 它接收每位客人的意见。</li>
+<li><strong>平台出口随着房间大小的平方而增长。</strong> 描述每个主机的快照
+玩家随着玩家数量的增加而增长，并且它会被复制到每个客人。</li>
+</ul>
+<p>工作示例：100 名玩家。每个访客每秒发送 30 个 32 字节的输入。主机发送20
+快照/秒，每个播放器 12 字节，每个约 1.2 KB。每条消息的 TLS/TCP/WebSocket 开销为
+取约70字节。</p>
+<table>
+<thead>
+<tr>
+<th>关联</th>
+<th>速度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>各位嘉宾，上传</td>
+<td>〜26 kbit/s</td>
+</tr>
+<tr>
+<td>各位嘉宾，下载</td>
+<td>~0.21 兆比特/秒</td>
+</tr>
+<tr>
+<td>楼主，上传一下</td>
+<td>~0.21 兆比特/秒</td>
+</tr>
+<tr>
+<td><strong>楼主，下载吧</strong></td>
+<td><strong>~2.8 Mbit/s，相当于 ~3,000 条消息/秒</strong></td>
+</tr>
+<tr>
+<td><strong>房间平台出口</strong></td>
+<td><strong>~23 Mbit/s（~10.5 GB 每小时）</strong></td>
+</tr>
+</tbody>
+</table>
+<p>其他规模的同一游戏显示平台出口呈二次方增长：</p>
+<table>
+<thead>
+<tr>
+<th>玩家</th>
+<th>8</th>
+<th>22</th>
+<th>50</th>
+<th>100</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>平台出口</td>
+<td>~0.4 兆比特/秒</td>
+<td>~1.8 兆比特/秒</td>
+<td>~6.9 兆比特/秒</td>
+<td>~23 兆比特/秒</td>
+</tr>
+</tbody>
+</table>
+<p>每个连接的限制限制了最坏的情况，而不是典型的情况。一个可容纳 100 名玩家的房间
+每个连接以 30/s 的速度发送 8 KB 帧大约 <strong>390兆比特/秒</strong> 平台出口。</p>
+<p>对于大房间：</p>
+<ul>
+<li><strong>保持较低的宾客投入率</strong> (10–20 Hz)，并且仅在输入发生变化时才发送输入。主持人
+接收每位客人的输入，每秒处理数千条消息通常比较困难
+对浏览器主机的限制大于带宽。</li>
+<li><strong>保持快照较小。</strong> 量化仓位，根据最后确认的状态发送增量，
+并将很少变化的实体分散到多个快照中。最多单帧
+8 KB，在 100 名玩家的情况下，每个玩家还剩下大约 80 字节。</li>
+<li><strong>房间频道不能针对一位客人。</strong> 主机帧发送给每个人，因此每个客人
+接收整个世界。如果您的游戏需要每个玩家的兴趣管理（仅限附近
+玩家，战争迷雾），在 <a href="/zh-CN/docs/api/container-games.html">容器游戏服务器</a> 反而。一个
+容器可以将帧寻址到各个玩家，主机不再是玩家的家
+连接。</li>
+</ul>
+<h2 id="automatic-room-lifecycle">自动房间生命周期</h2>
+<ul>
+<li>一个 <code>Open</code> 当回填截止日期过后，房间自动启动；空座位成为唯一命名的人工智能参与者，直到房间的 <a href="#backfill-allowance">回填津贴</a>.</li>
+<li>一个 <code>Open</code> 一旦每个座位都被占用（人类、创建时配置的人工智能玩家或混合），房间也会自动启动，而无需等待截止日期。</li>
+<li>A <code>Playing</code> 当主人没有房间时，房间就会关闭 <code>ws/v1/realtime</code> 连接超过 60 秒 - 除非它绑定到仍处于活动状态的游戏会话，在这种情况下，主机角色会移动（见下文）。已连接的客人会收到最终名册推送，显示房间已关闭。</li>
+<li>A <code>Lobby</code> 或者 <code>Open</code> 房间在没有连接参与者的情况下超过 60 分钟后关闭。</li>
+</ul>
+<p>仅仅失去连接的参与者不会受到影响：重新连接套接字（最新的连接取代）并且 <code>GET /rooms/mine</code> 当房间还活着时，两者都会继续工作。</p>
+<h3 id="the-60-second-host-rule-and-room-bound-sessions">60 秒主持人规则和房间限制会议</h3>
+<p><strong>服务器运行的匹配不属于其主机。</strong> A <code>Playing</code> 房间绑定到游戏会话，即
+仍然 <code>active</code> 永远不会因为主机离线而关闭：主机角色转移到联网的人身上
+如果有的话，否则什么也不会发生。会话的生命周期决定了比赛的时间
+结束，并在结束时关闭房间。以下规则适用于主持人路由的房间（无会话），并且
+会话结束后转到绑定房间。</p>
+<p><strong>因此，房间内的游戏不需要主机的实时套接字。</strong> 一位主持比赛的主持人
+<code>ws/v1/games</code> 并关闭（或从不打开） <code>ws/v1/realtime</code> 会议期间不关闭房间
+是 <code>active</code>;仅当您的游戏需要名单推送时才打开实时套接字。</p>
+<p><strong>对于主机路由的房间，只需 <code>ws/v1/realtime</code> 套接字算作主机的连接。</strong> 时钟
+当主机的最后一个实时套接字关闭时启动；从未连接过的主机是从
+房间的 <code>startedAt</code>.</p>
+<p><strong>关闭房间并不会结束其在房间内的会话。</strong> 绑定房间在其关闭时仍然可以关闭
+会话运行——通常是在最后一个人的时候 <a href="#start-seats-leave-result">树叶</a> 一个房间没有
+<a href="#join-in-progress">正在进行中的加入</a>。关闭它（名册推送、每个席位都已释放、等待邀请
+已过期）不做任何其他事情：</p>
+<ul>
+<li>会话保持 <code>active</code>。它的玩家可以继续玩 <code>ws/v1/games</code>，并且脚本保留
+以滴答率运行。</li>
+<li>从下一次调用开始， <code>ctx.room.roster</code> 是 <strong>空的</strong> 和每个人在 <code>ctx.presence</code> 有
+<code>left: true</code>，因为关闭房间可以释放每个座位。 <code>online</code> 仍然反映 <code>ws/v1/games</code>
+插座。一个处理的脚本 "每个人都离开了" 因为比赛结束后应该返回 <code>result</code> 然后。</li>
+<li>如果脚本稍后返回 <code>result</code>，会话照常结束，但是房间的 <code>result</code> 停留
+<code>null</code>：房间已经关闭，因此结果仅存储在会话中。</li>
+<li>如果脚本永远不会返回 <code>result</code>，该会话像任何其他游戏会话一样退出：5 分钟
+最后一次之后 <code>ws/v1/games</code> 套接字关闭，或 24 小时后没有玩家操作（请参阅
+<a href="/zh-CN/docs/api/games.html#session-model">游戏——会话模型</a>).</li>
+</ul>
+<p>简而言之：一场房间内的比赛在主机离线后仍然存在；如果它必须结束时它的玩家
+离开房间，在脚本中结束 <code>ctx.presence</code> 显示所有人都离开了。</p>
+<h2 id="security-summary">安全概要</h2>
+<ul>
+<li>每个端点都使用完整的 JWT <strong>或者</strong> 游戏范围内的启动代币；启动令牌的 <code>game_scope</code> 必须与房间相匹配 <code>gameSlug</code>，因此两个游戏永远无法看到或加入彼此的房间。</li>
+<li>仅限参与者（加上待邀请者）阅读； <code>open</code>, <code>seats</code>, <code>start</code>， 和 <code>result</code> 仅限主机；邀请仅限好友。</li>
+<li>验证：席位/团队上限、始终为主持人留下席位的 AI 计数、每个用户一个活动房间（世界除外）、每个席位一名占用者、幂等开始、结果分数限制在 0-50、邀请随房间过期。</li>
+<li>传输：服务器标记的发件人 ID、基于角色的路由、帧大小上限、每个连接速率限制、无服务器端二进制有效负载解析。</li>
+</ul>
+<h2 id="room-bound-sessions">房间内的会议</h2>
+<p>对于具有服务器后端的游戏 - <code>server=</code> 其清单中的脚本，或 <a href="/zh-CN/docs/api/container-games.html">容器</a> — 实时房间可以进行比赛 <strong>服务器权威</strong> 而不是在主机客户端上。以下几点是针对脚本编写的；容器通过其接收相同的名册 <code>POST /sessions</code> ctx（<code>room</code>, <code>presence</code>）和会员资格变更通过 <code>POST /sessions/{id}/members</code>。这将房间（大厅、邀请、匹配、​​回填）与服务器端模拟、经过验证的输入和脚本拥有的结果结合在一起。</p>
+<ul>
+<li><strong>房间启动时创建会话。</strong> 当房间进入时 <code>Playing</code>，平台打造N人玩家 <a href="/zh-CN/docs/api/games.html">游戏环节</a> 对于人类参与者。 AI席位仅存在于面向剧本的名单中。房间反应和花名册推动暴露 <code>gameSessionId</code> 这样客户就知道要打开哪个游戏套接字。</li>
+<li><strong>游戏玩法移至 <code>ws/v1/games</code>.</strong> 客户端连接到 <code>ws/v1/games?sessionId=&lt;gameSessionId&gt;</code> 和交流 <code>cmd</code>/<code>game</code> 带有脚本的框架，就像任何脚本游戏一样；实时 WS 仅在名册/状态下保持连接。会话按照其脚本请求的支持速率进行计时 <code>game.tickRateHz</code> — 不请求任何内容的脚本在 0.25 Hz 处勾选，这是实时游戏所不需要的，因此声明一个（请参阅 <a href="/zh-CN/docs/api/game-scripts.html#tick-rate">游戏脚本</a>).</li>
+<li><strong>扩展脚本 ctx.</strong> 每次调用房间限制会话（<code>createSession</code>, <code>onPlayerMessage</code>, <code>onTick</code>）另外收到 <code>ctx.room</code> （房间 ID、元数据和冻结名单 — 人类 <em>和</em> AI座位，按团队排序然后分配）和 <code>ctx.presence</code> (<code>{ "&lt;userId&gt;": { online, left } }</code> 对于每个现在或曾经是人类参与者的用户）。详情见 <a href="/zh-CN/docs/api/game-scripts.html#room-bound-sessions">游戏脚本——房间限制的会话</a>.</li>
+<li><strong>服务器权威成就。</strong> 绑定会话的每个钩子都可以通过返回来授予成就 <code>achievements: {userId: [keys]}</code>，就像任何有脚本的游戏一样——包括来自 <code>createSession</code>，房间一开始就触发。解锁被推送给赚钱的玩家 <code>ws/v1/games</code> 作为 <code>{"type":"achievement"}</code> 帧。看 <a href="/zh-CN/docs/api/achievements.html#server-authoritative-game-achievements">成就</a>.</li>
+<li><strong>脚本结束了比赛。</strong> 当脚本返回时 <code>result</code>，平台完成会话，将结果存储在房间中，并关闭房间（包括最终名单推送）。 <code>POST /rooms/{id}/result</code> 不用于房间内的游戏。</li>
+<li><strong>启动失败。</strong> 如果会话创建失败，脚本支持的房间可以在没有绑定会话的情况下启动；检查 <code>gameSessionId</code> 在选择游戏交通工具之前。当容器支持的房间的服务器无法创建会话时，该房间将保持未启动状态。出现临时启动错误时通过退避重试；不要将其切换到主机模拟。</li>
+<li><strong>主机路由的游戏可以纯粹为了成就而绑定会话。</strong> 二进制游戏通道永远不会在绑定会话上门控，因此在主机客户端上模拟的游戏仍然可以发送 <code>server=</code> 脚本的唯一作用是权威成就（和 elo）授予，而快速路径不断流动 <code>ws/v1/realtime</code>.</li>
+</ul>
+<h2 id="how-a-game-uses-it">游戏如何使用它</h2>
+<ol>
+<li><strong>创造</strong>：大厅创建者调用 <code>POST /rooms</code> 其团队布局不透明 <code>metadata</code> 斑点，无论多少 <code>aiPlayers</code> 比赛应从 开始，并成为东道主。在这里，人工智能占据了所有其他座位，这就是整个单人与计算机的流程。</li>
+<li><strong>邀请</strong>：主持人列出好友（<code>GET /api/v1/me/friends</code>）并发送 <code>POST /rooms/{id}/invites</code>。平台通知每个被邀请者（<code>game_invite</code> 推+ <code>GET /api/v1/me/game-invites</code>），这样他们就可以在不打开游戏的情况下从仪表板接受；已在游戏中的受邀者通过投票看到相同的邀请 <code>GET /rooms/invites</code>。接受后，他们将成为东道主团队的席位。</li>
+<li><strong>打开</strong>: 主持人打电话 <code>POST /rooms/{id}/open</code>。单人玩家打电话 <code>POST /rooms/quick-join</code> 并降落在最古老的开放房间，有一个空闲座位（在 <code>404</code> 他们创建并打开自己的房间）。</li>
+<li><strong>连接</strong>: 大家都打开 <code>ws/v1/realtime?roomId=…</code> 和手表 <code>roster</code>/<code>presence</code> 当座位填满时推动。</li>
+<li><strong>开始</strong>：在回填截止时间，当所有席位都被占用时，或者当主持人强制开始时，剩余的空席位成​​为AI参与者（最多 <a href="#backfill-allowance">回填津贴</a>）并且名册冻结。 <strong>主机路由游戏</strong>：访客以二进制帧的形式发送输入（它们仅到达主机）；主机广播快照。 <strong>房间限定脚本游戏</strong>: 每个人都连接 <code>ws/v1/games?sessionId=&lt;gameSessionId&gt;</code> 并与脚本进行对抗 <code>cmd</code>/<code>game</code> 帧。</li>
+<li><strong>比赛中途离开</strong>： 在一个 <a href="#join-in-progress">正在进行中的加入</a> 房间内的座位已腾出给下一位玩家。否则，在比赛期间离开的球员 <code>Playing</code> 被 AI 参与者取代（同一座位，服务器生成的新昵称），并且可以立即再次排队；如果主机离开，主机角色将传递给加入时间最长的剩余人员。在主机路由的游戏中，断开实时连接的主机在比赛结束前有 60 秒的时间重新连接；房间内的比赛永远不会因为主人不在而结束。</li>
+<li><strong>结束</strong>：主机路由 — 主机 POST 结果；服务器夹紧分数，存储结果，将其推送到所有套接字，然后关闭房间。房间限制 — 脚本返回 <code>result</code> 平台将其存储并关闭房间。</li>
+</ol>
+<h2 id="see-also">参见</h2>
+<ul>
+<li><a href="/zh-CN/docs/api/relay.html">中继</a> — 绑定到游戏会话或实时房间名册的不透明字节扇出；可用性可能会有所不同</li>
+<li><a href="/zh-CN/docs/api/games.html">游戏</a> — 服务器权威脚本游戏</li>
+<li><a href="/zh-CN/docs/api/auth.html">验证</a> — 启动代币和游戏范围的围栏</li>
+<li><a href="/zh-CN/docs/api/friends.html">朋友们</a> — 邀请选择器使用的好友列表</li>
+</ul>
+<p>看 <a href="/zh-CN/docs/credentials.html">凭证兼容性</a> 和 <a href="/zh-CN/docs/api/contracts.html">机器可读的合同</a>.</p>
+
+{% endraw %}

@@ -1,0 +1,125 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Muat dan simpan kemajuan dengan aman"
+source_url: "/docs/tutorials/cloud-save-sync.html"
+source_path: "docs/tutorials/cloud-save-sync.md"
+source_hash: "3d1bef0f13bb54f639d96ca6ff1c5607c172a4d25d7707062b404cba46d5de83"
+translation: "machine"
+permalink: "/id/docs/tutorials/cloud-save-sync.html"
+---
+{% raw %}
+<h1 id="load-and-save-progress-safely">Muat dan simpan kemajuan dengan aman</h1>
+<p>Gunakan penyimpanan cloud untuk kemajuan milik klien pemain yang masuk. Opsi pemain tunggal yang tidak ditandatangani
+menyimpan kemajuan dalam memori dan tidak membaca atau menulis simpanan akun. Preferensi termasuk dalam
+<a href="/id/docs/api/games.html#per-player-game-settings">pengaturan permainan</a>, bukan dokumen kemajuan.</p>
+<p>Token peluncuran dapat mengakses dengan tepat <code>game:&lt;gameId&gt;</code>, Di mana <code>gameId</code> adalah itu <code>game_scope</code>. Platformnya
+menyimpan byte buram, dengan satu simpanan per slot. Validasi format yang diharapkan game Anda. Melihat
+<a href="/id/docs/api/catalog.html#cloud-saves">Simpanan cloud</a> untuk kuota dan header bersyarat.</p>
+<p><img src="/docs/images/id/cloud-save-flow.svg" alt="Muat dan validasi sebelum menulis. Gagal membaca blokir unggahan; penulisan bersyarat mempertahankan penyimpanan baru dan memunculkan konflik."></p>
+<h2 id="a-small-complete-json-recipe">Resep kecil JSON lengkap</h2>
+<p>Menyalin <a href="/docs/sdk/cloud-save-store.js"><code>cloud-save-store.js</code></a> ke dalam bangunan Anda. Contoh ini menyimpan mentah
+byte UTF-8 JSON; platform melayani mereka <code>application/zip</code> tetapi tidak memerlukan format ZIP.
+Gunakan pembaca yang berbeda untuk menyimpan ZIP, termasuk <a href="/id/docs/sdk/javascript.html#cloud-saves">penyimpanan ZIP SDK browser</a>.
+Jangan mengubah format tanpa rencana migrasi untuk pemain yang sudah ada.</p>
+<pre><code class="language-js">import { CloudSaveStore } from './cloud-save-store.js';
+
+const store = new CloudSaveStore({
+  gameId: StarHermit.slug,
+  token: () =&gt; StarHermit.token, // Always obtain the current renewed token.
+});
+const valid = value =&gt; value?.version === 1 &amp;&amp; Number.isSafeInteger(value.points) &amp;&amp; value.points &gt;= 0;
+let progress = { version: 1, points: 0 };
+let saving = false;
+
+async function startAccountGame() {
+  // Keep gameplay/saving disabled until this resolves.
+  const remote = await store.load(valid);
+  progress = remote ?? { version: 1, points: 0 };
+  render(progress);
+}
+
+async function saveCheckpoint() {
+  if (saving) return; // Coalesce checkpoints; do not issue overlapping writes.
+  saving = true;
+  showSync('Saving…');
+  try {
+    await store.save(progress);
+    showSync('Saved');
+  } catch (error) {
+    if (error.status === 412) {
+      // Keep local progress in memory. Offer Reload cloud or an explicit merge.
+      showConflict(() =&gt; startAccountGame());
+    } else showSync('Save failed; retry after resolving the error');
+  } finally {
+    saving = false;
+  }
+}
+</code></pre>
+<p><code>render</code>, <code>showSync</code>, Dan <code>showConflict</code> adalah UI Anda. Menunggu <code>startAccountGame()</code> sebelum mengaktifkan
+bermain atau menyimpan. Saat beban gagal, pertahankan status lokal pemutar saat ini, tampilkan kegagalan,
+dan tetap memblokir unggahan. A <code>404</code> adalah kotak dengan slot kosong; <code>401</code>, <code>403</code>, <code>5xx</code>, format JSON salah,
+atau versi penyimpanan yang tidak didukung bukanlah slot kosong.</p>
+<p>Resepnya tidak memperbarui kredensial. SDK browser memperbarui token peluncuran selagi masih ada
+sah. Selesaikan persyaratan yang tertunda atau autentikasi ulang alur entri game sebelum mencoba membaca lagi.</p>
+<h2 id="conditions-and-conflicts">Kondisi dan konflik</h2>
+<table>
+<thead>
+<tr>
+<th>Apa yang dimuat</th>
+<th>Header pada tulisan berikutnya</th>
+<th>Jika perangkat lain menulis</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Penyimpanan yang ada dengan ETag</td>
+<td><code>If-Match: &lt;etag&gt;</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>Tidak ada penyimpanan (<code>404</code>)</td>
+<td><code>If-None-Match: *</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>Tidak ada yang berhasil dimuat</td>
+<td>Tidak ada tulisan</td>
+<td>Terus ulangi pembacaan atau biarkan pemain tetap bermain tanpa terlacak</td>
+</tr>
+</tbody>
+</table>
+<p>Gunakan versi dari <strong>data yang Anda muat</strong>, bukan pemeriksaan metadata nanti. Simpan ETag baru yang dikembalikan
+oleh setiap penulisan yang berhasil. A <code>412</code> memblokir penyimpanan lebih lanjut hingga game memuat versi saat ini dan
+pemain mengadopsi atau menggabungkannya. Jangan diam-diam menghapus kondisi tersebut dan menimpa perangkat lain.
+API tidak menawarkan riwayat penyimpanan untuk membatalkan penimpaan tersebut.</p>
+<p>Jika dua perangkat harus memperbarui penghitung atau inventaris secara independen, satu dokumen yang ditulis terakhir akan menang
+mungkin tidak cocok dengan permainannya. Gunakan status otoritatif server dan tentukan perintah game yang divalidasi.</p>
+<h2 id="save-format-and-migration">Simpan format dan migrasi</h2>
+<p>Sertakan versi format dan validasi jenis, rentang, dan bidang wajib sebelum mengadopsi jarak jauh
+kemajuan. Tulis migrasi untuk versi lama yang didukung. Pertahankan versi baru yang tidak diketahui tetap utuh;
+jangan setel ulang ke default dan unggah di atasnya. Data cloud dikontrol oleh klien, jadi jangan pernah memperlakukannya
+sebagai bukti skor kompetitif atau hak berbayar.</p>
+<p>Batas penyimpanan dekode default adalah 10 MiB. Base64 menambahkan sekitar sepertiga ke badan permintaan.
+<code>413 cloud_save_too_large</code>, <code>409 cloud_save_slots_exhausted</code>, Dan <code>507 cloud_save_quota_exceeded</code>
+adalah kegagalan kapasitas yang berbeda; memeriksa <code>code</code> Dan <code>limit</code>. Menghormati <code>Retry-After</code> pada <code>429</code>.</p>
+<h2 id="checkpoints-and-page-exit">Pos pemeriksaan dan halaman keluar</h2>
+<p>Simpan di pos pemeriksaan yang bermakna dan tawarkan tindakan Simpan yang terlihat. Hapus perubahan cepat dan buat serial
+menulis sehingga masing-masing menggunakan versi terakhir yang diakui. Simpan indikator kotor sampai diketahui.
+Permintaan yang gagal bukan merupakan penyimpanan yang dikonfirmasi; setelah penulisan yang ambigu, muat ulang sebelum penulisan lainnya.</p>
+<p>Unggahan keluar halaman adalah upaya terbaik. Peramban <code>fetch(..., { keepalive: true })</code> berbagi penerbangan kecil
+tunjangan badan, umumnya 64 KiB; penghematan 10 MiB tidak dapat mengandalkannya. Tab mungkin ditutup sebelum permintaan apa pun
+selesai. Gunakan penyimpanan latar depan biasa untuk ketahanan, dan jangan beri label kemajuan yang tidak diakui sebagai
+disimpan. Mulai cepat menyimpan dokumen kecilnya di setiap pengumpulan titik.</p>
+<h2 id="verify-in-your-game">Verifikasi di game Anda</h2>
+<ol>
+<li>Mulailah dengan slot kosong; kumpulkan kemajuan, simpan, muat ulang, dan konfirmasikan pengembaliannya.</li>
+<li>Menolak membaca dengan kesalahan jaringan, <code>403</code>, atau data tidak valid; konfirmasi tidak ada unggahan berikut.</li>
+<li>Buka dua tab pada satu versi. Kecuali di A, maka B: B harus memunculkan konflik dan mempertahankan keadaan lokalnya.</li>
+<li>Uji format lama/baru dan pengakuan yang hilang tanpa menimpa data yang tidak dikenal.</li>
+<li>Masuk ke mode pemain tunggal yang tidak terlacak dan verifikasi bahwa pemutaran tidak membuat permintaan penyimpanan cloud.</li>
+</ol>
+<p>Melihat <a href="/id/docs/tutorials/browser-quickstart.html">mulai cepat yang dapat dijalankan</a>, <a href="/id/docs/api/conventions.html">konvensi API</a>, Dan
+<a href="/id/docs/troubleshooting.html#game-setup-and-storage">pemecahan masalah</a>.</p>
+
+{% endraw %}

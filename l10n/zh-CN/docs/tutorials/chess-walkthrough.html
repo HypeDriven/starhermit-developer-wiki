@@ -1,0 +1,357 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "集成演练：在 StarHermit 上构建游戏"
+source_url: "/docs/tutorials/chess-walkthrough.html"
+source_path: "docs/tutorials/chess-walkthrough.md"
+source_hash: "7821c7dca4a5960c279cb38770c02c54213ef04443d3147dac75b7d222022dec"
+translation: "machine"
+permalink: "/zh-CN/docs/tutorials/chess-walkthrough.html"
+---
+{% raw %}
+<h1 id="integration-walkthrough-building-a-game-on-starhermit">集成演练：在 StarHermit 上构建游戏</h1>
+<p>此页面逐步介绍了将游戏与 StarHermit 集成的完整生命周期 - 发布、启动、菜单、匹配、游戏、聊天、语音、评级、重播。显示的所有内容均适用于 <strong>任何</strong> 游戏：您的游戏替换它自己的 slug、它自己的命令和它自己的规则脚本。</p>
+<p>运行的示例是开源国际象棋参考实现， <a href="https://github.com/HypeDriven/starhermit-chess">明星隐士国际象棋</a>：一款对应国际象棋游戏（每步 24 小时，elo 评级），以普通 HTML/JS/CSS 构建为无构建静态浏览器游戏。对于每个步骤，演练都会显示游戏客户端进行的确切调用以及进行这些调用的参考存储库中的文件。无论国际象棋特定值出现在哪里——参考游戏的 UUID、移动命令、棋盘编码、 "哈尔" AI，24 小时移动截止时间 - 它们是您自己的游戏在自己的脚本中为自己定义的示例值。</p>
+<p>请与它链接到的 API 参考页面一起阅读它。最后的清单将所有内容浓缩为您自己的游戏需要复制的内容。</p>
+<h2 id="1-anatomy-of-a-platform-hosted-game">1. 平台托管游戏剖析</h2>
+<p>脚本化平台游戏是一个普通的静态站点加上一个规则文件。例如，国际象棋参考实现没有捆绑器、没有框架、没有构建步骤：</p>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>角色</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index.html</code></td>
+<td>整个页面：看板、菜单、聊天和语音 UI</td>
+</tr>
+<tr>
+<td><code>app.js</code></td>
+<td>应用程序引导、主菜单、配对、邀请、重播、个人资料</td>
+</tr>
+<tr>
+<td><code>net.js</code></td>
+<td>HTTP 层：范围游戏路径、启动令牌、令牌刷新</td>
+</tr>
+<tr>
+<td><code>game.js</code></td>
+<td>游戏内控制器：游戏 WebSocket、聊天、语音</td>
+</tr>
+<tr>
+<td><code>ui.js</code></td>
+<td>面板和菜单渲染</td>
+</tr>
+<tr>
+<td><code>style.css</code></td>
+<td>风格</td>
+</tr>
+<tr>
+<td><code>server.js</code></td>
+<td>规则——见下文</td>
+</tr>
+<tr>
+<td><code>starhermit.txt</code></td>
+<td>发布清单</td>
+</tr>
+</tbody>
+</table>
+<p>在参考实现中， <code>server.js</code> 值得特别关注。这是 <strong>两个都</strong> 事情同时发生：</p>
+<ul>
+<li>这 <strong>服务器权威脚本</strong> 平台通过公开执行（通过其 Jint 主机） <code>globalThis.game</code>。每个动作都在服务器上根据合同进行验证 <a href="/zh-CN/docs/api/game-scripts.html">game-scripts.md</a>.</li>
+<li>客户的 <strong>共享规则引擎</strong>，暴露为 <code>globalThis.chessRules</code>，浏览器使用它来进行棋盘渲染、移动预览和重放。</li>
+</ul>
+<p>一个文件，一个事实来源， <strong>客户端的零规则权限</strong>。遵循这种模式的游戏客户端永远不会决定移动是否合法——它会呈现服务器广播的内容。这是脚本平台游戏中最重要的架构思想，参考实现演示了这一点。</p>
+<h2 id="2-publishing-your-game">2. 发布您的游戏</h2>
+<p>发布任何游戏都从 <code>starhermit.txt</code> 体现在回购根目录。它宣告了游戏的 <code>name</code>, <code>launch</code> 入口点， <code>owner</code>， 和 <code>server</code> 脚本。选修的 <code>cover=</code> 是图书馆图块上的艺术品 — 请参阅 <a href="/zh-CN/docs/starhermit-txt.html#game-with-cover-art">这 <code>starhermit.txt</code> 显现</a>。参考实现的清单，例如：</p>
+<pre><code class="language-text">name=StarHermit Chess
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6  # StarHermit user ID, not username/nickname
+server=server.js
+</code></pre>
+<p>使用不可变的 <code>id</code> 从 <code>GET /api/v1/me</code> 为了 <code>owner</code>;显示用户名和昵称
+值，不应用作明显的所有权标识符。</p>
+<p>该平台克隆存储库，提供静态文件 <code>&lt;slug&gt;.starhermit.com</code> — slug 是平台分配给游戏的 uid，而不是您选择的名称；参考游戏是 <code>83fd04b1-3cbe-4b09-a251-3733ad4b9d94</code>，所以它可以在现场播放 <a href="https://83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com">83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com</a> ——和代理 <code>/api</code> 和 <code>/ws</code> 到后端 <strong>同源</strong>。这一决定消除了一整类工作：没有 CORS、没有基于 API 的配置、没有环境检测——游戏客户端只使用相对路径。</p>
+<p>全流程： <a href="/zh-CN/docs/api/github-games.html">github-games.md</a> 和 <a href="/zh-CN/docs/api/publisher.html">publisher.md</a>.</p>
+<h2 id="3-launch-and-authentication">3. 启动和认证</h2>
+<p>国际象棋参考流程从平台启动器接收凭据：</p>
+<ol>
+<li>启动器调用 <code>POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/launch-token</code> （与参考游戏的 UUID 一起显示；替换您自己的）与用户的完整平台 JWT。</li>
+<li>它恢复了短暂的， <strong>游戏范围的</strong> 令牌：</li>
+</ol>
+<pre><code class="language-json">{ "token": "&lt;jwt&gt;", "expiresInSeconds": 3600 }
+</code></pre>
+<ol start="3">
+<li>游戏开始于 <code>index.html#game_token=&lt;jwt&gt;</code>，可选地与 <code>&amp;session_id=&lt;guid&gt;</code> 附加邀请深层链接。</li>
+</ol>
+<p>在参考实现中，客户端读取哈希值 <strong>一次</strong>，然后用 <code>history.replaceState</code> 因此令牌永远不会停留在 URL 栏或历史记录中（<code>app.js</code>, <code>App.init</code>）。它对 JWT 有效负载进行解码以获取两个声明：</p>
+<ul>
+<li><code>sub</code> — 用户的 ID</li>
+<li><code>game_scope</code> — 游戏蛞蝓</li>
+</ul>
+<p>第二个主张很重要： <strong>游戏客户端不应该对其 slug 进行硬编码</strong>。参考实现将每个 API URL 构建为 <code>/api/v1/games/&lt;slug&gt;</code> 加一个后缀（<code>net.js</code>, <code>Net.gamePath</code>），因此相同的代码适用于任何游戏、任何 slug、任何部署。</p>
+<p><strong>刷新。</strong> 作用域令牌允许重新调用 <code>launch-token</code> 对于自己的游戏，因此客户端通常会定期刷新 - 参考实现每 45 分钟刷新一次（<code>net.js</code>, <code>Net.startRefresh</code>），在 60 分钟的生命周期内舒适地度过。</p>
+<p>直接打开的游戏可以提供 <a href="/zh-CN/docs/api/auth.html#sign-in-from-a-directly-opened-browser-game">浏览器登录</a>,
+返回 <code>#access_token</code> 而不是启动器的 <code>#game_token</code>。处理两个入口路径，如果
+你都支持。使用返回的生命周期进行续订并遵循默认的 12 小时续订链
+天花板。一个 <code>403 terms_acceptance_required</code> 要求玩家 <a href="/zh-CN/docs/api/profile.html#terms-acceptance">通过他们的帐户接受</a>;
+或在游戏中显示条款并使用玩家启动令牌接受。重新登录也不行
+记录验收。</p>
+<p>授权参考： <a href="/zh-CN/docs/api/auth.html">auth.md</a>, <a href="/zh-CN/docs/api/games.html">games.md</a>.</p>
+<h2 id="4-loading-the-main-menu">4. 加载主菜单</h2>
+<p>游戏的菜单通常会打开针对其自己的 slug 的一小批 GET。在参考实现中，这是 <code>refreshMenu</code> 在 <code>app.js</code>:</p>
+<p><strong>游戏信息+我的统计数据：</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94
+</code></pre>
+<pre><code class="language-json">{
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "name": "StarHermit Chess",
+  "enabled": true,
+  "leaderboardId": "&lt;guid&gt;",
+  "maxConcurrentSessionsPerPlayer": 20,
+  "me": {
+    "userId": "&lt;guid&gt;",
+    "elo": 1420,
+    "wins": 31,
+    "losses": 18,
+    "draws": 4,
+    "activeSessionCount": 3
+  }
+}
+</code></pre>
+<p>这 <code>me</code> block 是整个玩家卡 — elo、record 以及正在使用的允许并发会话数（在国际象棋示例中为 20）。</p>
+<p><strong>我的会议：</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/mine
+</code></pre>
+<pre><code class="language-json">[
+  {
+    "sessionId": "&lt;guid&gt;",
+    "status": "active",
+    "players": [ /* ... */ ],
+    "createdAt": "…",
+    "finishedAt": null,
+    "myTurn": true,
+    "deadline": 1784642591000
+  }
+]
+</code></pre>
+<p><code>myTurn</code> 和 <code>deadline</code> 正是这些使得对应游戏的会话列表变得有用——玩家一眼就能看出哪些游戏正在等待他们以及每一步棋何时到期。</p>
+<p><strong>好友排行榜：</strong></p>
+<pre><code class="language-http">GET /api/v1/leaderboards/{leaderboardId}/entries?friendsOnly=true&amp;page=1&amp;pageSize=10
+</code></pre>
+<p>使用 <code>leaderboardId</code> 来自游戏信息响应。</p>
+<p><strong>最近回放：</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/mine?limit=10
+</code></pre>
+<p><strong>待处理的邀请：</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites
+</code></pre>
+<p>参考： <a href="/zh-CN/docs/api/games.html">games.md</a>, <a href="/zh-CN/docs/api/leaderboards.html">leaderboards.md</a>.</p>
+<h2 id="5-getting-players-into-a-session--three-ways">5. 让玩家参与会话——三种方式</h2>
+<p>本演练使用匹配、邀请接受和 AI 实践来创建会话。需要大厅的游戏可以使用 <a href="/zh-CN/docs/api/realtime.html">实时房间</a>，其启动流程还可以创建绑定的权威会话。</p>
+<h3 id="a-matchmaking">一个。对接会</h3>
+<p>在参考实现中， <code>App.startMatchmaking</code> 在 <code>app.js</code>:</p>
+<pre><code class="language-http">POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking
+</code></pre>
+<p>响应是一张票：</p>
+<pre><code class="language-json">{ "ticketId": "&lt;guid&gt;", "status": "queued" }
+</code></pre>
+<p>或立即匹配：</p>
+<pre><code class="language-json">{ "status": "matched", "sessionId": "&lt;guid&gt;" }
+</code></pre>
+<p>在排队时，客户端轮询匹配端点 - 参考实现轮询 <code>GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking</code> 每 3 秒一次，并且 <code>DELETE /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking</code> 取消机票。参考客户端还确保玩家永远不会盯着旋转器：在 30 秒未匹配的情况下， <strong>"对阵哈尔"</strong> 按钮出现（"哈尔" 是国际象棋示例的内置 AI 对手 — 请参阅第 12 节），并且 <code>POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/ai</code> 回报 <code>{ "sessionId" }</code>.</p>
+<h3 id="b-friend-invite">b.好友邀请</h3>
+<p>在参考实现中， <code>App.inviteFriend</code> 在 <code>app.js</code>。首先列出朋友——此端点明确允许用于游戏范围的代币：</p>
+<pre><code class="language-http">GET /api/v1/me/friends
+</code></pre>
+<p>然后发送邀请：</p>
+<pre><code class="language-http">POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites
+{ "toUserId": "&lt;guid&gt;" }
+</code></pre>
+<p>接收者接受（或拒绝）来自自己客户的：</p>
+<pre><code class="language-http">POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/{id}/accept   → { "sessionId": "&lt;guid&gt;" }
+POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/{id}/decline  → 204
+</code></pre>
+<p>接受是创建会话的原因。这 <code>&amp;session_id=</code> launch-hash deep-link (§3) 将受邀请的玩家直接放入其中。</p>
+<p>好友邀请仅适用于已经是好友的人。为了吸引不在平台上（或根本不在平台上）的人，参考实现还提供了 <strong>分享邀请链接</strong> 按钮 （<code>App.shareInviteLink</code>)：复制的一行字符串构建</p>
+<pre><code>https://dashboard.starhermit.com/game-invite/&lt;Net.userId&gt;/&lt;slug&gt;
+</code></pre>
+<p>到剪贴板。 Web 仪表板处理接收者所需的一切 - 登录、好友请求、昵称、启动游戏 - 然后将游戏邀请发送回共享者，因此它会出现在同一个邀请列表中。看 <a href="/zh-CN/docs/api/games.html#share-links-invite-by-url">分享链接</a> 以获得完整的合同。</p>
+<h3 id="c-the-rule">c.规则</h3>
+<p>会话是通过匹配、邀请接受创建的， <code>sessions/ai</code>，或者启动一个实时房间
+服务器后端。对于有座位的大堂，请使用 <a href="/zh-CN/docs/api/realtime.html">实时房间API</a>.</p>
+<h2 id="6-playing-over-the-gameplay-websocket">6. 玩游戏WebSocket</h2>
+<p>每个脚本游戏的播放循环都是相同的：获取会话、打开套接字、渲染广播、发送命令。在参考实现中，它位于 <code>game.js</code>, <code>GameController</code>.</p>
+<p><strong>获取会话：</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/{sessionId}
+</code></pre>
+<pre><code class="language-json">{
+  "sessionId": "&lt;guid&gt;",
+  "status": "active",
+  "players": [ /* ... */ ],
+  "createdAt": "…",
+  "finishedAt": null,
+  "chatConversationId": "&lt;guid&gt;",
+  "result": null
+}
+</code></pre>
+<p>笔记 <code>chatConversationId</code> — 您将需要它来进行聊天 (§7) 和语音 (§8)。</p>
+<p><strong>连接游戏插座：</strong></p>
+<pre><code class="language-text">ws(s)://&lt;host&gt;/ws/v1/games?sessionId=&lt;id&gt;&amp;access_token=&lt;token&gt;
+</code></pre>
+<p>在 <code>open</code>，客户端立即发送同步命令：</p>
+<pre><code class="language-json">{ "type": "cmd", "data": { "type": "sync" } }
+</code></pre>
+<p>在任何断开连接时，它都会以从 1 秒到 30 秒上限的指数退避重新连接，并且 <strong>每次打开时重新发送同步</strong>。同步命令使重新连接成为无状态和幂等的：无论客户端错过什么，服务器都会重新广播。</p>
+<p><strong>信封。</strong> 每个帧都是一个薄的 JSON 信封：</p>
+<ul>
+<li>客户端→服务器： <code>{"type":"cmd","data":&lt;command&gt;}</code></li>
+<li>服务器→客户端： <code>{"type":"game","data":…}</code>, <code>{"type":"error","error":…}</code>, <code>{"type":"presence","userId","online"}</code></li>
+</ul>
+<p><strong>游戏命令由您自己的规则脚本定义。</strong> 例如，国际象棋示例的命令（ <code>data</code> 的有效载荷 <code>cmd</code> 框架）：</p>
+<pre><code class="language-json">{ "type": "sync" }
+{ "type": "move", "from": "e2", "to": "e4", "promo": "q" }
+{ "type": "resign" }
+{ "type": "offer-draw" }
+{ "type": "accept-draw" }
+{ "type": "decline-draw" }
+</code></pre>
+<p>在国际象棋的例子中， <code>promo</code> 仅出现在促销活动中。</p>
+<p><strong>广播同样是由脚本定义的。</strong> 国际象棋示例的广播（ <code>data</code> 的有效载荷 <code>game</code> 框架）：</p>
+<ul>
+<li><code>state</code> — 完整快照：</li>
+</ul>
+<pre><code class="language-json">{
+  "type": "state",
+  "white": "&lt;userId&gt;",
+  "black": "&lt;userId&gt;",
+  "ratings": { "white": 1420, "black": 1388 },
+  "board": "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr",
+  "turn": "w",
+  "moves": [ { "from": "e2", "to": "e4", "promo": null, "san": "e4", "at": "…" } ],
+  "status": "active",
+  "result": null,
+  "deadline": 1784642591000,
+  "drawOfferBy": null,
+  "ai": false,
+  "aiName": null
+}
+</code></pre>
+<p>这 <code>board</code> 是一个 64 个字符的字符串， <code>index = rank * 8 + file</code> 和 <code>a1 = 0</code>， 使用 <code>PNBRQK</code> 对于白色， <code>pnbrqk</code> 对于黑色， <code>.</code> 对于空方块——国际象棋特定的编码；你的游戏定义了它自己的状态形状。</p>
+<ul>
+<li><code>moved</code> ——施展了一个动作。</li>
+<li><code>draw-offered</code> / <code>draw-declined</code>.</li>
+<li><code>game-over</code> — <code>{ "result": { "kind", "reason", "at" }, "view" }</code>， 在哪里 <code>reason</code> 值是脚本定义的；国际象棋示例使用 <code>checkmate</code>, <code>stalemate</code>, <code>threefold-repetition</code>, <code>fifty-move-rule</code>, <code>insufficient-material</code>, <code>resignation</code>, <code>agreement</code>, <code>timeout</code>, <code>timeout-no-moves</code>.</li>
+</ul>
+<p><strong>身份永远不会从有效负载中获取。</strong> 客户端发送没有用户 ID 的命令，并且脚本从不信任来自网络的命令 - 平台将经过身份验证的发送者传递给脚本。没有什么可以欺骗的。</p>
+<p>看 <a href="/zh-CN/docs/api/game-scripts.html">game-scripts.md</a> 对于这一切背后的脚本合同。</p>
+<h2 id="7-in-game-chat">7. 游戏内聊天</h2>
+<p>每个会话都带有一个 <code>chatConversationId</code> (§6) 游戏客户端可用于游戏内聊天。在参考实现中， <code>initChat</code> 在 <code>game.js</code> 像这样使用它：</p>
+<pre><code class="language-http">GET  /api/v1/chat/conversations/{id}/messages?page=1&amp;pageSize=50
+POST /api/v1/chat/conversations/{id}/messages
+     { "content": "good luck!" }
+</code></pre>
+<p>实时聊天套接字 <code>ws/v1/chat</code> 是 <strong>阻止游戏范围的代币</strong>。参考客户端尝试一次，被拒绝，然后退回到每 5 秒轮询一次 REST 端点 - 计划从一开始就在您自己的游戏中进行轮询。</p>
+<p>即使两个玩家可能不是朋友，聊天仍然可以进行：会话对话（类型 <code>"game"</code>）是由两个玩家作为参与者创建的，因此通常的聊天权限规则已经满足。</p>
+<p>参考： <a href="/zh-CN/docs/api/chat.html">chat.md</a>.</p>
+<h2 id="8-voice">8. 语音</h2>
+<p>语音是可选的，游戏客户端通常会保留它 <strong>默认关闭</strong>。参考实现在中处理它 <code>game.js</code>, <code>VoiceController</code>。当玩家启用它时：</p>
+<ol>
+<li>查找或创建与会话对话绑定的房间：</li>
+</ol>
+<pre><code class="language-http">GET  /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;
+POST /api/v1/voice/rooms
+     { "conversationId": "&lt;chatConversationId&gt;" }
+</code></pre>
+<ol start="2">
+<li>加入它：</li>
+</ol>
+<pre><code class="language-http">POST /api/v1/voice/rooms/{roomId}/join
+</code></pre>
+<ol start="3">
+<li>连接语音插座：</li>
+</ol>
+<pre><code class="language-text">ws(s)://&lt;host&gt;/ws/v1/voice?roomId=&lt;id&gt;&amp;access_token=&lt;token&gt;
+</code></pre>
+<p>媒体是 <strong>WebRTC 点对点完美协商</strong>;套接字仅承载信令和控制：</p>
+<ul>
+<li>信令： <code>{"type":"rtc","to":&lt;userId&gt;,"payload":{"sdp":…}}</code> 或者 <code>{"type":"rtc","to":&lt;userId&gt;,"payload":{"ice":…}}</code></li>
+<li>控制： <code>{"type":"mute","muted":…}</code>, <code>{"type":"speaking","speaking":…}</code></li>
+<li>服务器事件： <code>voice.roster</code>, <code>voice.participant_joined</code>, <code>voice.participant_left</code>, <code>voice.mute_changed</code>, <code>voice.speaking</code>, <code>voice.rtc</code></li>
+</ul>
+<p>如果 P2P 失败，后备方案是服务器中继的 opus 二进制帧：一个 16 字节的发送者 ID，后跟音频有效负载。</p>
+<p>声音是 <strong>在 AI 游戏中禁用</strong> — 参考客户检查 <code>view.ai</code> 来自国家广播并且从不提供切换。</p>
+<p>参考： <a href="/zh-CN/docs/api/voice.html">voice.md</a>.</p>
+<h2 id="9-ratings-and-leaderboard">9. 评分和排行榜</h2>
+<p>游戏客户端从不提交分数。当一场比赛结束时， <strong>脚本</strong> 回报 <code>eloUpdates</code> 和 <strong>平台</strong> 将它们发布到游戏排行榜。客户端永远不能直接写入排行榜条目；服务器还必须验证其评级更新背后的游戏玩法。</p>
+<p>因此，客户端很简单：读取条目（§4）并呈现它们，就像参考实现一样。看 <a href="/zh-CN/docs/api/leaderboards.html">leaderboards.md</a>.</p>
+<h2 id="10-replays">10. 重播</h2>
+<p>一款游戏宣告 <code>replays: true</code> 在其脚本中包含平台保存的每个已完成的会话；客户端只需获取并渲染它。查看 <code>replaysEnabled</code> 在 <code>GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94</code> 在提供屏幕之前 - 操作员可以以任何一种方式回答游戏，并且下面的端点返回 <code>404</code> 当重播关闭时。在参考实现中，获取是 <code>App.loadReplays</code> / <code>App.openReplay</code> 在 <code>app.js</code>:</p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/mine?limit=10
+GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/{sessionId}
+</code></pre>
+<p>重播有效负载（以国际象棋示例的结果形状显示）：</p>
+<pre><code class="language-json">{
+  "sessionId": "&lt;guid&gt;",
+  "players": [ /* ... */ ],
+  "finishedAt": "…",
+  "result": {
+    "kind": "win",
+    "reason": "checkmate",
+    "at": "…",
+    "white": "&lt;userId&gt;",
+    "black": "&lt;userId&gt;",
+    "moveCount": 41,
+    "eloBefore": { "white": 1420, "black": 1388 },
+    "eloAfter": { "white": 1436, "black": 1372 }
+  },
+  "state": { "game": { "moves": [ /* ... */ ] } }
+}
+</code></pre>
+<p>观看者的脚步 <code>state.game.moves</code> 通过共享的 <code>chessRules</code> 本地引擎 - 相同 <code>server.js</code> 规则文件，在浏览器中运行 - 因此重播不需要服务器往返；当规则更改时，保留用于存档比赛的规则版本。这是第 1 节中单文件双角色设计的第二个成果，任何游戏都可以采用这种模式并拥有自己的规则文件。</p>
+<h2 id="11-player-profiles">11. 球员简介</h2>
+<p>游戏客户端通过公共配置文件端点解析其他玩家。在参考实现中， <code>App.profileFor</code> 在 <code>app.js</code>:</p>
+<pre><code class="language-http">GET /api/v1/users/{id}/profile  → { "id": "…", "username": "…", "nickname": "…" }
+GET /api/v1/users/{id}/avatar   → image/png, or 404
+</code></pre>
+<p>参考客户端遵循两条 UI 规则：</p>
+<ul>
+<li>使成为 <strong>昵称</strong>，绝不是用户名。</li>
+<li>回落至 <code>"Player " + id.slice(0, 8)</code> 当个人资料丢失或昵称为空时。</li>
+</ul>
+<p>参考： <a href="/zh-CN/docs/api/profile.html">profile.md</a>.</p>
+<h2 id="12-ai-practice-opponents">12.AI练习对手</h2>
+<p><code>POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/ai</code> （如示例 slug 所示）创建一个会话，其中平台标记一个席位 <code>ai: true</code> 在 <code>createSession</code>。脚本本身扮演着这个角色——人工智能的行为是你自己的脚本定义的。在国际象棋的例子中，下棋者是 "哈尔"，一个贪婪的材料捕获引擎，它会回复 <strong>在同一个调用中</strong> 处理人类的动作。</p>
+<p>游戏的脚本决定练习是否会改变人类玩家的评分。 AI座椅不能
+接收帐户玩家状态、评级或成就写入。将任何 AI 统计数据保留在会话状态。</p>
+<h2 id="13-what-the-reference-game-does-not-use">13. 参考游戏不使用什么</h2>
+<p>国际象棋参考实现没有触及这些，但它们都可用于需要它们的游戏：</p>
+<ul>
+<li><strong>成就</strong> — 任何带有 <code>server=</code> 脚本可以声明它们（<code>game.achievements</code>）并从任何生命周期挂钩授予它们服务器权威；国际象棋根本没有。目录标题有一个单独的客户声明路径： <a href="/zh-CN/docs/api/achievements.html">achievements.md</a>, <a href="/zh-CN/docs/api/game-scripts.html#achievements">game-scripts.md</a>.</li>
+<li><strong>目录/权利</strong> — 对于通过目录分发和销售的游戏： <a href="/zh-CN/docs/api/catalog.html">catalog.md</a>.</li>
+<li><strong>中继</strong> — 用于快节奏实时游戏的高频中继通道，其中每个命令脚本往返速度太慢： <a href="/zh-CN/docs/api/relay.html">relay.md</a>.</li>
+<li><strong>外部库</strong> — 链接 Steam、Epic 或 GOG 游戏库： <a href="/zh-CN/docs/api/external-libraries.html">external-libraries.md</a>.</li>
+</ul>
+<p>国际象棋的例子是一种回合制棋盘游戏，不需要它们。如果您的游戏是实时的、目录分布式的或需要二进制有效负载，那么接下来要查看这些页面。</p>
+<h2 id="14-integration-checklist">14. 集成清单</h2>
+<ul>
+<li>[ ] 添加一个 <code>starhermit.txt</code> 显现 （<code>name</code>, <code>launch</code>, <code>owner</code>, <code>server</code>;选修的 <code>cover=</code> 对于图书馆磁贴）。</li>
+<li>[ ] 读 <code>#game_token</code> 从 URL 哈希中提取一次，然后用 <code>history.replaceState</code>.</li>
+<li>[ ] 解码 JWT <code>sub</code> （用户 ID）和 <code>game_scope</code> (slug) — 永远不要对你的 slug 进行硬编码。</li>
+<li>[ ] 将所有 API 路径构建为同源相对 URL： <code>/api/v1/games/&lt;slug&gt;</code> + 后缀。</li>
+<li>[ ] 每 45 分钟刷新一次启动令牌 <code>POST …/launch-token</code>.</li>
+<li>[ ] 使用 <code>cmd</code> / <code>sync</code> WebSocket 模式：封装所有内容，每次打开时同步，以 1 秒→30 秒的延迟时间重新连接。</li>
+<li>[ ] 设计脚本的命令和广播 <strong>作为客户合同</strong> — 客户端渲染广播并发送命令，仅此而已。</li>
+<li>[ ] 返回摘要对象 <code>{ turnPlayerId, deadline, status, moveCount }</code> 这样会话列表就可以显示轮到谁了。</li>
+<li>[ ] 通过返回 a 结束游戏 <code>result</code> ——这个返回值是重播和 elo 的动力。</li>
+<li>[ ] 宣布 <code>replays: true</code> 如果您希望保留已完成的会话，请在脚本中将重播 UI 分支到 <code>replaysEnabled</code>.</li>
+</ul>
+<p>该平台提供身份验证、会话、匹配和存储；你的脚本提供了
+游戏规则。开始于 <a href="/zh-CN/docs/tutorials/browser-quickstart.html">浏览器快速入门</a> 完整的首次上传。</p>
+
+{% endraw %}

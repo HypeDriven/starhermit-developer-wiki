@@ -1,0 +1,194 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "嗓音"
+source_url: "/docs/api/voice.html"
+source_path: "docs/api/voice.md"
+source_hash: "b854ce844a33279125a6c44c43b800b3efef80cbcf31d1f74a9f17192fab0aef"
+translation: "machine"
+permalink: "/zh-CN/docs/api/voice.html"
+---
+{% raw %}
+<h1 id="voice">嗓音</h1>
+<p>StarHermit 语音通过 REST API 提供每次对话语音室（<code>api/v1/voice</code>）加上混合的二进制/文本 WebSocket（<code>ws/v1/voice</code>）用于音频和 WebRTC 信号传输。所有 REST 端点都需要身份验证。语音可用性可能会有所不同。错误体各不相同；看 <a href="/zh-CN/docs/api/conventions.html#requests-and-responses">API约定</a>.</p>
+<p>客房锚定于 <a href="/zh-CN/docs/api/chat.html">聊天对话</a>;对话中的成员资格决定了一切，因此聊天友谊规则也控制语音（游戏会话对话绕过友谊）。限制：每个对话 3 个活动房间，每个房间最多 10 名参与者，编解码器 <code>"opus"</code>.</p>
+<h2 id="rest-endpoints">REST 端点</h2>
+<p>根据： <code>https://api.starhermit.com/api/v1/voice</code>.</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>邮政</td>
+<td><code>/rooms</code></td>
+<td>智威汤逊</td>
+<td>创建对话语音室</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/rooms?conversationId=</code></td>
+<td>智威汤逊</td>
+<td>列出对话房间</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/rooms/{roomId}</code></td>
+<td>智威汤逊</td>
+<td>获得一个房间</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/rooms/{roomId}/join</code></td>
+<td>智威汤逊</td>
+<td>加入房间（WS之前需要）</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/rooms/{roomId}/leave</code></td>
+<td>智威汤逊</td>
+<td>留下一个房间</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/rooms/{roomId}/mute</code></td>
+<td>智威汤逊</td>
+<td>设置自己的静音状态</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/rooms/{roomId}/participants/{userId}/server-mute</code></td>
+<td>智威汤逊（创建者）</td>
+<td>主持人静音参会者无法解除</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/rooms/{roomId}/close</code></td>
+<td>智威汤逊</td>
+<td>关闭房间（仅限创建者）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-room">创建一个房间</h3>
+<p><code>POST /rooms</code></p>
+<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 10 }
+</code></pre>
+<p>返回一个 <code>VoiceRoomDto</code>.</p>
+<h3 id="room-shape">房间形状</h3>
+<p><code>GET /rooms?conversationId=&lt;guid&gt;</code> → <code>VoiceRoomDto[]</code>; <code>GET /rooms/{roomId}</code> → <code>VoiceRoomDto</code>:</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "conversationId": "&lt;guid&gt;",
+  "creatorUserId": "&lt;guid&gt;",
+  "codec": "opus",
+  "status": "Active",
+  "maxParticipants": 10,
+  "createdAt": "2026-07-22T07:00:00Z",
+  "participants": [
+    {
+      "userId": "&lt;guid&gt;",
+      "username": "alice",
+      "isMuted": false,
+      "isConnected": true,
+      "joinedAt": "2026-07-22T07:01:00Z"
+    }
+  ]
+}
+</code></pre>
+<h3 id="join-leave-mute-close">加入、离开、静音、关闭</h3>
+<p><code>POST /rooms/{roomId}/join</code> → <code>VoiceRoomDto</code>。这个 REST 连接是 <strong>必需的</strong> 在打开 WebSocket 之前；连接而不返回 <code>403</code>。重新加入会清除参与者的 <strong>自己的</strong> 沉默的 （<code>isMuted</code>）；一个主机的 <code>isServerMuted</code> 幸存离开并重新连接。</p>
+<p><code>POST /rooms/{roomId}/leave</code> → <code>204</code>.</p>
+<p><code>POST /rooms/{roomId}/mute</code> 和 <code>{ "muted": true }</code> → <code>204</code>。这是与会者自己的静音，无法清除主持人的静音。</p>
+<p><code>POST /rooms/{roomId}/participants/{userId}/server-mute</code> 和 <code>{ "muted": true }</code> → <code>204</code> （仅限创作者）。如果设置了静音，音频就会被丢弃。</p>
+<p><code>POST /rooms/{roomId}/close</code> → <code>204</code> （仅限创作者）。</p>
+<p>在连接时声明您的静音，而不是继承该行记住的任何内容。</p>
+<h2 id="websocket-wsv1voice">网络套接字： <code>ws/v1/voice</code></h2>
+<p>连接到 <code>wss://api.starhermit.com/ws/v1/voice?roomId=&lt;guid&gt;</code> 通过 JWT <code>Authorization</code> 标头， <code>?ticket=</code>， 或者 <code>?access_token=</code>。事先休息 <code>join</code> 是必须的。</p>
+<p>协议是混合的：</p>
+<h3 id="binary-frames--audio">二进制帧——音频</h3>
+<p>二进制帧携带音频（例如 Opus）。服务器将每个帧转发给其他参与者：</p>
+<pre><code>[16-byte senderUserId][audio…]
+</code></pre>
+<p>服务器前缀为 <strong>经过验证的</strong> 发件人 ID，并且从不信任客户端提供的发件人。来自静音用户的音频将被丢弃。限制：每个用户每秒 100 个数据包，最大帧 4000 字节。</p>
+<h3 id="text-frames--client--server-control">文本框架——客户端→服务器控制</h3>
+<pre><code class="language-json">{ "type": "mute", "muted": true }
+</code></pre>
+<pre><code class="language-json">{ "type": "speaking", "speaking": true }
+</code></pre>
+<pre><code class="language-json">{ "type": "rtc", "to": "&lt;guid&gt;", "payload": { } }
+</code></pre>
+<pre><code class="language-json">{ "type": "deafen", "deafened": true }
+</code></pre>
+<p><code>rtc</code> 有效负载是不透明的 WebRTC 信令，转发给指定的参与者。
+<code>deafen</code> 抑制该套接字传入的中继二进制音频；它不会自动静音
+传出音频或单独的对等连接。当玩家选择 Deafen 时，在本地应用这些内容。</p>
+<p>REST 参与者形状公开自己的静音，而不是主机静音。初始语音名单和加入活动
+包括 <code>serverMuted</code>;没有单独的主机静音更改推送事件。如果你的游戏使用P2P
+音频、其主机静音信号和执行必须是您自己的媒体集成的一部分。</p>
+<p>当最后一个语音套接字断开连接时，语音室成员资格结束。呼叫休息 <code>join</code> 再次之前
+在发送音频之前重新连接并恢复预期的静音。</p>
+<h3 id="server--client-events">服务器→客户端事件</h3>
+<p>信封： <code>{ "event": "&lt;name&gt;", "data": { } }</code>.</p>
+<table>
+<thead>
+<tr>
+<th>事件</th>
+<th><code>data</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>voice.roster</code></td>
+<td><code>{ "roomId", "participants": [{ "userId", "muted", "serverMuted" }] }</code> — 发送给新人</td>
+</tr>
+<tr>
+<td><code>voice.participant_joined</code></td>
+<td><code>{ "roomId", "userId", "muted", "serverMuted" }</code></td>
+</tr>
+<tr>
+<td><code>voice.participant_left</code></td>
+<td><code>{ "roomId", "userId" }</code></td>
+</tr>
+<tr>
+<td><code>voice.mute_changed</code></td>
+<td><code>{ "roomId", "userId", "muted" }</code></td>
+</tr>
+<tr>
+<td><code>voice.deafened</code></td>
+<td>`{ "房间号", "用户身份", "聋了" }</td>
+</tr>
+<tr>
+<td><code>voice.speaking</code></td>
+<td><code>{ "roomId", "userId", "speaking" }</code></td>
+</tr>
+<tr>
+<td><code>voice.rtc</code></td>
+<td><code>{ "roomId", "from", "payload" }</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="example-integration-pattern-from-the-chess-reference-implementation">集成模式示例（来自国际象棋参考实现）</h2>
+<p>每个游戏会话都可以选择加入语音。典型客户 <code>enable()</code> 流动：</p>
+<ol>
+<li><code>GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;</code> 找到一个现有的房间，否则 <code>POST /api/v1/voice/rooms</code> 创建一个。</li>
+<li><code>POST /api/v1/voice/rooms/{roomId}/join</code>.</li>
+<li>打开 <code>ws/v1/voice?roomId=&lt;guid&gt;</code>.</li>
+</ol>
+<p>在 <a href="/zh-CN/docs/tutorials/chess-walkthrough.html">国际象棋参考实现</a>，音频通过WebRTC P2P运行，完美协商；信令是通过交换 <code>rtc</code> 控制消息（<code>{ "sdp": … }</code> / <code>{ "ice": … }</code> 有效负载），以服务器中继的 Opus 二进制路径作为后备。</p>
+<p>游戏范围内的启动代币 <strong>可能</strong> 对连接到自己的游戏会话的房间使用语音 REST 和 WebSocket。</p>
+<h2 id="see-also">参见</h2>
+<ul>
+<li><a href="/zh-CN/docs/tutorials/audio-options.html">音频选项</a> — 基线音量、麦克风和一键通控制，
+具有自动检测的播放上限</li>
+<li><a href="/zh-CN/docs/api/chat.html">聊天</a> ——房间以对话为中心；游戏会话暴露 <code>chatConversationId</code></li>
+<li><a href="/zh-CN/docs/api/games.html">游戏</a> — 游戏会话和启动代币</li>
+<li><a href="/zh-CN/docs/api/relay.html">中继</a> — 游戏网络代码的字节扇出</li>
+</ul>
+<p>看 <a href="/zh-CN/docs/credentials.html">凭证兼容性</a> 和 <a href="/zh-CN/docs/api/contracts.html">机器可读的合同</a>.</p>
+
+{% endraw %}

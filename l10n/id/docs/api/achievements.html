@@ -1,0 +1,423 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Prestasi"
+source_url: "/docs/api/achievements.html"
+source_path: "docs/api/achievements.md"
+source_hash: "c1d53f838d5142ee2120e5c9dae0320c206922aeea5b05f708503462166883e0"
+translation: "machine"
+permalink: "/id/docs/api/achievements.html"
+---
+{% raw %}
+<h1 id="achievements">Prestasi</h1>
+<p>Sebuah prestasi adalah milik tepatnya <strong>satu pemilik</strong>, dan pemilik memutuskan siapa yang diizinkan membukanya:</p>
+<table>
+<thead>
+<tr>
+<th>Pemilik</th>
+<th>Dinyatakan oleh</th>
+<th>Tidak terkunci oleh</th>
+<th>Gunakan untuk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Sebuah permainan yang berwibawa</strong></td>
+<td><code>game.achievements</code> dalam naskah, atau <code>achievements</code> dari sebuah wadah <code>/describe</code> — <strong>atau oleh pemilik game</strong> melalui <a href="#achievements-created-by-the-games-owner"><code>/me/github-games/{id}/achievements</code></a></td>
+<td><strong>Hanya waktu proses server game</strong> — otoritatif server</td>
+<td>Permainan dengan a <code>server=</code> naskah atau <code>container.image=</code> bagian belakang</td>
+</tr>
+<tr>
+<td><strong>Judul katalog</strong> (<code>SoftwareTitle</code>)</td>
+<td>Penerbit, melalui <a href="/id/docs/api/publisher.html#achievements">API penerbit</a></td>
+<td>Klien pemain, melalui <code>POST /api/v1/me/achievements/unlock</code> (hak diperlukan)</td>
+<td>Judul terdistribusi yang kliennya adalah satu-satunya yang mengetahui bahwa pemain memperoleh sesuatu</td>
+</tr>
+</tbody>
+</table>
+<p>Keduanya saling eksklusif dan platform menerapkan pemisahan tersebut:</p>
+<ul>
+<li><code>POST /api/v1/me/achievements/unlock</code> <strong>menolak pencapaian dalam lingkup permainan</strong> — klien tidak akan pernah bisa mengklaimnya.</li>
+<li>Titik akhir CRUD penerbit juga menolaknya. Anda tidak memerlukan penerbit untuk game yang Anda miliki: as
+pemiliknya kamu <strong>adalah</strong> penerbitnya, dan Anda mengelola pencapaiannya melalui
+<a href="#achievements-created-by-the-games-owner">titik akhir pemilik</a> alih-alih.</li>
+</ul>
+<p>URL Dasar: <code>https://api.starhermit.com</code>. Semua rute berada di bawah <code>/api/v1/...</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/achievements</code></td>
+<td>Pembawa</td>
+<td>Prestasi game resmi + status tidak terkunci penelepon</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/github-games/{id}/achievements</code></td>
+<td>JWT (pemilik permainan)</td>
+<td>Setiap pencapaian permainan Anda, dengan pencapaiannya <code>origin</code> dan membuka kunci hitungan</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/me/github-games/{id}/achievements</code></td>
+<td>JWT (pemilik permainan)</td>
+<td>Ciptakan pencapaian untuk game Anda → <code>201</code></td>
+</tr>
+<tr>
+<td>MELETAKKAN</td>
+<td><code>/api/v1/me/github-games/{id}/achievements/{achievementId}</code></td>
+<td>JWT (pemilik permainan)</td>
+<td>Perbarui yang Anda buat</td>
+</tr>
+<tr>
+<td>MENGHAPUS</td>
+<td><code>/api/v1/me/github-games/{id}/achievements/{achievementId}</code></td>
+<td>JWT (pemilik permainan)</td>
+<td>Hapus yang Anda buat dan tidak ada yang membuka kuncinya → <code>204</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/software/{titleId}/achievements</code></td>
+<td>Anonim</td>
+<td>Definisi pencapaian judul katalog</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/achievements?titleId=</code></td>
+<td>JWT</td>
+<td>Pembuka kunci penelepon (semua pemilik, atau satu judul)</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/me/achievements/unlock</code></td>
+<td>JWT</td>
+<td>Buka kunci yang diklaim klien — <strong>judul katalog saja</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Baca kesalahan secara defensif seperti yang dijelaskan dalam <a href="/id/docs/api/conventions.html#requests-and-responses">konvensi API</a>.
+<code>POST /me/achievements/unlock</code> mengembalikannya <code>400</code> alasan sebagai teks biasa.</p>
+<h2 id="server-authoritative-game-achievements">Prestasi game resmi server</h2>
+<p>Inilah mekanismenya <strong>setiap</strong> game harus digunakan jika memiliki skrip atau backend container. Itu
+runtime server adalah satu-satunya penulis. Itu harus memvalidasi bahwa pemain mendapatkan setiap pembukaan kunci; menolak
+pengiriman API langsung saja tidak memvalidasi kejadian yang dilaporkan oleh klien yang dimodifikasi.</p>
+<h3 id="1-declare-them-in-your-script">1. Deklarasikannya dalam skrip Anda</h3>
+<p>Tambahkan statis <code>achievements</code> susunan ke <code>game</code> objek — lihat
+<a href="/id/docs/api/game-scripts.html#achievements">Skrip Game — Prestasi</a> untuk kontrak penuh:</p>
+<pre><code class="language-js">globalThis.game = {
+  achievements: [
+    { key: "first-win",  name: "First Win",  description: "Win a match.", points: 10 },
+    { key: "flawless",   name: "Flawless",   description: "Win without conceding.",
+      points: 50, secret: true, icon: "https://cdn.example/flawless.png" }
+  ],
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<p>Deklarasi dibacakan <strong>saat game diterbitkan atau diperbarui</strong> dari repositorinya. Publikasikan pembaruan untuk menerapkan perubahan.</p>
+<h3 id="2-unlock-them-from-any-lifecycle-hook">2. Buka kuncinya dari hook siklus hidup apa pun</h3>
+<p>Kembalikan sebuah <code>achievements</code> peta — id pengguna → susunan kunci — dari <code>createSession</code>, <code>onPlayerMessage</code>,
+atau <code>onTick</code>:</p>
+<pre><code class="language-js">return {
+  ok: true,
+  sessionState: state,
+  achievements: { [winnerId]: ["first-win", "flawless"] },
+  result: { kind: "win", winner: winnerId }
+};
+</code></pre>
+<p>Buka kuncinya adalah <strong>idempoten</strong> — mengembalikan kunci yang sudah dipegang pemain adalah hal yang dilarang, jadi skrip mungkin saja melakukannya
+tegaskan kembali pencapaian pada setiap centang tanpa mengkhawatirkan duplikat.</p>
+<h3 id="3-the-player-is-notified-over-the-gameplay-socket">3. Pemain diberitahu melalui soket gameplay</h3>
+<p>Setiap pembukaan kunci yang baru diberikan hanya diberikan kepada pemain yang memperoleh penghasilan saja <code>ws/v1/games</code>, sebagai bingkainya sendiri
+type (platform kebenaran, bukan skrip-relay <code>game</code> pesan):</p>
+<pre><code class="language-json">{
+  "type": "achievement",
+  "data": {
+    "key": "first-win",
+    "name": "First Win",
+    "description": "Win a match.",
+    "icon": null,
+    "points": 10,
+    "unlockedAt": "2026-07-25T09:14:02Z"
+  }
+}
+</code></pre>
+<p>Buka kunci diberikan dari <code>createSession</code> disimpan sebelum ada yang memiliki soket, jadi mereka datang bersama
+tanpa bingkai — membacanya dari titik akhir daftar yang dimuat.</p>
+<h3 id="container-backends">Backend kontainer</h3>
+<p>Sebuah wadah mendeklarasikan bidang pencapaian yang sama <code>GET /describe</code>, lalu mengirimkan
+<code>achievements</code> pesan pada kontrolnya WebSocket. Platform menerapkan kunci yang sama, peserta,
+idempotensi, dan aturan penyampaian. Melihat <a href="/id/docs/api/container-games.html#control-channel">Server Game Kontainer</a>.</p>
+<h3 id="get-apiv1gamesslugachievements"><code>GET /api/v1/games/{slug}/achievements</code></h3>
+<p>Setiap pencapaian yang diumumkan game, dengan status tidak terkunci pemanggil. <code>404</code> jika siput tidak memiliki
+definisi game yang otoritatif (game tanpa skrip atau backend container tidak memiliki game milik
+prestasi — lihat <a href="#which-games-can-use-this">Game mana yang bisa menggunakan ini</a>). Prestasi rahasia disembunyikan sampai
+penelepon membuka kuncinya. Diurutkan berdasarkan kreasi, lalu kunci.</p>
+<pre><code class="language-json">[
+  {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "key": "first-win",
+    "name": "First Win",
+    "description": "Win a match.",
+    "icon": null,
+    "secret": false,
+    "points": 10,
+    "unlocked": true,
+    "unlockedAt": "2026-07-25T09:14:02Z"
+  }
+]
+</code></pre>
+<p>Bekerja dengan JWT pengguna penuh atau token peluncuran cakupan game.</p>
+<h3 id="which-games-can-use-this">Game mana yang bisa menggunakan ini</h3>
+<p>Mekanisme ini tersedia untuk game yang mendeklarasikan a <code>server=</code> naskah atau a
+<code>container.image=</code> bagian belakang masuk <a href="/id/docs/api/github-games.html#the-manifest-starhermittxt"><code>starhermit.txt</code></a>. Itu
+runtime server membuat pembukaan kunci menjadi otoritatif. Kasus penggunaan yang didukung skrip meliputi:</p>
+<ul>
+<li><strong>Game platform bernaskah</strong> — membuka kunci dari <code>onPlayerMessage</code> / <code>onTick</code> saat pertandingan berlangsung.</li>
+<li><strong>Game waktu nyata yang terikat ruangan</strong> — a <a href="/id/docs/api/realtime.html#room-bound-sessions">ruang waktu nyata</a> untuk a
+permainan dengan a <code>server=</code> skrip membuat sesi terikat saat dimulai, dan setiap kaitannya
+sesi dapat memberikan pencapaian.</li>
+<li><strong>Permainan pemain tunggal dan latihan</strong> — sesi melawan kursi AI
+(<code>POST /api/v1/games/{slug}/sessions/ai</code>) menjalankan skrip yang sama dan jalur buka kunci yang sama.</li>
+<li><strong>Game real-time yang diarahkan ke host</strong> — permainan yang alur permainannya melebihi
+<a href="/id/docs/api/realtime.html#binary-frames-gameplay">saluran biner ruang waktu nyata</a> masih dapat mengirimkan skrip server
+murni sebagai otoritas pencapaiannya: ruang awal membuat sesi terikat, dan skrip
+penghargaan dari <code>createSession</code> / <code>onTick</code> / tahan lama <code>cmd</code> pesan yang dikirim <code>ws/v1/games</code> sementara itu
+jalur cepat terus mengalir <code>ws/v1/realtime</code>.</li>
+</ul>
+<p>Sesi yang didukung container juga dapat mendeklarasikan dan memberikan pencapaian melalui protokolnya. Sebuah permainan
+dengan <strong>tidak ada backend otoritatif</strong> (permainan browser murni, atau yang hanya dibuat di atas <a href="/id/docs/api/relay.html">estafet rekan</a>)
+tidak memiliki jalur buka kunci resmi server. Pembukaan kunci yang diklaim klien hanya tersedia untuk
+judul yang didistribusikan katalog, di bawah.</p>
+<h3 id="limits-and-rules">Batasan dan aturan</h3>
+<table>
+<thead>
+<tr>
+<th>Aturan</th>
+<th>Nilai</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Prestasi yang diumumkan per game</td>
+<td>100 (ekstra diabaikan)</td>
+</tr>
+<tr>
+<td>Panjang kunci pencapaian</td>
+<td>128 karakter</td>
+</tr>
+<tr>
+<td>Buka kunci kunci yang diterima per pemain, per doa</td>
+<td>32</td>
+</tr>
+<tr>
+<td><code>points</code></td>
+<td>dijepit ke 0–10000; defaultnya adalah 0</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>default ke <code>key</code> ketika dihilangkan</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Entri deklarasi yang formatnya salah adalah <strong>dilewati</strong>. Skrip yang gagal mengevaluasi menghasilkan hasil yang kosong
+daftar; deklarasi kontainer dibaca setelah melewati pemeriksaan kesehatan. Verifikasi dengan
+<code>GET /api/v1/games/{slug}/achievements</code> setelah penerapan.</li>
+<li>Definisi dikecewakan oleh <code>key</code>. Kunci yang berhenti dideklarasikan oleh backend Anda telah dihapus <strong>hanya jika tidak ada yang punya
+membukanya</strong> — sejarah yang diperoleh tidak pernah hancur. Prestasi yang dibuat pemilik melalui API
+tidak pernah tersentuh oleh hal ini: hanya mereka yang dinyatakan yang direkonsiliasi.</li>
+<li>Pembukaan kunci untuk pengguna yang bukan peserta sesi, dan untuk kursi AI, diabaikan.</li>
+</ul>
+<h2 id="achievements-from-other-games">Prestasi dari game lain</h2>
+<p>Sebuah game dapat membuka fitur berdasarkan apa yang dibuka pemainnya <strong>lain</strong> permainan: penghormatan sekuel
+yang asli, atau game dalam seri berbagi kosmetik. Ada dua cara untuk membacanya.</p>
+<h3 id="from-your-server-ctxlinkedachievements-trusted">Dari server Anda: <code>ctx.linkedAchievements</code> (tepercaya)</h3>
+<p>Beri nama permainan lain dalam skrip Anda, di samping deklarasi Anda yang lain:</p>
+<pre><code class="language-js">globalThis.game = {
+  linkedAchievements: ["83fd04b1-3cbe-4b09-a251-3733ad4b9d94"], // other games' slugs (uids)
+  // ...
+};
+</code></pre>
+<p>Sebuah wadah mengembalikan hal yang sama <code>linkedAchievements</code> susunan dari <code>GET /describe</code>. Setiap skrip
+ctx doa kemudian membawa kunci terbuka setiap pemain manusia dalam game tersebut:</p>
+<pre><code class="language-js">ctx.linkedAchievements = {
+  "7c9e6679-...": {                                   // player id
+    "83fd04b1-3cbe-4b09-a251-3733ad4b9d94": ["first-win", "checkmate-10"]
+  }
+};
+</code></pre>
+<ul>
+<li>Ini dibaca ulang <strong>setiap doa</strong>, jadi pembukaan kunci yang diperoleh di game lain di tengah pertandingan akan terlihat
+yang berikutnya. Sebuah wadah menerimanya di ctx <code>POST /sessions</code>, yaitu, pada saat membuat dan pada
+memulihkan.</li>
+<li>Paling banyak <strong>8</strong> pertandingan; entri yang bukan string yang tidak kosong, duplikat, dan slug lebih dari 100
+karakter dijatuhkan. Seperti deklarasi lainnya, deklarasi ini dibacakan saat game diterbitkan atau
+diperbarui.</li>
+<li>Sebuah permainan yang menyatakan tidak ada yang mendapat tidak <code>linkedAchievements</code> lapangan dan tidak membayar apa pun.</li>
+<li>Gunakan rute ini untuk apa pun yang harus diterapkan oleh platform, seperti membuka kunci gameplay atau memberikan izin
+pencapaian Anda sendiri.</li>
+</ul>
+<h3 id="from-your-client-get-apiv1gamessluglinked-achievementsotherslug">Dari klien Anda: <code>GET /api/v1/games/{slug}/linked-achievements/{otherSlug}</code></h3>
+<p>Milik si penelepon membuka kuncinya <code>otherSlug</code>. Tidak memerlukan deklarasi, jadi game khusus browser tanpa
+server dapat menggunakannya, dan berfungsi dengan token peluncuran <code>{slug}</code>: titik akhir game lain itu sendiri
+tetap dipagari dari token itu.</p>
+<pre><code class="language-json">{
+  "game": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "hidden": false,
+  "unlocked": [
+    { "key": "first-win", "unlockedAt": "2026-07-25T09:14:02Z" }
+  ]
+}
+</code></pre>
+<p>Seorang klien bisa berbohong tentang apa yang diterimanya, jadi perlakukan ini sebagai petunjuk untuk UI dan kosmetik, bukan sebagai bukti.</p>
+<h3 id="what-is-disclosed">Apa yang diungkapkan</h3>
+<ul>
+<li><strong>Hanya buka kunci status game yang Anda beri nama</strong>: kunci dan waktu buka kunci, tidak pernah nama, deskripsi atau
+daftar permainan lain yang pernah dimainkan pemain. Sebuah pencapaian rahasia yang telah dibuka oleh pemain adalah
+termasuk.</li>
+<li>Siput yang tidak cocok dengan jawaban game seperti game tanpa ada yang terbuka.</li>
+<li><strong>Privasi dihormati.</strong> Seorang pemain yang pencapaiannya bersifat privasi <code>Private</code> adalah <strong>tersembunyi</strong>: tidak hadir
+dari <code>ctx.linkedAchievements</code>, Dan <code>"hidden": true</code> dengan daftar kosong dari titik akhir. Tersembunyi
+tidak sama dengan "tidak memilikinya", jadi jangan perlakukan seperti itu. <code>FriendsOnly</code> (default) diungkapkan,
+karena pembaca bertindak untuk pemain.</li>
+</ul>
+<h2 id="achievements-created-by-the-games-owner">Prestasi yang diciptakan oleh pemilik game</h2>
+<p>Mendeklarasikan pencapaian dalam kode bukanlah satu-satunya cara untuk memberikan kesan pada game Anda. Jika Anda memiliki game dengan a
+<code>server=</code> naskah atau <code>container.image=</code> backend, Anda juga dapat membuat pencapaian melalui
+API — cara yang dilakukan penerbit untuk judul katalog, tanpa memerlukan akun atau izin penerbit.
+Kepemilikan game adalah keseluruhan dari hibah. Gunakan ini ketika seorang desainer ingin menambahkan atau menulis ulang
+pencapaian tanpa perubahan kode, atau ketika backend Anda memberikan kunci, hal itu tidak dideklarasikan.</p>
+<p><strong>Hanya server game Anda yang dapat membuka kuncinya</strong>, persis seperti yang dideklarasikan: skrip Anda mengembalikan kuncinya
+di <code>achievements</code>, atau penampung Anda mengirimkannya ke saluran kontrol. Tidak ada perubahan pada
+membuka kunci sisi — kunci diselesaikan <em>semua</em> pencapaian game, diumumkan dan dibuat.</p>
+<p><code>{id}</code> dari mana id gamemu berasal? <code>GET /api/v1/me/github-games</code>.</p>
+<h3 id="post-apiv1megithub-gamesidachievements"><code>POST /api/v1/me/github-games/{id}/achievements</code></h3>
+<pre><code class="language-json">{
+  "key": "speedrunner",
+  "name": "Speedrunner",
+  "description": "Finish a level in under a minute.",
+  "icon": "https://cdn.example/speedrunner.png",
+  "secret": false,
+  "points": 25
+}
+</code></pre>
+<p><code>key</code>, <code>name</code> Dan <code>description</code> diperlukan. Kembali <code>201</code>:</p>
+<pre><code class="language-json">{
+  "id": "…",
+  "key": "speedrunner",
+  "name": "Speedrunner",
+  "description": "Finish a level in under a minute.",
+  "icon": "https://cdn.example/speedrunner.png",
+  "secret": false,
+  "points": 25,
+  "origin": "owner",
+  "unlocks": 0,
+  "createdAt": "…",
+  "updatedAt": "…"
+}
+</code></pre>
+<p><code>GET</code> di jalur yang sama mencantumkan setiap pencapaian game dalam bentuk ini: <code>origin</code> adalah <code>declared</code>
+untuk yang dinyatakan oleh skrip atau wadah Anda dan <code>owner</code> untuk yang dibuat di sini, dan <code>unlocks</code>
+menghitung berapa banyak pemain yang memegang masing-masing pemain.</p>
+<p><code>PUT .../achievements/{achievementId}</code> mengambil salah satu dari <code>name</code>, <code>description</code>, <code>icon</code>, <code>secret</code> Dan
+<code>points</code>; itu <code>key</code> tidak bisa berubah. <code>DELETE</code> menghapusnya.</p>
+<h3 id="rules">Aturan</h3>
+<table>
+<thead>
+<tr>
+<th>Aturan</th>
+<th>Nilai</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Kunci</td>
+<td>1–128 karakter: huruf, angka, <code>.</code>, <code>_</code>, <code>-</code>, dimulai dengan huruf atau angka</td>
+</tr>
+<tr>
+<td><code>name</code> / <code>description</code></td>
+<td>diperlukan; paling banyak 200/2000 karakter</td>
+</tr>
+<tr>
+<td><code>points</code></td>
+<td>0–10.000; defaultnya adalah 0</td>
+</tr>
+<tr>
+<td>Prestasi yang dibuat pemilik per game</td>
+<td>200 (selain yang dinyatakan hingga 100)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Pencapaian yang dinyatakan tetap menjadi milik kode Anda.</strong> Membuat kunci yang sudah dimiliki permainan <code>409</code>,
+dan begitu juga mengedit atau menghapus a <code>declared</code> satu — pembaruan berikutnya akan mengembalikannya sebagai kode Anda
+menyatakannya. Ubah di skrip Anda atau <code>/describe</code> alih-alih.</li>
+<li><strong>Jika kode Anda nanti mendeklarasikan kunci yang Anda buat di sini</strong>, deklarasi tersebut mengambil pencapaian itu
+berakhir (<code>origin</code> menjadi <code>declared</code>). Pemain yang mendapatkannya menyimpannya.</li>
+<li><strong>Prestasi yang telah dibuka seseorang tidak dapat dihapus</strong> (<code>409</code>).</li>
+<li><code>404</code> berarti game tersebut bukan milik Anda; <code>409</code> di salah satu rute ini dengan pesan tentang server
+backend berarti game tersebut tidak memilikinya — game khusus browser tidak memiliki apa pun yang dapat membuka kuncinya
+prestasi.</li>
+</ul>
+<p>Langkah demi langkah: <a href="/id/docs/tutorials/game-leaderboards-achievements.html">Tutorial: papan peringkat dan pencapaian untuk game Anda</a>.</p>
+<h2 id="catalog-title-achievements">Prestasi judul katalog</h2>
+<p>Untuk perangkat lunak yang didistribusikan melalui katalog, di mana klien adalah satu-satunya yang mengamati
+kondisi terbuka. Definisi dibaca secara anonim; membuka kunci membutuhkan JWT dan tidak dicabut
+hak atas gelar tersebut.</p>
+<h3 id="get-apiv1softwaretitleidachievements"><code>GET /api/v1/software/{titleId}/achievements</code></h3>
+<p><code>AchievementDto[]</code>. Prestasi rahasia disembunyikan kecuali dibuka oleh penelepon (dan mereka
+<code>criteria</code> ditahan sampai saat itu). Prestasi dalam lingkup permainan tidak pernah muncul di sini.</p>
+<pre><code class="language-json">[
+  {
+    "id": "…",
+    "key": "…",
+    "name": "…",
+    "description": "…",
+    "icon": "…",
+    "secret": false,
+    "points": 10,
+    "visibility": "…",
+    "criteria": "…"
+  }
+]
+</code></pre>
+<h3 id="post-apiv1meachievementsunlock"><code>POST /api/v1/me/achievements/unlock</code></h3>
+<pre><code class="language-json">{ "achievementDefinitionId": "…" }
+</code></pre>
+<p>Kembali <code>204</code>. Kembali <code>400</code> ketika pencapaiannya tidak ada, ketika penelepon tidak mempunyai hak
+untuk judulnya (lihat <a href="/id/docs/api/catalog.html">catalog.md</a>), atau kapan pencapaiannya <strong>lingkup permainan</strong> — itu adalah
+hanya diberikan oleh skrip resmi atau backend container game. Membuka kembali sesuatu yang sudah ditahan akan kembali <code>204</code>.</p>
+<p>Manajemen sisi penerbit — menentukan, memperbarui, dan menghapus pencapaian judul — ada
+<a href="/id/docs/api/publisher.html#achievements">publisher.md</a>.</p>
+<h2 id="get-apiv1meachievements"><code>GET /api/v1/me/achievements</code></h2>
+<p>Penelepon membuka kunci sebagai <code>UserAchievementDto[]</code>. <strong>Dengan tidak <code>titleId</code> ini mengembalikan setiap pembukaan kunci
+pegangan pengguna, baik dalam cakupan game maupun dalam cakupan judul</strong>; lulus <code>?titleId=</code> untuk mempersempitnya menjadi satu judul katalog.</p>
+<pre><code class="language-json">[
+  {
+    "id": "…",
+    "achievementDefinitionId": "…",
+    "key": "…",
+    "name": "…",
+    "description": "…",
+    "icon": "…",
+    "points": 10,
+    "unlockedAt": "…"
+  }
+]
+</code></pre>
+<p>Untuk layar pencapaian permainan sendiri lebih disukai <code>GET /api/v1/games/{slug}/achievements</code>, yang juga
+mengembalikan definisi yang dimiliki pemain <em>bukan</em> belum terkunci.</p>
+<p>Dibagikan <a href="/id/docs/api/conventions.html">konvensi API</a> menjelaskan penguraian respons, stempel waktu, penomoran halaman, dan percobaan ulang.</p>
+<p>Melihat <a href="/id/docs/credentials.html">kompatibilitas kredensial</a> Dan <a href="/id/docs/api/contracts.html">kontrak yang dapat dibaca mesin</a>.</p>
+
+{% endraw %}

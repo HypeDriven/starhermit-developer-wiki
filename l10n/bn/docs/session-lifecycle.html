@@ -1,0 +1,152 @@
+---
+layout: "wiki"
+lang: "bn"
+title: "অধিবেশন, বিশ্ব, এবং পুনরুদ্ধার"
+source_url: "/docs/session-lifecycle.html"
+source_path: "docs/session-lifecycle.md"
+source_hash: "ce490b04789602ff10857e6496e4e3847230ac0bd33619cb5beb61051dc65c85"
+translation: "machine"
+permalink: "/bn/docs/session-lifecycle.html"
+---
+{% raw %}
+<h1 id="sessions-worlds-and-recovery">অধিবেশন, বিশ্ব, এবং পুনরুদ্ধার</h1>
+<p>ম্যাচমেকিং, আমন্ত্রণ গ্রহণ, অনুশীলন বা শুরুর মাধ্যমে একটি প্রামাণিক অধিবেশন তৈরি করা হয়
+একটি সার্ভার ব্যাকএন্ড সহ একটি রিয়েলটাইম রুমের। একটি রুম আসন সহ একটি লবি; এর <code>gameSessionId</code> চিহ্নিত করে
+পৃথক সেশন চলমান গেমপ্লে. দেখুন <a href="/bn/docs/api/games.html">গেমস</a> এবং <a href="/bn/docs/api/realtime.html">রিয়েলটাইম রুম</a>.</p>
+<h2 id="lifecycle">জীবনচক্র</h2>
+<p><img src="/docs/images/bn/session-lifecycle.svg" alt="সেশনগুলি সক্রিয় থেকে বিরতিতে এবং ফিরে যায়, বা ফলাফলের মাধ্যমে শেষ হয়, স্পষ্টভাবে চলে যায়, মালিকের ক্রিয়াকলাপ, বা ধরে রাখার মেয়াদ শেষ হয়।"></p>
+<p><code>status</code> হয় <code>active</code> বা <code>finished</code>. বিরতি একটি তৃতীয় অবস্থা প্রবর্তন করে না: <code>pausedAt</code> চিহ্ন a
+স্থায়ী অধিবেশন বিরতি. একটি সমাপ্ত সেশন আবার খেলা যাবে না. রিপ্লে, সক্রিয় থাকলে, পড়া হয়
+তাদের নিজস্ব শেষ পয়েন্টের মাধ্যমে।</p>
+<table>
+<thead>
+<tr>
+<th>ঘটনা</th>
+<th>সাধারণ ম্যাচ</th>
+<th>অবিরাম অধিবেশন</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>শেষ গেমপ্লে সকেট সংযোগ বিচ্ছিন্ন</td>
+<td>প্রায় 5 মিনিট পরে ফিরে না গিয়ে শেষ হয়</td>
+<td>প্রায় 15 সেকেন্ড পরে বিরতি</td>
+</tr>
+<tr>
+<td>24 ঘন্টার জন্য কোন খেলোয়াড়ের কার্যকলাপ নেই</td>
+<td>অবসর নেওয়া যায়</td>
+<td>নিষ্ক্রিয়তার জন্য শেষ হওয়ার পরিবর্তে বিরতি দেয়</td>
+</tr>
+<tr>
+<td>প্লেয়ার আরেকটি সেশন অনুরোধ</td>
+<td>একটি খালি পুরানো ম্যাচ অবসর নিতে পারেন</td>
+<td>তাদের পার্ক করা দুনিয়াকে অবসর দেয় না</td>
+</tr>
+<tr>
+<td>প্লেয়ার পুনরায় সংযোগ করে</td>
+<td>শুধুমাত্র সক্রিয় থাকাকালীন</td>
+<td>প্রথম কমান্ডের আগে পুনরায় শুরু হয়</td>
+</tr>
+<tr>
+<td>ব্যাকএন্ড একটি ফলাফল প্রদান করে</td>
+<td>শেষ করে</td>
+<td>শেষ করে</td>
+</tr>
+<tr>
+<td>মালিক অধিবেশন শেষ</td>
+<td>বিজয়ী/রেটিং পরিবর্তন ছাড়াই সমাপ্ত হয়</td>
+<td>একই</td>
+</tr>
+</tbody>
+</table>
+<p>সময় এবং পুনরুদ্ধারের সীমা স্থাপনার দ্বারা পরিবর্তিত হতে পারে। থেমে থাকা বিশ্বগুলি প্রতি-খেলোয়াড়ের বিপরীতে গণনা করে৷
+সমবর্তী-সেশন সীমা। স্পষ্টভাবে পৃথিবী ছেড়ে বা শেষ করার একটি উপায় অফার করুন।</p>
+<h2 id="disconnecting-and-leaving-are-different">সংযোগ বিচ্ছিন্ন করা এবং ছেড়ে যাওয়া আলাদা</h2>
+<p>একটি সকেট বন্ধ করা সদস্যপদ সংরক্ষণ করে যাতে খেলোয়াড় ফিরে আসতে পারে। একটি সুস্পষ্ট <strong>পৃথিবী ছেড়ে</strong> দেয়
+আপ সদস্যপদ এবং এর গেমপ্লে সকেট অ্যাক্সেস.</p>
+<p>একটি অবিরাম অধিবেশন জন্য <strong>একটি রুম ছাড়া</strong>:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/sessions/{sessionId}/leave
+Authorization: Bearer &lt;player-token&gt;
+</code></pre>
+<p>কোন অনুরোধ বডি নেই. সাফল্য হল <code>204</code>. খেলার সদস্যপদ পরিবর্তন এবং অবহিত করা হয়
+লিভারের গেমপ্লে সকেট বন্ধ। মানুষের শেষ সদস্যটি চলে গেলে পৃথিবী শেষ হয়ে যায়
+<code>players_left</code>. <code>404</code> মানে অধিবেশন নেই, <code>403</code> মানে সদস্য নয়, <code>410</code> মানে ইতিমধ্যে শেষ, এবং
+<code>409</code> মানে এটি একটি স্থায়ী পৃথিবী নয় বা এটি একটি ঘরের অন্তর্গত।</p>
+<p>একটি জন্য <strong>রুম আবদ্ধ অধিবেশন</strong>, ব্যবহার করুন <code>POST /api/v1/realtime/rooms/{roomId}/leave</code>. ক
+জয়েন-ইন-প্রোগ্রেস রুম এটি সিট খালি করে এবং সেশন মেম্বারশিপ সরিয়ে দেয়। একটি ফিক্সড-রস্টার ম্যাচে,
+আসনটি AI হয়ে যায় এবং অধিবেশনটি তার মূল সদস্যপদ বজায় রাখতে পারে। রুমের নিয়ম মেনে চলুন;
+স্বতন্ত্র সেশন-লিভ এন্ডপয়েন্টকে কল করবেন না।</p>
+<p>একটি চলমান জয়েন-ইন-প্রোগ্রেস ওয়ার্ল্ড তার শেষ পরিদর্শক চলে যাওয়ার পরে তালিকাভুক্ত থাকতে পারে। এর সদস্য a
+অবিরাম বিশ্বের অন্য সাধারণ লবি ব্যবহার করতে পারেন. মাধ্যমে বর্তমান সদস্যতা আবিষ্কার করুন
+<code>GET /api/v1/realtime/rooms/joined</code>, শুধু নয় <code>/rooms/mine</code>.</p>
+<h2 id="read-recovery-information">পুনরুদ্ধারের তথ্য পড়ুন</h2>
+<p>সেশনে থাকা খেলোয়াড় এবং গেমের মালিক কল করতে পারেন:</p>
+<pre><code class="language-http">GET /api/v1/games/{slug}/sessions/{sessionId}/recovery
+Authorization: Bearer &lt;player-or-owner-token&gt;
+</code></pre>
+<p>প্রতিক্রিয়া এই সেশনের কার্যকর পুনরুদ্ধার এবং পরিবহন সীমা বর্ণনা করে:</p>
+<table>
+<thead>
+<tr>
+<th>ক্ষেত্র</th>
+<th>অর্থ/ একক</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sessionId</code>, <code>status</code>, <code>runtime</code>, <code>persistent</code></td>
+<td>সেশনের পরিচয় এবং ধরন; রানটাইম হয় <code>script</code> বা <code>container</code></td>
+</tr>
+<tr>
+<td><code>pausedAt</code>, <code>pausedMillis</code></td>
+<td>আইএসও টাইমস্ট্যাম্প শুরু করার বিরতি; মিলিসেকেন্ডে সঞ্চিত বিরতি সময়</td>
+</tr>
+<tr>
+<td><code>snapshotBytes</code>, <code>stateBudgetBytes</code>, <code>lastSnapshotAt</code></td>
+<td>পুনরুদ্ধার নথির আকার/বাজেট বাইট এবং সর্বশেষ স্ন্যাপশট ISO সময়</td>
+</tr>
+<tr>
+<td><code>snapshotIntervalSeconds</code>, <code>maxSnapshotPushHz</code></td>
+<td>কন্টেইনার চেকপয়েন্ট ক্যাডেন্স এবং পুশ সিলিং; <code>null</code> স্ক্রিপ্টের জন্য</td>
+</tr>
+<tr>
+<td><code>maxRestoreStalenessSeconds</code></td>
+<td>কন্টেইনার ম্যাচের সর্বোচ্চ স্ন্যাপশট বয়স; <code>null</code> যেখানে প্রযোজ্য নয়, অবিরাম বিশ্ব সহ</td>
+</tr>
+<tr>
+<td><code>maxRestores</code>, <code>restoreWindowMinutes</code>, <code>restoreCount</code></td>
+<td>পুনরুদ্ধারের প্রচেষ্টা ভাতা, এর উইন্ডো, এবং রিপোর্ট করা পুনরুদ্ধার গণনা</td>
+</tr>
+<tr>
+<td><code>retentionDays</code>, <code>recoveryDataExpiresAt</code></td>
+<td>বিরাম-বিশ্ব ধরে রাখা; <code>0</code> এবং <code>null</code> মানে কোন কনফিগার করা মেয়াদ নেই</td>
+</tr>
+<tr>
+<td><code>transport.maxMessageBytes</code>, <code>transport.maxRealtimeInputsPerSecond</code></td>
+<td>গেমপ্লে ফ্রেম/ইনপুট সীমা</td>
+</tr>
+<tr>
+<td><code>transport.tickRateHz</code>, <code>transport.pacingRateHz</code></td>
+<td>Hz এ কার্যকর টিক এবং পরিবহন গতির হার</td>
+</tr>
+</tbody>
+</table>
+<p>অনির্দিষ্টকাল ধরে রাখার প্রতিশ্রুতি বা একটি নির্দিষ্ট ক্র্যাশ-রিওয়াইন্ড উইন্ডোর পরিবর্তে এই মানগুলি পড়ুন। ক
+ইতিবাচক <code>retentionDays</code> একটি থামানো বিশ্বের মেয়াদ শেষ হতে অনুমতি দেয়. প্রদর্শন <code>recoveryDataExpiresAt</code> যখন সেট;
+মেয়াদ শেষ করে সেশন শেষ করে <code>retention_expired</code>.</p>
+<h2 id="restoring-client-and-server-state">ক্লায়েন্ট এবং সার্ভারের অবস্থা পুনরুদ্ধার করা হচ্ছে</h2>
+<p>একটি সকেট পুনঃসংযোগে, আপনার গেমের সম্পূর্ণ-রাষ্ট্রীয় বার্তার অনুরোধ করুন। চালু <code>resumed</code>, ইন্টারপোলেশন বাতিল করুন
+এবং পূর্ববর্তী অবস্থার উপর ভিত্তি করে ভবিষ্যদ্বাণী; <code>lostMs</code> পুনরুদ্ধারের ফাঁক রিপোর্ট. একটি পদক্ষেপ অনুমান করবেন না
+যার স্বীকৃতি হারিয়ে গেছে আবার পাঠানো নিরাপদ।</p>
+<p>স্ক্রিপ্ট সম্পূর্ণ রাষ্ট্র নথি ফেরত. পাত্রে একটি স্ন্যাপশট থেকে একটি সম্পূর্ণ সেশন পুনর্নির্মাণ করা আবশ্যক
+এবং বর্তমান তালিকা, আগের স্ন্যাপশট থেকে ভর্তি হওয়া খেলোয়াড়দের সহ। পরে চেকপয়েন্ট ধাক্কা
+গুরুত্বপূর্ণ ঘটনা, রিপোর্ট সিলিং মধ্যে. একটি বিরতি একটি কন্টেইনারের লাইভ সেশন এবং পরে সরিয়ে দেয়
+সংরক্ষিত স্ন্যাপশট থেকে এটি পুনরায় তৈরি করে। বিরতি খেলা সময় ব্যবহার করতে পারেন <code>ctx.now - ctx.pausedMs</code>.</p>
+<p>একটি ব্যর্থ জীবনবৃত্তান্ত বিশ্বকে থামিয়ে দেয় এবং একটি ত্রুটির পরে সকেট বন্ধ করে দেয়; ফিরে যান এবং পুনরায় চেষ্টা করুন।
+একটি ব্যর্থ পুনরুদ্ধার পরিবর্তে একটি সেশন শেষ করতে পারে। টার্মিনাল <code>abandoned</code> কারণ অন্তর্ভুক্ত <code>players_left</code>,
+<code>idle_no_players</code>, <code>superseded</code>, <code>server_failure</code>, <code>restore_failed</code>, <code>operator_ended</code>, এবং
+<code>retention_expired</code>. কারণ দেখান এবং পুনরায় সংযোগ বন্ধ করুন। পরিত্যাগ কোন বিজয়ী বা Elo পরিবর্তন অনুদান.</p>
+<p>দেখুন <a href="/bn/docs/tutorials/persistent-sessions.html">অবিরাম সেশন</a> সার্ভার কোডের জন্য এবং
+<a href="/bn/docs/troubleshooting.html#websockets">সমস্যা সমাধান</a> সিদ্ধান্ত পুনরায় সংযোগের জন্য।</p>
+
+{% endraw %}

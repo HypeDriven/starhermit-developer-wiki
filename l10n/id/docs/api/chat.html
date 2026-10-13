@@ -1,0 +1,361 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Mengobrol"
+source_url: "/docs/api/chat.html"
+source_path: "docs/api/chat.md"
+source_hash: "9c505584849a0722b12e5a1beb5ca636c08fbd95af2294c71ff7c49eddef36ad"
+translation: "machine"
+permalink: "/id/docs/api/chat.html"
+---
+{% raw %}
+<h1 id="chat">Mengobrol</h1>
+<p>Obrolan StarHermit mencakup pesan langsung, ruang grup, dan percakapan sesi permainan, melalui REST API (<code>api/v1/chat</code>) ditambah saluran push WebSocket server-ke-klien (<code>ws/v1/chat</code>). Semua titik akhir REST memerlukan autentikasi. Badan kesalahan bervariasi; melihat <a href="/id/docs/api/conventions.html#requests-and-responses">konvensi API</a>.</p>
+<h2 id="rest-endpoints">titik akhir REST</h2>
+<p>Basis: <code>https://api.starhermit.com/api/v1/chat</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POS</td>
+<td><code>/conversations</code></td>
+<td>JWT</td>
+<td>Buat percakapan (1 teman = langsung, ≥2 = grup)</td>
+</tr>
+<tr>
+<td>tambalan</td>
+<td><code>/conversations/{id}</code></td>
+<td>JWT</td>
+<td>Mengganti nama percakapan (anggota mana pun)</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/conversations/{id}/invites</code></td>
+<td>JWT</td>
+<td>Undang pengguna ke dalam grup</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/invites</code></td>
+<td>JWT</td>
+<td>Cantumkan undangan obrolan Anda yang tertunda</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/invites/{id}/accept</code></td>
+<td>JWT</td>
+<td>Terima undangan obrolan</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/invites/{id}/decline</code></td>
+<td>JWT</td>
+<td>Tolak undangan ngobrol</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/rooms/joinable</code></td>
+<td>JWT</td>
+<td>Buat daftar ruang terbuka dengan ≥1 teman di dalamnya</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/conversations/{id}/join</code></td>
+<td>JWT</td>
+<td>Bergabunglah di ruang terbuka (harus berteman dengan anggota)</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/conversations/{id}/participants</code></td>
+<td>JWT</td>
+<td>Tambahkan peserta ke percakapan</td>
+</tr>
+<tr>
+<td>MENGHAPUS</td>
+<td><code>/conversations/{id}/participants/{userId}</code></td>
+<td>JWT</td>
+<td>Menghapus peserta (diri sendiri: anggota mana pun; orang lain: hanya pembuat grup)</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/conversations/{id}/leave</code></td>
+<td>JWT</td>
+<td>Tinggalkan percakapan</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/conversations</code></td>
+<td>JWT</td>
+<td>Buat daftar percakapan, termasuk setiap hitungan yang belum dibaca</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/conversations/{id}</code></td>
+<td>JWT</td>
+<td>Dapatkan percakapan, termasuk jumlah yang belum dibaca</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/unread</code></td>
+<td>JWT</td>
+<td>Dapatkan jumlah total pesan yang belum dibaca</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/conversations/{id}/read</code></td>
+<td>JWT</td>
+<td>Tandai percakapan yang sudah dibaca</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/conversations/{id}/messages?page=&amp;pageSize=</code></td>
+<td>JWT</td>
+<td>Dapatkan riwayat pesan berhalaman</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/conversations/{id}/messages</code></td>
+<td>JWT</td>
+<td>Kirim pesan (tarif terbatas)</td>
+</tr>
+<tr>
+<td>MELETAKKAN</td>
+<td><code>/conversations/{conversationId}/messages/{messageId}</code></td>
+<td>JWT</td>
+<td>Mengedit pesan</td>
+</tr>
+<tr>
+<td>MENGHAPUS</td>
+<td><code>/conversations/{conversationId}/messages/{messageId}</code></td>
+<td>JWT</td>
+<td>Hapus pesan (batu nisan)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-conversation">Buat percakapan</h3>
+<p><code>POST /conversations</code></p>
+<pre><code class="language-json">{
+  "participantIds": ["&lt;guid&gt;"],
+  "name": "Friday night lobby",
+  "friendUserId": "&lt;guid&gt;",
+  "joinPolicy": "closed"
+}
+</code></pre>
+<p>Semua bidang bersifat opsional. Salah satu teman peserta membuat a <strong>langsung</strong> percakapan; dua atau lebih membuat a <strong>kelompok</strong>. <code>joinPolicy</code> adalah <code>"open"</code> atau <code>"closed"</code> (bawaan <code>"closed"</code>). Pengembalian a <code>ConversationDto</code>.</p>
+<h3 id="rename-a-conversation">Ganti nama percakapan</h3>
+<p><code>PATCH /conversations/{id}</code> dengan <code>{ "name": "New name" }</code> → <code>ConversationDto</code>. Setiap anggota dapat mengganti nama; catatan sistem dengan <code>kind: "system_rename"</code> sedang disiarkan.</p>
+<h3 id="invites">Undangan</h3>
+<p><code>POST /conversations/{id}/invites</code> dengan <code>{ "toUserId": "&lt;guid&gt;" }</code> → <code>ChatInviteDto</code>. Undangan adalah satu-satunya jalan masuk ke ruangan tertutup.</p>
+<p><code>GET /invites</code> → <code>ChatInviteDto[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "id": "&lt;guid&gt;",
+    "conversationId": "&lt;guid&gt;",
+    "conversationName": "Friday night lobby",
+    "fromUserId": "&lt;guid&gt;",
+    "fromUsername": "alice",
+    "toUserId": "&lt;guid&gt;",
+    "status": "pending",
+    "createdAt": "2026-07-22T07:00:00Z"
+  }
+]
+</code></pre>
+<p><code>POST /invites/{id}/accept</code> Dan <code>POST /invites/{id}/decline</code> → <code>ChatInviteDto</code>.</p>
+<h3 id="joining-rooms">Bergabung dengan ruangan</h3>
+<p><code>GET /rooms/joinable</code> → <code>JoinableRoomDto[]</code> — ruang terbuka yang memiliki setidaknya satu teman Anda di dalamnya:</p>
+<pre><code class="language-json">[
+  {
+    "id": "&lt;guid&gt;",
+    "name": "Friday night lobby",
+    "joinPolicy": "open",
+    "createdAt": "2026-07-22T07:00:00Z",
+    "participants": [{ "userId": "&lt;guid&gt;", "username": "alice" }]
+  }
+]
+</code></pre>
+<p><code>POST /conversations/{id}/join</code> → <code>ConversationDto</code>. Bergabung dengan ruang terbuka; Anda harus berteman dengan anggota.</p>
+<h3 id="participants">Peserta</h3>
+<p><code>POST /conversations/{id}/participants</code> dengan <code>{ "participantIds": ["&lt;guid&gt;"] }</code> → <code>ConversationDto</code>.</p>
+<p><code>DELETE /conversations/{id}/participants/{userId}</code> → <code>204</code>. Setiap anggota dapat mengeluarkan dirinya sendiri; menghapus orang lain memerlukan menjadi pembuat grup.</p>
+<p><code>POST /conversations/{id}/leave</code> → <code>204</code>.</p>
+<h3 id="reading-conversations">Membaca percakapan</h3>
+<p><code>GET /conversations</code> → <code>ConversationDto[]</code>.</p>
+<p><code>GET /conversations/{id}</code> → <code>ConversationDto</code>:</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "type": "group",
+  "name": "Friday night lobby",
+  "createdByUserId": "&lt;guid&gt;",
+  "joinPolicy": "closed",
+  "createdAt": "2026-07-22T07:00:00Z",
+  "participants": [{ "userId": "&lt;guid&gt;", "username": "alice" }],
+  "otherParticipant": { "userId": "&lt;guid&gt;", "username": "bob" },
+  "unreadCount": 3
+}
+</code></pre>
+<p><code>type</code> adalah salah satu dari <code>direct</code>, <code>group</code>, <code>game</code>. <code>name</code>, <code>createdByUserId</code>, Dan <code>otherParticipant</code> mungkin tidak ada. <code>unreadCount</code> menghitung pesan teks yang belum dibaca yang dikirim oleh anggota lain setelah cakrawala baca per percakapan penelepon.</p>
+<h3 id="unread-state">Status belum dibaca</h3>
+<p><code>GET /unread</code> mengembalikan jumlah yang belum dibaca di seluruh percakapan penelepon:</p>
+<pre><code class="language-json">{ "total": 7 }
+</code></pre>
+<p><code>POST /conversations/{id}/read</code> memajukan cakrawala baca penelepon untuk percakapan itu.
+Gunakan setelah menampilkan transkrip saat ini. Server memancarkan a <code>conversation_read</code> acara ke
+semua soket milik penelepon, memungkinkan beberapa klien yang masuk untuk menghapus lencana mereka.
+Pesan baru dan yang dihapus dapat mengubah totalnya, jadi klien harus memperbarui dari acara WebSocket atau
+mengambil kembali secara berkala <code>/unread</code>.</p>
+<h3 id="messages">Pesan</h3>
+<p><code>GET /conversations/{id}/messages?page=1&amp;pageSize=50</code> → <code>PagedMessagesDto</code>:</p>
+<pre><code class="language-json">{
+  "conversationId": "&lt;guid&gt;",
+  "page": 1,
+  "pageSize": 50,
+  "totalCount": 123,
+  "items": []
+}
+</code></pre>
+<p><code>POST /conversations/{id}/messages</code> dengan <code>{ "content": "hello" }</code> → <code>MessageDto</code>. Tarif dibatasi hingga 10 pesan/menit per pengguna; melebihi itu kembali <code>429</code>.</p>
+<p><code>PUT /conversations/{conversationId}/messages/{messageId}</code> dengan <code>{ "content": "edited" }</code> → <code>MessageDto</code>.</p>
+<p><code>DELETE /conversations/{conversationId}/messages/{messageId}</code> → <code>204</code>. Penghapusan adalah batu nisan: pesan tetap ada <code>isDeleted: true</code>.</p>
+<p><code>MessageDto</code>:</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "conversationId": "&lt;guid&gt;",
+  "senderId": "&lt;guid&gt;",
+  "senderUsername": "alice",
+  "content": "hello",
+  "kind": "text",
+  "metadata": { "key": "value" },
+  "sentAt": "2026-07-22T07:00:00Z",
+  "editedAt": null,
+  "isDeleted": false
+}
+</code></pre>
+<p><code>kind</code> adalah <code>"text"</code> atau <code>"system_rename"</code>; <code>content</code>, <code>metadata</code> (a <code>Dictionary&lt;string,string&gt;</code>), Dan <code>editedAt</code> mungkin tidak ada/null.</p>
+<h2 id="websocket-wsv1chat">Soket Web: <code>ws/v1/chat</code></h2>
+<p>Hubungkan ke <code>wss://api.starhermit.com/ws/v1/chat</code> dengan JWT melalui <code>Authorization</code> tajuk, <code>?ticket=</code>, atau <code>?access_token=</code>.</p>
+<p>Ini adalah sebuah <strong>server murni→saluran dorong klien</strong>: frame klien diabaikan (hanya <code>Close</code> dihormati). Setiap bingkai adalah sebuah amplop:</p>
+<pre><code class="language-json">{ "type": "&lt;event&gt;", "payload": { } }
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Peristiwa <code>type</code></th>
+<th>Muatan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>conversation_created</code></td>
+<td><code>ConversationDto</code></td>
+</tr>
+<tr>
+<td><code>conversation_renamed</code></td>
+<td><code>ConversationDto</code></td>
+</tr>
+<tr>
+<td><code>participants_added</code></td>
+<td><code>ConversationDto</code></td>
+</tr>
+<tr>
+<td><code>participant_removed</code></td>
+<td><code>ConversationDto</code></td>
+</tr>
+<tr>
+<td><code>chat_invite</code></td>
+<td><code>ChatInviteDto</code></td>
+</tr>
+<tr>
+<td><code>chat_invite_responded</code></td>
+<td><code>ChatInviteDto</code></td>
+</tr>
+<tr>
+<td><code>new_message</code></td>
+<td><code>MessageDto</code></td>
+</tr>
+<tr>
+<td><code>message_updated</code></td>
+<td><code>MessageDto</code></td>
+</tr>
+<tr>
+<td><code>message_deleted</code></td>
+<td><code>MessageDto</code></td>
+</tr>
+<tr>
+<td><code>conversation_read</code></td>
+<td>Perubahan status baca untuk pengguna yang masuk; mengambil kembali jumlah yang belum dibaca</td>
+</tr>
+<tr>
+<td><code>game_invite</code></td>
+<td><code>{ "inviteId", "kind", "gameSlug", "gameName", "roomId", "from": { "userId", "username" }, "createdAt", "acceptPath", "declinePath", "inProgress", "sessionId" }</code> — lihat di bawah</td>
+</tr>
+</tbody>
+</table>
+<h3 id="game_invite-one-event-for-both-invite-systems"><code>game_invite</code>: satu acara untuk kedua sistem undangan</h3>
+<p>Siapa pun dapat diundang untuk bermain dengan dua cara, dan acara tunggal ini membawa keduanya — klien menerapkan satu toast, bukan dua:</p>
+<table>
+<thead>
+<tr>
+<th><code>kind</code></th>
+<th>Dikeluarkan oleh</th>
+<th>Menerimanya</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>"session"</code></td>
+<td><a href="/id/docs/api/games.html#invites"><code>POST /games/{slug}/invites</code></a></td>
+<td>Membuat sesi permainan baru untuk Anda berdua</td>
+</tr>
+<tr>
+<td><code>"room"</code></td>
+<td><a href="/id/docs/api/realtime.html#invites"><code>POST /realtime/rooms/{id}/invites</code></a></td>
+<td>Mengambil tempat duduk di ruangan yang sudah diduduki oleh pengundang; <code>roomId</code> apakah ruangan itu</td>
+</tr>
+</tbody>
+</table>
+<p><code>acceptPath</code> Dan <code>declinePath</code> adalah titik akhir yang menjawab <strong>ini</strong> undang - gunakanlah dan perbedaannya tidak menjadi masalah. Menjawab di titik akhir sistem lain adalah a <code>404</code>: keduanya menyimpan id undangan terpisah.</p>
+<p><code>inProgress</code> adalah <code>true</code> ketika menerima bergabung dengan permainan yang sudah dimainkan — undangan sesi yang menyebutkan sesi yang sedang berjalan, atau undangan ruang ke ruang yang dimulai yang memungkinkan bergabung dalam proses — dan <code>sessionId</code> adalah sesi permainan itu. Gunakan itu untuk mengatakan "bergabung dengan permainan mereka" alih-alih "bermain".</p>
+<pre><code class="language-json">{
+  "type": "game_invite",
+  "payload": {
+    "inviteId": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+    "kind": "room",
+    "gameSlug": "poker",
+    "gameName": "StarHermit Poker",
+    "roomId": "b1d2c3e4-5f60-4a71-8b92-c3d4e5f60718",
+    "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "alice" },
+    "createdAt": "2026-07-26T14:10:00Z",
+    "acceptPath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/accept",
+    "declinePath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/decline"
+  }
+}
+</code></pre>
+<p><code>roomId</code> adalah <code>null</code> untuk <code>"session"</code> mengundang. Token peluncuran dalam cakupan game tidak dapat membuka soket ini atau membaca seluruh akun <code>/me/game-invites</code> kotak masuk. Jajak pendapat klien game <code>GET /api/v1/games/{slug}/invites</code> untuk undangan sesi dan <code>GET /api/v1/realtime/rooms/invites</code> untuk undangan ruang permainan mereka. Klien akun dapat membaca kedua jenis tersebut <code>GET /api/v1/me/game-invites</code>.</p>
+<h2 id="chat-inside-a-game-session">Mengobrol di dalam sesi permainan</h2>
+<p>Token peluncuran dalam lingkup game <strong>tidak bisa</strong> membuka <code>ws/v1/chat</code> — diblokir karena soket mengalirkan semua percakapan pengguna. Luncurkan token <strong>mungkin</strong> gunakan obrolan REST API pada percakapan yang dilampirkan ke sesi permainan mereka sendiri: detail sesi mengembalikan a <code>chatConversationId</code>, percakapannya bertipe <code>"game"</code>, pesertanya adalah pemain sesi, dan aturan pertemanan dilewati.</p>
+<p>Oleh karena itu, klien game biasanya memuat riwayat melalui REST dan melakukan polling untuk pesan baru alih-alih menggunakan soket. Misalnya, <a href="/id/docs/tutorials/chess-walkthrough.html">implementasi referensi catur</a> polling setiap 5 detik:</p>
+<pre><code class="language-http">GET /api/v1/chat/conversations/{chatConversationId}/messages?page=1&amp;pageSize=50
+Authorization: Bearer &lt;launch-token&gt;
+</code></pre>
+<pre><code class="language-http">POST /api/v1/chat/conversations/{chatConversationId}/messages
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+
+{ "content": "good game" }
+</code></pre>
+<h2 id="see-also">Lihat juga</h2>
+<ul>
+<li><a href="/id/docs/api/voice.html">Suara</a> — ruang suara berlabuh untuk percakapan obrolan</li>
+<li><a href="/id/docs/api/friends.html">Teman-teman</a> — gerbang persahabatan obrolan langsung dan bergabung ke ruang</li>
+<li><a href="/id/docs/api/games.html">Pertandingan</a> — sesi permainan dan mereka <code>chatConversationId</code></li>
+</ul>
+<p>Melihat <a href="/id/docs/credentials.html">kompatibilitas kredensial</a> Dan <a href="/id/docs/api/contracts.html">kontrak yang dapat dibaca mesin</a>.</p>
+
+{% endraw %}

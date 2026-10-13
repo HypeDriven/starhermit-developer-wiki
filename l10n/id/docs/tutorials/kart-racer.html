@@ -1,0 +1,512 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Tutorial: membangun pembalap kart multipemain"
+source_url: "/docs/tutorials/kart-racer.html"
+source_path: "docs/tutorials/kart-racer.md"
+source_hash: "d1191e3e810a9f7c888152161e331f2cebb8c39f3e6d39661e4cde37fd39c340"
+translation: "machine"
+permalink: "/id/docs/tutorials/kart-racer.html"
+---
+{% raw %}
+<h1 id="tutorial-build-a-multiplayer-kart-racer">Tutorial: membangun pembalap kart multipemain</h1>
+<p>Tutorial ini membangun lapisan multipemain dari pembalap kart arcade — hingga delapan kart, pribadi
+lobi dengan teman, bergabung cepat dengan orang asing, driver CPU mengisi slot jaringan yang kosong, hitung mundur,
+putaran, urutan penyelesaian, dan pencapaian — di StarHermit API. Ini mencakup kontrak netcode
+dan platform memanggil; mesin, track art, dan model penanganan Anda adalah milik Anda sendiri.</p>
+<p>Segala sesuatu yang khusus untuk game di sini — itu <code>grand-prix</code> antrian, tata letak bingkai biner, tombol item,
+konstanta fisika — adalah nilai contoh. Hanya titik akhir, selubung bingkai, dan batasnya saja
+perilaku platform, dan masing-masing tertaut ke halaman referensinya.</p>
+<h2 id="1-pick-an-architecture">1. Pilih arsitektur</h2>
+<p>Pembalap adalah bentuk permainan yang paling sulit untuk anggaran server tick: kart bergerak cepat, bertabrakan, dan
+pemain merasakan steering lag 50 ms. StarHermit memberi Anda dua cara untuk menjalankannya, keduanya dimulai dari a
+<a href="/id/docs/api/realtime.html">ruang waktu nyata</a>:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><strong>A. Dirutekan host</strong></th>
+<th><strong>B. Skrip otoritatif server</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Siapa yang melakukan simulasi</td>
+<td>Klien host ruangan, apa pun yang disukainya (60 Hz+)</td>
+<td>Milikmu <code>server=</code> naskah, paling banyak <strong>30Hz</strong></td>
+</tr>
+<tr>
+<td>Mengangkut</td>
+<td>Bingkai biner aktif <code>ws/v1/realtime</code></td>
+<td>JSON <code>cmd</code>/<code>game</code> bingkai aktif <code>ws/v1/games</code></td>
+</tr>
+<tr>
+<td>Curang</td>
+<td>Tuan rumah dapat dipercaya</td>
+<td>Klien tidak memiliki otoritas</td>
+</tr>
+<tr>
+<td>Elo, pencapaian naskah</td>
+<td>Tidak (host memposting hasil yang dijepit)</td>
+<td>Ya - <code>eloUpdates</code>, <code>achievements</code>, memutar ulang</td>
+</tr>
+<tr>
+<td>Terbaik untuk</td>
+<td>Balapan santai dengan teman, fisika fidelitas penuh</td>
+<td>Balapan berperingkat dengan fisika arcade sederhana</td>
+</tr>
+</tbody>
+</table>
+<p>Mulailah dengan <strong>A</strong> kecuali jika Anda membutuhkan permainan peringkat; bagian 7 menunjukkan untuk apa perubahan itu <strong>B</strong>. A
+<a href="/id/docs/api/container-games.html">server kontainer</a> juga bisa menjalankan delapan kart <strong>terikat ruangan</strong> ras dan
+simulasikan pada 60 Hz secara resmi. Pencocokan API Game langsungnya saat ini menggunakan 1v1 implisit
+antrian, jadi gunakan ruang waktu nyata untuk jaringan yang lebih besar. Platform tidak melangkahi putaran penampung.</p>
+<h2 id="2-manifest">2. Manifes</h2>
+<p>Publikasikan folder build yang dapat didistribusikan dengan ini <code>starhermit.txt</code> pada akarnya (lihat
+<a href="/id/docs/starhermit-txt.html">manifes</a>). Itu <code>control.*</code> garis memberi pemain UI yang mengikat kembali dan milik Anda
+klien a <a href="/id/docs/api/games.html#per-player-control-bindings">mengontrol API</a> untuk membaca binding dari:</p>
+<pre><code class="language-ini">name=Turbo Hermits
+launch=index.html
+cover=art/cover.png
+control.accelerate=KeyW+ArrowUp | Accelerate
+control.brake=KeyS+ArrowDown | Brake / reverse
+control.left=KeyA+ArrowLeft | Steer left
+control.right=KeyD+ArrowRight | Steer right
+control.drift=ShiftLeft+ShiftRight | Drift
+control.item=Space | Use item
+</code></pre>
+<p>Jalur A punya <strong>TIDAK</strong> <code>server=</code> garis. Jika game mengirimkan skrip, memulai ruangan akan membuat sesi terikat
+dan hanya naskah yang dapat mengakhiri pertandingan — milik tuan rumah <code>POST .../result</code> berhenti menjadi cara balapan berakhir
+(bagian 7).</p>
+<h2 id="3-sign-in-and-read-the-basics">3. Masuk dan baca dasar-dasarnya</h2>
+<p>Game yang dihosting platform dibuka dengan <code>#game_token=&lt;jwt&gt;</code> di URL — baca sekali, hapus dengan
+<code>history.replaceState</code>, dan segarkan sebelum masa berlakunya habis 60 menit (detailnya ada di
+<a href="/id/docs/tutorials/chess-walkthrough.html#3-launch-and-authentication">panduan catur</a> Dan
+<a href="/id/docs/api/auth.html">autentik</a>). Siput Anda adalah tokennya <code>game_scope</code> klaim (atau <code>location.hostname</code>itu
+label pertama); jangan pernah melakukan hard-code.</p>
+<p>Saat dimuat, ambil apa yang dibutuhkan menu:</p>
+<pre><code class="language-http">GET /api/v1/games/{slug}/controls     # effective key bindings (manifest defaults + overrides)
+GET /api/v1/games/{slug}/settings     # camera, volume, last chosen kart — your own keys
+GET /api/v1/realtime/rooms/mine       # 200 → the player is still in a race; rejoin it
+</code></pre>
+<p>Simpan pilihan menu dengan <code>PATCH /api/v1/games/{slug}/settings</code> (<code>{"settings":{"kart":"hermit-crab"}}</code>).
+Pengaturan mengikuti pemain melintasi mesin dan tidak memerlukan deklarasi.</p>
+<h2 id="4-the-lobby">4. Lobi</h2>
+<p>Sebuah grand prix gratis untuk semua, jadi ruangan tersebut memiliki satu tim yang terdiri dari delapan kursi. Lintasan, jumlah putaran dan mesin
+kelas menjadi buram <code>metadata</code>:</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms
+Authorization: Bearer &lt;launch token&gt;
+
+{ "teamCount": 1, "seatsPerTeam": 8, "backfillAfterSeconds": 45,
+  "aiPlayers": 0, "name": "Friday cup", "isVisible": true,
+  "metadata": { "track": "coral-loop", "laps": 3, "cc": 150 } }
+</code></pre>
+<p>Dengan token peluncuran, permainan ruangan berasal dari token, jadi <code>gameSlug</code> dapat dihilangkan. Pencipta
+adalah tuan rumah di kursi <code>(0, 0)</code>. Dari sini lobi adalah aliran ruangan biasa:</p>
+<ul>
+<li><strong>Teman-teman</strong> — <code>POST /rooms/{id}/invites</code> dengan <code>{"toUserId": ...}</code>. Platform ini memberi tahu mereka;
+menerima kursi mereka. Tunjukkan enam karakter <code>joinCode</code> jadi teman-teman juga bisa mengetiknya
+<code>POST /rooms/join-by-code</code>.</li>
+<li><strong>Orang asing</strong> — tuan rumah menelepon <code>POST /rooms/{id}/open</code>. Pemain tanpa panggilan kamar
+<code>POST /rooms/quick-join</code> dengan <code>{"seats": 1}</code> dan, seterusnya <code>404</code>, buat dan buka sendiri.</li>
+<li><strong>Lacak suara / tuan rumah berubah pikiran</strong> — <code>PATCH /rooms/{id}</code> dengan yang baru <code>metadata</code> dan ruangan itu
+<code>revision</code> sebagai <code>expectedRevision</code>.</li>
+<li><strong>Solo melawan CPU</strong> — buat dengan <code>"aiPlayers": 7</code>, Kemudian <code>POST /rooms/{id}/start</code>.</li>
+</ul>
+<p>Ruang terbuka dimulai dengan sendirinya ketika kedelapan kursi terisi atau <code>backfillAfterSeconds</code> lolos; tuan rumah
+juga bisa <code>POST /rooms/{id}/start</code>. Setiap kursi yang masih kosong menjadi peserta AI — itu milik Anda
+driver CPU.</p>
+<h2 id="5-the-race-socket-host-routed">5. Soket balapan (diarahkan ke host)</h2>
+<h3 id="connect">Menghubungkan</h3>
+<p>Setiap peserta membuka soket realtime dengan tiket sekali pakai:</p>
+<pre><code class="language-js">const { ticket } = await api.post("/api/v1/realtime/connection-tickets"); // { ticket, expiresIn }
+const ws = new WebSocket(
+  `wss://api.starhermit.com/ws/v1/realtime?roomId=${roomId}&amp;ticket=${encodeURIComponent(ticket)}`);
+ws.binaryType = "arraybuffer";
+</code></pre>
+<p>Bingkai teks adalah dorongan JSON dan bingkai kontrol; frame biner adalah gameplay. Itu <code>roster</code> dorongan adalah
+grid Anda: setelah start dibekukan, termasuk kursi AI. Dengan satu tim, slot grid kart adalah miliknya
+milik peserta <code>slot</code>.</p>
+<pre><code class="language-js">ws.onmessage = (e) =&gt; {
+  if (typeof e.data === "string") return onControl(JSON.parse(e.data)); // roster, presence, event, ready, chat, result
+  const bytes = new Uint8Array(e.data);
+  const sender = guidFromDotNet(bytes.subarray(0, 16)); // server-stamped, trustworthy
+  onGameplay(sender, new DataView(e.data, 16));          // your payload starts at byte 16
+};
+
+// The server prefixes the sender's participant id in .NET GUID byte order:
+// the first three groups are little-endian.
+function guidFromDotNet(b) {
+  const h = (i) =&gt; b[i].toString(16).padStart(2, "0");
+  return `${h(3)}${h(2)}${h(1)}${h(0)}-${h(5)}${h(4)}-${h(7)}${h(6)}-` +
+         `${h(8)}${h(9)}-${h(10)}${h(11)}${h(12)}${h(13)}${h(14)}${h(15)}`;
+}
+</code></pre>
+<p>Jangan pernah memasukkan id pemain ke dalam payload Anda sendiri dan percayalah — awalan 16-byte adalah satu-satunya identitas
+yang dijamin oleh server.</p>
+<h3 id="routing-and-budget">Perutean dan anggaran</h3>
+<p>Platform ini menerapkan bentuk permainan yang diarahkan oleh host:</p>
+<ul>
+<li>A <strong>milik tamu</strong> jangkauan frame biner <strong>hanya tuan rumah</strong> — itulah saluran masukan.</li>
+<li>Itu <strong>milik tuan rumah</strong> jangkauan frame biner <strong>setiap tamu</strong> — itulah saluran snapshot.</li>
+<li>Setiap frame paling banyak <strong>8 KB</strong>; setiap koneksi dapat mengirim <strong>30 pesan/detik</strong> (2× meledak untuk satu
+kedua). Menutup soket dengan <code>PolicyViolation</code>.</li>
+</ul>
+<p>Jadi host melakukan simulasi pada kecepatan berapa pun yang dirasa tepat (umumnya 60 Hz) tetapi <strong>mengirimkan</strong> snapshot di
+20 Hz, dan tamu mengirimkan masukan pada 20 Hz. Itu menyisakan ruang kepala untuk bingkai kontrol sesekali.</p>
+<h3 id="frame-layouts-example">Tata letak bingkai (contoh)</h3>
+<p>Input, tamu → host, 7 byte:</p>
+<table>
+<thead>
+<tr>
+<th>Mengimbangi</th>
+<th>Jenis</th>
+<th>Bidang</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>u8</td>
+<td><code>1</code> = masukan</td>
+</tr>
+<tr>
+<td>1</td>
+<td>u16</td>
+<td><code>seq</code> — bertambah setiap pengiriman</td>
+</tr>
+<tr>
+<td>3</td>
+<td>i8</td>
+<td>mengarahkan, −127…127</td>
+</tr>
+<tr>
+<td>4</td>
+<td>u8</td>
+<td>throttle, 0…255</td>
+</tr>
+<tr>
+<td>5</td>
+<td>u8</td>
+<td>bit: 0 rem, 1 drift</td>
+</tr>
+<tr>
+<td>6</td>
+<td>u8</td>
+<td><code>itemPresses</code> — penghitung, bukan bendera</td>
+</tr>
+</tbody>
+</table>
+<p><code>itemPresses</code> adalah hitungan penekanan tombol item. Pada 20 Hz, pers yang lebih pendek dari 50 ms akan melakukannya
+jika tidak, jatuh di antara sampel; dengan penghitung, tuan rumah menembakkan satu item per kenaikan, namun
+mesin press mendarat.</p>
+<p>Snapshot, host → tamu, 4 + 22 byte per kart (176 byte untuk grid penuh):</p>
+<table>
+<thead>
+<tr>
+<th>Mengimbangi</th>
+<th>Jenis</th>
+<th>Bidang</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>u8</td>
+<td><code>2</code> = cuplikan</td>
+</tr>
+<tr>
+<td>1</td>
+<td>u16</td>
+<td>kutu tuan rumah</td>
+</tr>
+<tr>
+<td>3</td>
+<td>u8</td>
+<td>jumlah kart</td>
+</tr>
+<tr>
+<td>per kart</td>
+<td>u8, f32 ×4, u8, u16, u8, u8</td>
+<td>slot, x, z, pos, kecepatan, putaran, pos pemeriksaan, item, bendera</td>
+</tr>
+</tbody>
+</table>
+<p>Para tamu membuat kart lainnya <strong>~100 ms di masa lalu</strong>, menginterpolasi antara dua snapshot itu
+tandai waktu itu, dan prediksi kart mereka sendiri secara lokal dari masukan mereka, menuju ke tuan rumah
+posisi ketika mereka tidak setuju. Sertakan masukan terakhir <code>seq</code> tuan rumah menerapkan per kart masuk <code>flags</code> atau sebuah
+bidang tambahan jika Anda ingin rekonsiliasi yang tepat.</p>
+<h3 id="countdown-race-events-finish">Hitung mundur, acara balapan, selesai</h3>
+<p>Bingkai kontrol adalah JSON, maksimal 4 KB, dan stempel server <code>from</code> dengan id peserta pengirim:</p>
+<ul>
+<li>Para tamu mengirim <code>{"type":"ready"}</code> setelah trek dimuat.</li>
+<li>Tuan rumah menunggu setiap manusia yang terhubung siap (atau batas waktu), lalu mengirimkan
+<code>{"type":"event","kind":"countdown","goInMs":3000}</code>. Para tamu memulai hitungan mundur lokal mereka
+tanda terima — tidak diperlukan sinkronisasi jam pada presisi ini.</li>
+<li>Ketukan balapan lainnya juga demikian <code>event</code> bingkai: <code>{"kind":"lap","slot":3,"lap":2}</code>,
+<code>{"kind":"finished","slot":3,"place":1,"timeMs":94210}</code>.</li>
+<li><code>chat</code> tersedia untuk semua orang, namun tamu dibatasi hingga 10 frame kontrol per menit — cukup banyak
+<code>ready</code> dan beberapa "gg"s, bukan untuk gameplay.</li>
+</ul>
+<p>Ketika manusia terakhir melewati garis (atau penghitung waktu setelah pemenang habis), tuan rumah menyerahkan
+Hasilnya, yang menutup ruangan dan mendorong <code>{"type":"result"}</code> kepada semua orang:</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms/{id}/result
+
+{ "teamScores": [0],
+  "metadata": { "track": "coral-loop",
+                "order": [ { "slot": 3, "timeMs": 94210 }, { "slot": 0, "timeMs": 95002 } ],
+                "bestLapMs": 30112 } }
+</code></pre>
+<p><code>teamScores</code> membutuhkan tepat satu entri per tim (dijepit 0–50), yang tidak berguna dalam a
+gratis untuk semua; urutan akhir tetap ada <code>metadata</code>. Perlombaan tim adalah ruangan yang sama dengan
+<code>teamCount: 2</code> dan poin masing-masing tim <code>teamScores</code>.</p>
+<h3 id="cpu-drivers-leavers-and-host-changes">Driver CPU, lulusan dan perubahan host</h3>
+<ul>
+<li><strong>Kursi AI dapat Anda kendalikan.</strong> Platform memesan tempat duduk dan memberi nama pengemudi; milik tuan rumah
+simulasi mengarahkannya (garis balap melalui pos pemeriksaan, dengan beberapa karet gelang).</li>
+<li><strong>Seorang tamu yang meninggalkan pertengahan balapan</strong> (<code>POST /rooms/{id}/leave</code>) menyimpan kart mereka di grid: daftar pemain
+push menunjukkan peserta yang sama <code>id</code> Sekarang <code>isAi: true</code>, dan CPU host mengambil alih kart tersebut.</li>
+<li><strong>Seorang tamu yang turun</strong> masih di dalam kamar; pertahankan kart mereka tetap meluncur dan biarkan mereka terhubung kembali —
+soket terbaru menggantikan soket lama.</li>
+<li><strong>Jika tuan rumah pergi</strong>, peran tuan rumah diberikan kepada manusia yang tersisa paling lama bergabung dan
+roster push menunjukkan yang baru <code>isHost</code>. Setiap tamu sudah memegang snapshot lengkap terbaru, jadi baru
+host melanjutkan simulasi darinya dan mulai mengirimkan snapshot; masukan tamu sekarang diarahkan ke mereka.
+Migrasi host adalah tugas kode Anda — platform hanya memindahkan perannya.</li>
+<li><strong>Kalau hostnya putus saja</strong>, ruangan ditutup setelah 60 detik tanpa soket host.</li>
+</ul>
+<h2 id="6-around-the-race">6. Sekitar perlombaan</h2>
+<ul>
+<li><strong>Suara dan obrolan.</strong> Setiap tamu sudah bisa <code>chat</code> pada soket waktu nyata; untuk suara, lihat
+<a href="/id/docs/api/voice.html">Suara</a>.</li>
+<li><strong>Pertandingan ulang.</strong> Ruangan ditutup setelah hasilnya. Mintalah tuan rumah membuat ruangan baru dan mengundang
+manusia dari daftar sebelumnya, atau kirim semua orang kembali untuk bergabung dengan cepat.</li>
+<li><strong>Papan peringkat waktu putaran.</strong> Papan peringkat platform game adalah papan elo-nya, yang hanya ditulis oleh server
+waktu proses. Papan peringkat yang ditentukan penerbit menerima <code>POST /api/v1/leaderboards/{id}/submit</code>, tapi itu
+skor diklaim oleh klien — baik untuk uji waktu persahabatan, bukan untuk apa pun yang berhadiah.</li>
+</ul>
+<h2 id="7-variant-b-server-authoritative-racing">7. Varian B: balap otoritatif server</h2>
+<p>Untuk permainan berperingkat, pindahkan simulasi ke dalam skrip. Lobi tidak berubah; tambahkan skrip dan
+pengaturan pencocokan ke manifes:</p>
+<pre><code class="language-ini">server=server.js
+matchmaking.max_wait_seconds=20
+matchmaking.ai_players=7
+</code></pre>
+<p>Sekarang ada dua hal yang menciptakan perlombaan: <strong>memulai sebuah ruangan</strong> menciptakan sesi terikat ruangan untuk manusianya, dan
+<strong>penjaruman</strong> (<code>POST /api/v1/games/{slug}/matchmaking?queue=grand-prix</code>) menciptakan satu ketika delapan
+pemain ditemukan — atau, dengan pengaturan di atas, setelah 20 detik dengan CPU hingga tujuh kosong
+kursi. Lobi teman bisa mengantri bersama <code>POST /realtime/rooms/{id}/matchmake</code>.</p>
+<p>Apa pun pilihannya, klien mengambil alih <code>sessionId</code> (kamar itu <code>gameSessionId</code>, atau tiket yang cocok) dan
+mainkan <code>ws/v1/games?sessionId=…</code>. Soket waktu nyata, jika ada, disimpan hanya untuk daftar nama.</p>
+<h3 id="the-script">Naskahnya</h3>
+<p>Seluruh simulasi berjalan <code>onTick</code> pada langit-langit 30 Hz. Setiap doa adalah kotak pasir baru yang
+mendapat <code>sessionState</code> masuk dan mengembalikannya, jadi pertahankan statusnya tetap kecil — statusnya diserialkan setiap kali centang.</p>
+<pre><code class="language-js">const TRACK = { laps: 3, radius: 14,
+  checkpoints: [[0, 0], [120, 0], [160, 60], [120, 120], [0, 120], [-40, 60]] };
+
+globalThis.game = {
+  tickRateHz: 30,
+  replays: true,
+  queues: [{ key: "grand-prix", teams: 8, teamSize: 1 }],
+  achievements: [
+    { key: "chequered-flag", name: "Chequered Flag", description: "Win a race.", points: 10 }
+  ],
+
+  createSession(ctx) {
+    const karts = racers(ctx).map((r, i) =&gt; ({
+      id: r.id, name: r.name, ai: r.ai, x: -8 * (i % 2), z: -6 * i, heading: 0, speed: 0,
+      cp: 1, lap: 0, boost: 0, boosts: 1, input: {}, ack: 0, finishedAt: null
+    }));
+    return { ok: true, sessionState: { t: ctx.now, goAt: ctx.now + 4000, karts, order: [] } };
+  },
+
+  onPlayerMessage(ctx) {                       // durable commands: discrete actions
+    const s = copy(ctx.sessionState);
+    const k = s.karts.find((k) =&gt; k.id === ctx.message.from);
+    if (ctx.message.data?.type === "use-item" &amp;&amp; k &amp;&amp; k.boosts &gt; 0 &amp;&amp; ctx.now &gt;= s.goAt) {
+      k.boosts--; k.boost = 1.2;
+    }
+    return { ok: true, sessionState: s };
+  },
+
+  onTick(ctx) {
+    const s = copy(ctx.sessionState);
+    const dt = Math.min(Math.max((ctx.now - s.t) / 1000, 0), 0.1);
+    s.t = ctx.now;
+    for (const i of ctx.inputs || []) {        // latest realtime input per player since last tick
+      const k = s.karts.find((k) =&gt; k.id === i.from);
+      if (k) { k.input = i.data; k.ack = Math.max(k.ack, Math.floor(+i.data.seq) || 0); }
+    }
+    if (ctx.now &gt;= s.goAt) {
+      for (const k of s.karts) {
+        if (k.finishedAt) continue;
+        move(k, k.ai ? aiInput(k) : k.input, dt);   // pure motion — shared with the client
+        progress(k, s, ctx);                        // checkpoints, laps, finish — server only
+      }
+    }
+    const snap = s.karts.map((k) =&gt;
+      [k.id, r2(k.x), r2(k.z), r3(k.heading), r2(k.speed), r2(k.boost), k.lap, k.cp, k.ack]);
+    const out = { ok: true, sessionState: s,
+      broadcast: [{ to: "all", data: { type: "snap", t: s.t, goAt: s.goAt, karts: snap } }] };
+    if (raceOver(s, ctx)) Object.assign(out, finish(s, ctx));
+    return out;
+  }
+};
+</code></pre>
+<p>Pembantunya adalah kode permainan biasa. Bagian-bagian yang menjadi perhatian platform:</p>
+<ul>
+<li><strong><code>racers(ctx)</code></strong> membaca grid dari awal sesi mana pun: <code>ctx.room.roster</code> untuk a
+ruangan (kursi AI punya <code>userId: null</code>, jadi beri mereka id suka <code>ai-0-5</code>), <code>ctx.matchmaking.seats</code> untuk a
+balapan matchmade (melewati kursi dengan <code>id: null</code>), kalau tidak <code>ctx.players</code>.</li>
+<li><strong><code>move(k, input, dt)</code></strong> harus <strong>jepit setiap nilai masukan</strong> — <code>steer</code> ke −1…1, <code>throttle</code> hingga 0…1 —
+karena <code>ctx.inputs[].data</code> adalah apa pun yang dikirim klien. Hanya <code>from</code> dipercaya. Jaga agar tetap murni—
+tidak <code>ctx</code>, tidak ada status sesi — sehingga klien dapat menjalankannya juga (lihat
+<a href="#client-side-prediction">prediksi sisi klien</a>).</li>
+<li><strong>Keacakan dan waktu</strong> berasal dari <code>ctx.random</code> Dan <code>ctx.now</code>; tidak ada <code>Date</code> atau <code>Math.random</code>.</li>
+<li><strong><code>finish(s, ctx)</code></strong> kembali <code>result</code> (yang mengakhiri sesi dan, untuk sebuah ruangan, menutupnya),
+<code>achievements</code> untuk pemenang jika manusia, dan <code>eloUpdates</code> untuk pembalap manusia — misalnya berpasangan
+elo melintasi urutan akhir, membaca dari dan menulis kembali ke <code>ctx.playerStates</code>. Kursi AI tidak bisa
+menerima status pemain, peringkat, atau pencapaian.</li>
+<li><strong><code>raceOver</code></strong> juga harus mengakhiri perlombaan yang tidak dapat diselesaikan oleh siapa pun - setiap manusia mengikuti perlombaan tersebut
+<code>ctx.presence</code> (ruangan), atau batas waktu yang sulit.</li>
+<li><strong>Pemutaran ulang</strong> simpan saja <em>terakhir</em> <code>sessionState</code>. Pertahankan tabel waktu putaran dan penyelesaian akhir yang ringkas
+pesan di dalamnya, bukan log posisi per centang.</li>
+</ul>
+<h3 id="the-client">Klien</h3>
+<p>Kirim kemudi sebagai masukan waktu nyata setiap centang dan tindakan terpisah sebagai perintah tahan lama:</p>
+<pre><code class="language-js">// ~30 Hz: latest-wins, batched into the next onTick
+send({ type: "cmd", data: { type: "input", realtime: true, seq: ++seq,
+                            steer, throttle, brake, drift } });
+
+// on key press: a durable command, runs onPlayerMessage immediately
+send({ type: "cmd", data: { type: "use-item" } });
+</code></pre>
+<p>Barang <strong>harus</strong> melalui perintah yang tahan lama. Input waktu nyata adalah kemenangan terbaru antara tick, dan
+platform hanya mempertahankan bidang sekali pakai <code>pass</code>, <code>tackle</code> Dan <code>shoot</code> ketika sampel yang lebih baru
+menggantikan yang lama — tombol lain apa pun dalam input waktu nyata dapat ditimpa sebelum dicentang
+melihatnya.</p>
+<p><code>achievement</code> bingkai tiba pada soket yang sama; membaca <code>GET /api/v1/games/{slug}/achievements</code> pada
+memuat apa pun yang diberikan sebelum dibuka.</p>
+<h3 id="client-side-prediction">Prediksi sisi klien</h3>
+<p>Hanya menampilkan apa yang dikirimkan server membuat kart terasa seperti dikemudikan melalui lumpur. Kemudi
+perubahan harus mencapai server, tunggu centang berikutnya (hingga 33 ms pada 30 Hz), dan kembali lagi dalam a
+<code>snap</code> — pada ping 80 ms yang berarti lebih dari 100 ms sebelum kart berbelok. Prediksi menyembunyikan itu: klien
+bergerak <strong>kartnya sendiri</strong> segera dan perlakukan masing-masing <code>snap</code> sebagai koreksi, bukan seperti gambar.</p>
+<h4 id="share-the-motion-code">Bagikan kode gerak</h4>
+<p>Pisahkan simulasi seperti yang dilakukan skrip di atas: murni <code>move(k, input, dt)</code> untuk penanganan, dan
+khusus server <code>progress</code> untuk pos pemeriksaan, putaran dan finishing. Paparkan kode gerak dari <code>server.js</code>
+sebagai global kedua - pola yang digunakan catur <code>globalThis.chessRules</code> — dan memuat file yang sama
+peramban:</p>
+<pre><code class="language-js">// server.js — shared by the platform's sandbox and the browser
+function move(k, input, dt) { /* clamp input, integrate speed, heading, x, z, boost */ }
+globalThis.kartPhysics = { move, TRACK };
+globalThis.game = { /* ... as above ... */ };
+</code></pre>
+<pre><code class="language-html">&lt;script src="server.js"&gt;&lt;/script&gt;  &lt;!-- defines kartPhysics; the client never calls game.* --&gt;
+</code></pre>
+<p>Klien memperkirakan <strong>gerak saja</strong>. Lap, posisi, item, dan urutan finish tetap menjadi milik server
+panggilan. Jangan berharap hasil yang sedikit sama: kotak pasir dan browser mungkin tidak setuju pada bagian terakhir
+<code>Math.sin</code>/<code>Math.cos</code>, dan posisi di <code>snap</code> berbentuk bulat. Rekonsiliasi menyerap penyimpangan tersebut.</p>
+<h4 id="step-at-the-servers-rhythm">Ikuti ritme server</h4>
+<p>Server tidak menjalankan satu langkah per input. Setiap centang itu menerapkan <strong>terbaru</strong> masukan yang dipegangnya
+kart itu, terus menggunakannya hingga kart yang lebih baru tiba, dan terintegrasi secara real time sejak itu
+centang sebelumnya. Jadi cerminkan bentuk itu daripada melangkah pada kecepatan bingkai tampilan:</p>
+<pre><code class="language-js">const pending = [];                              // inputs the server hasn't acknowledged yet
+let seq = 0, predicted, previous;               // { x, z, heading, speed, boost }, seeded from the first snap
+let error = { x: 0, z: 0, heading: 0 };          // visual offset, decays in render()
+
+setInterval(() =&gt; {                              // 30 Hz, the script's tickRateHz
+  if (!predicted || serverNow() &lt; goAt) return;  // the server ignores movement before goAt
+  const input = { steer: readSteer(), throttle: readThrottle(), brake: held("brake"), drift: held("drift") };
+  const entry = { seq: ++seq, input, dt: 1 / 30 };
+  send({ type: "cmd", data: { type: "input", realtime: true, seq: entry.seq, ...input } });
+  pending.push(entry);
+  previous = { ...predicted };
+  kartPhysics.move(predicted, input, entry.dt);  // the kart responds now, not a round trip later
+}, 1000 / 30);
+</code></pre>
+<p>Mengirim lebih cepat dari laju tick akan terbuang sia-sia — hanya input terbaru per tick yang digunakan — dan
+platform menurunkan input waktu nyata di atas batas per koneksinya.</p>
+<h4 id="reconcile-on-every-snap">Berdamailah dalam segala hal <code>snap</code></h4>
+<p>Naskahnya bergema <code>ack</code>, paling atas <code>seq</code> itu telah diterapkan untuk setiap kart. Pada masing-masing <code>snap</code>, mundurkan milikmu
+kart ke status server dan memutar ulang apa yang belum dilihat server:</p>
+<pre><code class="language-js">function onSnap(snap) {
+  const [, x, z, heading, speed, boost, lap, cp, ack] = snap.karts.find((k) =&gt; k[0] === myId);
+  while (pending.length &amp;&amp; pending[0].seq &lt;= ack) pending.shift();   // applied or superseded
+
+  const corrected = { x, z, heading, speed, boost };
+  for (const p of pending) kartPhysics.move(corrected, p.input, p.dt);
+
+  if (!predicted) { predicted = corrected; previous = { ...corrected }; return; } // first snap
+  error.x += predicted.x - corrected.x;          // what the player would see jump
+  error.z += predicted.z - corrected.z;
+  error.heading += predicted.heading - corrected.heading;
+  if (Math.hypot(error.x, error.z) &gt; 3) error = { x: 0, z: 0, heading: 0 }; // wall hit, bump: snap
+  predicted = corrected;
+  hud.lap = lap; hud.checkpoint = cp;            // progress is never predicted
+}
+</code></pre>
+<p>Membuang semuanya <code>ack</code> benar meskipun kemenangan terbaru melewatkan beberapa input: a dilewati
+input digantikan sebelum server dicentang, jadi itu juga tidak mempengaruhi kart server.</p>
+<h4 id="smooth-corrections-render-at-frame-rate">Koreksi halus, render pada kecepatan bingkai</h4>
+<p>Koreksi kecil seharusnya tidak terlihat. Gambarlah kart pada posisi yang diprediksi ditambah dengan pembusukan
+kesalahan offset, dan interpolasi antara dua langkah prediksi 30 Hz terakhir sehingga tampilan 60 atau 144 Hz
+bergerak dengan lancar:</p>
+<pre><code class="language-js">function render(frameDt) {
+  const decay = Math.exp(-frameDt / 0.1);        // ~100 ms to absorb a correction
+  error.x *= decay; error.z *= decay; error.heading *= decay;
+  const a = sinceLastStep() * 30;                // 0…1 between prediction steps
+  drawKart(lerp(previous.x, predicted.x, a) + error.x,
+           lerp(previous.z, predicted.z, a) + error.z,
+           lerpAngle(previous.heading, predicted.heading, a) + error.heading);
+}
+</code></pre>
+<p>Sesuaikan ambang batas jepret daripada peluruhan: koreksi yang lebih besar dari panjang kart adalah hal yang nyata
+peristiwa (benjolan yang tidak Anda prediksi) dan terbaca lebih baik dalam sekejap daripada slide lambat.</p>
+<h4 id="know-what-not-to-predict">Ketahui apa yang tidak perlu diprediksi</h4>
+<ul>
+<li><strong>kart lainnya.</strong> Mereka diambil ~100 ms di masa lalu (buffer <code>snap</code>s dan interpolasi antara
+dua braket itu <code>serverNow() - 100</code>), jadi tumbukan yang diprediksikan terhadap mereka adalah tumbukan dengan
+dimana mereka <em>adalah</em>. Prediksi dinding dan lintasan — tidak bergerak — dan biarkan server menyelesaikannya
+gundukan kart-ke-kart. Koreksi terjadi dalam perjalanan bolak-balik. Jika buffer mengering, ekstrapolasi
+dari kecepatan dan menuju hingga ~100 ms, lalu tahan.</li>
+<li><strong>Barang.</strong> <code>use-item</code> adalah perintah yang tahan lama, sehingga dapat dijalankan <code>onPlayerMessage</code> segera setelah itu tiba -
+tidak ada centang tunggu. Mainkan nyala api dan suara saat tombol ditekan; biarkan kecepatannya melewatinya
+rekonsiliasi, sejak itu <code>boost</code> ada di <code>snap</code>. Jika server menolak (tidak ada biaya tersisa), selanjutnya
+<code>snap</code> menggulungnya kembali.</li>
+<li><strong>Negara ras.</strong> Jumlah putaran, posisi, dan finis berasal <code>snap</code> dan siaran skrip Anda saja.</li>
+</ul>
+<h4 id="estimate-the-server-clock">Perkirakan jam server</h4>
+<p><code>snap.t</code> Dan <code>goAt</code> adalah waktu server (<code>ctx.now</code>). Pertahankan offset dari celah terkecil yang diamati, yaitu
+menyaring pengiriman yang lambat:</p>
+<pre><code class="language-js">let offset = Infinity;
+function noteSnap(snap) { offset = Math.min(offset, performance.now() - snap.t); }
+const serverNow = () =&gt; performance.now() - offset;
+</code></pre>
+<p>Mulai hitung mundur dari <code>goAt</code>, dan prediksi gerbang di atasnya seperti yang dilakukan loop di atas. Sebuah kart yang bergerak
+sebelumnya <code>goAt</code> secara lokal akan diikat kembali ke jaringan listrik terlebih dahulu <code>snap</code> setelah permulaan.</p>
+<p>Untuk menyempurnakan semua ini, tambahkan latensi buatan dalam pengembangan (delay <code>send</code> Dan <code>onSnap</code> sebesar 100–200 ms)
+dan mencatat ukuran setiap koreksi — rata-rata koreksi besar yang stabil <code>move</code> telah melayang dari
+salinan server, atau kolom input dijepit secara berbeda di setiap sisi.</p>
+<h2 id="checklist">Daftar periksa</h2>
+<ul>
+<li>[ ] <code>starhermit.txt</code> di akar keluaran build, dengan <code>control.*</code> untuk aksi kart.</li>
+<li>[ ] Luncurkan token yang dibaca dari hash, dilucuti, disegarkan; siput dari <code>game_scope</code>.</li>
+<li>[ ] <code>GET /realtime/rooms/mine</code> sedang memuat untuk bergabung kembali dengan perlombaan yang sedang berlangsung.</li>
+<li>[ ] Ruang satu tim, lacak masuk <code>metadata</code>; undangan, kode gabung, buka + gabung cepat, solo dengan <code>aiPlayers</code>.</li>
+<li>[ ] Soket dibuka dengan tiket koneksi; Awalan pengirim 16 byte dihapus dan digunakan sebagai identitas.</li>
+<li>[ ] Host snapshot dan input tamu masing-masing pada ≤ 20 Hz, frame ≤ 8 KB; item ditekan sebagai penghitung.</li>
+<li>[ ] Siap → hitung mundur → acara balapan sebagai bingkai kontrol; hasil dengan pesanan masuk <code>metadata</code>.</li>
+<li>[ ] Tuan rumah mengendarai kursi AI dan kart lulusan; host baru melanjutkan dari snapshot terakhir.</li>
+<li>[ ] Varian B: <code>tickRateHz: 30</code>, input terjepit, item sebagai perintah tahan lama, <code>result</code> + <code>eloUpdates</code>.</li>
+<li>[ ] Varian B: prediksi kart sendiri dengan yang dibagikan <code>move</code>, berdamai <code>ack</code>, koreksi dihaluskan;
+tidak ada gerakan sebelumnya <code>goAt</code>; kart lain diinterpolasi ~100 ms di belakang.</li>
+</ul>
+<h2 id="see-also">Lihat juga</h2>
+<ul>
+<li><a href="/id/docs/api/realtime.html">Ruangan waktu nyata</a> — lobi, kursi, itu <code>ws/v1/realtime</code> kontrak</li>
+<li><a href="/id/docs/api/game-scripts.html">Skrip permainan</a> — tingkat tick, input waktu nyata, sesi terikat ruangan</li>
+<li><a href="/id/docs/api/games.html">Pertandingan</a> — perjodohan, kontrol, pengaturan, soket gameplay</li>
+<li><a href="/id/docs/starhermit-txt.html"><code>starhermit.txt</code></a> — kontrol, tenggat waktu perjodohan, kursi AI</li>
+</ul>
+
+{% endraw %}

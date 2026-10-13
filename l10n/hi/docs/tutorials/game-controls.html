@@ -1,0 +1,254 @@
+---
+layout: "wiki"
+lang: "hi"
+title: "ट्यूटोरियल: अपने गेम में नियंत्रण जोड़ें"
+source_url: "/docs/tutorials/game-controls.html"
+source_path: "docs/tutorials/game-controls.md"
+source_hash: "e0d2b7612fbd90ee6e1e21734aca934295d32197bc56b43449da00dd637601bf"
+translation: "machine"
+permalink: "/hi/docs/tutorials/game-controls.html"
+---
+{% raw %}
+<h1 id="tutorial-add-controls-to-your-game">ट्यूटोरियल: अपने गेम में नियंत्रण जोड़ें</h1>
+<p>स्टारहर्मिट स्टोर कर सकता है <strong>कुंजी बाइंडिंग</strong> आपके गेम के लिए: आप क्रियाओं और उनकी डिफ़ॉल्ट कुंजियों की घोषणा करते हैं,
+और प्रत्येक खिलाड़ी उन्हें दोबारा जोड़ सकता है। उनकी पसंद उन्हें किसी भी मशीन पर ले जाती है जिस पर वे साइन इन करते हैं। आपका खेल
+नियंत्रण एपीआई से प्लेयर की बाइंडिंग पढ़ता है और अपनी पेशकश कर सकता है "कुंजियाँ पुनः बाँधें" स्क्रीन।</p>
+<p>यदि आपका गेम नियंत्रण API को कॉल करता है और यह प्राप्त करता है:</p>
+<pre><code class="language-text">404 {"error":"This game declares no controls."}
+</code></pre>
+<p>मंच है <strong>कोई घोषित कार्रवाई नहीं</strong> निर्माण के लिए यह सेवा दे रहा है। आप एपीआई को कुछ भी नहीं भेज सकते
+इसे ठीक करें: आपके गेम में नियंत्रण घोषित किए गए हैं <a href="/hi/docs/starhermit-txt.html"><code>starhermit.txt</code></a> और कब पढ़ें
+खेल प्रकाशित हो चुकी है।. यह पृष्ठ दिखाता है कि उन्हें कैसे घोषित किया जाए, उन्हें प्रकाशित किया जाए, जाँच की जाए कि वे आ गए हैं,
+और उन्हें अपने ग्राहक से उपयोग करें।</p>
+<ol>
+<li><a href="#1-declare-the-actions">कार्रवाई की घोषणा करें</a></li>
+<li><a href="#2-publish-them">उन्हें प्रकाशित करें</a></li>
+<li><a href="#3-check-they-arrived">जांचें कि वे पहुंचे</a></li>
+<li><a href="#4-use-them-in-your-game">अपने खेल में उनका उपयोग करें</a></li>
+<li><a href="#troubleshooting">समस्या निवारण</a></li>
+</ol>
+<h2 id="1-declare-the-actions">1. कार्यों की घोषणा करें</h2>
+<p>एक जोड़ें <code>control.&lt;action&gt;=</code> प्रति क्रिया पंक्ति <code>starhermit.txt</code>:</p>
+<pre><code class="language-text">name=Space Hopper
+launch=index.html
+
+control.left=KeyA+ArrowLeft | Move left
+control.right=KeyD+ArrowRight | Move right
+control.jump=Space+KeyW | Jump
+control.fire=KeyJ | Fire
+control.pause=Escape | Pause
+</code></pre>
+<p>प्रत्येक पंक्ति में तीन भाग होते हैं:</p>
+<pre><code class="language-text">control.&lt;action&gt;=&lt;code&gt;[+&lt;code&gt;...][ | &lt;label&gt;]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>भाग</th>
+<th>नियम</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;action&gt;</code></td>
+<td>कार्रवाई के लिए आपके गेम का नाम: छोटे अक्षरों, अंकों आदि के 1-32 अक्षर <code>_</code> (<code>move_left</code>, नहीं <code>move-left</code>). अद्वितीय प्रति प्रकट.</td>
+</tr>
+<tr>
+<td><code>&lt;code&gt;</code></td>
+<td>A <a href="https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_code_values"><code>KeyboardEvent.code</code></a> मान, जैसे <code>KeyA</code>, <code>ArrowLeft</code>, <code>Space</code>, <code>Digit1</code>, <code>ShiftLeft</code>, <code>Enter</code> या <code>Escape</code>. समान क्रिया के लिए 1-4 कोड जोड़ें <code>+</code>.</td>
+</tr>
+<tr>
+<td><code>&lt;label&gt;</code></td>
+<td>वैकल्पिक। रीबाइंडिंग स्क्रीन में दिखाया गया; अधिकतम 64 अक्षर. क्रिया नाम पर डिफ़ॉल्ट.</td>
+</tr>
+</tbody>
+</table>
+<p>जानने योग्य बातें:</p>
+<ul>
+<li><strong>उपयोग <code>code</code>, नहीं <code>key</code>.</strong> लिखना <code>KeyA</code>, नहीं <code>a</code>, और <code>Space</code>, नहीं <code>" "</code>. कोड भौतिक को नाम देते हैं
+कुंजी, इसलिए बाइंडिंग किसी भी कीबोर्ड लेआउट पर काम करती है। प्लेटफ़ॉर्म केवल यह जाँचता है कि कोई कोड 1-32 है
+अक्षर और अंक, तो <code>a</code> या <code>space</code> स्वीकार किया जाता है लेकिन कोई भी कुंजी इसे कभी उत्पन्न नहीं करती है। वर्तनी और मामला
+बिल्कुल मेल खाना चाहिए.</li>
+<li><strong>एक कुंजी एक क्रिया से संबंधित होती है.</strong> पिछली पंक्ति द्वारा पहले से उपयोग किया गया कोड बाद की पंक्ति बनाता है
+अमान्य.</li>
+<li><strong>32 क्रियाओं तक</strong> प्रति खेल. 32 तारीख के बाद की पंक्तियों को नजरअंदाज कर दिया जाता है।</li>
+<li><strong>आदेश रखा गया है.</strong> क्रियाएँ एपीआई से स्पष्ट क्रम में वापस आती हैं, इसलिए उन्हें इस प्रकार सूचीबद्ध करें
+आपकी सेटिंग्स स्क्रीन को उन्हें दिखाना चाहिए।</li>
+<li><strong>एक अमान्य पंक्ति चुपचाप छोड़ दी जाती है.</strong> गेम अभी भी प्रकाशित होता है. यदि प्रत्येक पंक्ति अमान्य है,
+गेम में कोई नियंत्रण नहीं है और एपीआई उत्तर देता है <code>404</code>. <a href="#3-check-they-arrived">प्रकाशन के बाद जांचें</a>.</li>
+</ul>
+<h2 id="2-publish-them">2. उन्हें प्रकाशित करें</h2>
+<p>घोषणापत्र पढ़े जाते हैं <strong>जब खेल प्रकाशित हो जाता है</strong>. संपादन <code>starhermit.txt</code> आपके भंडार में
+या डिस्क पर तब तक कुछ भी नहीं बदलता जब तक कि आप उस बिल्ड को प्रकाशित नहीं करते जिसमें यह शामिल है:</p>
+<table>
+<thead>
+<tr>
+<th>आपका गेम कैसे प्रकाशित होता है</th>
+<th>नए नियंत्रणों को क्या जीवंत बनाता है</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GitHub रिपोजिटरी से</td>
+<td>आपकी अगली तैनाती. परिवर्तन को आगे बढ़ाएं, फिर नवीनतम संस्करण तैनात करें (<strong>परिनियोजित संस्करण अद्यतन करें</strong> डैशबोर्ड में, या <code>PUT /api/v1/me/github-games/{id}/deployment</code>).</td>
+</tr>
+<tr>
+<td>अपलोड किया गया फ़ोल्डर या बंडल</td>
+<td>एक नया बिल्ड अपलोड करें (<code>POST /api/v1/me/github-games/{id}/bundle</code>, या <code>ws/v1/game-upload</code>) किसका <code>starhermit.txt</code> पंक्तियाँ हैं.</td>
+</tr>
+<tr>
+<td>एक नया गेम जोड़ा जा रहा है</td>
+<td>पहला अपलोड या सबमिशन उन्हें तुरंत पढ़ता है।</td>
+</tr>
+</tbody>
+</table>
+<p>एक प्रतिस्थापित अपलोड आपके नियंत्रणों को उसके स्वयं के मेनिफ़ेस्ट से पुनर्स्थापित करता है। प्रत्येक को हटा दें <code>control.*</code> लाइन और
+खेल में कुछ भी नहीं है. ए <a href="/hi/docs/api/github-games.html#partial-updates-modemerge"><code>?mode=merge</code></a> उसे पैच करो
+नंबर वहन करता है <code>starhermit.txt</code> वर्तमान नियंत्रण रखता है.</p>
+<p><strong>खिलाड़ियों की अपनी रिबाइंडिंग एक नए निर्माण से बची रहती है।</strong> किसी खिलाड़ी की उस कार्रवाई के लिए बाइंडिंग सहेजी गई है जो नहीं है
+लंबे समय तक मौजूद रहने पर ध्यान नहीं दिया जाता है।</p>
+<h2 id="3-check-they-arrived">3. जांचें कि वे पहुंचे</h2>
+<p>नीचे दिया गया प्रत्येक समापन बिंदु पूर्ण उपयोगकर्ता टोकन या आपके गेम के लॉन्च टोकन के साथ काम करता है। <code>{slug}</code> आपका है
+गेम का स्लग: लॉन्च टोकन <code>game_scope</code> दावा, या <code>gameSlug</code> में
+<code>GET /api/v1/me/github-games</code>.</p>
+<pre><code class="language-bash">curl -s "https://api.starhermit.com/api/v1/games/$SLUG/controls" \
+  -H "Authorization: Bearer $TOKEN" | jq
+</code></pre>
+<pre><code class="language-json">{
+  "actions": [
+    { "action": "left",  "label": "Move left",  "defaultCodes": ["KeyA", "ArrowLeft"],  "codes": ["KeyA", "ArrowLeft"] },
+    { "action": "right", "label": "Move right", "defaultCodes": ["KeyD", "ArrowRight"], "codes": ["KeyD", "ArrowRight"] },
+    { "action": "jump",  "label": "Jump",       "defaultCodes": ["Space", "KeyW"],      "codes": ["Space", "KeyW"] },
+    { "action": "fire",  "label": "Fire",       "defaultCodes": ["KeyJ"],               "codes": ["KeyJ"] },
+    { "action": "pause", "label": "Pause",      "defaultCodes": ["Escape"],             "codes": ["Escape"] }
+  ]
+}
+</code></pre>
+<p>गुम कार्रवाइयों का मतलब है कि उनकी पंक्तियाँ अमान्य थीं; उपरोक्त नियमों से उनकी तुलना करें। ए <code>404</code>
+इसका मतलब है कि कोई भी जीवित नहीं बचा, या उन्हें घोषित करने वाली रचना अभी तक प्रकाशित नहीं हुई है।</p>
+<h2 id="4-use-them-in-your-game">4. अपने खेल में उनका प्रयोग करें</h2>
+<p><code>codes</code> खिलाड़ी का प्रभावी बंधन है: यदि वे एक सेट करते हैं तो उनका ओवरराइड, अन्यथा आपका डिफ़ॉल्ट।
+इससे एक लुकअप बनाएं और मिलान करें <code>event.code</code>:</p>
+<pre><code class="language-js">const auth = { Authorization: `Bearer ${launchToken}` };
+
+// Your built-in defaults, in the same shape the API returns.
+const DEFAULT_ACTIONS = [
+  { action: "left", label: "Move left", codes: ["KeyA", "ArrowLeft"] },
+  { action: "jump", label: "Jump", codes: ["Space", "KeyW"] },
+  /* ... */
+];
+
+function toControls(actions) {
+  const byCode = new Map();
+  for (const a of actions) for (const code of a.codes) byCode.set(code, a.action);
+  return { actions, byCode };
+}
+
+async function loadControls(slug) {
+  try {
+    const res = await fetch(`/api/v1/games/${slug}/controls`, { headers: auth });
+    if (res.ok) return toControls((await res.json()).actions);
+  } catch { /* offline: fall through */ }
+  return toControls(DEFAULT_ACTIONS);                   // 404, error, or outside StarHermit
+}
+
+let controls = await loadControls(gameScope);
+
+window.addEventListener("keydown", (e) =&gt; {
+  const action = controls.byCode.get(e.code);   // e.code, never e.key
+  if (action) { e.preventDefault(); onAction(action, true); }
+});
+window.addEventListener("keyup", (e) =&gt; {
+  const action = controls.byCode.get(e.code);
+  if (action) onAction(action, false);
+});
+</code></pre>
+<p>बिल्ट-इन डिफॉल्ट्स गेम को ऑफ़लाइन, स्टारहर्मिट के बाहर, या यदि नियंत्रण रखते हैं, खेलने योग्य रखते हैं
+अनुरोध विफल रहता है. उन्हें अपने साथ कदम से कदम मिला कर रखें <code>control.*</code> पंक्तियाँ.</p>
+<p><strong>एक रिबाइंडिंग स्क्रीन.</strong> सूची <code>actions</code> साथ उनके <code>label</code>. पूरा ओवरराइड मानचित्र रखें, या
+एक कार्रवाई बदलने से पहले वर्तमान प्रभावी मानचित्र को पढ़ें और संरक्षित करें:</p>
+<pre><code class="language-js">async function saveBinding(slug, action, codes) {
+  const current = await fetch(`/api/v1/games/${slug}/controls`, { headers: auth });
+  if (!current.ok) throw new Error(`Controls read failed: ${current.status}`);
+  const bindings = Object.fromEntries((await current.json()).actions.map(a =&gt; [a.action, a.codes]));
+  bindings[action] = codes;
+  const res = await fetch(`/api/v1/games/${slug}/controls`, {
+    method: "PUT",
+    headers: { ...auth, "Content-Type": "application/json" },
+    body: JSON.stringify({ bindings }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error);   // e.g. a key already in use
+  return res.json();                                         // the new effective map
+}
+</code></pre>
+<p><code>PUT</code> खिलाड़ी के ओवरराइड को आपके द्वारा भेजे गए कार्यों से बदल देता है, इसलिए खिलाड़ी के प्रत्येक कार्य को शामिल करें
+बदल गया है, केवल नवीनतम नहीं। बाकी आपके डिफ़ॉल्ट पर बने रहेंगे. <code>DELETE</code> उसी रास्ते पर
+सब कुछ डिफ़ॉल्ट पर रीसेट कर देता है।</p>
+<p>अपनी स्क्रीन से परिवर्तनों को क्रमबद्ध करें; दो एक साथ पढ़ने/लिखने पर भी एक-दूसरे को अधिलेखित किया जा सकता है।
+ब्राउज़र SDK <code>setControl()</code> अपने स्वयं के परिवर्तनों को क्रमबद्ध करता है और वर्तमान प्रभावी मानचित्र को संरक्षित करता है।
+प्रभावी मानचित्र भेजने से उन मानों को ओवरराइड के रूप में पिन कर दिया जाता है; उपयोग <code>DELETE</code> प्रकट डिफ़ॉल्ट पर लौटने के लिए।</p>
+<p>प्लेटफ़ॉर्म ने सेव करने से इंकार कर दिया (<code>400</code>) जो दो कार्यों पर एक कुंजी छोड़ देगा <strong>बाद</strong> खिलाड़ी का
+परिवर्तन आपके डिफ़ॉल्ट के साथ विलय कर दिए जाते हैं। उदाहरण के लिए, बाइंडिंग <code>jump</code> को <code>KeyJ</code> जबकि <code>fire</code> अभी भी
+अपने डिफ़ॉल्ट का उपयोग करता है <code>KeyJ</code> मना कर दिया जाता है. त्रुटि दिखाएं, या विरोधाभासी कार्रवाई को उसी में स्थानांतरित करें
+सहेजें.</p>
+<h2 id="troubleshooting">समस्या निवारण</h2>
+<table>
+<thead>
+<tr>
+<th>प्रतिक्रिया</th>
+<th>कारण</th>
+<th>हल करना</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>404</code> "यह गेम कोई नियंत्रण नहीं होने की घोषणा करता है।"</td>
+<td>कोई मान्य नहीं <code>control.*</code> में लाइन <strong>प्रकाशित</strong> निर्माण।</td>
+<td>इसमें पंक्तियाँ जोड़ें <code>starhermit.txt</code>, उनके विरुद्ध जाँच करें <a href="#1-declare-the-actions">नियम</a>, और <a href="#2-publish-them">एक नया निर्माण प्रकाशित करें</a>.</td>
+</tr>
+<tr>
+<td><code>404</code> "उस स्लग के साथ कोई खेल नहीं।"</td>
+<td>स्लग ग़लत है, या गेम में कोई स्लग नहीं है।</td>
+<td>लॉन्च टोकन का उपयोग करें <code>game_scope</code> या <code>gameSlug</code> से <code>GET /me/github-games</code>. स्थानीय फ़ोल्डर से जोड़े गए प्रत्येक गेम और सत्यापित स्वामी द्वारा जोड़े गए प्रत्येक रिपोजिटरी गेम में एक स्लग होता है, चाहे केवल ब्राउज़र हो या नहीं। केवल एक रिपॉजिटरी सबमिशन जिसका मालिक सत्यापित नहीं है, उसके पास कोई नहीं है; <a href="/hi/docs/tutorials/claim-existing-game.html">इसपर दावा करो</a> एक पाने के लिए.</td>
+</tr>
+<tr>
+<td><code>403</code> "यह टोकन गेम '...' तक सीमित है।"</td>
+<td>किसी अन्य गेम के स्लग के साथ उपयोग किया जाने वाला लॉन्च टोकन।</td>
+<td>टोकन में स्लग के साथ कॉल करें <code>game_scope</code>.</td>
+</tr>
+<tr>
+<td><code>400</code> "अज्ञात क्रिया '...' - गेम के मेनिफ़ेस्ट में घोषित नहीं की गई है।"</td>
+<td><code>PUT</code> एक ऐसी क्रिया का नाम दिया गया है जिसे मेनिफेस्ट घोषित नहीं करता है।</td>
+<td>उपयोग <code>action</code> से मान <code>GET …/controls</code>.</td>
+</tr>
+<tr>
+<td><code>400</code> "'...' '...' और '...' दोनों से जुड़ा है।"</td>
+<td>आपके डिफ़ॉल्ट के साथ विलय के बाद, एक कुंजी दो क्रियाओं को ट्रिगर करेगी।</td>
+<td>अन्य क्रिया को भी इसी में ले जाएँ <code>PUT</code>, या कोई अन्य कुंजी चुनें।</td>
+</tr>
+<tr>
+<td><code>400</code> "'...' मान्य कीबोर्डइवेंट.कोड मान नहीं है।"</td>
+<td>रिक्त स्थान या विराम चिह्न वाला एक कोड.</td>
+<td>भेजना <code>event.code</code> मूल्य.</td>
+</tr>
+<tr>
+<td><code>400</code> "क्रिया '...' को 1-4 कोड बाइंड करने होंगे।"</td>
+<td>एक खाली सूची, या चार से अधिक.</td>
+<td>1-4 कोड भेजें; <code>DELETE</code> रीसेट करना।</td>
+</tr>
+<tr>
+<td>प्रतिक्रिया से एक क्रिया गायब है</td>
+<td>इसकी पंक्ति अमान्य थी: एक बड़ा अक्षर या <code>-</code> क्रिया नाम में, <code>,</code> के बजाय <code>+</code>, 4 से अधिक कोड, एक कोड पहले ही उपयोग किया जा चुका है, या 32वीं क्रिया के बाद।</td>
+<td>लाइन ठीक करें और पुनः प्रकाशित करें।</td>
+</tr>
+<tr>
+<td>बंधन कभी नहीं जलता</td>
+<td>कोड स्वीकार किया जाता है लेकिन कोई कुंजी इसे उत्पन्न नहीं करती है, जैसे <code>a</code> या <code>space</code>.</td>
+<td>सटीक प्रयोग करें <code>KeyboardEvent.code</code> वर्तनी: <code>KeyA</code>, <code>Space</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>यह भी देखें: <a href="/hi/docs/api/games.html#per-player-control-bindings">गेम्स एपीआई - प्रति-खिलाड़ी नियंत्रण बाइंडिंग</a>,
+<a href="/hi/docs/starhermit-txt.html#controls"><code>starhermit.txt</code></a>.</p>
+
+{% endraw %}

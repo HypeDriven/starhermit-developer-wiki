@@ -1,0 +1,597 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Ruangan Waktu Nyata"
+source_url: "/docs/api/realtime.html"
+source_path: "docs/api/realtime.md"
+source_hash: "9ba1c7babc144fc3452532ed6c2cfd2092bc5ad1db8ee2ea833b22fabcc8fffe"
+translation: "machine"
+permalink: "/id/docs/api/realtime.html"
+---
+{% raw %}
+<h1 id="realtime-rooms">Ruangan Waktu Nyata</h1>
+<p>Ruang waktu nyata adalah lobi umum untuk permainan multipemain yang bergerak cepat: pembuatan ruang, undangan teman, perjodohan gabung cepat, pemain AI sesuai permintaan ditambah pengisian ulang kursi AI, dan transportasi waktu nyata yang sadar peran (<code>ws/v1/realtime</code>). Subsistem ini sengaja dibuat agnostik game - ruangan dicakup per slug game, ruangan <code>metadata</code> adalah gumpalan JSON per game yang buram, dan <code>teamCount = 1</code> model permainan gratis untuk semua.</p>
+<p>Pertandingan berjalan dengan salah satu dari dua cara:</p>
+<ul>
+<li><strong>Dirutekan host (default)</strong> — server platform adalah transportasi cerdas, bukan simulator: klien pembuat ruangan adalah <strong>tuan rumah</strong> dan menjalankan simulasi permainan resmi; klien lain (tamu) mengirim masukan ke host dan menerima snapshot host. Server menerapkan perutean, peran, kapasitas, batas kecepatan, dan identitas — klien tidak dapat melakukan spoofing satu sama lain, dan hanya host yang ditetapkan server yang dapat melakukan siaran.</li>
+<li><strong>Sesi terikat ruangan (otoritatif server)</strong> — untuk game yang mengirimkan a <code>server=</code> naskah atau a <a href="/id/docs/api/container-games.html">wadah</a>: saat ruangan dimulai, platform membuat sesi N-pemain terikat (<a href="/id/docs/api/game-scripts.html#room-bound-sessions">tertulis</a> atau container) yang menjalankan sisi server simulasi. Gameplay kemudian mengalir <code>ws/v1/games</code> dan WS realtime digunakan untuk lobi/roster saja. Melihat <a href="#room-bound-sessions">jembatan</a> di bawah.</li>
+</ul>
+<p>Bandingkan ini dengan <a href="/id/docs/api/relay.html">estafet rekan</a> (penyebaran buram terikat ke daftar ruangan/sesi yang ada, dinonaktifkan secara default) dan polos <a href="/id/docs/api/games.html">permainan bernaskah</a> (server-otoritatif, dengan perjodohan sesi dan undangan tetapi tidak ada lobi ruangan). Kamar waktu nyata adalah <strong>diaktifkan secara default</strong>.</p>
+<p>Semua titik akhir REST memerlukan autentikasi dan berfungsi dengan token pengguna penuh dan token peluncuran cakupan game. Badan kesalahan bervariasi; melihat <a href="/id/docs/api/conventions.html#requests-and-responses">konvensi API</a>.</p>
+<p><img src="/docs/images/id/multiplayer-routing.svg" alt="Ruangan yang dirutekan host mengirimkan masukan ke host dan mengembalikan snapshot. Ruang otoritatif server membuat sesi permainan terpisah menggunakan soket permainan."></p>
+<h2 id="data-model">Model data</h2>
+<p><strong>Ruang</strong> siklus hidup: <code>Lobby</code> → <code>Open</code> (perjodohan) → <code>Playing</code> (daftar dibekukan, kursi kosong diisi ulang dengan AI hingga jumlah ruangan) → <code>Closed</code>. Sebuah ruangan yang dibuat dengan <a href="#join-in-progress"><code>joinInProgress</code></a> terus mengambil pemain sementara <code>Playing</code>.</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "hostUserId": "&lt;guid&gt;",
+  "status": "Lobby",
+  "gameSessionId": null,
+  "config": {
+    "teamCount": 2,
+    "seatsPerTeam": 5,
+    "backfillAfterSeconds": 30,
+    "aiPlayers": 0,
+    "backfillAiPlayers": null,
+    "joinInProgress": false,
+    "metadata": { "map": "arena" }
+  },
+  "participants": [
+    {
+      "id": "&lt;guid&gt;",
+      "userId": "&lt;guid&gt;",
+      "username": "ada",
+      "isAi": false,
+      "isHost": true,
+      "team": 0,
+      "slot": 0,
+      "joinedAt": "2026-07-22T07:00:00Z",
+      "leftAt": null
+    }
+  ],
+  "name": "Friday night",
+  "joinCode": "K7MP2X",
+  "isVisible": false,
+  "revision": 1,
+  "createdAt": "2026-07-22T07:00:00Z",
+  "openedAt": null,
+  "startedAt": null,
+  "closedAt": null,
+  "result": null
+}
+</code></pre>
+<ul>
+<li><code>config.metadata</code> adalah gumpalan JSON buram yang tidak pernah diinterpretasikan oleh platform. Itu, dan diserahkan
+metadata hasil, maksimal 16 KB (<code>413</code>), dan sebuah ruangan mempunyai paling banyak 100 kursi; seorang operator bisa
+ubah untuk satu pertandingan.</li>
+<li><code>config.aiPlayers</code> adalah berapa banyak pemain AI yang diminta pencipta untuk memulai pertandingan — mereka duduk saat ruangan dibuat (lihat <a href="#ai-players">di bawah</a>). Ini mencatat permintaan tersebut; itu <code>participants</code> Daftar tersebut bersifat otoritatif bagi siapa yang benar-benar memegang kursi.</li>
+<li>Peserta AI punya <code>userId: null</code>, <code>isAi: true</code>, dan nama panggilan acak yang dihasilkan server, unik di dalam ruangan.</li>
+<li><code>(team, slot)</code> merupakan koordinat tempat duduk peserta; manusia duduk secara berurutan.</li>
+<li><code>gameSessionId</code> adalah sesi permainan terikat, yang ditetapkan saat ruangan dimulai untuk permainan dengan backend server — a <code>server=</code> naskah atau a <a href="/id/docs/api/container-games.html">wadah</a> (melihat <a href="#room-bound-sessions">jembatan</a>); <code>null</code> jika tidak. Itu juga termasuk dalam dorongan daftar.</li>
+<li><code>result</code> adalah hasilnya, ditetapkan ketika ruangan ditutup — dikirimkan oleh tuan rumah untuk permainan yang diarahkan oleh tuan rumah, skrip dikembalikan untuk sesi terikat ruangan.</li>
+<li><code>joinCode</code> adalah enam karakter (pasangan yang mirip dibaca dihapus). Ini adalah undangan untuk <code>join-by-code</code>. Daftar tidak pernah menyertakannya.</li>
+<li><code>isVisible</code> mencantumkan ruangan di dalamnya <code>GET /rooms</code>. Bersikap terbuka (dapat bergabung dengan cepat) dan terdaftar adalah independen.</li>
+<li><code>revision</code> hanya muncul ketika host mengedit konfigurasi (<code>PATCH</code>), tidak pernah ketika kursi terisi. Sebarkan sebagai <code>expectedRevision</code> pada <code>PATCH</code> untuk membandingkan-dan-menukar (<code>409</code> pada konflik).</li>
+</ul>
+<p><strong>Mengundang</strong>: <code>{ "id", "roomId", "gameSlug", "fromUserId", "fromUsername", "toUserId", "status", "createdAt", "notified" }</code> dengan <code>status</code> salah satu <code>pending</code> | <code>accepted</code> | <code>declined</code> | <code>expired</code> (undangan habis masa berlakunya ketika ruangan ditutup atau dimulai sebelum dijawab). <code>notified</code> muncul pada respons terhadap <code>POST /rooms/{id}/invites</code> dan melaporkan apakah pemberitahuan orang yang diundang mencapai sambungan langsung; dia <code>null</code> saat mendaftar.</p>
+<h2 id="rest-endpoints">titik akhir REST</h2>
+<p>Basis: <code>https://api.starhermit.com/api/v1/realtime</code> - Jadi
+<code>POST /rooms</code> dibawah ini adalah <code>POST /api/v1/realtime/rooms</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Siapa</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POS</td>
+<td><code>/rooms</code></td>
+<td>siapa pun</td>
+<td>Buat lobi, opsional dengan pemain AI; penelepon menjadi tuan rumah</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/rooms?gameSlug=[&amp;includeInProgress=true]</code></td>
+<td>siapa pun</td>
+<td>Jelajahi ruang terbuka dan terdaftar yang masih memiliki kursi — dan, ketika ditanya, jalankan ruang gabungan yang sedang berlangsung (tanpa kode, tanpa daftar nama; maks 50)</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/rooms/join-by-code</code></td>
+<td>siapa pun</td>
+<td>Duduklah dengan kode bergabung ruangan (berlaku pada ruangan yang tidak terdaftar / masih di Lobi)</td>
+</tr>
+<tr>
+<td>tambalan</td>
+<td><code>/rooms/{id}</code></td>
+<td>tuan rumah</td>
+<td>Ganti nama, daftar/batalkan daftar, ganti metadata, alihkan <code>joinInProgress</code>, atur tunjangan pengisian ulang (<code>expectedRevision</code> CAS)</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/rooms/{id}/matchmake</code></td>
+<td>tuan rumah, lobi</td>
+<td>Antrian seluruh roster sebagai satu partai/tim</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/rooms/{id}</code></td>
+<td>peserta + undangan</td>
+<td>Kamar + daftar</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/realtime/connection-tickets</code></td>
+<td>siapa pun</td>
+<td>Satu kali <code>?ticket=</code> untuk soket realtime (dan lainnya).</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/rooms/{id}/invites</code></td>
+<td>peserta</td>
+<td>Undang teman; memberitahu mereka (<code>409</code> pada duplikat)</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/rooms/invites</code></td>
+<td>siapa pun</td>
+<td>Undangan ruang tunggu penelepon (lintas permainan)</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/rooms/invites/{inviteId}/accept</code></td>
+<td>undangan</td>
+<td>Bergabunglah dengan ruangan (kursi ditentukan)</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/rooms/invites/{inviteId}/decline</code></td>
+<td>undangan</td>
+<td>Menolak (<code>204</code>)</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/rooms/{id}/open</code></td>
+<td>tuan rumah</td>
+<td>Terbuka untuk perjodohan; memulai hitungan mundur pengisian ulang</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/rooms/quick-join</code></td>
+<td>siapa pun</td>
+<td>Bergabunglah dengan ruang terbuka tertua dengan kursi gratis untuk permainan, filter yang cocok secara opsional</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/rooms/{id}/start</code></td>
+<td>tuan rumah</td>
+<td>Isi ulang kursi kosong dengan AI, status → <code>Playing</code></td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/rooms/{id}/leave</code></td>
+<td>peserta</td>
+<td>Meninggalkan; di Lobi/Terbuka, kursi dihapus, di Playing, kursi diubah menjadi peserta AI — atau, di ruang yang sedang berlangsung, dikosongkan</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/rooms/{id}/seats</code></td>
+<td>tuan rumah</td>
+<td>Seimbangkan kembali kursi sebelum pertandingan dimulai</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/rooms/{id}/result</code></td>
+<td>tuan rumah</td>
+<td>Kirimkan hasilnya; kamar → <code>Closed</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/rooms/mine</code></td>
+<td>siapa pun</td>
+<td>Ruang aktif penelepon, jika ada (sambungkan kembali)</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/rooms/joined[?gameSlug=]</code></td>
+<td>siapa pun</td>
+<td>Setiap ruangan tempat penelepon duduk, termasuk dunia (daftar kosong jika tidak ada)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-room--post-rooms">Buat ruangan — <code>POST /rooms</code></h3>
+<pre><code class="language-json">{ "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "teamCount": 2, "seatsPerTeam": 5, "backfillAfterSeconds": 30, "aiPlayers": 0, "backfillAiPlayers": 4, "name": "Friday night", "isVisible": false, "metadata": { "map": "arena" } }
+</code></pre>
+<ul>
+<li><code>gameSlug</code> diperlukan untuk token pengguna penuh. Dengan token peluncuran lingkup permainan, siput diambil dari token tersebut <code>game_scope</code> (nilai isi yang tidak cocok ditolak dengan <code>403</code>).</li>
+<li>topi: <code>teamCount</code> 1–2, <code>seatsPerTeam</code> 1–100, total kursi ≤ 100 (satu tim beranggotakan 100 orang, atau dua tim beranggotakan 50 orang). <code>backfillAfterSeconds</code> defaultnya adalah <code>30</code> dan harus
+setidaknya <code>1</code> (<code>400</code> jika tidak); ada <strong>tidak maksimal</strong> melebihi ukuran bilangan bulat 32-bit. Panjang
+hitungan mundur hanya berlaku saat seseorang tetap terhubung: an <code>Open</code> ruangan tanpa siapa pun
+<code>ws/v1/realtime</code> tutup setelah 60 menit (lihat <a href="#automatic-room-lifecycle">Siklus hidup ruangan otomatis</a>),
+jadi hitungan mundur yang lebih lama dari itu hanya tercapai jika peserta tetap membuka soketnya.
+Ruangan besar terikat bandwidth, bukan terikat kursi: setiap frame tamu masuk ke host, dan setiap frame host disalin ke setiap tamu — lihat <a href="#sizing-a-large-room">Mengukur ruangan yang besar</a>.</li>
+<li><code>aiPlayers</code> defaultnya adalah <code>0</code>. Jangkauan <code>0</code>–<code>(teamCount × seatsPerTeam) − 1</code> — tuan rumah selalu membutuhkan tempat duduk, jadi ruangan yang sepenuhnya AI adalah a <code>400</code>.</li>
+<li><code>backfillAiPlayers</code> membatasi berapa banyak kursi yang masih kosong saat pertandingan dimulai yang diberikan kepada AI — lihat <a href="#backfill-allowance">Tunjangan pengisian ulang</a>. Dihilangkan atau <code>null</code> memenuhi semuanya.</li>
+<li><code>joinInProgress</code> (bawaan <code>false</code>) menjaga ruangan menerima pemain setelah dimulai — lihat <a href="#join-in-progress">Bergabunglah dalam proses</a>.</li>
+<li>Satu ruang aktif per pengguna: membuat atau bergabung saat Anda berada di non-<code>Closed</code> ruangan kembali <code>409</code>.</li>
+<li>Pencipta menjadi tuan rumah, duduk di tim 0, slot 0. Mengembalikan ruangan.</li>
+</ul>
+<h4 id="ai-players">pemain AI</h4>
+<p><code>aiPlayers</code> mengatakan berapa banyak pemain AI tersebut <strong>pertandingan harus dimulai dengan</strong>. Janji tersebut bukan merupakan janji yang ditebus nanti — server segera menempatkannya, sehingga ruangan yang Anda dapatkan kembali sudah berisi janji tersebut:</p>
+<ul>
+<li>Mereka adalah peserta biasa (<code>isAi: true</code>, <code>userId: null</code>, nama panggilan unik) dan muncul di daftar dan di setiap <code>roster</code> dorong sejak ruangan itu ada.</li>
+<li>Mereka <strong>menempati kursi</strong>, jadi mereka mengurangi kapasitas yang tersisa untuk manusia: undangan dan gabung cepat hanya mengisi yang tersisa, dan <code>POST /rooms/invites/{id}/accept</code> kembali <code>409</code> setelah tidak ada kursi kosong yang tersisa. Anda mendapatkan jumlah AI persis seperti yang Anda minta — tidak lebih dari perjodohan.</li>
+<li>Penempatan mengisi <strong>tim paling kosong terlebih dahulu</strong> (ikatan menuju ke indeks tim yang lebih rendah), slot gratis terendah. Jadi a <code>teamCount: 2, seatsPerTeam: 1</code> kamar dengan <code>aiPlayers: 1</code> menempatkan AI berlawanan dengan tuan rumah, dan ruangan yang lebih besar tetap seimbang. Tempatkan kembali sesuai keinginan Anda <code>POST /rooms/{id}/seats</code> sebelum pertandingan dimulai.</li>
+<li>Mereka terpisah dari pengisian ulang waktu mulai, yang mengisi kursi yang tidak ditempati siapa pun saat ruangan dimulai — hingga ruangan tersebut <a href="#backfill-allowance">tunjangan penimbunan kembali</a>.</li>
+</ul>
+<h4 id="backfill-allowance">Tunjangan pengisian ulang</h4>
+<p>Saat ruangan dimulai — pada batas waktu pengisian ulang, segera setelah ruangan terisi, atau pada saat tuan rumah memulai secara paksa —
+kursi yang tidak diambil siapa pun diberikan kepada pemain AI. <code>backfillAiPlayers</code> memutuskan berapa banyak:</p>
+<table>
+<thead>
+<tr>
+<th><code>backfillAiPlayers</code></th>
+<th>Pada awalnya</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>dihilangkan / <code>null</code> (bawaan)</td>
+<td>setiap kursi kosong menjadi pemain AI</td>
+</tr>
+<tr>
+<td><code>0</code></td>
+<td>tidak ada AI: pertandingan dimulai dengan kursi kosong dibiarkan kosong</td>
+</tr>
+<tr>
+<td><code>n</code></td>
+<td>paling banyak <code>n</code> kursi kosong menjadi AI; apa pun di luar itu tetap kosong</td>
+</tr>
+</tbody>
+</table>
+<p>AI yang dibatasi, buka <strong>tim paling kosong terlebih dahulu</strong> (terkait dengan indeks tim yang lebih rendah), jadi a <code>2 × 3</code> kamar dengan
+satu tuan rumah dan <code>backfillAiPlayers: 3</code> dimulai 2-vs-2. Jangkauan <code>0</code>–<code>teamCount × seatsPerTeam</code>, kalau tidak <code>400</code>.
+Tuan rumah dapat mengubahnya sebelum pertandingan dengan <code>PATCH /rooms/{id}</code> (<code>"backfillAiPlayers": 2</code>), atau
+kembali mengisi setiap kursi dengan <code>"backfillAllEmptySeats": true</code>. Itu tidak mempengaruhi <code>aiPlayers</code>,
+yang duduk saat ruangan dibuat.</p>
+<p>Jika permainan Anda dimaksudkan untuk dimainkan dengan jumlah yang kurang - permainan gratis untuk semua tidak masalah dengan enam dari delapan
+pemain — gunakan <code>0</code> dan biarkan permainan Anda menangani kursi kosong. Dengan defaultnya, ruangan tidak pernah dimulai
+dengan kursi kosong.</p>
+<p><strong>Bermain solo melawan komputer</strong> oleh karena itu ada dua panggilan - buat ruangan dengan setiap kursi lainnya sebagai AI, lalu mulai:</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms
+{ "gameSlug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94", "teamCount": 2, "seatsPerTeam": 1, "aiPlayers": 1 }
+
+POST /api/v1/realtime/rooms/{id}/start
+</code></pre>
+<p>Kursi AI adalah identitas dan reservasi kursi, bukan layanan bot — tidak ada platform yang memainkannya untuk Anda. Game yang diarahkan ke host mendorong mereka dalam simulasinya sendiri; permainan dengan a <code>server=</code> skrip menemukannya <code>ctx.room.roster</code> ditandai <code>ai: true</code> dan memutarnya di dalam skrip (lihat <a href="/id/docs/api/game-scripts.html#room-bound-sessions">Skrip Permainan</a>).</p>
+<h3 id="invites">Undangan</h3>
+<p><code>POST /rooms/{id}/invites</code> dengan <code>{ "toUserId": "&lt;guid&gt;" }</code>. Undangan adalah <strong>hanya untuk teman</strong> (<code>403</code> jika tidak; aturan pertemanan yang sama seperti undangan permainan), peserta saja, dan hanya saat ruangan menerima bergabung: masuk <code>Lobby</code>/<code>Open</code>, atau <code>Playing</code> dengan <a href="#join-in-progress"><code>joinInProgress</code></a>. <code>409</code> jika pengguna sudah berada di dalam ruangan atau sudah memiliki undangan yang menunggu keputusan; <code>400</code> saat mengundang dirimu sendiri. Mengembalikan undangan.</p>
+<p><strong>Orang yang diundang diberitahukan untuk Anda.</strong> Mengirim undangan ruangan mengeluarkan a <a href="/id/docs/api/chat.html#game_invite-one-event-for-both-invite-systems"><code>game_invite</code> dorongan</a> di soket obrolan orang yang diundang dan menambahkan undangan tersebut <code>GET /api/v1/me/game-invites</code>, jadi teman yang ada di dasbor StarHermit (atau di mana pun kecuali game Anda) masih mendengarnya. Anda melakukannya <strong>bukan</strong> perlu juga mengirim undangan game-API — yang akan memberi tahu dua kali. Tanggapannya <code>notified</code> memberitahu Anda apakah push mencapai koneksi langsung; <code>false</code> artinya orang yang diundang tidak terhubung saat ini dan akan melihat undangan dari kotak masuknya.</p>
+<p>Karena satu notifikasi mencakup kedua sistem undangan, muatannya akan dibawa <code>kind: "room"</code> plus <code>roomId</code> dan itu <code>acceptPath</code>/<code>declinePath</code> untuk <strong>ini</strong> mengundang. Jawab undangan ruang pada titik akhir waktu nyata di bawah — id undangan ruang tidak valid <code>/games/{slug}/invites/...</code> dan sebaliknya.</p>
+<p><code>GET /rooms/invites</code> mencantumkan undangan ruang tunggu penelepon di semua game (token peluncuran hanya melihat game mereka sendiri). Gunakan ini sebagai kotak masuk undangan ruangan yang disurvei klien game. Kotak masuk undangan terpadu di <code>GET /api/v1/me/game-invites</code> mengembalikan ini juga.</p>
+<p><code>POST /rooms/invites/{inviteId}/accept</code> mendudukkan penelepon dan mengembalikan ruangan. <strong>Menyematkan pesta</strong>: undangan-gabung ditempatkan di tim tuan rumah selama ruang masih ada, lalu dialihkan ke tim lain. <code>409</code> jika ruangan penuh, sudah dimulai/ditutup, atau penelepon berada di ruangan lain yang aktif (<a href="#worlds-do-not-count-as-your-room">dunia</a> dikecualikan). Menerima undangan ke ruangan tempat penelepon duduk, terima saja.</p>
+<p><code>POST /rooms/invites/{inviteId}/decline</code> → <code>204</code>.</p>
+<h3 id="matchmaking">Penjaruman</h3>
+<p><code>POST /rooms/{id}/open</code> (khusus tuan rumah): <code>Lobby</code> → <code>Open</code>, set <code>openedAt</code>, dan memulai hitungan mundur pengisian ulang. Idempoten sementara sudah <code>Open</code>; <code>409</code> sekali <code>Playing</code>/<code>Closed</code>.</p>
+<p>Sebuah <code>Open</code> ruangan tidak menunggu hitungan mundurnya sekali pun <strong>setiap kursi terisi</strong> — oleh manusia atau oleh pemain AI yang dikonfigurasikan saat pembuatan. Itu dimulai dari sana dan kemudian, jadi tanggapannya <code>open</code> (atau kepada join yang mengisi kursi terakhir) sudah dapat a <code>Playing</code> kamar dengan <code>startedAt</code> mengatur. Sebuah ruangan yang dibuat dengan AI di setiap kursi tetapi milik tuan rumah dimulai saat ruangan tersebut dibuka.</p>
+<p><code>GET /rooms?gameSlug=</code> menelusuri ruang permainan yang terbuka dan terdaftar yang masih memiliki kursi, yang terlama dibuka terlebih dahulu, dibatasi hingga 50. Setiap baris memiliki nama, nama host, jumlah pemain/kapasitas, <code>freeSeats</code>, metadata, <code>startedAt</code> Dan <code>joinInProgress</code> — <strong>tidak ada kode bergabung dan tidak ada daftar</strong>. Menambahkan <code>includeInProgress=true</code> untuk juga membuat daftar berjalan <a href="#join-in-progress">bergabung dalam proses</a> kamar dengan kursi kosong, setelah setiap kamar masih terisi.</p>
+<p><code>POST /rooms/join-by-code</code> dengan <code>{ "joinCode": "K7MP2X" }</code> mengambil tempat duduk. Kode tidak peka terhadap spasi dan huruf besar-kecil. Tidak seperti gabung cepat, ini berfungsi pada ruangan tidak terdaftar yang masih ada <code>Lobby</code>. Kode dilepaskan ketika ruangan ditutup.</p>
+<p><code>PATCH /rooms/{id}</code> (tuan rumah): <code>{ "name", "isVisible", "metadata", "joinInProgress", "backfillAiPlayers", "backfillAllEmptySeats", "expectedRevision" }</code>. Bidang yang dihilangkan dibiarkan saja; mengirim <code>name: ""</code> untuk membersihkan nama. A <code>Playing</code> ruangan masih dapat diganti namanya, terdaftar atau tidak terdaftar, metadatanya diganti dan dialihkan <code>joinInProgress</code>; pengaturan pengisian ulang ditolak (<code>409</code>) setelah pertandingan dimulai.</p>
+<p><code>POST /rooms/{id}/matchmake</code> (tuan rumah, <code>Lobby</code> saja) mengantri di ruangan itu <strong>manusia</strong> daftar sebagai satu
+partai/tim; peserta AI yang duduk sebelumnya bukanlah anggota partai. Dengan kebijakan default, ukuran partai
+harus sama dengan antrian yang dipilih <code>teamSize</code>. Dengan sebuah <a href="/id/docs/starhermit-txt.html#starting-matchmaking-before-every-human-seat-is-filled">batas waktu mulai nyata</a>,
+partai yang lebih kecil dapat menempati tim yang lebih besar pada batas waktu yang ditentukan; kursi yang tersisa menjadi AI hingga
+batas game yang dikonfigurasi, lalu tetap kosong. Pesta tetap bersama dan tiket tidak digabungkan menjadi satu tim.</p>
+<p>Menggunakan <code>?queue=duos</code> untuk satu bentuk atau ulangi <code>?queues=</code> untuk mengizinkan subset, seperti di Games API:</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms/{id}/matchmake?queues=duos&amp;queues=trios
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<p>Mengembalikan <a href="/id/docs/api/games.html#post-apiv1gamesslugmatchmaking">tiket perjodohan</a>, termasuk <code>status</code> Dan
+<code>sessionId</code> ketika cocok. Jajak pendapat tuan rumah <code>GET /api/v1/games/{slug}/matchmaking</code> dan membatalkan dengan
+<code>DELETE</code> di jalan itu. Ruangan yang sudah ada antrian atau pesta yang tidak sesuai dengan bentuk yang diperbolehkan
+kembali <code>409</code>. Alur perjodohan otoritatif ini terpisah dari pembukaan ruang untuk bergabung dengan cepat
+dan hitungan mundur pengisian ulang di tingkat ruangan.</p>
+<p><code>POST /rooms/quick-join</code> dengan <code>{ "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "seats": 1 }</code> menempatkan penelepon di <strong>ruang terbuka tertua dengan kursi gratis</strong> untuk game slug itu — kursi AI dihitung sudah terisi, jadi ruangan yang sisa kursinya semuanya AI dilewati. <code>404</code> ketika tidak ada ruangan yang memenuhi syarat — klien kemudian harus membuat ruangannya sendiri dan membukanya. Hanya gabung cepat satu kursi yang didukung (<code>seats</code> harus <code>1</code>).</p>
+<p><strong>Filter.</strong> Tambahkan salah satu dari ini untuk bergabung hanya dengan ruangan yang sesuai; setiap filter yang diberikan harus tahan, dan
+tidak ada yang diberikan adalah perilaku di atas:</p>
+<pre><code class="language-json">{ "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "seats": 1, "teamCount": 2, "seatsPerTeam": 4, "metadata": { "mode": "ranked", "map": "arena" }, "includeInProgress": true }
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Menyaring</th>
+<th>Cocok dengan ruangan yang…</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>teamCount</code></td>
+<td>jumlah tim persis seperti ini</td>
+</tr>
+<tr>
+<td><code>seatsPerTeam</code></td>
+<td>kursi per tim persis seperti ini</td>
+</tr>
+<tr>
+<td><code>metadata</code></td>
+<td>berisi metadata <strong>setiap</strong> properti yang diberikan, dengan nilai yang sama. Properti yang tidak Anda sebutkan akan diabaikan <code>{"mode":"ranked"}</code> pertandingan <code>{"mode":"ranked","map":"desert"}</code>. Nilai dibandingkan sebagai JSON: angka berdasarkan nilai (<code>1</code> sama <code>1.0</code>), objek apa pun urutan kuncinya, susunannya berurutan. Harus berupa objek (<code>400</code> jika tidak).</td>
+</tr>
+</tbody>
+</table>
+<p><code>includeInProgress: true</code> juga menganggap terdaftar, berjalan <a href="#join-in-progress">bergabung dalam proses</a> kamar dengan kursi kosong; kamar yang masih terisi adalah yang utama. Tanpanya, pertandingan berjalan tidak akan pernah diikuti, jadi klien yang sudah ada sebelum proses bergabung tidak akan pernah masuk ke dalam pertandingan tersebut. A <code>metadata</code> filter yang membawa id yang dimasukkan game Anda ke dalam metadata ruangan adalah cara klien bergabung <strong>satu tertentu</strong> ruangan yang terdaftar, karena listing tidak membawa kode bergabung.</p>
+<p>Ruang terbuka tertua yang cocok dengan kursi gratis menang. Jika tidak ada yang cocok, <code>404</code> mengatakan
+<code>"No open room with free seats matches those filters."</code> — isyarat biasa untuk membuat dan membuka ruangan
+dengan metadata itu sendiri, sehingga gabung cepat yang difilter oleh pemain berikutnya akan menemukannya.</p>
+<h3 id="start-seats-leave-result">Mulai, duduk, pergi, hasil</h3>
+<p><code>POST /rooms/{id}/start</code> (khusus host): terisi <strong>masih kosong</strong> kursi — semuanya, atau hingga ruangan <a href="#backfill-allowance">tunjangan penimbunan kembali</a> — dengan peserta AI (<code>isAi: true</code>, <code>userId: null</code>, nama panggilan acak unik) — Pemain AI yang duduk di tempat pembuatan tetap mempertahankan id, nama panggilan, dan tempat duduknya — membekukan daftar pemain, menetapkan <code>status: "Playing"</code>, dan mengembalikan daftar nama yang dibekukan. Jika game memiliki backend server (a <code>server=</code> skrip atau wadah), ini juga membuat sesi terikat ruangan (lihat <a href="#room-bound-sessions">jembatan</a>); ruang kembali dan daftar push carry <code>gameSessionId</code>. A <strong>wadah</strong> sesi yang tidak dapat dibuat — paling sering penerapan masih aktif dari keadaan diam — membuat ruangan tidak dimulai: <code>start</code> menjawab kesalahan itu (coba lagi), dan ruangan penuh atau sapuan isi ulang mencoba lagi pada lintasan berikutnya. Kegagalan skrip masih memulai rute host ruangan. <strong>Idempoten</strong> — memulai a <code>Playing</code> room mengembalikan daftar itu lagi. Sebuah ruangan dapat dimulai secara otomatis ketika batas waktu pengisian ulangnya telah lewat.</p>
+<p><code>POST /rooms/{id}/seats</code> (hanya tuan rumah, <code>Lobby</code>/<code>Open</code> saja) mendudukkan kembali peserta:</p>
+<pre><code class="language-json">{ "seats": [ { "participantId": "&lt;guid&gt;", "team": 1, "slot": 0 } ] }
+</code></pre>
+<p><code>400</code> untuk kursi di luar batas tim/slot ruangan atau peserta yang tidak diketahui; <code>409</code> jika dua peserta berbagi tempat duduk.</p>
+<p><code>POST /rooms/{id}/leave</code> berperilaku per status ruangan:</p>
+<ul>
+<li><strong>Lobi/Terbuka</strong>: kursi dilepas. Jika <strong>tuan rumah</strong> pergi, peran tuan rumah berpindah ke peserta manusia yang tersisa yang paling lama bertugas; jika tidak ada manusia yang tersisa, ruangan itu akan hilang <code>Closed</code>.</li>
+<li><strong>Bermain, <a href="#join-in-progress">bergabung dalam proses</a> ruang</strong>: kursinya adalah <strong>dikosongkan</strong> (tidak diberikan kepada AI), pemain dikeluarkan dari sesi terikat (mereka <code>ws/v1/games</code> soketnya tertutup) dan permainan pun diceritakan. Saat manusia terakhir keluar dan sesi terikat masih aktif, ruangannya aktif <strong>bukan</strong> ditutup: dunia tetap terdaftar dan dapat digabungkan, dan pemain pertama yang kembali mengambil peran sebagai tuan rumah.</li>
+<li><strong>Bermain (pengambilalihan AI)</strong>: pertandingan berlanjut — kursi yang keluar menjadi kursi AI: <code>isAi: true</code>, <code>userId: null</code>, dengan nama panggilan unik yang segar dan peserta yang sama <code>id</code>, <code>team</code>, <code>slot</code>, Dan <code>joinedAt</code>. Yang keluar segera dibebaskan (aturan satu ruang aktif tidak lagi menghitung mereka, sehingga mereka dapat membuat atau bergabung dengan ruangan lain) sementara dorongan daftar memberi tahu setiap klien bahwa AI sekarang menempati kursi itu. Jika yang meninggalkan adalah <strong>tuan rumah</strong> dan setidaknya satu sisa manusia lainnya, peran tuan rumah berpindah ke sisa manusia yang paling lama bergabung dan ruangan tersebut tetap ada <code>Playing</code> (migrasi host sisi klien menjadi perhatian game); jika tidak ada manusia yang tersisa, ruangan itu akan hilang <code>Closed</code>.</li>
+</ul>
+<p>Mengembalikan ruangan.</p>
+<p><code>POST /rooms/{id}/result</code> (hanya tuan rumah, <code>Playing</code> saja) mencatat hasilnya, menutup ruangan, dan menyebarkan hasilnya melalui WebSocket. <strong>Hanya game yang diarahkan ke host</strong> — ruangan dengan sesi skrip terikat berakhir ketika skrip kembali <code>result</code>, yang menutup ruangan secara otomatis (lihat <a href="#room-bound-sessions">jembatan</a>).</p>
+<pre><code class="language-json">{ "teamScores": [3, 1], "metadata": { "durationSeconds": 360 } }
+</code></pre>
+<p><code>teamScores</code> harus memiliki satu entri per tim; setiap skor dibatasi kewarasannya menjadi 0–50. Hasil penjepitan disimpan di ruangan <code>result</code> dan didorong ke peserta yang terhubung sebagai a <code>{"type":"result"}</code> bingkai kendali.</p>
+<p><code>GET /rooms/mine</code> mengembalikan non-<code>Closed</code> ruangan (untuk menyambung kembali), atau <code>404</code>. Seorang pemain
+milik siapa juga <a href="#worlds-do-not-count-as-your-room">dunia</a> mendapat ruangan yang menempatinya, kalau tidak
+dunia tempat mereka bergabung baru-baru ini.</p>
+<p><code>GET /rooms/joined</code> daftar <strong>setiap</strong> ruangan tempat penelepon duduk, yang terbaru terlebih dahulu — dunia mereka sebagai
+serta satu ruangan yang menempatinya — sebagai ruangan penuh (termasuk daftar nama dan kode bergabung). Peluncuran
+token hanya melihat ruang permainannya sendiri; dengan token penuh, <code>?gameSlug=</code> mempersempitnya. Itu menjawab yang kosong
+daftar, bukan a <code>404</code>, sehingga klien dapat bertanya pada setiap permulaan tanpa kesalahan yang dicatat.</p>
+<h3 id="join-in-progress">Bergabunglah dalam proses</h3>
+<p>Sebuah ruangan dibuat (atau <code>PATCH</code>ed) dengan <code>"joinInProgress": true</code> terus mengambil pemain setelahnya <code>start</code>.
+Mengundang, <code>join-by-code</code> dan segera bergabung dengan <code>includeInProgress: true</code> lalu kerjakan a <code>Playing</code> kamar
+dengan a <strong>kosong</strong> kursi — tidak ada seorang pun di dalamnya, tidak ada AI — jadi ruangan seperti itu biasanya dimulai
+<code>"backfillAiPlayers": 0</code>. Tanpa bendera, ruang awal menolak setiap bergabung, seperti sebelumnya.</p>
+<ul>
+<li><strong>Permainan memutuskan.</strong> Jika ruangan itu terikat untuk sesi permainan, pendatang baru diperbolehkan melakukannya
+sesi sebelum kursi disimpan: platform menanyakan naskah <code>game.onMembershipChange(ctx)</code> atau a
+wadah <a href="/id/docs/api/container-games.html#post-sessionssessionidmembers"><code>POST /sessions/{id}/members</code></a>. Sebuah permainan
+yang menolak (atau tidak memiliki keduanya) mendapat kursi kembali dan yang bergabung adalah a <code>409</code>; undangan yang diterima tetap ada
+tertunda. Setelah diterima, pemain tersebut adalah pemain sesi dalam segala hal — valid <code>ws/v1/games</code>,
+dalam memulihkan dan menghubungkan kembali.</li>
+<li><strong>Meninggalkan akan mengosongkan kursi</strong> dan mengeluarkan pemain dari sesi, dan permainan diceritakan.</li>
+<li><strong>Dunia hidup lebih lama dari pengunjungnya.</strong> Saat manusia terakhir keluar dan sesi masih aktif,
+ruangan tetap terbuka, terdaftar, dan dapat digabungkan; pemain pertama yang kembali menjadi tuan rumah. Sebuah ruangan yang terikat pada sebuah
+sesi aktif juga tidak ditutup karena hostnya sedang offline (lihat
+<a href="#the-60-second-host-rule-and-room-bound-sessions">aturan tuan rumah 60 detik</a>). Sesi itu miliknya sendiri
+siklus hidup memutuskan kapan berakhirnya — a <a href="/id/docs/tutorials/persistent-sessions.html">gigih</a> jeda permainan
+bukannya berakhir — dan ruangan pun ikut tertutup.</li>
+<li><strong>Menemukan satu.</strong> <code>GET /rooms?includeInProgress=true</code> daftar menjalankan ruang join-in-progress dengan yang kosong
+kursi; <code>POST /rooms/quick-join</code> dengan <code>includeInProgress: true</code> bergabung menjadi satu (tambahkan a <code>metadata</code> menyaring ke
+pilih ruangan tertentu). Gabung cepat melewati ruangan tempat penelepon berada.</li>
+</ul>
+<h4 id="worlds-do-not-count-as-your-room">Dunia tidak dihitung sebagai kamar Anda</h4>
+<p>Seorang pemain mungkin masuk <strong>satu ruang aktif pada satu waktu</strong>: membuat, bergabung dengan kode, bergabung dengan cepat atau
+menerima undangan adalah a <code>409 "You are already in an active room."</code> sementara mereka duduk di kursi lain
+ruangan yang tidak tertutup. Tempat duduk di a <strong>dunia</strong> tidak dihitung: a <code>Playing</code>, <code>joinInProgress</code> terikat ruangan
+ke sesi aktif a <a href="/id/docs/tutorials/persistent-sessions.html">gigih</a> permainan. Dunia akan bertahan lama
+karena sesinya dan ruangannya tetap terbuka setelah pengunjung terakhir pergi, maka kursi di salah satunya adalah keanggotaan,
+bukan lobi tempat pemain duduk — mereka bisa berada di beberapa dunia, di game apa pun, dan masih digunakan
+satu ruangan biasa. Pertandingan gabungan yang sedang berlangsung dan tidak persisten masih dihitung: pertandingan berakhir, dan sementara
+itu berjalan, pemain ada di dalamnya. Kursi kedua di ruangan yang sama ditolak (<code>409</code>) di setiap jalur. Daftar a
+dunia pemain dengan <a href="#start-seats-leave-result"><code>GET /rooms/joined</code></a>.</p>
+<h2 id="websocket-wsv1realtime">Soket Web: <code>ws/v1/realtime</code></h2>
+<p>Hubungkan ke <code>wss://api.starhermit.com/ws/v1/realtime?roomId=&lt;guid&gt;</code> dengan JWT melalui <code>Authorization</code> tajuk, <code>?ticket=</code> dari <code>POST /api/v1/realtime/connection-tickets</code>, atau <code>?access_token=</code>. Lebih suka tiketnya: tiket sekali pakai dan berumur beberapa detik. <strong>Hanya peserta</strong> (<code>403</code> jika tidak); token peluncuran <code>game_scope</code> harus sama dengan ruangan <code>gameSlug</code>. Koneksi terbaru menggantikan koneksi pengguna sebelumnya — soket lama ditutup <code>PolicyViolation</code> ("Digantikan oleh koneksi yang lebih baru").</p>
+<h3 id="binary-frames-gameplay">Bingkai biner (gameplay)</h3>
+<p>Bingkai biner adalah saluran gameplaynya <strong>dialihkan ke host</strong> permainan (sesi bernaskah yang terikat ruangan dimainkan <code>ws/v1/games</code> sebaliknya — lihat <a href="#room-bound-sessions">jembatan</a>). Server <strong>tidak pernah diurai</strong> muatan mereka — otoritas host adalah kontrak permainan — tetapi hal ini memberlakukan perutean dan identitas:</p>
+<ul>
+<li>Server <strong>mengawali setiap frame dengan id peserta 16-byte pengirim</strong> (GUID peserta dalam urutan byte .NET). Klien harus menghapus 16 byte pertama dan tidak boleh mempercayai id pengirim di dalam payload.</li>
+<li><strong>Tuan rumah → kamar</strong>: frame host disebarkan ke setiap peserta lain yang terhubung (snapshot).</li>
+<li><strong>Tamu → hanya tuan rumah</strong>: frame tamu dikirim ke host dan tidak ke orang lain (input).</li>
+<li>Batas ukuran bingkai: <strong>8 KB</strong>. Batas tarif: <strong>30 pesan/detik per koneksi</strong>, ember token dengan jatah burst 2× selama 1 detik. Pelanggaran menutup soket dengan <code>PolicyViolation</code>.</li>
+</ul>
+<h3 id="json-text-control-frames">Bingkai kontrol teks JSON</h3>
+<p>Bingkai JSON kecil (≤ <strong>4 KB</strong>) mengadakan acara lobi dan pertandingan:</p>
+<pre><code class="language-json">{ "type": "ready" }
+{ "type": "chat", "text": "Ready to race" }
+{ "type": "event", "kind": "countdown", "goInMs": 3000 }
+</code></pre>
+<ul>
+<li>Itu <strong>tuan rumah</strong> mungkin mengirim <code>event</code>, <code>chat</code>, Dan <code>ready</code>; frame disiarkan ke setiap peserta lainnya.</li>
+<li><strong>Tamu</strong> hanya dapat mengirim <code>ready</code> Dan <code>chat</code> (juga disiarkan), tarif terbatas pada <strong>10 per menit</strong>.</li>
+<li>Server <strong>memberi tag ulang pada setiap bingkai kontrol</strong> dengan id peserta pengirim: yang disediakan klien <code>from</code> dilucuti dan diganti dengan <code>"from": "&lt;participantId&gt;"</code>.</li>
+<li>Bingkai yang tidak dapat diurai, tidak diketahui <code>type</code>, atau tipe yang tidak dapat dikirim oleh peran pengirim akan menutup soket <code>PolicyViolation</code>.</li>
+</ul>
+<h3 id="server-pushes">Server mendorong</h3>
+<p>Server mendorong bingkai teks JSON sendiri:</p>
+<ul>
+<li><code>{"type":"presence","userId":"&lt;guid&gt;","online":true|false}</code> — pada setiap sambungan/pemutusan sambungan.</li>
+<li><code>{"type":"roster","roomId":"&lt;guid&gt;","status":"Playing","participants":[ ... ]}</code> — ke soket penghubung, dan ke seluruh ruangan pada sambungan, daun, pergantian tempat duduk, pembukaan, dan permulaan. Daftar tersebut didorong setelahnya <code>start</code> adalah daftar pertandingan yang dibekukan, termasuk kursi AI, dan carry <code>gameSessionId</code> ketika ruangan memiliki sesi skrip terikat.</li>
+<li><code>{"type":"result","roomId":"&lt;guid&gt;","teamScores":[3,1],"metadata":{...}}</code> — saat host mengirimkan hasilnya, atau saat skrip terikat mengembalikan hasilnya.</li>
+</ul>
+<h3 id="close-codes">Tutup kode</h3>
+<table>
+<thead>
+<tr>
+<th>Kode</th>
+<th>Kapan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>NormalClosure</code></td>
+<td>Penutupan yang diprakarsai oleh klien</td>
+</tr>
+<tr>
+<td><code>MessageTooBig</code></td>
+<td>Bingkai di atas batas 8 KB (biner) / 4 KB (teks).</td>
+</tr>
+<tr>
+<td><code>PolicyViolation</code></td>
+<td>Pelanggaran batas nilai, kerangka kontrol tidak diizinkan/tidak valid, koneksi digantikan oleh yang lebih baru</td>
+</tr>
+</tbody>
+</table>
+<h2 id="sizing-a-large-room">Mengukur ruangan yang besar</h2>
+<p>Sebuah ruangan menampung hingga 100 pemain, namun batasan praktisnya adalah bandwidth. Saluran biner adalah
+dialihkan ke host:</p>
+<ul>
+<li>setiap bingkai tamu dikirim ke tuan rumah;</li>
+<li>setiap frame host disalin ke setiap tamu;</li>
+<li>setiap frame membawa awalan pengirim 16-byte.</li>
+</ul>
+<p>Dua hal berikut:</p>
+<ul>
+<li><strong>Unduhan tuan rumah bertambah seiring dengan jumlah tamu.</strong> Ia menerima masukan setiap tamu.</li>
+<li><strong>Platform jalan keluar bertambah seiring dengan kuadrat ukuran ruangan.</strong> Cuplikan host yang menjelaskan setiap hal
+Pemain bertambah seiring dengan jumlah pemain, dan disalin ke setiap tamu.</li>
+</ul>
+<p>Contoh yang berhasil: 100 pemain. Setiap tamu mengirimkan 30 input/s sebesar 32 byte. Tuan rumah mengirimkan 20
+snapshots/s pada 12 byte per pemain, masing-masing sekitar 1,2 KB. Overhead TLS/TCP/WebSocket per pesan adalah
+diambil sekitar 70 byte.</p>
+<table>
+<thead>
+<tr>
+<th>Link</th>
+<th>Kecepatan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Setiap tamu, unggah</td>
+<td>~26 kbit/dtk</td>
+</tr>
+<tr>
+<td>Setiap tamu, unduh</td>
+<td>~0,21 Mbit/dtk</td>
+</tr>
+<tr>
+<td>Tuan rumah, unggah</td>
+<td>~0,21 Mbit/dtk</td>
+</tr>
+<tr>
+<td><strong>Tuan rumah, unduh</strong></td>
+<td><strong>~2,8 Mbit/dtk, sebanyak ~3.000 pesan/dtk</strong></td>
+</tr>
+<tr>
+<td><strong>Platform jalan keluar untuk ruangan</strong></td>
+<td><strong>~23 Mbit/dtk (~10,5 GB per jam)</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Game yang sama pada ukuran lain menunjukkan pertumbuhan kuadrat dalam jalan keluar platform:</p>
+<table>
+<thead>
+<tr>
+<th>Pemain</th>
+<th>8</th>
+<th>22</th>
+<th>50</th>
+<th>100</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Jalan keluar peron</td>
+<td>~0,4 Mbit/dtk</td>
+<td>~1,8 Mbit/dtk</td>
+<td>~6,9 Mbit/dtk</td>
+<td>~23 Mbit/dtk</td>
+</tr>
+</tbody>
+</table>
+<p>Batasan per koneksi membatasi kasus terburuk, bukan kasus biasa. Ruang 100 pemain di mana
+setiap koneksi mengirimkan 8 KB frame dengan kecepatan sekitar 30/s <strong>390 Mbit/dtk</strong> jalan keluar platform.</p>
+<p>Untuk ruangan besar:</p>
+<ul>
+<li><strong>Pertahankan tingkat masukan tamu tetap rendah</strong> (10–20 Hz), dan mengirimkan input hanya jika inputnya berubah. Tuan rumah
+menerima masukan dari setiap tamu, dan menangani ribuan pesan per detik biasanya lebih sulit
+batas untuk host browser daripada bandwidth.</li>
+<li><strong>Jaga agar snapshot tetap kecil.</strong> Mengukur posisi, mengirim delta terhadap keadaan terakhir yang diakui,
+dan menyebarkan entitas yang jarang berubah di beberapa snapshot. Satu frame paling banyak
+8 KB, yang menyisakan sekitar 80 byte per pemain pada 100 pemain.</li>
+<li><strong>Saluran kamar tidak dapat menargetkan satu tamu.</strong> Bingkai tuan rumah diberikan kepada semua orang, jadi setiap tamu
+menerima seluruh dunia. Jika game Anda memerlukan manajemen minat per pemain (hanya di dekatnya
+pemain, kabut perang), jalankan di a <a href="/id/docs/api/container-games.html">server permainan kontainer</a> alih-alih. SEBUAH
+container dapat mengalamatkan frame ke pemain individu, dan host bukan lagi rumah pemain
+koneksi.</li>
+</ul>
+<h2 id="automatic-room-lifecycle">Siklus hidup ruangan otomatis</h2>
+<ul>
+<li>Sebuah <code>Open</code> ruangan dimulai secara otomatis ketika batas waktu pengisian ulang telah lewat; kursi kosong menjadi peserta AI yang diberi nama unik, hingga ke ruangan <a href="#backfill-allowance">tunjangan penimbunan kembali</a>.</li>
+<li>Sebuah <code>Open</code> ruangan juga dimulai secara otomatis segera setelah setiap kursi terisi — oleh manusia, oleh pemain AI yang dikonfigurasi saat pembuatan, atau gabungannya — tanpa menunggu tenggat waktu tersebut.</li>
+<li>A <code>Playing</code> ruangan ditutup ketika tuan rumahnya tidak punya <code>ws/v1/realtime</code> koneksi selama lebih dari 60 detik — kecuali jika terikat ke sesi permainan yang masih aktif, dalam hal ini peran host akan berpindah (lihat di bawah). Tamu yang terhubung menerima dorongan daftar terakhir yang menunjukkan ruangan ditutup.</li>
+<li>A <code>Lobby</code> atau <code>Open</code> ruangan ditutup setelah lebih dari 60 menit tanpa peserta yang terhubung.</li>
+</ul>
+<p>Peserta yang hanya kehilangan koneksinya tidak terpengaruh: menyambungkan kembali soket (koneksi terbaru menggantikan) dan <code>GET /rooms/mine</code> keduanya tetap bekerja saat ruangan masih hidup.</p>
+<h3 id="the-60-second-host-rule-and-room-bound-sessions">Aturan tuan rumah 60 detik dan sesi terikat ruangan</h3>
+<p><strong>Kecocokan yang dijalankan server bukan milik hostnya.</strong> A <code>Playing</code> ruangan terikat pada sesi permainan itu
+masih <code>active</code> tidak pernah ditutup karena hostnya sedang offline: peran host berpindah ke manusia yang terhubung
+jika ada, dan jika tidak, tidak akan terjadi apa-apa. Siklus hidup sesi menentukan kapan pertandingan akan diadakan
+selesai, dan menutup ruangan saat itu. Aturan di bawah ini berlaku untuk ruangan yang dirutekan tuan rumah (tidak ada sesi), dan
+ke ruang terikat setelah sesinya berakhir.</p>
+<p><strong>Jadi game yang berada di ruangan tidak memerlukan soket waktu nyata milik host.</strong> Tuan rumah yang bermain-main
+<code>ws/v1/games</code> dan menutup (atau tidak pernah membuka) <code>ws/v1/realtime</code> tidak menutup ruangan saat sesi berlangsung
+adalah <code>active</code>; buka soket waktu nyata hanya jika game Anda menginginkan dorongan daftar.</p>
+<p><strong>Untuk ruangan yang dirutekan tuan rumah, hanya a <code>ws/v1/realtime</code> soket dihitung sebagai koneksi host.</strong> Jam
+dimulai ketika soket realtime terakhir host ditutup; host yang tidak pernah terhubung diukur dari
+kamar <code>startedAt</code>.</p>
+<p><strong>Menutup ruangan tidak mengakhiri sesi terikat ruangan.</strong> Ruang terikat masih bisa ditutup selagi berada
+sesi berjalan — paling sering saat sesi manusia terakhir <a href="#start-seats-leave-result">daun-daun</a> sebuah ruangan tanpa
+<a href="#join-in-progress">bergabung dalam proses</a>. Menutupnya (pendorongan daftar nama, setiap kursi kosong, undangan tertunda
+kadaluarsa) tidak melakukan hal lain:</p>
+<ul>
+<li>Sesinya tetap ada <code>active</code>. Para pemainnya bisa terus bermain <code>ws/v1/games</code>, dan skrip tetap ada
+berjalan pada tingkat ticknya.</li>
+<li>Mulai dari pemanggilan berikutnya, <code>ctx.room.roster</code> adalah <strong>kosong</strong> dan setiap manusia di dalamnya <code>ctx.presence</code> memiliki
+<code>left: true</code>, karena menutup ruangan akan mengosongkan setiap kursi. <code>online</code> masih mencerminkan <code>ws/v1/games</code>
+soket. Sebuah naskah yang memperlakukan "semua orang pergi" sebagai akhir pertandingan harus kembali <code>result</code> Kemudian.</li>
+<li>Jika skrip nanti kembali <code>result</code>, sesi selesai seperti biasa, tetapi ruangannya <code>result</code> tetap
+<code>null</code>: ruangan sudah ditutup, jadi hasilnya disimpan pada sesi saja.</li>
+<li>Jika skrip tidak pernah kembali <code>result</code>, sesi dihentikan seperti sesi permainan lainnya: 5 menit
+setelah yang terakhir <code>ws/v1/games</code> soket tertutup, atau setelah 24 jam tanpa tindakan pemain (lihat
+<a href="/id/docs/api/games.html#session-model">Permainan — Model sesi</a>).</li>
+</ul>
+<p>Singkatnya: pertandingan yang berada di dalam ruangan akan tetap mempertahankan hostnya saat offline; jika itu harus berakhir ketika para pemainnya
+tinggalkan ruangan, akhiri di skrip kapan <code>ctx.presence</code> menunjukkan semua orang pergi.</p>
+<h2 id="security-summary">Ringkasan keamanan</h2>
+<ul>
+<li>Setiap titik akhir berfungsi dengan JWT penuh <strong>atau</strong> token peluncuran dalam lingkup permainan; token peluncuran <code>game_scope</code> harus sesuai dengan ruangan <code>gameSlug</code>, jadi dua game tidak akan pernah bisa melihat atau bergabung dengan ruangan masing-masing.</li>
+<li>Pembacaan hanya untuk peserta (ditambah undangan yang menunggu keputusan); <code>open</code>, <code>seats</code>, <code>start</code>, Dan <code>result</code> hanya untuk host; undangan hanya untuk teman.</li>
+<li>Validasi: batas kursi/tim, jumlah AI yang selalu memberi tuan rumah satu kursi, satu ruang aktif per pengguna (kecuali dunia), satu penghuni per kursi, permulaan idempoten, skor hasil ditetapkan ke 0–50, undangan berakhir dengan ruangan.</li>
+<li>Transportasi: ID pengirim yang diberi tag server, perutean berbasis peran, batas ukuran bingkai, batas kecepatan per koneksi, tidak ada penguraian muatan biner di sisi server.</li>
+</ul>
+<h2 id="room-bound-sessions">Sesi terikat ruangan</h2>
+<p>Untuk game dengan backend server — a <code>server=</code> naskah dalam manifesnya, atau a <a href="/id/docs/api/container-games.html">wadah</a> — ruang waktu nyata dapat menjalankan pertandingannya <strong>server secara otoritatif</strong> bukannya di klien host. Poin-poin di bawah ini ditulis untuk skrip; sebuah kontainer menerima daftar yang sama melaluinya <code>POST /sessions</code> ctx (<code>room</code>, <code>presence</code>) dan perubahan keanggotaan melalui <code>POST /sessions/{id}/members</code>. Ini menggabungkan ruangan (lobi, undangan, perjodohan, pengisian ulang) dengan simulasi sisi server, masukan yang divalidasi, dan hasil yang dimiliki skrip.</p>
+<ul>
+<li><strong>Pembuatan sesi di ruang dimulai.</strong> Saat ruangan masuk <code>Playing</code>, platform membuat N-player <a href="/id/docs/api/games.html">sesi permainan</a> untuk partisipan manusia. Kursi AI hanya ada di daftar yang menghadap skrip. Respon ruangan dan roster mendorong ekspos <code>gameSessionId</code> sehingga klien mengetahui soket gameplay mana yang harus dibuka.</li>
+<li><strong>Gameplay berpindah ke <code>ws/v1/games</code>.</strong> Klien terhubung ke <code>ws/v1/games?sessionId=&lt;gameSessionId&gt;</code> dan pertukaran <code>cmd</code>/<code>game</code> bingkai dengan skrip, persis seperti game dengan skrip lainnya; WS realtime tetap terhubung hanya untuk daftar nama/kehadiran. Sesi ini berjalan pada kecepatan yang didukung yang diminta oleh skripnya melalui <code>game.tickRateHz</code> — skrip yang tidak meminta apa pun dicentang pada 0,25 Hz, yang tidak diinginkan oleh game waktu nyata, jadi nyatakan satu (lihat <a href="/id/docs/api/game-scripts.html#tick-rate">Skrip Permainan</a>).</li>
+<li><strong>Skrip ctx yang diperluas.</strong> Setiap pemanggilan untuk sesi terikat ruangan (<code>createSession</code>, <code>onPlayerMessage</code>, <code>onTick</code>) juga menerima <code>ctx.room</code> (id ruangan, metadata, dan daftar yang dibekukan — manusia <em>Dan</em> Kursi AI, dipesan berdasarkan tim lalu slot) dan <code>ctx.presence</code> (<code>{ "&lt;userId&gt;": { online, left } }</code> untuk setiap pengguna yang merupakan atau pernah menjadi peserta manusia). Detail di <a href="/id/docs/api/game-scripts.html#room-bound-sessions">Skrip Game — Sesi terikat ruangan</a>.</li>
+<li><strong>Prestasi otoritatif server.</strong> Setiap kaitan sesi terikat dapat memberikan pencapaian dengan kembali <code>achievements: {userId: [keys]}</code>, persis seperti dalam game bernaskah apa pun — termasuk dari <code>createSession</code>, yang menyala saat ruangan dimulai. Pembukaan kunci didorong ke pemain yang menghasilkan <code>ws/v1/games</code> sebagai <code>{"type":"achievement"}</code> bingkai. Melihat <a href="/id/docs/api/achievements.html#server-authoritative-game-achievements">Prestasi</a>.</li>
+<li><strong>Naskah mengakhiri pertandingan.</strong> Saat skrip kembali <code>result</code>, platform menyelesaikan sesi, menyimpan hasilnya di ruangan, dan menutup ruangan (termasuk dorongan daftar nama terakhir). <code>POST /rooms/{id}/result</code> tidak digunakan untuk permainan di ruangan.</li>
+<li><strong>Mulai kegagalan.</strong> Ruang yang didukung skrip dapat dimulai tanpa sesi terikat jika pembuatan sesinya gagal; memeriksa <code>gameSessionId</code> sebelum memilih transportasi gameplay. Ruang yang didukung kontainer tetap tidak dimulai ketika servernya tidak dapat membuat sesi. Coba lagi dengan backoff pada kesalahan startup sementara; jangan alihkan ke simulasi host.</li>
+<li><strong>Permainan yang diarahkan oleh tuan rumah dapat mengikat sesi semata-mata untuk pencapaian.</strong> Saluran gameplay biner tidak pernah dibatasi pada sesi terikat, sehingga game yang disimulasikan pada klien host masih dapat mengirimkan a <code>server=</code> naskah yang tugasnya hanyalah pencapaian otoritatif (dan elo) hibah, sedangkan jalur cepat terus mengalir <code>ws/v1/realtime</code>.</li>
+</ul>
+<h2 id="how-a-game-uses-it">Bagaimana sebuah game menggunakannya</h2>
+<ol>
+<li><strong>Membuat</strong>: panggilan pembuat lobi <code>POST /rooms</code> dengan tata letak timnya, buram <code>metadata</code> gumpalan, dan betapapun banyaknya <code>aiPlayers</code> pertandingan harus dimulai, dan menjadi tuan rumah. Mengisi setiap kursi lainnya dengan AI di sini adalah keseluruhan alur solo-versus-komputer.</li>
+<li><strong>Mengundang</strong>: tuan rumah mencantumkan teman (<code>GET /api/v1/me/friends</code>) dan mengirim <code>POST /rooms/{id}/invites</code>. Platform memberi tahu setiap orang yang diundang (<code>game_invite</code> tekan + <code>GET /api/v1/me/game-invites</code>), sehingga mereka dapat menerima dari dasbor tanpa membuka game Anda; undangan yang sudah ada dalam game melihat undangan yang sama melalui polling <code>GET /rooms/invites</code>. Menerima menempatkan mereka di tim tuan rumah.</li>
+<li><strong>Membuka</strong>: tuan rumah menelepon <code>POST /rooms/{id}/open</code>. Panggilan pemain solo <code>POST /rooms/quick-join</code> dan mendarat di ruang terbuka tertua dengan kursi kosong (di <code>404</code> mereka membuat dan membuka kamarnya sendiri).</li>
+<li><strong>Menghubungkan</strong>: semua orang terbuka <code>ws/v1/realtime?roomId=…</code> dan jam tangan <code>roster</code>/<code>presence</code> mendorong saat kursi terisi.</li>
+<li><strong>Awal</strong>: pada batas waktu pengisian ulang, segera setelah setiap kursi terisi, atau ketika tuan rumah memulai secara paksa, sisa kursi kosong menjadi peserta AI (hingga <a href="#backfill-allowance">tunjangan penimbunan kembali</a>) dan daftarnya terhenti. <strong>Game yang diarahkan ke tuan rumah</strong>: tamu mengirimkan masukan sebagai bingkai biner (hanya mencapai tuan rumah); tuan rumah menyiarkan snapshot. <strong>Game bernaskah yang terikat ruangan</strong>: semua orang terhubung <code>ws/v1/games?sessionId=&lt;gameSessionId&gt;</code> dan bermain melawan naskah dengan <code>cmd</code>/<code>game</code> bingkai.</li>
+<li><strong>Tinggalkan di tengah pertandingan</strong>: di sebuah <a href="#join-in-progress">bergabung dalam proses</a> ruangan kursi dikosongkan untuk pemain berikutnya. Jika tidak, pemain yang keluar pada saat itu <code>Playing</code> digantikan di tempat mereka duduk oleh peserta AI (kursi yang sama, nama panggilan baru yang dihasilkan server) dan dapat segera mengantri lagi; jika tuan rumah pergi, peran tuan rumah berpindah ke manusia yang tersisa yang paling lama bergabung. Dalam permainan yang dialihkan ke tuan rumah, tuan rumah yang memutuskan koneksi waktu nyatanya memiliki waktu 60 detik untuk menyambung kembali sebelum pertandingan ditutup; pertandingan yang berada di dalam ruangan tidak pernah ditutup karena tuan rumahnya sedang pergi.</li>
+<li><strong>Menyelesaikan</strong>: dialihkan ke host — host memposting hasilnya; server menjepit skor, menyimpan hasilnya, mendorongnya ke semua soket, dan menutup ruangan. Terikat ruangan — skrip kembali <code>result</code> dan platform menyimpannya dan menutup ruangan.</li>
+</ol>
+<h2 id="see-also">Lihat juga</h2>
+<ul>
+<li><a href="/id/docs/api/relay.html">Menyampaikan</a> — penyebaran byte buram yang terikat pada sesi permainan atau daftar ruang waktu nyata; ketersediaan dapat bervariasi</li>
+<li><a href="/id/docs/api/games.html">Pertandingan</a> — permainan dengan skrip resmi server</li>
+<li><a href="/id/docs/api/auth.html">Otentikasi</a> — meluncurkan token dan pagar lingkup permainan</li>
+<li><a href="/id/docs/api/friends.html">Teman-teman</a> — daftar teman yang digunakan oleh pemilih undangan</li>
+</ul>
+<p>Melihat <a href="/id/docs/credentials.html">kompatibilitas kredensial</a> Dan <a href="/id/docs/api/contracts.html">kontrak yang dapat dibaca mesin</a>.</p>
+
+{% endraw %}

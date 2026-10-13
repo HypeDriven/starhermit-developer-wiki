@@ -1,0 +1,949 @@
+---
+layout: "wiki"
+lang: "hi"
+title: "गेम्स एपीआई"
+source_url: "/docs/api/games.html"
+source_path: "docs/api/games.md"
+source_hash: "e470bcc739248f71e3ff63290f133d01b1b9deb11aa638ef8f1c4d640d43ae5a"
+translation: "machine"
+permalink: "/hi/docs/api/games.html"
+---
+{% raw %}
+<h1 id="games-api">गेम्स एपीआई</h1>
+<p>गेम सबसिस्टम StarHermit का मूल है: सर्वर-आधिकारिक मल्टीप्लेयर गेम जिनके नियम या तो सैंडबॉक्स वाली जावास्क्रिप्ट फ़ाइल या डेवलपर द्वारा आपूर्ति किए गए कंटेनर में चलते हैं। दोनों रनटाइम इस प्लेयर-फ़ेसिंग REST API को साझा करते हैं (<code>api/v1/games/{slug}</code>) और गेमप्ले वेबसॉकेट (<code>ws/v1/games</code>). सर्वर संलेखन के लिए, देखें <a href="/hi/docs/api/game-scripts.html">गेम स्क्रिप्ट</a> या <a href="/hi/docs/api/container-games.html">कंटेनर-होस्टेड गेम सर्वर</a>. संपूर्ण स्क्रिप्ट-रनटाइम उदाहरण के लिए, देखें <a href="/hi/docs/tutorials/chess-walkthrough.html">शतरंज का पूर्वाभ्यास</a> और <a href="https://github.com/HypeDriven/starhermit-chess">हाइपड्राइवन/स्टारहर्मिट-शतरंज</a>.</p>
+<p><strong>आधार यूआरएल:</strong> <code>https://api.starhermit.com</code>.</p>
+<p>प्लेयर एंडपॉइंट को प्रमाणीकरण की आवश्यकता होती है और यह पूर्ण उपयोगकर्ता टोकन और गेम-स्कोप लॉन्च दोनों के साथ काम करता है
+टोकन. दो <code>/server/...</code> समापन बिंदु केवल कंटेनर हैं: सत्र समाधान एक संकीर्ण का उपयोग करता है
+सर्वर बियरर टोकन, जबकि टोकन नवीनीकरण परिनियोजन ताज़ा कुंजी का उपयोग करता है।</p>
+<h2 id="what-slug-is">क्या <code>{slug}</code> है</h2>
+<p>एक खेल का स्लग है <strong>यूआईडी</strong> - उसके जैसा ही मूल्य <code>&lt;uid&gt;.starhermit.com</code> पता, उदा.
+<code>83fd04b1-3cbe-4b09-a251-3733ad4b9d94</code>. यह गेम की अपरिवर्तनीय आईडी और से लिया गया है <strong>कुछ नहीं
+इसे सेट कर सकते हैं</strong>: नहीं <code>starhermit.txt</code>, रेपो नाम नहीं, ऑपरेटर नहीं। एक नाम जो एक डेवलपर कर सकता है
+चुनें कुछ ऐसा होगा जिसके लिए दो खेल प्रतिस्पर्धा कर सकते हैं, और किसकी मध्यस्थता करने के लिए मंच की आवश्यकता होगी
+मिल गया; यूआईडी न तो टकरा सकती है और न ही मांगी जा सकती है।</p>
+<p><strong>स्लग सर्वर बैकएंड नहीं है.</strong> प्रत्येक गेम एक स्थानीय फ़ोल्डर से जोड़ा गया, और प्रत्येक रिपॉजिटरी गेम
+एक सत्यापित स्वामी ने जोड़ा, उसके पास एक है - सहित या उसके बिना <code>server=</code> या <code>container.image=</code> - क्योंकि यह है
+खेल की खिलाड़ी-सामना वाली सतह का पता: <a href="#launch-tokens">टोकन लॉन्च करें</a>,
+<a href="#per-player-control-bindings">को नियंत्रित करता है</a>, <a href="#per-player-game-settings">सेटिंग्स</a>, इसका
+<a href="/hi/docs/api/catalog.html#saving-from-inside-a-game-launch-token">क्लाउड-सेव स्लॉट</a> और <a href="/hi/docs/api/realtime.html">कमरा</a>. ए
+केवल-ब्राउज़र गेम को भी उतनी ही आवश्यकता है जितनी किसी अन्य गेम को। बिना स्लग वाले एकमात्र गेम रिपोजिटरी हैं
+प्रस्तुतियाँ जिनका स्वामी सत्यापित नहीं है (<code>gameSlug</code> है <code>null</code> में <code>GET /api/v1/me/github-games</code>).</p>
+<p>गेम के सर्वर के बारे में अंतिम बिंदु - गेम की जानकारी, उपलब्धियां, सत्र, मैचमेकिंग, आमंत्रण,
+रीप्ले - बैकएंड की आवश्यकता है। <code>GET /api/v1/games/{slug}</code> जवाब <code>404</code> ऐसे गेम के लिए जिसमें स्लग है और नहीं
+बैकएंड, जो दोनों को अलग बताने का तरीका है।</p>
+<p>इसे हार्ड-कोड न करें. इसे लॉन्च टोकन से पढ़ें <code>game_scope</code> दावा, या - एक के लिए
+प्लेटफ़ॉर्म-होस्टेड ब्राउज़र गेम — से <code>location.hostname</code>, चूँकि उपडोमेन यूआईडी है।</p>
+<h2 id="endpoints">अंतिमबिंदुओं</h2>
+<table>
+<thead>
+<tr>
+<th>तरीका</th>
+<th>पथ</th>
+<th>प्रमाणीकरण</th>
+<th>विवरण</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}</code></td>
+<td>ले जानेवाला</td>
+<td>गेम की जानकारी + कॉल करने वाले के आँकड़े</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/games/{slug}/launch-token</code></td>
+<td>ले जानेवाला</td>
+<td>एक गेम-स्कोप्ड लॉन्च टोकन बनाएं</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/achievements</code></td>
+<td>ले जानेवाला</td>
+<td>गेम की उपलब्धियां + कॉल करने वाले की अनलॉक स्थिति</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/linked-achievements/{otherSlug}</code></td>
+<td>ले जानेवाला</td>
+<td>कॉल करने वाले ने दूसरे गेम में क्या अनलॉक किया</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/controls</code></td>
+<td>ले जानेवाला</td>
+<td>कॉल करने वाले की प्रभावी नियंत्रण बाइंडिंग प्राप्त करें</td>
+</tr>
+<tr>
+<td>रखना</td>
+<td><code>/api/v1/games/{slug}/controls</code></td>
+<td>ले जानेवाला</td>
+<td>कॉल करने वाले के नियंत्रण ओवरराइड को बदलें</td>
+</tr>
+<tr>
+<td>मिटाना</td>
+<td><code>/api/v1/games/{slug}/controls</code></td>
+<td>ले जानेवाला</td>
+<td>डिफ़ॉल्ट प्रकट करने के लिए कॉल करने वाले के नियंत्रण को रीसेट करें</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>ले जानेवाला</td>
+<td>इस गेम के लिए कॉल करने वाले की संग्रहीत सेटिंग्स, साथ ही आकार सीमाएँ</td>
+</tr>
+<tr>
+<td>रखना</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>ले जानेवाला</td>
+<td>कॉल करने वाले का संपूर्ण सेटिंग मानचित्र बदलें</td>
+</tr>
+<tr>
+<td>पैबंद</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>ले जानेवाला</td>
+<td>संग्रहीत मानचित्र में मर्ज करें; <code>null</code> एक कुंजी निकालता है</td>
+</tr>
+<tr>
+<td>मिटाना</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>ले जानेवाला</td>
+<td>इस गेम के लिए कॉलर द्वारा संग्रहीत प्रत्येक सेटिंग साफ़ करें</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/settings/{key}</code></td>
+<td>ले जानेवाला</td>
+<td>एक सेटिंग, या <code>404</code></td>
+</tr>
+<tr>
+<td>रखना</td>
+<td><code>/api/v1/games/{slug}/settings/{key}</code></td>
+<td>ले जानेवाला</td>
+<td>एक सेटिंग स्टोर करें</td>
+</tr>
+<tr>
+<td>मिटाना</td>
+<td><code>/api/v1/games/{slug}/settings/{key}</code></td>
+<td>ले जानेवाला</td>
+<td>एक सेटिंग हटाएँ</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/sessions/mine</code></td>
+<td>ले जानेवाला</td>
+<td>कॉलर के सक्रिय सत्र</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/sessions/{sessionId}</code></td>
+<td>ले जानेवाला</td>
+<td>सत्र विवरण (केवल प्रतिभागी)</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/sessions/{sessionId}/recovery</code></td>
+<td>वाहक (प्रतिभागी या मालिक)</td>
+<td>पुनर्प्राप्ति डेटा, समाप्ति, और प्रभावी परिवहन सीमाएँ</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/games/{slug}/sessions/{sessionId}/leave</code></td>
+<td>वाहक (प्रतिभागी)</td>
+<td>एक कमरे के बिना एक सतत दुनिया छोड़ें → <code>204</code></td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/leaderboards</code></td>
+<td>ले जानेवाला</td>
+<td>स्वयं के गेम के सक्रिय स्वामी द्वारा निर्मित बोर्ड</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/games/{slug}/sessions/ai</code></td>
+<td>ले जानेवाला</td>
+<td>प्लेटफ़ॉर्म AI बनाम एक अभ्यास सत्र बनाएं</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/queues</code></td>
+<td>ले जानेवाला</td>
+<td>आकृतियों का मिलान करें यह गेम स्वीकार करता है</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/games/{slug}/matchmaking</code></td>
+<td>ले जानेवाला</td>
+<td>निकटतम-एलो मंगनी के लिए कतार (<code>?queues=</code> उपसमुच्चय)</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/matchmaking</code></td>
+<td>ले जानेवाला</td>
+<td>नवीनतम टिकट जबकि यह अभी भी जुड़ने योग्य है</td>
+</tr>
+<tr>
+<td>मिटाना</td>
+<td><code>/api/v1/games/{slug}/matchmaking</code></td>
+<td>ले जानेवाला</td>
+<td>पंक्तिबद्ध टिकट रद्द करें</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/diagnostics</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td>लाइव सत्र, स्क्रिप्ट मीटरिंग, कतार, वेबहुक स्वास्थ्य</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/webhooks</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td>वेबहुक एंडपॉइंट्स की सूची बनाएं</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/games/{slug}/webhooks</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td>एक वेबहुक बनाएं; रहस्य एक बार लौट आया</td>
+</tr>
+<tr>
+<td>मिटाना</td>
+<td><code>/api/v1/games/{slug}/webhooks/{id}</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td>एक वेबहुक हटाएँ</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/games/{slug}/webhooks/{id}/resume</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td>समापन बिंदु को ठीक करने के बाद ब्रेकर को साफ़ करें</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/games/{slug}/invites</code></td>
+<td>ले जानेवाला</td>
+<td>किसी मित्र को किसी नए गेम में, या जो गेम आप खेल रहे हैं उसमें आमंत्रित करें</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/invites</code></td>
+<td>ले जानेवाला</td>
+<td>आने वाले लंबित + सभी आउटगोइंग आमंत्रण</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/games/{slug}/invites/{inviteId}/accept</code></td>
+<td>ले जानेवाला</td>
+<td>एक आमंत्रण स्वीकार करें (सत्र बनाता है, या जिसे नाम देता है उसमें शामिल होता है)</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/games/{slug}/invites/{inviteId}/decline</code></td>
+<td>ले जानेवाला</td>
+<td>किसी आमंत्रण को अस्वीकार करें</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/me/game-invites</code></td>
+<td>खाता जेडब्ल्यूटी</td>
+<td>सभी लंबित आमंत्रण - प्रत्येक गेम, दोनों आमंत्रण प्रणालियाँ (अधिकतम 50)</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/replays/mine</code></td>
+<td>ले जानेवाला</td>
+<td>कॉलर के समाप्त सत्र (रीप्ले वाले गेम)</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/replays/{sessionId}</code></td>
+<td>ले जानेवाला</td>
+<td>पूर्ण रीप्ले स्थिति (केवल प्रतिभागी)</td>
+</tr>
+<tr>
+<td>डब्ल्यूएस</td>
+<td><code>/ws/v1/games?sessionId={guid}</code></td>
+<td>ले जानेवाला</td>
+<td>गेमप्ले वेबसॉकेट</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/games/{slug}/server/sessions/{sessionId}</code></td>
+<td>गेम-सर्वर टोकन</td>
+<td>कंटेनर बैकएंड सत्र समाधान; खिलाड़ी टोकन के लिए उपलब्ध नहीं है</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/games/{slug}/server/token</code></td>
+<td>कुंजी ताज़ा करें</td>
+<td>कंटेनर के समाप्त हो रहे सर्वर टोकन को नवीनीकृत करें</td>
+</tr>
+</tbody>
+</table>
+<p>त्रुटि निकाय अलग-अलग होते हैं; देखना <a href="/hi/docs/api/conventions.html#requests-and-responses">एपीआई कन्वेंशन</a>.</p>
+<h2 id="game-info">गेम जानकारी</h2>
+<h3 id="get-apiv1gamesslug"><code>GET /api/v1/games/{slug}</code></h3>
+<p>गेम की परिभाषा और उस गेम के लिए कॉल करने वाले के आँकड़े लौटाता है। <code>404</code> यदि ऐसा कोई गेम मौजूद नहीं है,
+या यदि गेम केवल ब्राउज़र है (इसमें स्लग है लेकिन कोई सर्वर बैकएंड नहीं है)।</p>
+<pre><code class="language-json">{
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "name": "Chess",
+  "enabled": true,
+  "leaderboardId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "maxConcurrentSessionsPerPlayer": 20,
+  "replaysEnabled": true,
+  "buildId": "s12",
+  "me": {
+    "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "elo": 1200,
+    "wins": 4,
+    "losses": 2,
+    "draws": 1,
+    "activeSessionCount": 2
+  }
+}
+</code></pre>
+<ul>
+<li><code>leaderboardId</code> वैकल्पिक है.</li>
+<li><code>me.elo</code> के लिए डिफ़ॉल्ट <code>1200</code>; <code>wins</code>/<code>losses</code>/<code>draws</code> सर्वर-रनटाइम-स्वामित्व वाले प्रति-खिलाड़ी दस्तावेज़ से पढ़े जाते हैं।</li>
+<li><code>replaysEnabled</code> कहता है कि क्या इस गेम के समाप्त सत्र रखे गए हैं - इसे मानने के बजाय इसे पढ़ें, और जब यह हो तो अपना रीप्ले यूआई छुपाएं <code>false</code>. देखना <a href="#replays">रिप्ले</a>.</li>
+<li><code>buildId</code> वर्तमान में गेम को परोसने वाले सर्वर लॉजिक को नाम दें (<code>s</code> + स्क्रिप्ट संस्करण, या <code>c</code> + छवि डाइजेस्ट उपसर्ग)। के रूप में इसे वापस भेजें <code>ws/v1/games?build=…</code> इसलिए बासी ग्राहक को मना कर दिया जाता है <code>409 {"error":"build_mismatch"}</code> इससे पहले कि यह स्थानांतरित फ़ील्ड पर कार्य करे। को छोड़ते हुए <code>build</code> पहले की तरह जुड़ता है.</li>
+</ul>
+<h2 id="launch-tokens">टोकन लॉन्च करें</h2>
+<h3 id="post-apiv1gamessluglaunch-token"><code>POST /api/v1/games/{slug}/launch-token</code></h3>
+<p>एक गेम-स्कोप्ड JWT (डिफ़ॉल्ट जीवनकाल 60 मिनट) ले जाने वाला मिंट <code>game_scope={slug}</code> और कोई अनुमति का दावा नहीं. एक स्कोप्ड टोकन अपने गेम के लिए एक टोकन को दोबारा ढाल सकता है - यह क्लाइंट रिफ्रेश पैटर्न है - लेकिन नवीनीकरण इसके द्वारा सीमित है <code>launch_chain</code> (मूल उपयोगकर्ता सत्र से डिफ़ॉल्ट 12 घंटे)। विगत वह सीलिंग नवीनीकरण है <code>403</code>. टोकन समाप्त होने से पहले ग्राहकों को ताज़ा करना चाहिए; उदाहरण के लिए, शतरंज संदर्भ क्लाइंट हर 45 मिनट में रीफ्रेश होता है। सॉकेट को दोबारा कनेक्ट करने से पहले नवीनीकृत भी करें - देखें <a href="#gameplay-websocket">गेमप्ले वेबसॉकेट</a>.</p>
+<pre><code class="language-json">{
+  "token": "eyJhbGciOi...",
+  "expiresInSeconds": 3600
+}
+</code></pre>
+<h2 id="achievements">उपलब्धियों</h2>
+<h3 id="get-apiv1gamesslugachievements"><code>GET /api/v1/games/{slug}/achievements</code></h3>
+<p>गेम का आधिकारिक बैकएंड कॉलर की अनलॉक स्थिति के साथ प्रत्येक उपलब्धि की घोषणा करता है। गुप्त
+उपलब्धियाँ तब तक छिपी रहती हैं जब तक कि कॉल करने वाला उन्हें अनलॉक नहीं कर देता। पूर्ण उपयोगकर्ता JWT या गेम-स्कोप स्वीकार करता है
+लॉन्च टोकन. <code>404</code> जब स्लग के पास कोई आधिकारिक गेम परिभाषा नहीं है।</p>
+<pre><code class="language-json">[
+  {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "key": "first-win",
+    "name": "First Win",
+    "description": "Win a match.",
+    "icon": null,
+    "secret": false,
+    "points": 10,
+    "unlocked": true,
+    "unlockedAt": "2026-07-25T09:14:02Z"
+  }
+]
+</code></pre>
+<p>खेल उपलब्धियाँ हैं <strong>सर्वर-आधिकारिक</strong>: केवल गेम की स्क्रिप्ट या कंटेनर ही उन्हें अनुदान देता है,
+और ग्राहक-दावा किया गया <code>POST /api/v1/me/achievements/unlock</code> समापन बिंदु उन्हें मना कर देता है। लाइव अनलॉक
+गेमप्ले सॉकेट पर पहुंचें <code>{"type":"achievement"}</code> तख्ते. पूर्ण अनुबंध अंदर हैं
+<a href="/hi/docs/api/achievements.html">उपलब्धियों</a>, <a href="/hi/docs/api/game-scripts.html#achievements">गेम स्क्रिप्ट</a>, और
+<a href="/hi/docs/api/container-games.html#control-channel">कंटेनर गेम सर्वर</a>.</p>
+<h3 id="get-apiv1gamessluglinked-achievementsotherslug"><code>GET /api/v1/games/{slug}/linked-achievements/{otherSlug}</code></h3>
+<p>कॉल करने वाले का अपना अनलॉक हो जाता है <strong>एक और</strong> गेम, इसलिए यह गेम उनके आधार पर सुविधाएँ खोल सकता है। काम करता है
+इस गेम के लॉन्च टोकन के साथ। देखना
+<a href="/hi/docs/api/achievements.html#achievements-from-other-games">उपलब्धियाँ - अन्य खेलों से उपलब्धियाँ</a>.</p>
+<h2 id="per-player-control-bindings">प्रति-खिलाड़ी नियंत्रण बाइंडिंग</h2>
+<p>गेम्स डेस्कटॉप-ब्राउज़र नियंत्रण घोषित कर सकते हैं <code>control.*</code> में प्रविष्टियाँ
+<a href="/hi/docs/api/github-games.html#default-control-bindings"><code>starhermit.txt</code></a>. नियंत्रण API स्टोर करता है a
+प्रत्येक उपयोगकर्ता और गेम के लिए अलग ओवरराइड। पूर्ण उपयोगकर्ता JWTs और गेम-स्कोप्ड लॉन्च टोकन हैं
+स्वीकृत; एक लॉन्च टोकन <code>game_scope</code> मेल खाना चाहिए <code>{slug}</code>.</p>
+<h3 id="get-apiv1gamesslugcontrols"><code>GET /api/v1/games/{slug}/controls</code></h3>
+<p>प्रभावी बाइंडिंग को प्रकट क्रम में लौटाता है। <code>codes</code> इसमें उपयोगकर्ता का ओवरराइड कब शामिल है
+एक मौजूद है, अन्यथा <code>defaultCodes</code>. रिटर्न <code>404</code> <code>"This game declares no controls."</code> जब
+लाइव बिल्ड <code>starhermit.txt</code> कोई वैध नहीं है <code>control.*</code> लाइन - उन्हें घोषित करें और एक बिल्ड प्रकाशित करें; देखना
+<a href="/hi/docs/tutorials/game-controls.html">ट्यूटोरियल: अपने गेम में नियंत्रण जोड़ें</a>.</p>
+<pre><code class="language-json">{
+  "actions": [
+    {
+      "action": "up",
+      "label": "Run forward",
+      "defaultCodes": ["KeyW", "ArrowUp"],
+      "codes": ["KeyW", "ArrowUp"]
+    },
+    {
+      "action": "shoot",
+      "label": "Shoot",
+      "defaultCodes": ["Space"],
+      "codes": ["KeyJ"]
+    }
+  ]
+}
+</code></pre>
+<h3 id="put-apiv1gamesslugcontrols"><code>PUT /api/v1/games/{slug}/controls</code></h3>
+<p>कॉल करने वाले के ओवरराइड को प्रतिस्थापित करता है। <code>bindings</code> ऑब्जेक्ट में घोषित का एक सबसेट हो सकता है
+क्रियाएँ; छोड़ी गई कार्रवाइयां अपने डिफ़ॉल्ट का उपयोग करना जारी रखती हैं।</p>
+<pre><code class="language-json">{
+  "bindings": {
+    "up": ["KeyW", "ArrowUp"],
+    "shoot": ["KeyJ"]
+  }
+}
+</code></pre>
+<p>प्रत्येक क्रिया को खेल द्वारा घोषित किया जाना चाहिए। प्रत्येक क्रिया में 1-4 वैध होने चाहिए
+<code>KeyboardEvent.code</code> मान, और परिणामी दो क्रियाओं के लिए कोई कोड निर्दिष्ट नहीं किया जा सकता है
+प्रभावी मानचित्र. अमान्य क्रियाएँ, कोड या विरोध वापस आते हैं <code>400</code>.</p>
+<h3 id="delete-apiv1gamesslugcontrols"><code>DELETE /api/v1/games/{slug}/controls</code></h3>
+<p>कॉल करने वाले के सभी ओवरराइड को हटा देता है और मेनिफेस्ट डिफ़ॉल्ट को पुनर्स्थापित करता है। रिटर्न <code>204</code>.
+लॉन्च-टोकन लिखना जानबूझकर किया जाता है, इसलिए एक होस्ट किया गया गेम अपनी स्वयं की रीबाइंडिंग स्क्रीन प्रदान कर सकता है।</p>
+<h2 id="per-player-game-settings">प्रति-खिलाड़ी गेम सेटिंग</h2>
+<p>आपका खेल कहाँ रहता है <strong>इसके अपने विकल्प हैं</strong> एक खिलाड़ी के लिए - मास्टर वॉल्यूम, ग्राफिक्स विवरण, उपशीर्षक
+आकार, पसंदीदा कैमरा, अंतिम चुना गया लोडआउट - इसलिए वे जिस भी मशीन पर साइन इन करते हैं, उस प्लेयर का अनुसरण करते हैं
+से. एक कुंजी/मूल्य भंडार का दायरा एक खिलाड़ी और एक गेम तक होता है।</p>
+<p><strong>कुछ भी स्कीमा घोषित नहीं करता.</strong> प्लेटफ़ॉर्म आपकी चाबियाँ और आपके मूल्यों को संग्रहीत करता है और उन्हें कभी नहीं पढ़ता है,
+इसलिए आप इसे लिखकर एक विकल्प जोड़ें: कोई मैनिफ़ेस्ट प्रविष्टि नहीं, कोई पुनः तैनाती नहीं, कोई प्लेटफ़ॉर्म रिलीज़ नहीं। वो भी
+इसका मतलब है कि प्लेटफ़ॉर्म उन्हें आपके लिए मान्य नहीं कर सकता है - कुंजी नाम में टाइपो एक नई सेटिंग है, न कि कोई
+त्रुटि.</p>
+<p>नियंत्रण एपीआई की तरह, एक गेम-स्कोप्ड लॉन्च टोकन स्वीकार किया जाता है (इसकी) <code>game_scope</code> मेल खाना चाहिए <code>{slug}</code>),
+इसलिए इन-गेम विकल्प स्क्रीन गेम के पास पहले से मौजूद टोकन के अलावा किसी और चीज़ के साथ काम नहीं करती है। भिन्न
+नियंत्रण, किसी प्रकट घोषणा की आवश्यकता नहीं है: प्रत्येक गेम में उसी समय से सेटिंग स्टोरेज होता है
+मौजूद है, जिसमें केवल ब्राउज़र वाला गेम शामिल है जिसमें कोई सर्वर लॉजिक नहीं है।</p>
+<p>सही स्टोर चुनें - <a href="/hi/docs/api/catalog.html#saving-from-inside-a-game-launch-token">बादल बचाता है</a> प्रगति रोकें (प्रति शीर्षक एक अपारदर्शी संग्रह, 10 एमबी, लॉन्च टोकन के साथ भी पहुंच योग्य),
+और एक स्क्रिप्ट या कंटेनर बैकएंड की अपनी प्लेयर स्थिति सर्वर-प्राधिकृत है और लिखने योग्य नहीं है
+ग्राहक. सेटिंग्स बीच में छोटी, ग्राहक-स्वामित्व वाली प्राथमिकताएँ हैं।</p>
+<h3 id="get-apiv1gamesslugsettings"><code>GET /api/v1/games/{slug}/settings</code></h3>
+<p>कॉल करने वाले ने इस गेम के लिए सब कुछ संग्रहित किया है। <code>settings</code> उस खिलाड़ी के लिए खाली है जिसने कभी बचत नहीं की है
+कुछ भी - वह एक है <code>200</code>, नहीं ए <code>404</code>. कुंजियाँ क्रमबद्ध होकर वापस आती हैं।</p>
+<pre><code class="language-json">{
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "settings": {
+    "audio.master": 0.8,
+    "graphics.detail": "ultra",
+    "graphics.options": { "shadows": true, "msaa": 4 }
+  },
+  "count": 3,
+  "bytes": 118,
+  "updatedAt": "2026-08-07T15:04:11Z",
+  "limits": { "maxKeys": 200, "maxKeyLength": 128, "maxTotalBytes": 2097152, "maxAccountBytes": 67108864 }
+}
+</code></pre>
+<p><code>bytes</code> वर्तमान में इस खिलाड़ी की सेटिंग की लागत यही है <code>limits.maxTotalBytes</code>. पढ़ें
+उन्हें हार्ड-कोड करने के बजाय सीमाएं: भत्ता एक ऑपरेटर सेटिंग है, और एक गेम प्रदान किया जा सकता है
+इसका अपना. <code>maxKeys</code> (डिफ़ॉल्ट रूप से 200) प्रति गेम भी सेट किया जा सकता है, और <code>maxAccountBytes</code> सीमा एक
+प्रत्येक गेम में खाते की सेटिंग (डिफ़ॉल्ट रूप से 64 एमबी)।</p>
+<h3 id="put-apiv1gamesslugsettings"><code>PUT /api/v1/games/{slug}/settings</code></h3>
+<p>पूरा नक्शा बदल देता है. <strong>मुख्य भाग द्वारा छोड़ी गई कुंजियाँ हटा दी जाती हैं</strong> - सब कुछ भेजें, या उपयोग करें <code>PATCH</code>.</p>
+<pre><code class="language-json">{ "settings": { "audio.master": 0.8, "graphics.detail": "ultra" } }
+</code></pre>
+<p>एक खाली <code>settings</code> ऑब्जेक्ट कॉल करने वाले के लिए गेम की सेटिंग साफ़ कर देता है। जैसा ही आकार लौटाता है
+<code>GET</code>.</p>
+<h3 id="patch-apiv1gamesslugsettings"><code>PATCH /api/v1/games/{slug}/settings</code></h3>
+<p>जो संग्रहीत किया गया है उसमें विलीन हो जाता है, कुंजियाँ छोड़ देता है जिनका इसमें अकेले उल्लेख नहीं किया गया है। ए <code>null</code> कीमत <strong>निकालता है</strong> इसका
+कुंजी. यह शीर्ष-स्तरीय सेटिंग कुंजियों को मर्ज करता है; एक वस्तु मान उसकी कुंजी पर संपूर्ण मान को प्रतिस्थापित कर देता है,
+इसके नेस्टेड गुणों सहित। यह क्या है
+विकल्प स्क्रीन का उपयोग करना चाहिए - यह एक स्लाइडर को बचा सकता है जो पहले पढ़ने के बिना चला गया और
+बाकी सब कुछ फिर से लिखना।</p>
+<pre><code class="language-json">{ "settings": { "audio.music": 0.25, "graphics.options": null } }
+</code></pre>
+<h3 id="get--put--delete-apiv1gamesslugsettingskey"><code>GET</code> / <code>PUT</code> / <code>DELETE /api/v1/games/{slug}/settings/{key}</code></h3>
+<p>एक समय में एक सेटिंग. <code>GET</code> रिटर्न <code>{ "key", "value", "updatedAt" }</code>, या <code>404</code> यदि कॉल करने वाले के पास है
+इसे कभी संग्रहित नहीं किया. <code>PUT</code> लेता है <code>{ "value": &lt;any JSON&gt; }</code> और मूल्य संग्रहीत करता है <strong>प्रतिशब्द</strong> -सहित
+एक स्पष्ट <code>null</code>, जो यहां किसी भी अन्य की तरह एक मूल्य है, डिलीट नहीं। <code>DELETE</code> रिटर्न <code>204</code>, और
+जो चीज़ वहां नहीं है उसे हटाना त्रुटि के बजाय नो-ऑप है।</p>
+<pre><code class="language-bash">curl -X PUT "https://api.starhermit.com/api/v1/games/$SLUG/settings/audio.master" \
+  -H "Authorization: Bearer $LAUNCH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"value": 0.35}'
+</code></pre>
+<h3 id="rules">नियम</h3>
+<table>
+<thead>
+<tr>
+<th>नियम</th>
+<th>कीमत</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>नाम निर्धारित करना</td>
+<td>1-128 वर्ण <code>A-Z a-z 0-9 . _ - :</code> - नामस्थान स्वतंत्र रूप से (<code>audio.master</code>, <code>graphics:shadows</code>)</td>
+</tr>
+<tr>
+<td>मान</td>
+<td>कोई भी JSON: संख्या, स्ट्रिंग, बूलियन, सरणी, ऑब्जेक्ट, <code>null</code></td>
+</tr>
+<tr>
+<td>प्रति खिलाड़ी, प्रति गेम सेटिंग्स</td>
+<td>200</td>
+</tr>
+<tr>
+<td>प्रति खिलाड़ी, प्रति गेम बाइट्स</td>
+<td><strong>डिफ़ॉल्ट रूप से 2 एमबी</strong> - एक ऑपरेटर इसे बढ़ा या घटा सकता है, और एक गेम को अलग भत्ता दे सकता है</td>
+</tr>
+</tbody>
+</table>
+<p>एक एकल सेटिंग संपूर्ण बाइट भत्ते का उपयोग कर सकती है; प्रति-मूल्य के लिए अलग से कोई छोटी सीमा नहीं है।</p>
+<table>
+<thead>
+<tr>
+<th>स्थिति</th>
+<th>अर्थ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td>ख़राब सेटिंग नाम, या ऐसी बॉडी जो नहीं है <code>{"settings": {...}}</code> / <code>{"value": ...}</code></td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>उस स्लग का कोई गेम उत्तर नहीं देता, या (एकल-कुंजी)। <code>GET</code>) उस कुंजी के अंतर्गत कुछ भी संग्रहीत नहीं है</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>भत्ते से अधिक - या तो बहुत अधिक सेटिंग्स, या बहुत अधिक बाइट्स। संदेश सीमा बताता है</td>
+</tr>
+</tbody>
+</table>
+<p>जिस बैच में एक ख़राब कुंजी होती है वह कोई भी अच्छी कुंजी नहीं लिखता है। सेटिंग्स प्रति खिलाड़ी और प्रति हैं
+खेल: दो खिलाड़ियों के बीच, या एक ही खिलाड़ी के दो खेलों के बीच कुछ भी लीक नहीं होता है। वे जीवित रहते हैं ए
+गेम को अक्षम या असूचीबद्ध किया जा रहा है, क्योंकि वे गेम के बजाय खिलाड़ी का डेटा हैं।</p>
+<h2 id="sessions">सत्र</h2>
+<h3 id="get-apiv1gamesslugsessionsmine"><code>GET /api/v1/games/{slug}/sessions/mine</code></h3>
+<p>इस गेम के लिए कॉल करने वाले के सक्रिय सत्र। <code>myTurn</code> और <code>deadline</code> स्क्रिप्ट स्थिति से पार्स किए गए हैं <code>summary</code> वस्तु (देखें <a href="/hi/docs/api/game-scripts.html#the-platform-readable-window">गेम स्क्रिप्ट</a>). <code>pausedAt</code> सेट है जबकि ए <a href="/hi/docs/tutorials/persistent-sessions.html">ज़िद्दी</a> सत्र को इसमें किसी के न होने पर रोक दिया गया है, और <code>null</code> अन्यथा।</p>
+<p><strong>कमरे में बंद सत्र शामिल हैं।</strong> A <a href="/hi/docs/api/realtime.html#room-bound-sessions">वास्तविक समय कक्ष</a>के बाउंड सेशन में प्रत्येक व्यक्ति की सूची है जो कमरा शुरू होने पर सीट पर बैठा था, इसलिए यह उनमें से प्रत्येक के लिए यहां दिखाई देता है जब यह शुरू होता है <code>active</code>. एआई सीटें नहीं हैं <code>players</code>. कमरा छोड़ना, या कमरा बंद करना, किसी को भी सत्र से नहीं हटाता है, इसलिए यह इस सूची में तब तक रहता है जब तक कि सत्र समाप्त न हो जाए - सिवाय इसके कि <a href="/hi/docs/api/realtime.html#join-in-progress">प्रगति में शामिल हों</a> कमरा, जहां छोड़ने वाला खिलाड़ी अपनी सीट छोड़ देता है और उसे सत्र से हटा दिया जाता है, और मध्य-मैच में प्रवेश पाने वाले एक नवागंतुक को इसमें जोड़ा जाता है। प्रतिक्रिया में कोई कमरा आईडी नहीं है: उपयोग करें <code>GET /api/v1/realtime/rooms/joined</code> कॉल करने वाले के कमरे के लिए, और उनका मिलान करें <code>gameSessionId</code> ख़िलाफ़ <code>sessionId</code>.</p>
+<pre><code class="language-json">[
+  {
+    "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "status": "active",
+    "players": [
+      { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+      { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" }
+    ],
+    "createdAt": "2026-07-20T14:03:11Z",
+    "finishedAt": null,
+    "myTurn": true,
+    "deadline": 1784642591000,
+    "pausedAt": null
+  }
+]
+</code></pre>
+<h3 id="get-apiv1gamesslugsessionssessionid"><code>GET /api/v1/games/{slug}/sessions/{sessionId}</code></h3>
+<p>सत्र विवरण. केवल प्रतिभागी - <code>403</code> अन्यथा।</p>
+<pre><code class="language-json">{
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "status": "active",
+  "players": [
+    { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+    { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" }
+  ],
+  "createdAt": "2026-07-20T14:03:11Z",
+  "finishedAt": null,
+  "chatConversationId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+  "result": null
+}
+</code></pre>
+<h3 id="recovery-and-explicit-leaving">पुनर्प्राप्ति और स्पष्ट छोड़ना</h3>
+<p><code>GET /api/v1/games/{slug}/sessions/{sessionId}/recovery</code> प्रभावी स्नैपशॉट लौटाता है, पुनर्स्थापित करता है,
+प्रतिधारण और परिवहन मूल्य। प्रतिभागी और गेम का मालिक इसे पढ़ सकते हैं। समय इकाइयाँ और सभी
+प्रतिक्रिया फ़ील्ड में वर्णित हैं <a href="/hi/docs/session-lifecycle.html#read-recovery-information">सत्र जीवनचक्र और पुनर्प्राप्ति</a>.</p>
+<p><code>POST /api/v1/games/{slug}/sessions/{sessionId}/leave</code> एक सतत दुनिया में सदस्यता छोड़ देता है
+बिना रीयलटाइम रूम के। यह कोई शरीर नहीं लेता और वापस लौट आता है <code>204</code>; अंतिम मानव प्रस्थान से दुनिया समाप्त हो जाती है।
+<code>403</code> मतलब सदस्य नहीं, <code>404</code> मतलब कोई सत्र नहीं, <code>410</code> मतलब ख़त्म, और <code>409</code> मतलब एक गैर-स्थायी
+सत्र या कमरे में बंद सत्र। कमरे में बंद सत्र के लिए कमरे का उपयोग करें <code>/leave</code> समापनबिंदु. समापन
+केवल एक सॉकेट ही सदस्यता को सुरक्षित रखता है। देखना <a href="/hi/docs/session-lifecycle.html#disconnecting-and-leaving-are-different">डिस्कनेक्ट करना और छोड़ना</a>.</p>
+<h3 id="post-apiv1gamesslugsessionsai"><code>POST /api/v1/games/{slug}/sessions/ai</code></h3>
+<p>प्लेटफ़ॉर्म एआई सीट के विरुद्ध एक अभ्यास सत्र बनाता है: निश्चित उपयोगकर्ता आईडी <code>00000000-0000-4000-8000-00000000a1a1</code>, उपयोक्तानाम <strong>"घर"</strong>. गेम का आधिकारिक बैकएंड एआई चलाता है - कोई बाहरी बॉट सेवा नहीं है।</p>
+<pre><code class="language-json">{ "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e" }
+</code></pre>
+<h2 id="matchmaking">मंगनी करना</h2>
+<p>एक स्क्रिप्ट उन मिलान आकृतियों की घोषणा करती है जिन्हें वह स्वीकार करती है <code>game.queues</code>. एक खेल जिसमें कोई स्वीकार्य नहीं है
+घोषणाओं में एक निहितार्थ है <code>default</code> कतार (एक की दो टीमें)। वर्तमान कंटेनर
+<code>/describe</code> पाठक करता है <strong>नहीं</strong> आयात <code>queues</code>, इसलिए कंटेनर गेम उस अंतर्निहित 1v1 आकार का उपयोग करते हैं।
+जिस क्लाइंट के पास कोई कतार नहीं है, उसे गेम का पहला स्थान मिलता है।</p>
+<p>अधिकतम आठ स्क्रिप्ट कतारें बरकरार रखी गई हैं। कुंजियाँ छोटी, छोटी, खाली नहीं और अधिकतम 32 हैं
+पात्र; डुप्लिकेट कुंजियाँ पहले रखें। <code>teams</code> 2-8 और पर जकड़ा हुआ है <code>teamSize</code> 1-16 तक;
+कुल 32 खिलाड़ियों से अधिक आकृतियाँ खारिज कर दी जाती हैं। अमान्य घोषणाएँ वापस अंतर्निहित हो सकती हैं
+1v1, इसलिए प्रभावी आकृतियों को सत्यापित करें <code>GET /queues</code> प्रकाशन के बाद.</p>
+<h3 id="get-apiv1gamesslugqueues"><code>GET /api/v1/games/{slug}/queues</code></h3>
+<pre><code class="language-json">[
+  { "key": "duos", "teams": 2, "teamSize": 2, "players": 4 }
+]
+</code></pre>
+<h3 id="post-apiv1gamesslugmatchmaking"><code>POST /api/v1/games/{slug}/matchmaking</code></h3>
+<p>निकटतम-एलो युग्मन के लिए कॉल करने वाले को कतारबद्ध करता है। repeatable <code>?queues=</code> क्वेरी कुंजियाँ नाम a <strong>उपसमुच्चय</strong> का
+वे आकृतियाँ (जैसे 1v1 और 2v2, 3v3 नहीं)। मिलान केवल उस आकार के विरुद्ध टिकट भरता है जिसकी उसे अनुमति है।
+उदाहरण के लिए:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/matchmaking?queues=solo&amp;queues=duos
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<p>द्वारा लौटाई गई कुंजियों का उपयोग करें <code>GET /queues</code>. <code>?queue=solo</code> एक ही आकृति का चयन करता है; अगर दोनों <code>queue</code> और
+<code>queues</code> आपूर्ति की जाती है, उनकी कुंजियाँ संयुक्त होती हैं और केस-असंवेदनशील तरीके से डुप्लिकेट की जाती हैं। एक अज्ञात कुंजी
+है <code>404</code>; सत्यापन के बाद एक सूची खाली है <code>400</code>. रिटर्न <code>409</code> यदि कॉल करने वाला पहले से ही कतार में है
+या उनके समवर्ती-सत्र कैप पर।</p>
+<p>खोज एक संकीर्ण एलो बैंड में शुरू होती है और टिकट प्रतीक्षा करते समय चौड़ी हो जाती है (डिफ़ॉल्ट 100, +10/सेकेंड)।
+स्थितियाँ: <code>queued</code>, <code>matched</code>, <code>cancelled</code>, <code>expired</code> (सीमा पार करने तक प्रतीक्षा की गई, डिफ़ॉल्ट 300 सेकंड, बिना
+किसी को ढूँढना - स्पिन के बजाय अभ्यास खेल की पेशकश करें)। एक पार्टी है <a href="/hi/docs/api/realtime.html">वास्तविक समय कक्ष</a>:
+<code>POST /api/v1/realtime/rooms/{id}/matchmake</code> (मेज़बान, लॉबी) पूरे रोस्टर में एक टीम के रूप में प्रवेश करता है।</p>
+<pre><code class="language-json">{
+  "ticketId": "b3b7c8d2-5c1e-4f3a-9e2d-1a2b3c4d5e6f",
+  "status": "queued",
+  "sessionId": null,
+  "waitedSeconds": 12,
+  "searchEloBand": 220,
+  "maxWaitSeconds": 300
+}
+</code></pre>
+<p>खेलों का विकल्प चुना जा सकता है <a href="/hi/docs/starhermit-txt.html#starting-matchmaking-before-every-human-seat-is-filled">समय सीमा शुरू होती है <code>starhermit.txt</code></a>:
+<code>matchmaking.max_wait_seconds</code> प्रतीक्षा के बाद एक अधूरा मैच शुरू होता है, और
+<code>matchmaking.ai_players</code> सीमित करें कि कितनी रिक्त सीटें AI बन जाती हैं। अन्य सीटें खाली रहती हैं. पूर्ण मानव
+मैच जल्दी शुरू होते हैं. <code>maxWaitSeconds</code> उस गेम की सेटिंग की रिपोर्ट करता है; ये टिकट रहते हैं <code>queued</code>
+जब तक वैश्विक प्रतीक्षा सीमा समाप्त होने के बजाय, मैचमेकिंग शुरू नहीं हो जाती।</p>
+<h3 id="get-apiv1gamesslugmatchmaking"><code>GET /api/v1/games/{slug}/matchmaking</code></h3>
+<p>कॉल करने वाले का नवीनतम टिकट लौटाता है, या <code>404</code>. A <code>matched</code> टिकट की सूचना है <strong>केवल जबकि यह
+सत्र अभी बाकी है <code>active</code></strong>. मैच ख़त्म होने के बाद ये है <code>404</code> इसलिए लॉबी एक नया मैच पेश करती है
+किसी मृत सत्र आईडी की ओर इंगित करने के बजाय।</p>
+<h3 id="delete-apiv1gamesslugmatchmaking"><code>DELETE /api/v1/games/{slug}/matchmaking</code></h3>
+<p>कॉल करने वाले के कतारबद्ध टिकट रद्द कर देता है। रिटर्न <code>204</code>.</p>
+<h2 id="invites">आमंत्रण</h2>
+<h3 id="post-apiv1gamessluginvites"><code>POST /api/v1/games/{slug}/invites</code></h3>
+<p>अनुरोध निकाय:</p>
+<pre><code class="language-json">{ "toUserId": "9b2f8c1a-1111-4222-8333-444455556666" }
+</code></pre>
+<p>लक्ष्य कोई मित्र होना चाहिए (<code>403</code> अन्यथा - देखें <a href="/hi/docs/api/friends.html">दोस्त</a>); <code>409</code> डुप्लिकेट आमंत्रण पर या जब कोई भी खिलाड़ी सेशन कैप पर हो। आमंत्रित व्यक्ति को भी एक प्राप्त होता है <a href="/hi/docs/api/chat.html#game_invite-one-event-for-both-invite-systems"><code>game_invite</code> आयोजन</a> उनके चैट सॉकेट पर धकेल दिया गया <code>kind: "session"</code>.</p>
+<h4 id="inviting-a-friend-into-a-game-in-progress">चल रहे खेल में किसी मित्र को आमंत्रित करना</h4>
+<p>वह सत्र जोड़ें जिसमें आप खेल रहे हैं:</p>
+<pre><code class="language-json">{ "toUserId": "9b2f8c1a-1111-4222-8333-444455556666", "sessionId": "3f0c…" }
+</code></pre>
+<p>फिर स्वीकार करना <strong>मित्र को उस चालू सत्र में प्रवेश देता है</strong> एक नई शुरुआत करने के बजाय - वे हर मायने में एक खिलाड़ी बन जाते हैं (सॉकेट, <code>ctx.players</code>, पुनर्स्थापित करता है, पुनः जोड़ता है)। आपका गेम तय करता है कि वह उन्हें लेता है या नहीं: प्लेटफ़ॉर्म एक स्क्रिप्ट पूछता है <code>game.onMembershipChange(ctx)</code> या एक कंटेनर का <a href="/hi/docs/api/container-games.html"><code>POST /sessions/{id}/members</code></a>, और एक ऐसा खेल जिसने न तो ऐसे हर शामिल होने से इनकार किया है। नियम:</p>
+<ul>
+<li>सत्र इस खेल का एक सक्रिय सत्र होना चाहिए <strong>आप</strong> में खेलें (<code>403</code> अन्यथा, <code>410</code> यदि यह समाप्त हो गया है), तो आपका मित्र पहले से ही इसमें नहीं होना चाहिए (<code>409</code>), और यह रीयलटाइम रूम से संबंधित नहीं होना चाहिए (<code>409</code> - कमरे में आमंत्रित करें, जिनकी सीटों का रोस्टर है)।</li>
+<li>प्रतिक्रिया वहन करती है <code>targetSessionId</code>; <code>sessionId</code> रहता है <code>null</code> जब तक आमंत्रण स्वीकार नहीं हो जाता.</li>
+<li>स्वीकार करते समय हर चीज़ की दोबारा जाँच की जाती है। यदि खेल अस्वीकार करता है (पूर्ण, बंद...) तो स्वीकार करना एक है <code>409</code> और निमंत्रण <strong>लंबित रहता है</strong>. यदि मैच समाप्त हो गया है तो आमंत्रण है <strong>रद्द कर दिया गया</strong> और उत्तर स्वीकार करें <code>410</code> - यह कभी भी नए गेम में नहीं बदलता।</li>
+<li>केवल आमंत्रित व्यक्ति की समवर्ती-सत्र सीमा लागू होती है। आप प्रति मित्र प्रति गंतव्य एक लंबित निमंत्रण रख सकते हैं, ताकि आपके मैच में एक निमंत्रण और एक नए गेम के लिए एक निमंत्रण सह-अस्तित्व में रह सके।</li>
+</ul>
+<p>पहले से बनाया गया एक प्लेटफ़ॉर्म इस सुविधा को नज़रअंदाज कर देता है <code>sessionId</code> और स्वीकार पर एक नया सत्र शुरू करता है; <code>targetSessionId</code> प्रतिक्रिया में आपको बताता है कि आपको क्या मिला।</p>
+<p><strong>आपको कौन सा आमंत्रण भेजना चाहिए?</strong> सादा आमंत्रण स्वीकार करना (संख्या) <code>sessionId</code>) <em>एक नया सत्र बनाता है</em> दो खिलाड़ियों के लिए. यदि आमंत्रितकर्ता पहले से ही बैठा है <a href="/hi/docs/api/realtime.html">वास्तविक समय कक्ष</a> (सीटों वाली एक लॉबी), इसके बजाय उन्हें उस कमरे में आमंत्रित करें - <code>POST /api/v1/realtime/rooms/{id}/invites</code> - इसलिए स्वीकार करना उन्हें उस मेज पर बैठाता है जिस पर आप वास्तव में हैं। दोनों आमंत्रित व्यक्ति को एक ही तरह से सूचित करते हैं, इसलिए कभी भी दोनों को एक ही निमंत्रण के लिए न भेजें: वह दो बार सूचित करता है।</p>
+<p>प्रतिक्रिया:</p>
+<pre><code class="language-json">{
+  "inviteId": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+  "from": { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+  "to": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
+  "status": "pending",
+  "createdAt": "2026-07-20T14:10:00Z",
+  "sessionId": null,
+  "targetSessionId": null,
+  "notified": true
+}
+</code></pre>
+<p><code>notified</code> रिपोर्ट करता है कि क्या पुश लाइव कनेक्शन तक पहुंच गया (<code>false</code> = आमंत्रित व्यक्ति कनेक्ट नहीं है; आमंत्रण अभी भी कायम है और वे इसे अपने इनबॉक्स में देखेंगे)। यह है <code>null</code> सूची में/प्रतिक्रियाओं को स्वीकार/अस्वीकार करें, जहां यह लागू नहीं होता है।</p>
+<h3 id="get-apiv1gamessluginvites"><code>GET /api/v1/games/{slug}/invites</code></h3>
+<pre><code class="language-json">{
+  "incoming": [ { "inviteId": "...", "from": { "userId": "...", "username": "bob" }, "to": { "userId": "...", "username": "alice" }, "status": "pending", "createdAt": "2026-07-20T14:10:00Z", "sessionId": null } ],
+  "outgoing": []
+}
+</code></pre>
+<p><code>incoming</code> इसमें केवल लंबित आमंत्रण शामिल हैं; <code>outgoing</code> इसमें कॉल करने वाले के सभी आउटगोइंग आमंत्रण शामिल हैं।</p>
+<h3 id="post-apiv1gamessluginvitesinviteidaccept"><code>POST /api/v1/games/{slug}/invites/{inviteId}/accept</code></h3>
+<p>आमंत्रण स्वीकार करता है और सत्र बनाता है - या, एक आमंत्रण के लिए <code>targetSessionId</code>, उससे जुड़ जाता है। को लौटाता है <code>GameInviteDto</code> साथ <code>status</code> <code>accepted</code> और <code>sessionId</code> सत्र को खोलने के लिए सेट करें।</p>
+<h3 id="post-apiv1gamessluginvitesinviteiddecline"><code>POST /api/v1/games/{slug}/invites/{inviteId}/decline</code></h3>
+<p>रिटर्न <code>204</code>.</p>
+<h3 id="get-apiv1megame-invites"><code>GET /api/v1/me/game-invites</code></h3>
+<p>पूर्ण खाता टोकन की आवश्यकता है; प्लेयर लॉन्च टोकन इस खाता-व्यापी इनबॉक्स को नहीं पढ़ सकते हैं।</p>
+<p>प्रत्येक लंबित आमंत्रण कॉलर को संबोधित (अधिकतम 50, नवीनतम पहले) - पुश अधिसूचना के लिए पोल फ़ॉलबैक, और पूछने के लिए एक स्थान "मुझे किसलिए आमंत्रित किया गया है?". यह फैलता है <strong>दोनों</strong> आमंत्रण प्रणाली: इस पृष्ठ से सत्र आमंत्रण और <a href="/hi/docs/api/realtime.html#invites">रीयलटाइम-रूम आमंत्रण</a>. प्रविष्टियाँ बिलकुल वैसी ही हैं <a href="/hi/docs/api/chat.html#game_invite-one-event-for-both-invite-systems"><code>game_invite</code> पेलोड</a>, इसलिए एक क्लाइंट एक ही कोड के साथ पुश और पोल परिणाम प्रस्तुत करता है।</p>
+<pre><code class="language-json">[
+  {
+    "inviteId": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+    "kind": "room",
+    "gameSlug": "poker",
+    "gameName": "StarHermit Poker",
+    "roomId": "b1d2c3e4-5f60-4a71-8b92-c3d4e5f60718",
+    "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
+    "createdAt": "2026-07-26T14:10:00Z",
+    "acceptPath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/accept",
+    "declinePath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/decline"
+  },
+  {
+    "inviteId": "c4a5b6d7-8e9f-4012-8345-6789abcdef01",
+    "kind": "session",
+    "gameSlug": "chess",
+    "gameName": "Chess",
+    "roomId": null,
+    "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
+    "createdAt": "2026-07-20T14:10:00Z",
+    "acceptPath": "/api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/c4a5b6d7-8e9f-4012-8345-6789abcdef01/accept",
+    "declinePath": "/api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/c4a5b6d7-8e9f-4012-8345-6789abcdef01/decline"
+  }
+]
+</code></pre>
+<p>प्रत्येक प्रविष्टि का स्वयं उत्तर दें <code>acceptPath</code>/<code>declinePath</code> - दोनों सिस्टम अलग-अलग आमंत्रण आईडी रखते हैं, इसलिए एक कमरे में आमंत्रण आईडी होती है <code>/games/{slug}/invites/...</code> एक है <code>404</code>. जिन कक्ष आमंत्रणों का कक्ष बंद हो गया है, या बिना प्रगति के प्रारंभ हो गया है, उन्हें छोड़ दिया गया है; स्वीकार करने के लिए कुछ भी नहीं बचा है। तो समाप्त हो चुके मैच में सत्र आमंत्रण भी शामिल हैं। प्रत्येक प्रविष्टि वहन करती है <code>inProgress</code> (स्वीकार करना पहले से ही खेले जा रहे गेम में शामिल होता है - एक लक्ष्य के साथ एक सत्र आमंत्रण, या एक आरंभिक जॉइन-इन-प्रोग्रेस रूम में एक रूम आमंत्रण) और वह गेम <code>sessionId</code>, तो एक ग्राहक कह सकता है "उनके खेल में शामिल हों" इसके बजाय "खेल".</p>
+<h3 id="share-links-invite-by-url">लिंक साझा करें (यूआरएल द्वारा आमंत्रण)</h3>
+<p>उपरोक्त आमंत्रण प्रवाह के लिए आवश्यक है कि दोनों खिलाड़ी पहले से ही मित्र हों। किसी ऐसे व्यक्ति को आमंत्रित करना जो है <strong>अभी तक मंच पर नहीं है</strong> (या अभी तक कोई दोस्त नहीं है), एक खेल एक हाथ दे सकता है <strong>लिंक शेयर करें</strong> - वेब डैशबोर्ड का एक यूआरएल जो संपूर्ण ऑनबोर्डिंग को स्वचालित करता है:</p>
+<pre><code>https://dashboard.starhermit.com/game-invite/&lt;userId&gt;/&lt;gameSlug&gt;
+</code></pre>
+<ul>
+<li><code>&lt;userId&gt;</code> - शेयरिंग प्लेयर की यूजर आईडी। एक गेम क्लाइंट के पास यह पहले से ही है: यह है <code>sub</code> इसके लॉन्च टोकन का दावा (शतरंज संदर्भ कार्यान्वयन इसे उजागर करता है <code>Net.userId</code>).</li>
+<li><code>&lt;gameSlug&gt;</code> - गेम का स्लग (<code>game_scope</code> दावा करना)। बिना आधिकारिक स्क्रिप्ट या कंटेनर बैकएंड वाले गेम इसके बजाय GitHub गेम आईडी (एक GUID) का उपयोग करते हैं; डैशबोर्ड या तो स्वीकार करता है।</li>
+<li><strong>वैकल्पिक क्वेरी स्ट्रिंग - आपकी।</strong> उसके बाद कुछ भी <code>?</code> आपके गेम को बिना किसी बदलाव के पास कर दिया जाता है:
+<code>…/game-invite/&lt;userId&gt;/&lt;gameSlug&gt;?room=K7MP2X&amp;map=arena</code> आपका गेम यहां खुलता है
+<code>https://&lt;game-id&gt;.starhermit.com/…?room=K7MP2X&amp;map=arena</code>. प्राप्तकर्ता को सीधे छोड़ने के लिए इसका उपयोग करें
+एक कमरे, एक स्तर या एक लॉबी में। यह प्राप्तकर्ता के साइन-इन से बच जाता है, और इसे आपके साथ जोड़ दिया जाता है
+वहां कुछ भी बदलने के बजाय गेम का यूआरएल। लॉन्च टोकन अभी भी आता है
+<code>#game_token=</code> खंड, इसलिए दोनों कभी नहीं टकराते। आपके द्वारा इसमें डाले गए मानों को यूआरएल-एनकोड करें।</li>
+</ul>
+<p>जब प्राप्तकर्ता लिंक खोलता है, तो <strong>डैशबोर्ड</strong> (गेम नहीं) स्वचालित मित्र-आमंत्रण भाग करता है - कोई नया बैकएंड एंडपॉइंट शामिल नहीं है, यह मौजूदा एपीआई बनाता है:</p>
+<ol>
+<li>उन्हें साइन इन करता है (लाइव प्रदाता के माध्यम से OAuth), या उनके मौजूदा सत्र का पुन: उपयोग करता है। लिंक का आशय साइन-इन राउंड ट्रिप से बच जाता है।</li>
+<li>फिर, हिस्सेदार और गेम का नाम बताते हुए एक सहमति संवाद दिखाता है <strong>दोस्तो हिस्सेदार</strong>: यदि कोई मौजूद है तो यह साझाकर्ता के लंबित मित्र अनुरोध को स्वीकार करता है, अन्यथा यह एक भेजता है (<code>POST /api/v1/me/friend-requests</code>).</li>
+<li>यदि उनके खाते में कोई उपनाम नहीं है तो उन्हें एक उपनाम चुनने के लिए प्रेरित करता है (गेम प्रदर्शन प्रोफ़ाइल उपनाम - देखें)। <a href="/hi/docs/api/profile.html">प्रोफ़ाइल</a>).</li>
+<li>गेम लॉन्च करता है (प्लेटफ़ॉर्म-होस्टेड <code>https://&lt;game-id&gt;.starhermit.com</code> कॉपी करें, लॉन्च टोकन के साथ <code>#game_token=</code> हमेशा की तरह टुकड़ा)।</li>
+<li>भेजता है <strong>शेयरर को वापस आमंत्रित करें खेलें</strong> साथ <code>POST /api/v1/games/{slug}/invites</code> - इसलिए एक शेयर लिंक एक सामान्य गेम आमंत्रण के रूप में समाप्त होता है जिसे साझाकर्ता स्वीकार करता है (डैशबोर्ड टोस्ट, डेस्कटॉप बैलून, या गेम की अपनी आमंत्रण सूची)। यदि मित्रता अभी भी एक लंबित अनुरोध है, तो डैशबोर्ड प्ले आमंत्रण को कतारबद्ध कर देता है और साझाकर्ता द्वारा स्वीकार किए जाने पर इसे स्वचालित रूप से भेज देता है।</li>
+</ol>
+<p>आपके गेम क्लाइंट के लिए इसका क्या अर्थ है:</p>
+<ul>
+<li><strong>लिंक पेश करने में स्ट्रिंग बिल्डिंग की एक लाइन की लागत आती है</strong> - ए डालो "आमंत्रण लिंक साझा करें" अपने मित्र को आमंत्रित करें यूआई के बगल में स्थित बटन पर क्लिक करें और यूआरएल को क्लिपबोर्ड पर कॉपी करें। देखना <code>shareInviteLink()</code> में <a href="https://github.com/HypeDriven/starhermit-chess">शतरंज संदर्भ कार्यान्वयन</a>.</li>
+<li><strong>प्राप्तकर्ता पक्ष पर किसी विशेष प्रबंधन की आवश्यकता नहीं है।</strong> प्राप्तकर्ता का आमंत्रण सामान्य आमंत्रण प्रवाह के माध्यम से आता है: आपका <code>GET .../invites</code> मतदान साझाकर्ता को आने वाला निमंत्रण दिखाता है, इसे स्वीकार करने से सत्र बनता है, और प्राप्तकर्ता सत्र को प्रकट होता हुआ देखता है <code>GET .../sessions/mine</code> (लंबित आउटगोइंग आमंत्रण दिखाएं ताकि प्रतीक्षा दिखाई दे - शतरंज ग्राहक का "आमंत्रित - प्रतीक्षारत" कार्ड)।</li>
+<li>डैशबोर्ड इन यूआरएल का भी उपयोग करता है: प्रत्येक खेलने योग्य होस्ट किए गए गेम के विवरण फलक में एक होता है <strong>आमंत्रण लिंक कॉपी करें</strong> बटन, और विंडोज़ क्लाइंट गेम के संदर्भ मेनू से समान प्रदान करता है।</li>
+</ul>
+<h2 id="replays">रिप्ले</h2>
+<p>रीप्ले एक समाप्त सत्र का अंतिम राज्य दस्तावेज़ है, जिसे प्लेटफ़ॉर्म द्वारा रखा जाता है और वापस भेजा जाता है
+जो खिलाड़ी इसमें थे. <strong>रिप्ले गेम की एक ऑप्ट-इन सुविधा है, जब तक गेम इसके लिए न कहे, बंद रहता है
+उन्हें</strong>, क्योंकि रीप्ले एक स्टोरेज है जिसे प्लेटफ़ॉर्म तब तक रखता है जब तक कि मैच का रिकॉर्ड मौजूद रहता है।</p>
+<p>अपने सर्वर कोड में उनके लिए पूछें - <code>replays: true</code> पर <code>game</code> ए के लिए वस्तु
+<a href="/hi/docs/api/game-scripts.html#replays">लिखी हुई कहानी</a>, <code>"replays": true</code> से <code>/describe</code> एक के लिए
+<a href="/hi/docs/api/container-games.html#get-describe">कंटेनर सर्वर</a> - और इसे लागू करने के लिए एक अद्यतन प्रकाशित करें। एक मंच
+ऑपरेटर किसी विशेष गेम के लिए किसी भी तरह से उत्तर दे सकता है, इसलिए इसका इलाज करें <code>replaysEnabled</code> का क्षेत्र
+<code>GET /api/v1/games/{slug}</code> यह मानने के बजाय कि आपकी घोषणा ही अंतिम शब्द है, उत्तर के रूप में।</p>
+<p>नीचे दिए गए दोनों समापन बिंदु वापस आते हैं <code>404</code> एक ऐसे गेम के लिए जिसका रिप्ले बंद है और उसमें कुछ भी नहीं रखा गया है
+खेल के समाप्त सत्र - इसलिए एक ग्राहक जो रीप्ले स्क्रीन प्रदान करता है उसे पढ़ना चाहिए <code>replaysEnabled</code>
+पहला।</p>
+<h3 id="get-apiv1gamesslugreplaysminelimit"><code>GET /api/v1/games/{slug}/replays/mine?limit=</code></h3>
+<p>कॉल करने वाले का सत्र समाप्त हो गया. <code>limit</code> के लिए डिफ़ॉल्ट <code>10</code> और 1-50 पर जकड़ा हुआ है।</p>
+<pre><code class="language-json">[
+  {
+    "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "players": [
+      { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+      { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" }
+    ],
+    "finishedAt": "2026-07-20T15:42:37Z",
+    "result": { "kind": "white-win", "reason": "checkmate" },
+    "moveCount": 41
+  }
+]
+</code></pre>
+<h3 id="get-apiv1gamesslugreplayssessionid"><code>GET /api/v1/games/{slug}/replays/{sessionId}</code></h3>
+<p>प्लेटफ़ॉर्म द्वारा संग्रहीत पूर्ण अंतिम स्थिति JSON। केवल प्रतिभागी। <code>recordedWith</code> क्या है
+दस्तावेज़ तैयार किया (स्क्रिप्ट संस्करण, रनटाइम, टिक दर), अंत में मुहर लगाई - ताकि बाद में पुन: तैनाती हो सके
+पुराने रिप्ले को वैसा नहीं बनाता जैसा वर्तमान कोड ने उन्हें लिखा था। इससे पहले ही मैच ख़त्म हो गए
+मौजूद रिपोर्ट <code>null</code>.</p>
+<pre><code class="language-json">{
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [ { "userId": "...", "username": "alice" }, { "userId": "...", "username": "bob" } ],
+  "finishedAt": "2026-07-20T15:42:37Z",
+  "result": { "kind": "white-win", "reason": "checkmate" },
+  "state": { "...": "game-specific final session state" },
+  "recordedWith": { "scriptVersion": 12, "runtime": "script", "tickRateHz": 0.25 }
+}
+</code></pre>
+<h2 id="session-model">सत्र मॉडल</h2>
+<ul>
+<li>सत्र <code>status</code> है <code>"active"</code> या <code>"finished"</code>.</li>
+<li>प्रत्येक सत्र को प्रति सत्र चैट वार्तालाप (प्रकार) मिलता है <code>"game"</code>) ताकि विरोधी चैट और वॉयस-कॉल कर सकें <strong>दोस्त बने बिना</strong> (देखना <a href="/hi/docs/api/chat.html">बात करना</a> और <a href="/hi/docs/api/voice.html">आवाज़</a>).</li>
+<li>प्रति खिलाड़ी समवर्ती-सत्र सीमा डिफ़ॉल्ट है <code>20</code>.</li>
+<li>एक खेल जो घोषणा करता है <code>persistent</code> खाली सत्र रखता है <strong>रुका हुआ</strong> उन्हें ख़त्म करने के बजाय; किसी एक से जुड़ने पर यह फिर से शुरू हो जाता है। रुके हुए सत्रों की गणना अधिकतम सीमा में की जाती है। देखें <a href="/hi/docs/tutorials/persistent-sessions.html">लगातार सत्र ट्यूटोरियल</a>.</li>
+<li>एक सक्रिय सत्र जिसे कोई नहीं खेल रहा है <strong>सेवानिवृत्त</strong> (स्थिति <code>finished</code>, छोड़ दिया गया): इसके आखिरी के 5 मिनट बाद <code>ws/v1/games</code> सॉकेट किसी के दोबारा शामिल न होने पर या 24 घंटों के बाद बिना किसी खिलाड़ी की कार्रवाई के बंद हो जाता है। इसके बजाय लगातार सत्र रुकते हैं। यह कमरे में बंद सत्रों पर भी लागू होता है; उनका कमरा बंद करने से उनका अंत नहीं हो जाता।</li>
+<li>मंगनी टिकट की स्थिति: <code>queued</code> | <code>matched</code> | <code>cancelled</code> | <code>expired</code>.</li>
+<li>आमंत्रण स्थितियाँ: <code>pending</code> | <code>accepted</code> | <code>declined</code> | <code>cancelled</code>.</li>
+<li><strong>सत्र मैचमेकिंग, आमंत्रण-स्वीकृति, एआई एंडपॉइंट या रीयलटाइम रूम स्टार्ट के माध्यम से बनाए जाते हैं</strong> (कमरे में बंद सत्र - देखें <a href="/hi/docs/api/realtime.html#room-bound-sessions">रीयलटाइम कमरे</a>) - कोई नहीं है "लॉबी बनाएं" समापनबिंदु.</li>
+<li>एलो अपडेट आधिकारिक स्क्रिप्ट से आते हैं (<code>eloUpdates</code>) या कंटेनर नियंत्रण चैनल, मैचमेकिंग के लिए उपयोग की जाने वाली रेटिंग सेट करता है और गेम के लीडरबोर्ड (स्कोर प्रकार) पर प्रकाशित किया जाता है <code>elo</code>). <strong>ग्राहक कभी भी गेम लीडरबोर्ड पर सीधे स्कोर सबमिट नहीं कर सकते</strong> (देखना <a href="/hi/docs/api/leaderboards.html">लीडरबोर्ड</a>).</li>
+</ul>
+<h2 id="gameplay-websocket">गेमप्ले वेबसॉकेट</h2>
+<p><code>ws/v1/games?sessionId={guid}</code> (संस्करण-तटस्थ मार्ग)। से प्रमाणित करें <code>Authorization</code> शीर्षलेख, <code>?ticket=</code>, या <code>?access_token=</code>. केवल प्रतिभागी (<code>403</code>); लॉन्च टोकन के साथ कनेक्ट करते समय, यह <code>game_scope</code> सत्र के खेल से मेल खाना चाहिए। एक समाप्त सत्र है <code>410 {"error":"session_not_active"}</code>. वैकल्पिक <code>?build=</code> है <code>buildId</code> से <code>GET /games/{slug}</code> - बेमेल है <code>409 {"error":"build_mismatch"}</code>.</p>
+<ul>
+<li>केवल टेक्स्ट फ़्रेम, प्रति फ़्रेम अधिकतम 16 केबी।</li>
+<li>एक नया कनेक्शन पुराने कनेक्शन का स्थान ले लेता है: पिछला कनेक्शन बंद हो जाता है <code>PolicyViolation</code>.</li>
+<li>किसी रुके हुए से कनेक्ट हो रहा है <a href="/hi/docs/tutorials/persistent-sessions.html">ज़िद्दी</a> सत्र आपके पहले आदेश से पहले इसे फिर से शुरू करता है। यदि इसे फिर से शुरू नहीं किया जा सकता है (आमतौर पर एक कंटेनर अभी भी शुरू हो रहा है), तो आपको एक मिलता है <code>error</code> फ्रेम और सॉकेट कोड के साथ बंद हो जाता है <code>1001</code>; सत्र रुका रहता है - बैकऑफ़ के साथ पुनः कनेक्ट करें।</li>
+<li><strong>प्रत्येक पुनः कनेक्ट करने से पहले टोकन नवीनीकृत करें।</strong> समाप्त हो चुके टोकन को अस्वीकार कर दिया जाता है <code>401</code> अपग्रेड से पहले, जिसे ब्राउज़र केवल क्लोज़ कोड के रूप में रिपोर्ट करता है <code>1006</code> - नेटवर्क ड्रॉप से ​​अप्रभेद्य - इसलिए एक असफल पुन: कनेक्ट एक प्रमाणीकरण विफलता हो सकता है, और इसे फिर से खोलना <code>?access_token=</code> यूआरएल कभी भी ठीक नहीं हो सकता. के माध्यम से नवीनीकृत करें <a href="#post-apiv1gamessluglaunch-token"><code>POST /api/v1/games/{slug}/launch-token</code></a> और नए टोकन के साथ पुनः कनेक्ट करें। नवीनीकरण केवल तभी काम करता है जब वर्तमान टोकन वैध हो और मूल लॉन्च के 12 घंटे (डिफ़ॉल्ट) के भीतर हो; एक बार इसे अस्वीकार कर दिया गया (<code>401</code>/<code>403</code>), पुन: कनेक्ट करना बंद करें और नए लॉन्च टोकन के लिए प्लेयर को लॉन्चर पर वापस भेजें।</li>
+</ul>
+<h3 id="client--server">क्लाइंट → सर्वर</h3>
+<p> <code>cmd</code> लिफ़ाफ़ा प्लेटफ़ॉर्म अनुबंध है; की सामग्री <code>data</code> प्रत्येक गेम के आधिकारिक बैकएंड द्वारा परिभाषित किया गया है। उदाहरण के लिए, शतरंज संदर्भ कार्यान्वयन इस तरह एक चाल भेजता है:</p>
+<pre><code class="language-json">{ "type": "cmd", "data": { "type": "move", "from": "e2", "to": "e4" } }
+</code></pre>
+<p>स्क्रिप्ट रनटाइम के लिए, टिकाऊ कमांड चलते हैं <code>onPlayerMessage</code>; स्पष्ट रूप से चिह्नित <code>{ "type": "input", "realtime": true, ... }</code> डेटा अगले में नवीनतम-जीत बैचिंग का उपयोग करता है <code>onTick</code>. एक कंटेनर रनटाइम के लिए, प्लेटफ़ॉर्म अपने बाइनरी स्ट्रीम पर प्रमाणित कमांड को आगे बढ़ाता है और कंटेनर अपने सिमुलेशन लूप का मालिक होता है। दोनों ही मामलों में प्लेटफ़ॉर्म विश्वसनीय प्रेषक पहचान प्रदान करता है और ग्राहक कभी भी स्थिति को सीधे रिले नहीं कर सकते हैं। देखना <a href="/hi/docs/api/game-scripts.html#context-object">खेल स्क्रिप्ट - संदर्भ वस्तु</a> और <a href="/hi/docs/api/container-games.html#gameplay-stream">कंटेनर गेम सर्वर - गेमप्ले स्ट्रीम</a>.</p>
+<h3 id="server--client">सर्वर → क्लाइंट</h3>
+<pre><code class="language-json">{ "type": "game", "data": { "...": "server-authorized message addressed to you" } }
+{ "type": "error", "error": "Illegal move" }
+{ "type": "presence", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "online": true }
+{ "type": "membership", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "change": "joined", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol", "team": 0, "slot": 1 }
+{ "type": "achievement", "data": { "key": "first-win", "name": "First Win", "description": "Win a match.", "icon": null, "points": 10, "unlockedAt": "2026-07-25T09:14:02Z" } }
+{ "type": "resumed", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "lostMs": 750 }
+{ "type": "abandoned", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "reason": "server_failure" }
+</code></pre>
+<ul>
+<li><code>game</code> - आपको संबोधित एक सर्वर-अधिकृत संदेश।</li>
+<li><code>error</code> — प्लेटफ़ॉर्म से या आपके अंतिम आदेश से कोई त्रुटि।</li>
+<li><code>presence</code> - जब कोई शामिल होता है या चला जाता है तो अन्य प्रतिभागियों के लिए प्रसारण।</li>
+<li><code>membership</code> — इस सत्र के मध्य मैच में कोई खिलाड़ी बन गया (<code>joined</code>) या अपनी सीट छोड़ दी (<code>left</code>); प्रत्येक जुड़े प्रतिभागी को भेजा गया। देखना <a href="/hi/docs/api/container-games.html#post-sessionssessionidmembers">कंटेनर गेम सर्वर - सदस्य</a>.</li>
+<li><code>achievement</code> - गेम की स्क्रिप्ट द्वारा अभी प्रदान की गई एक उपलब्धि <strong>आप</strong>, कमाने वाले खिलाड़ी को भेजा गया
+केवल. उद्देश्य पर एक अलग फ़्रेम प्रकार: यह प्लेटफ़ॉर्म सत्य है, स्क्रिप्ट-रिले गेम डेटा नहीं।
+दोनों रनटाइम के टिकाऊ अद्यतन पथों से उत्सर्जित। देखना
+<a href="/hi/docs/api/achievements.html#server-authoritative-game-achievements">उपलब्धियों</a>.</li>
+<li><code>resumed</code> - सत्र ने हाथ बदल दिए (कंटेनर पुनर्स्थापना, या किसी अन्य एपीआई प्रक्रिया ने ले लिया
+स्वामित्व पट्टा). स्थानीय भविष्यवाणी त्यागें; <code>lostMs</code> पिछले टिकाऊ लेखन के बाद से यह अंतर है।
+हैंडऑफ़ के बाद पहला अटैचमेंट प्रति खिलाड़ी एक बार घोषित किया जाता है।</li>
+<li><code>abandoned</code> - प्लेटफ़ॉर्म ने विजेता या एलो अपडेट के बिना सत्र समाप्त कर दिया। कारण:
+<code>players_left</code>, <code>idle_no_players</code>, <code>superseded</code> (खिलाड़ी ने इस शीर्षक का एक नया खेल मांगा),
+<code>server_failure</code>, <code>restore_failed</code>, <code>operator_ended</code> (गेम के मालिक ने इसे समाप्त कर दिया),
+<code>retention_expired</code> (एक रुकी हुई दुनिया की पुनर्प्राप्ति अवधारण समाप्त हो गई)। के रूप में संग्रहित किया गया
+<code>{ "kind": "abandoned", "reason": "…" }</code>. A <a href="/hi/docs/tutorials/persistent-sessions.html">ज़िद्दी</a> खेल के सत्र कभी नहीं होते
+केवल डिस्कनेक्ट करने या निष्क्रियता के लिए समाप्त हो गया - इसके बजाय वे रुक जाते हैं। अंतिम मानव स्पष्ट रूप से जा रहा है
+एक स्टैंडअलोन दुनिया अभी भी इसे समाप्त कर सकती है <code>players_left</code>; कॉन्फ़िगर की गई पुनर्प्राप्ति समाप्ति इसे इस प्रकार समाप्त कर सकती है
+<code>retention_expired</code>.</li>
+</ul>
+<h2 id="limits">सीमाएं</h2>
+<p>प्लेटफ़ॉर्म किस चीज़ को लागू करता है <code>ws/v1/games</code> और रेटिंग पर. संख्याएँ प्लेटफ़ॉर्म की डिफ़ॉल्ट हैं;
+एक ऑपरेटर उन्हें ट्यून कर सकता है।</p>
+<h3 id="messages-on-wsv1games">संदेश चालू <code>ws/v1/games</code></h3>
+<table>
+<thead>
+<tr>
+<th>आप LIMIT</th>
+<th>कीमत</th>
+<th>इसके आगे क्या होता है</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>चौखटा का आकर</td>
+<td>प्रति टेक्स्ट फ़्रेम 16 KB</td>
+<td>सॉकेट को बंद कर दिया गया है <code>1009</code> (संदेश बहुत बड़ा है).</td>
+</tr>
+<tr>
+<td>फ्रेम का प्रकार</td>
+<td>केवल पाठ करें</td>
+<td>एक बाइनरी फ़्रेम को एक मिलता है <code>error</code> चौखटा; सॉकेट खुला रहता है.</td>
+</tr>
+<tr>
+<td>कनेक्शन</td>
+<td>प्रति सत्र प्रति खिलाड़ी एक</td>
+<td>एक नया कनेक्शन पुराने कनेक्शन को बंद कर देता है <code>1008</code>.</td>
+</tr>
+<tr>
+<td>रीयलटाइम इनपुट (<code>{"type":"input","realtime":true,…}</code>)</td>
+<td><strong>60 प्रति सेकंड</strong> प्रति कनेक्शन, 120 तक फटता है</td>
+<td>अतिरिक्त फ्रेम हैं <strong>चुपचाप गिरा दिया</strong> - नहीं <code>error</code> चौखटा।</td>
+</tr>
+<tr>
+<td>स्क्रिप्ट के लिए टिकाऊ कमांड (हर दूसरे <code>cmd</code>)</td>
+<td><strong>20 प्रति सेकंड</strong> प्रति खिलाड़ी प्रति सत्र, अल्प बर्स्ट भत्ते के साथ</td>
+<td>एक के साथ मना कर दिया <code>error</code> चौखटा: <code>"Too many commands; slow down."</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>रीयलटाइम इनपुट</strong> नमूने लिए गए हैं, कतारबद्ध नहीं: प्लेटफ़ॉर्म प्रत्येक खिलाड़ी के नवीनतम इनपुट और हाथों को रखता है
+आपकी स्क्रिप्ट का अगला बैच <code>onTick</code> में <code>ctx.inputs</code>. आपके गेम की तुलना में तेज़ी से भेजा जा रहा है
+<a href="/hi/docs/api/game-scripts.html#tick-rate">टिक दर</a> कुछ भी हासिल नहीं होता, क्योंकि दो टिकों के बीच के इनपुट विलीन हो जाते हैं
+एक. अपने टिक दर पर, या जब इनपुट बदलता है तो भेजें।</p>
+<p><strong>स्क्रिप्ट के लिए टिकाऊ आदेश</strong> क्रम में संसाधित किया जाता है और वास्तविक समय से अलग से सीमित किया जाता है
+इनपुट. जब वे घटित हों तो अलग-अलग कार्रवाइयां भेजें; चिह्नित वास्तविक समय के माध्यम से निरंतर गति भेजें
+इनपुट पथ. गेम के अनुसार कमांड सीमा भिन्न हो सकती है। स्क्रिप्ट आमंत्रण भी खेल से बंधे हैं
+<a href="/hi/docs/api/game-scripts.html#budgets">बजट</a>. WebSocket त्रुटि फ़्रेम में एक संदेश होता है, HTTP स्थिति नहीं।
+आपकी स्क्रिप्ट को उन आदेशों को अस्वीकार कर देना चाहिए जिनका कोई मतलब नहीं है, जैसे कि बारी से बाहर जाना।</p>
+<p>एक के लिए <strong>CONTAINER</strong> गेम में, कमांड आते ही आपके कंटेनर में रिले कर दिए जाते हैं, बिना किसी प्लेटफॉर्म के
+उन पर दर सीमा. आपका सर्वर स्वयं को लागू करता है। रीयलटाइम-इनपुट दर सीमित करना स्क्रिप्टेड पर लागू होता है
+केवल खेल.</p>
+<h3 id="elo-per-match">एलो प्रति मैच</h3>
+<p>मंच करता है <strong>नहीं</strong> एक मैच में रेटिंग कितनी आगे बढ़ सकती है इसकी सीमा तय करें। <code>eloUpdates</code> (स्क्रिप्ट) और
+<code>elo</code> नियंत्रण संदेश (कंटेनर) प्रत्येक खिलाड़ी को ले जाता है <strong>नई निरपेक्ष रेटिंग</strong>, कोई बदलाव नहीं, और
+प्लेटफ़ॉर्म उन्हें भेजे गए अनुसार लागू करता है। यह क्या लागू करता है:</p>
+<ul>
+<li><strong>सत्र में केवल खिलाड़ी</strong> अद्यतन हैं. किसी और की आईडी और एआई सीट हटा दी गई है।</li>
+<li>जब भी आपका सर्वर उन्हें लौटाता है तो अपडेट लागू किए जाते हैं। एक सत्र <strong>प्लैटफ़ॉर्म</strong> समाप्त होता है
+(<code>abandoned</code>: खिलाड़ी चले गए, निष्क्रिय, प्रतिस्थापित, सर्वर विफलता, स्वामी द्वारा समाप्त) प्रकाशित करता है <strong>नहीं</strong>
+एलो परिवर्तन.</li>
+<li>रेटिंग कॉलम मैचमेकिंग जोड़ियों पर और गेम के एलो बोर्ड पर एक के रूप में लिखी जाती है
+प्रति खिलाड़ी प्रविष्टि (उनकी नवीनतम रेटिंग)।</li>
+<li>गेम का मालिक ऐसा कर सकता है <a href="/hi/docs/api/leaderboards.html#resetting-a-players-rating">एक खिलाड़ी की रेटिंग रीसेट करें</a> 1200 तक.</li>
+</ul>
+<p>तो स्विंग का आकार आपके खेल का निर्णय है। अपने कोड में एक मानक K-फैक्टर और क्लैंप का उपयोग करें।
+<a href="#example-chess-command-shapes">शतरंज संदर्भ कार्यान्वयन</a> K = 32 का उपयोग करता है, इसलिए एक गेम आगे बढ़ता है
+अधिकतम 32 अंक द्वारा रेटिंग:</p>
+<pre><code class="language-js">function eloAfter(mine, theirs, score /* 1 win, 0.5 draw, 0 loss */, K = 32) {
+  const expected = 1 / (1 + Math.pow(10, (theirs - mine) / 400));
+  const next = mine + K * (score - expected);
+  return Math.round(Math.max(100, next));      // your floor, if you want one
+}
+</code></pre>
+<h2 id="owner-diagnostics-and-webhooks">स्वामी निदान और वेबहुक</h2>
+<p>केवल स्वामी. गेम-स्कोप्ड लॉन्च टोकन इन तक नहीं पहुंच सकता।</p>
+<h3 id="get-apiv1gamesslugdiagnostics"><code>GET /api/v1/games/{slug}/diagnostics</code></h3>
+<p>लाइव सत्रों का एक स्नैपशॉट (सक्रिय, समाप्त, लाइव कनेक्शन), सीपीयू के विरुद्ध स्क्रिप्ट मीटरिंग /
+मेमोरी / स्टेटमेंट बजट, मैचमेकिंग कतार (सबसे लंबा इंतजार और यह कितना बढ़ गया है),
+और वेबहुक एंडपॉइंट स्वास्थ्य।</p>
+<h3 id="webhooks">वेबहुक</h3>
+<p><code>GET/POST/DELETE /api/v1/games/{slug}/webhooks</code> और <code>POST .../{id}/resume</code>. प्रति 5 समापन बिंदु तक
+खेल. घटनाएँ: <code>session.created</code>, <code>session.finished</code> (छोड़ें <code>events</code> दोनों की सदस्यता लेने के लिए)। द
+हस्ताक्षरित रहस्य वापस कर दिया गया है <strong>एक बार</strong>, बनाने पर।</p>
+<p>प्लेटफ़ॉर्म JSON को इसके साथ पोस्ट करता है:</p>
+<ul>
+<li><code>X-Starhermit-Signature: t=&lt;unix&gt;,v1=&lt;hmac-sha256&gt;</code> ऊपर <code>"&lt;t&gt;.&lt;body&gt;"</code></li>
+<li><code>X-Starhermit-Event-Id</code> - घटना (इम्पोटेंसी कुंजी; पुन: प्रयास के दौरान दोहराई जाती है)</li>
+<li><code>X-Starhermit-Delivery</code> - यह प्रयास</li>
+</ul>
+<p>यूआरएल https होना चाहिए और निजी/लूपबैक/सीजीएनएटी रेंज का समाधान नहीं होना चाहिए (यहां चेक किया गया है)।
+पंजीकरण और प्रत्येक भेजने से पहले फिर से)। रीडायरेक्ट का पालन नहीं किया जाता. विफल समापन बिंदु वापस बंद हो गए
+और लगातार विफलताओं के बाद अक्षम हो जाते हैं; <code>resume</code> ब्रेकर साफ़ करता है.</p>
+<h3 id="runtime-timing">रनटाइम टाइमिंग</h3>
+<p>जावास्क्रिप्ट गेम के लिए, प्लेटफ़ॉर्म चलता है <code>onTick</code> अनुरोधित दर पर स्वीप करें
+<code>game.tickRateHz</code>; <code>0</code> टिक को अक्षम कर देता है, और जो गेम कुछ भी अनुरोध नहीं करता उस पर टिक कर दिया जाता है <strong>0.25 हर्ट्ज</strong> —
+यदि आपका गेमप्ले टिक पर निर्भर करता है तो एक दर घोषित करें। एक कंटेनर अपना स्वयं का सिमुलेशन लूप चलाता है और
+के माध्यम से अपनी अनुरोधित दर घोषित करता है <code>/describe</code>; प्लेटफ़ॉर्म शेड्यूलिंग के लिए उस दर का उपयोग करता है
+स्नैपशॉट नीति, गेम को स्टेप न करना। देखना <a href="/hi/docs/api/game-scripts.html#tick-rate">गेम स्क्रिप्ट्स - टिक रेट</a> और
+<a href="/hi/docs/api/container-games.html#protocol-v1">कंटेनर गेम सर्वर</a>.</p>
+<h2 id="lifecycle-of-a-game">किसी खेल का जीवनचक्र</h2>
+<ol>
+<li><strong>एक लॉन्च टोकन बनाएं</strong> — <code>POST /api/v1/games/{slug}/launch-token</code>. ग्राहकों को समाप्ति से पहले इसे ताज़ा करना चाहिए (शतरंज संदर्भ क्लाइंट हर 45 मिनट में ताज़ा होता है)।</li>
+<li><strong>खेल स्थिति प्राप्त करें</strong> — <code>GET /api/v1/games/{slug}</code> जानकारी के लिए + आपके आँकड़े; <code>GET .../sessions/mine</code> चल रहे खेलों के लिए; <code>GET .../invites</code> और <code>GET /api/v1/realtime/rooms/invites</code> लंबित आमंत्रणों के लिए; <code>GET .../replays/mine</code> इतिहास के लिए जब <code>replaysEnabled</code>; <code>GET .../achievements</code> उपलब्धि स्क्रीन के लिए.</li>
+<li><strong>एक प्रतिद्वंद्वी खोजें</strong>, तीन तरीकों में से एक:
+<ul>
+<li><strong>मंगनी करना:</strong> <code>POST .../matchmaking</code>, फिर मतदान <code>GET .../matchmaking</code> हर 3 सेकंड तक <code>status</code> है <code>matched</code> (प्रतिक्रिया आती है <code>sessionId</code>). <code>DELETE .../matchmaking</code> निरस्त करना।</li>
+<li><strong>आमंत्रण प्रवाह:</strong> से एक मित्र चुनें <code>GET /api/v1/me/friends</code> (देखना <a href="/hi/docs/api/friends.html">दोस्त</a>), <code>POST .../invites</code> साथ <code>{ "toUserId": "..." }</code>; आमंत्रित व्यक्ति कॉल करता है <code>POST .../invites/{inviteId}/accept</code>, जो सत्र बनाता है। (यदि आपका गेम खिलाड़ियों को एक में बैठाता है <a href="/hi/docs/api/realtime.html">वास्तविक समय कक्ष</a> सबसे पहले, उन्हें कमरे में आमंत्रित करें - वही अधिसूचना, लेकिन स्वीकार करना उन्हें उसी मेज पर रखता है जिस पर आप पहले से ही हैं।)</li>
+<li><strong>एआई अभ्यास:</strong> <code>POST .../sessions/ai</code>.</li>
+</ul>
+</li>
+<li><strong>सत्र लोड करें</strong> — <code>GET .../sessions/{sessionId}</code>.</li>
+<li><strong>वेबसॉकेट कनेक्ट करें</strong> — <code>ws/v1/games?sessionId={guid}</code> लॉन्च टोकन के साथ, फिर गेम के बैकएंड द्वारा परिभाषित जो भी प्रारंभिक-सिंक कमांड भेजें - शतरंज संदर्भ कार्यान्वयन, उदाहरण के लिए, भेजता है <code>{"type":"cmd","data":{"type":"sync"}}</code>.</li>
+<li><strong>खेल</strong> - अदला-बदली <code>cmd</code>/<code>game</code> बैकएंड, सतह द्वारा परिभाषित फ़्रेम <code>achievement</code> फ़्रेम, और हैंडल <code>resumed</code> भविष्यवाणी को त्यागकर और पूर्ण राज्य का अनुरोध करके।</li>
+<li><strong>परिणाम</strong> - आधिकारिक बैकएंड खेल को समाप्त करता है; प्लेटफ़ॉर्म लीडरबोर्ड और गेम के लिए एलो अपडेट प्रकाशित करता है <a href="#replays">रिप्ले</a>, अंतिम स्थिति को संग्रहीत करता है।</li>
+<li><strong>REPLAY</strong> — <code>GET .../replays/{sessionId}</code> पूर्ण अंतिम स्थिति के लिए.</li>
+</ol>
+<h3 id="example-chess-command-shapes">उदाहरण: शतरंज कमांड आकार</h3>
+<p>निम्नलिखित पेलोड आकार उदाहरण हैं: शतरंज कैसे <a href="https://github.com/HypeDriven/starhermit-chess">संदर्भ कार्यान्वयन</a> भरता है <code>data</code>. <strong>वे शतरंज की स्क्रिप्ट से परिभाषित होते हैं, मंच से नहीं</strong> - प्रत्येक गेम अपने स्वयं के कमांड सेट को परिभाषित करता है और अपने आधिकारिक बैकएंड में पेलोड प्रसारित करता है। क्लाइंट कमांड लिफ़ाफ़ा है <code>cmd</code>; सामान्य सर्वर लिफ़ाफ़े में शामिल हैं <code>game</code>, <code>error</code>, <code>presence</code>, और <code>achievement</code>, साथ <code>resumed</code>/<code>abandoned</code> कंटेनर पुनर्प्राप्ति के लिए अतिरिक्त रूप से उपयोग किया जाता है। की सामग्री <code>data</code> बैकएंड-स्वामित्व वाले हैं।</p>
+<p>क्लाइंट कमांड (इस रूप में भेजा गया) <code>{"type":"cmd","data":{...}}</code>):</p>
+<pre><code class="language-json">{ "type": "move", "from": "e2", "to": "e4", "promo": "q" }
+{ "type": "resign" }
+{ "type": "offer-draw" }
+{ "type": "accept-draw" }
+{ "type": "decline-draw" }
+{ "type": "sync" }
+</code></pre>
+<p>(<code>promo</code> चालू करना वैकल्पिक है <code>move</code>.)</p>
+<p>सर्वर संदेश (के रूप में वितरित) <code>{"type":"game","data":{...}}</code>):</p>
+<pre><code class="language-json">{
+  "type": "state",
+  "white": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "black": "9b2f8c1a-1111-4222-8333-444455556666",
+  "ratings": { "white": 1200, "black": 1187 },
+  "board": "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr",
+  "turn": "w",
+  "moves": [],
+  "status": "active",
+  "result": null,
+  "deadline": 1784642591000,
+  "drawOfferBy": null,
+  "ai": false,
+  "aiName": null
+}
+</code></pre>
+<pre><code class="language-json">{ "type": "moved", "...": "move details + updated state" }
+{ "type": "draw-offered" }
+{ "type": "draw-declined" }
+{ "type": "game-over", "result": { "kind": "white-win", "reason": "checkmate", "at": "2026-07-20T15:42:37Z" }, "view": { "...": "final state view" } }
+</code></pre>
+<p>देखना <a href="/hi/docs/api/game-scripts.html">गेम स्क्रिप्ट</a> स्क्रिप्ट इन संदेशों को कैसे परिभाषित करती है, और इसके लिए <a href="/hi/docs/tutorials/chess-walkthrough.html">शतरंज का पूर्वाभ्यास</a> एंड-टू-एंड निर्माण के लिए।</p>
+<p>देखना <a href="/hi/docs/credentials.html">क्रेडेंशियल अनुकूलता</a> और <a href="/hi/docs/api/contracts.html">मशीन-पठनीय अनुबंध</a>.</p>
+
+{% endraw %}

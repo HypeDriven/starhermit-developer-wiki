@@ -1,9 +1,27 @@
 const root = document.documentElement;
+const ui = JSON.parse(document.querySelector('#wiki-ui')?.textContent || '{}');
+const languageSelect = document.querySelector('#language-select');
+languageSelect?.addEventListener('change', () => {
+  const option = languageSelect.selectedOptions[0];
+  try { localStorage.setItem('wiki-language', option.dataset.language); } catch (_) {}
+  location.assign(option.value + location.search + location.hash);
+});
+document.querySelector('.english-original')?.addEventListener('click', () => {
+  try { localStorage.setItem('wiki-language', 'en'); } catch (_) {}
+});
+// Respect a saved preference on the English landing page; deep links keep their explicit locale.
+if (languageSelect && root.lang === 'en' && document.body.dataset.sourceUrl === '/') {
+  try {
+    const saved = localStorage.getItem('wiki-language');
+    const option = [...languageSelect.options].find(option => option.dataset.language === saved);
+    if (option && saved !== 'en') location.replace(option.value + location.search + location.hash);
+  } catch (_) {}
+}
 const toggle = document.querySelector('#theme-toggle');
 function updateToggle() {
   const dark = root.dataset.theme === 'dark';
-  toggle.textContent = dark ? 'Light mode' : 'Dark mode';
-  toggle.setAttribute('aria-label', `Switch to ${dark ? 'light' : 'dark'} mode`);
+  toggle.textContent = dark ? ui.light_mode : ui.dark_mode;
+  toggle.setAttribute('aria-label', dark ? ui.switch_light : ui.switch_dark);
 }
 toggle.hidden = false;
 updateToggle();
@@ -30,7 +48,16 @@ document.querySelectorAll('.document table').forEach(table => {
   wrapper.className = 'table-scroll';
   wrapper.tabIndex = 0;
   wrapper.setAttribute('role', 'region');
-  wrapper.setAttribute('aria-label', 'Scrollable documentation table');
+  wrapper.setAttribute('aria-label', ui.scroll_table);
   table.before(wrapper);
   wrapper.append(table);
+});
+document.querySelectorAll('.document img[src$=".svg"]').forEach(image => {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'diagram-scroll';
+  wrapper.tabIndex = 0;
+  wrapper.setAttribute('role', 'region');
+  wrapper.setAttribute('aria-label', ui.scroll_diagram);
+  image.before(wrapper);
+  wrapper.append(image);
 });

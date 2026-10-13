@@ -1,0 +1,230 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "Relais"
+source_url: "/docs/api/relay.html"
+source_path: "docs/api/relay.md"
+source_hash: "fee2406e9c32c62019b48f6c4c765d18672bef89ea5233e883180fc2a451396c"
+translation: "machine"
+permalink: "/fr/docs/api/relay.html"
+---
+{% raw %}
+<h1 id="relay">Relais</h1>
+<p>Le relais fournit une distribution d'octets opaque pour le netcode du jeu&#160;: une API REST (<code>api/v1/relay</code>) gère
+séances, et <code>ws/v1/relay</code> transmet textuellement les trames binaires entre les participants. Chaque relais est
+lié à exactement une correspondance existante&#160;: un <a href="/fr/docs/api/games.html">séance de jeu</a> ou un <a href="/fr/docs/api/realtime.html">salle en temps réel</a>-et
+utilise la liste de ce match pour l'autorisation.</p>
+<p>Tous les points de terminaison REST nécessitent une authentification&#160;: un jeton d'utilisateur complet ou un jeton de lancement de jeu pour les relais
+lié aux propres sessions et salles de ce jeu&#160;: la liste affiche uniquement celles-ci, ainsi que toutes les autres réponses de relais
+<code>404</code> (ou <code>403</code> pour en créer un). Le relais d'un jeton de lancement prend <strong>l'identifiant de son propre jeu comme <code>titleId</code></strong> —
+l'uid dans son <code>game_scope</code> réclamation — et tout autre titre est refusé <code>403</code>, car le par titre
+le plafond de session compte pour lui. Les erreurs sont renvoyées sous forme <code>{"error":"..."}</code>: <code>403</code> lorsque l'appelant est
+pas dans le match lié ou le relais appartient à un autre jeu, <code>404</code> pour un relais inconnu, <code>409</code> pour un
+état qui refuse la demande (non liée, complète, fermée, déjà rejointe ou à la limite de session), et
+<code>503</code> lorsque le relais est éteint.</p>
+<h2 id="rest-endpoints">Points de terminaison REST</h2>
+<p>Base: <code>https://api.starhermit.com/api/v1/relay</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Chemin</th>
+<th>Authentification</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OBTENIR</td>
+<td><code>/?titleId=</code></td>
+<td>JWT</td>
+<td>Répertorier les sessions de relais actives pour ce titre dont la correspondance liée inclut l'appelant</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/</code></td>
+<td>JWT</td>
+<td>Créer un relais lié à un match</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/{sessionId}</code></td>
+<td>JWT</td>
+<td>Obtenez une session de relais — visible uniquement par les membres de son match lié (<code>404</code> sinon)</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/{sessionId}/join</code></td>
+<td>JWT</td>
+<td>Rejoignez le relais; l'appelant doit être dans sa correspondance liée</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/{sessionId}/close</code></td>
+<td>JWT</td>
+<td>Fermer un relais (créateur uniquement)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="match-binding">Reliure de correspondance</h2>
+<p>L’adhésion au Relais n’est pas un lobby indépendant et ouvert. La liste des matchs est la source de vérité :</p>
+<ul>
+<li>Un relais a soit <code>gameSessionId</code> ou <code>realtimeRoomId</code>, jamais les deux et jamais ni l'un ni l'autre.</li>
+<li>Le créateur doit appartenir à cette session de jeu ou détenir un siège actif et non gauche dans ce temps réel
+chambre.</li>
+<li>Chaque inscription ultérieure est vérifiée par rapport à la même liste.</li>
+<li>L'ouverture du WebSocket nécessite à la fois une ligne de participant relais active et une adhésion actuelle au
+match lié. Quitter une salle en temps réel empêche donc une connexion relais ultérieure/de remplacement.</li>
+<li>Liste par <code>titleId</code> renvoie uniquement les relais liés aux correspondances auxquelles l'appelant appartient&#160;; ce n'est pas un
+répertoire de chaque match en direct pour ce titre.</li>
+</ul>
+<p>Il s’agit d’un changement de forme de demande requis. Les anciennes lignes de relais non liées ne peuvent pas autoriser un socket&#160;; créer
+un nouveau relais lié à la place.</p>
+<h2 id="create-a-session">Créer une séance</h2>
+<p><code>POST /api/v1/relay</code></p>
+<p>Liez-vous à une session de jeu faisant autorité&#160;:</p>
+<pre><code class="language-json">{
+  "titleId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "maxParticipants": 8,
+  "gameSessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "realtimeRoomId": null
+}
+</code></pre>
+<p>Ou associez-vous à une salle en temps réel&#160;:</p>
+<pre><code class="language-json">{
+  "titleId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "maxParticipants": 8,
+  "gameSessionId": null,
+  "realtimeRoomId": "b1d2c3e4-5f60-4a71-8b92-c3d4e5f60718"
+}
+</code></pre>
+<p><code>maxParticipants</code> par défaut <code>8</code>. Au maximum cinq sessions de relais actives peuvent exister par titre par
+par défaut. L'appel est rejeté si le nombre de liaisons n'est pas exactement un ou si l'appelant n'est pas dans le
+correspondance sélectionnée.</p>
+<p>Le relais ne crée pas la session ou la salle de jeu. Créez/rejoignez ce match via le
+<a href="/fr/docs/api/games.html">API de jeux</a> ou <a href="/fr/docs/api/realtime.html">API des salles en temps réel</a> d'abord, puis transmettez son identifiant ici.</p>
+<h2 id="session-shape">Forme de la séance</h2>
+<pre><code class="language-json">{
+  "id": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+  "titleId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "creatorUserId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "gameSessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "realtimeRoomId": null,
+  "isBound": true,
+  "maxParticipants": 8,
+  "currentParticipantCount": 1,
+  "status": "Active",
+  "createdAt": "2026-07-28T11:30:00Z",
+  "closedAt": null,
+  "participants": [
+    {
+      "id": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+      "sessionId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+      "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "connectionId": null,
+      "joinedAt": "2026-07-28T11:30:01Z",
+      "leftAt": null,
+      "status": "Connected"
+    }
+  ]
+}
+</code></pre>
+<p>Exactement un ID de liaison n'est pas nul et <code>isBound</code> est donc <code>true</code>. Session <code>status</code> est
+<code>"Active"</code> ou <code>"Closed"</code>; <code>closedAt</code>, <code>connectionId</code>, et <code>leftAt</code> peut être absent ou nul.</p>
+<h2 id="join-and-close">Rejoindre et fermer</h2>
+<p><code>POST /api/v1/relay/{sessionId}/join</code> renvoie la mise à jour <code>RelaySession</code>. Cette jointure REST est requise
+avant d'ouvrir le WebSocket. Un créneau relais gratuit ne suffit pas : l'appelant doit encore être membre de
+le match lié.</p>
+<p><code>POST /api/v1/relay/{sessionId}/close</code> retours <code>204</code> et est réservé aux créateurs.</p>
+<h2 id="websocket-wsv1relay">WebSocket&#160;: <code>ws/v1/relay</code></h2>
+<p>Connectez-vous à&#160;:</p>
+<pre><code class="language-text">wss://api.starhermit.com/ws/v1/relay?sessionId=&lt;relay-id&gt;&amp;titleId=&lt;title-id&gt;
+</code></pre>
+<p>Authentifiez-vous avec un <code>Authorization: Bearer &lt;token&gt;</code> en-tête, <code>?ticket=</code>, ou <code>?access_token=</code> paramètre de requête.
+La poignée de main revient <code>403</code> sauf si l'utilisateur a rejoint le relais et est toujours autorisé par son lié
+correspondre.</p>
+<p>Le socket est en sortance d'octets opaque. Chaque trame binaire est transmise inchangée les unes aux autres
+participant connecté. Il n'y a pas de cadrage JSON et la plateforme n'interprète pas les données du jeu.
+La taille maximale des messages est de 4 Ko par défaut.</p>
+<h3 id="tick-rate-aware-rate-limit">Limite de taux tenant compte du taux de ticks</h3>
+<blockquote>
+<p><strong>Règle de suppression de connexion&#160;:</strong> si un client envoie des commandes/trames de relais plus rapidement que le débit autorisé,
+StarHermit ferme le relais WebSocket de ce client avec <code>PolicyViolation</code>. Il ne s'agit pas d'une file d'attente ou d'un
+suppression de trame au mieux&#160;: la connexion client est terminée et doit se reconnecter.</p>
+</blockquote>
+<p>L'intervalle minimum de chaque expéditeur est dérivé de la vitesse à laquelle la correspondance liée est rythmée&#160;:</p>
+<pre><code class="language-text">minimum interval ms = (1000 / max(pacingRateHz, 1)) × 0.90
+</code></pre>
+<p>La marge de 10&#160;% permet une gigue de minuterie et de réseau ordinaire. Le tarif n'est jamais pris en dessous <strong>1 Hz</strong>,
+donc la limite ne demande jamais plus de ~900 ms de silence entre deux images, même si le jeu est lent
+tiques. Exemples&#160;:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:right">Taux effectif</th>
+<th style="text-align:right">Intervalle minimum de l'expéditeur</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right">20 Hz</td>
+<td style="text-align:right">45 ms</td>
+</tr>
+<tr>
+<td style="text-align:right">30 Hz</td>
+<td style="text-align:right">30 ms</td>
+</tr>
+<tr>
+<td style="text-align:right">60 Hz</td>
+<td style="text-align:right">15 ms</td>
+</tr>
+<tr>
+<td style="text-align:right">120 Hz</td>
+<td style="text-align:right">7,5 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Pour une session de jeu, le tarif provient de sa définition de jeu. Pour une salle en temps réel, la salle
+<code>gameSlug</code> est résolu en une définition de jeu. La priorité normale du taux effectif s’applique&#160;:
+remplacement de l'opérateur, puis le taux demandé par le jeu. À quoi sert la limite de relais <strong>pas</strong> suivre est un
+taux qui ne dit rien sur la fréquence à laquelle les joueurs se parlent : si aucune définition ne peut être
+résolu, si le jeu s'est désabonné du serveur coche avec <code>0</code>, ou s'il n'a demandé aucun tarif et ainsi
+prend la lenteur par défaut de la plate-forme, la limite est plutôt dimensionnée à partir du taux global. Un jeu n'est jamais
+limité à un message toutes les quelques secondes car personne n'a écrit de numéro dans le code de son serveur. Tarifs
+sont délimités par le plafond de la plate-forme.</p>
+<p>Un client doit rythmer les commandes selon cet intervalle ou plus lentement. Envoi de deux commandes/images plus rapprochées
+supérieur à l'intervalle minimum est traité comme une inondation&#160;: StarHermit abandonne la connexion de ce client en
+fermant son relais WebSocket avec <code>PolicyViolation</code>. Les expéditeurs sont limités indépendamment, donc un
+la violation du client ne déconnecte pas les autres joueurs.</p>
+<h2 id="recommended-client-flow">Flux de clients recommandé</h2>
+<ol>
+<li>Créez ou rejoignez la session de jeu réelle/la salle en temps réel.</li>
+<li>Demandez à un membre du match de créer un relais avec cet ID de match.</li>
+<li>Partagez l'ID de relais renvoyé uniquement via l'état authentifié du match ou les messages de liste.</li>
+<li>Les autres membres du match appellent <code>POST /api/v1/relay/{relayId}/join</code>.</li>
+<li>Chaque membre ouvre <code>ws/v1/relay</code> et adapte les images au taux de tick effectif du jeu&#160;; envoi
+abandonne plus rapidement la connexion WebSocket de ce client.</li>
+<li>Le créateur ferme le relais à la fin du match.</li>
+</ol>
+<p>N'utilisez pas les ID de relais comme secrets d'autorisation. La plateforme autorise contre la liste liée&#160;;
+les identifiants identifient uniquement les ressources.</p>
+<h2 id="positioning">Positionnement</h2>
+<p>Utilisez le relais pour les jeux rapides qui nécessitent une diffusion par les pairs à faible surcharge. C'est volontairement bête
+transport&#160;: la liaison garantit qui peut participer, mais la plateforme n'analyse ni ne valide toujours
+charges utiles, élire un pair faisant autorité ou résoudre la tricherie.</p>
+<p>Pour les règles et l'état appliqués par le serveur, utilisez le <a href="/fr/docs/api/games.html">API de jeux</a> avec un script en bac à sable ou
+<a href="/fr/docs/api/container-games.html">back-end de conteneur</a>. Les salles en temps réel fournissent des halls, des sièges, du jumelage et
+routage compatible avec l'hôte&#160;; le relais peut désormais se lier à l'une de ces salles au lieu de dupliquer sa liste.</p>
+<p>Confirmez la disponibilité du relais avant d'expédier une fonctionnalité qui en dépend.</p>
+<h2 id="see-also">Voir aussi</h2>
+<ul>
+<li><a href="/fr/docs/api/realtime.html">Salles en temps réel</a> - lobbies, matchmaking, joueurs IA et routage sensible aux rôles</li>
+<li><a href="/fr/docs/api/games.html">Jeux</a> — sessions faisant autorité et taux de ticks efficaces</li>
+<li><a href="/fr/docs/api/container-games.html">Serveurs de jeux de conteneurs</a> — serveurs faisant autorité dans d'autres langues</li>
+<li><a href="/fr/docs/api/game-scripts.html">Scripts de jeu</a> — logique de serveur en bac à sable et taux de ticks demandés</li>
+<li><a href="/fr/docs/api/voice.html">Voix</a> - salles vocales pour l'audio du jeu</li>
+</ul>
+<p>Commun <a href="/fr/docs/api/conventions.html">Conventions API</a> décrire l'analyse des réponses, les horodatages, la pagination et les tentatives.</p>
+<p>Voir <a href="/fr/docs/credentials.html">compatibilité des informations d'identification</a> et <a href="/fr/docs/api/contracts.html">contrats lisibles par machine</a>.</p>
+
+{% endraw %}

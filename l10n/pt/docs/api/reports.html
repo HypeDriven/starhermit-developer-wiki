@@ -1,0 +1,185 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Relatórios de falhas e bugs"
+source_url: "/docs/api/reports.html"
+source_path: "docs/api/reports.md"
+source_hash: "6d28d99eae2ec0d57e0611ea1d1db48136d4f38dacbb270fd4242dbfd0f0e97a"
+translation: "machine"
+permalink: "/pt/docs/api/reports.html"
+---
+{% raw %}
+<h1 id="crash-and-bug-reports">Relatórios de falhas e bugs</h1>
+<p>Os jogadores podem relatar uma falha ou bug dentro de qualquer jogo que tenha um slug – jogos somente para navegador
+incluído — usando o token de lançamento do jogo ou um token de usuário completo. O proprietário do jogo lê, faz a triagem e
+exclui-los através <code>/api/v1/me/github-games/{id}/reports</code>.</p>
+<p>Para obter a saída do servidor e os registros de falhas do próprio jogo contêiner, consulte
+<a href="/pt/docs/api/container-games.html#your-servers-output-and-crash-reports">Servidores de jogos hospedados em contêiner — relatórios de saída e falhas do seu servidor</a>.</p>
+<h2 id="endpoints">Pontos finais</h2>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Caminho</th>
+<th>Autenticação</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/games/{slug}/reports</code></td>
+<td>Token de lançamento para esse jogo, ou JWT</td>
+<td>Arquivar um relatório de falha ou bug</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/reports/mine</code></td>
+<td>Token de lançamento para esse jogo, ou JWT</td>
+<td>Seus 50 relatórios mais recentes para este jogo, com seus status</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/me/github-games/{id}/reports</code></td>
+<td>JWT (proprietário)</td>
+<td>Listar relatórios: <code>?kind=crash|bug&amp;status=open|acknowledged|resolved&amp;page=&amp;pageSize=</code> (≤100)</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (proprietário)</td>
+<td>Um relatório, com sua lista de anexos</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}/attachments/{attachmentId}</code></td>
+<td>JWT (proprietário)</td>
+<td>Um anexo, sempre como download</td>
+</tr>
+<tr>
+<td>CORREÇÃO</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (proprietário)</td>
+<td>Definir <code>status</code></td>
+</tr>
+<tr>
+<td>EXCLUIR</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (proprietário)</td>
+<td>Excluir um relatório → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="file-a-report">Arquivar um relatório</h2>
+<pre><code class="language-http">POST /api/v1/games/{slug}/reports
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  "kind": "crash",
+  "title": "Crash entering the second level",
+  "description": "TypeError: cannot read properties of undefined (reading 'tiles')\n    at loadLevel (game.js:812)",
+  "clientVersion": "1.4.2",
+  "platform": "web",
+  "buildId": "a1b2c3d",
+  "sessionId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "attachments": [
+    { "fileName": "console.log", "contentType": "text/plain", "dataBase64": "…" }
+  ]
+}
+</code></pre>
+<ul>
+<li><code>kind</code> é <code>crash</code> ou <code>bug</code>; <code>title</code> é obrigatório (≤200 caracteres).</li>
+<li>Todo o resto é opcional. <code>userAgent</code> o padrão é o da solicitação <code>User-Agent</code> cabeçalho.</li>
+<li>Resposta: <code>201 { "id", "kind", "status": "open", "createdAt" }</code>.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td>Malformado: desconhecido <code>kind</code>, ausente <code>title</code>, base64 inválido ou não JSON</td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>Jogo desconhecido ou removido</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>Descrição, contagem de anexos ou bytes de anexo acima dos limites do jogo</td>
+</tr>
+<tr>
+<td><code>429</code></td>
+<td>Acima do limite diário de relatórios para este jogo; ver <code>Retry-After</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="limits">Limites</h2>
+<p>Os operadores podem alterar cada um deles para toda a plataforma e para jogos individuais; o limite diário
+também pode ser definido para um jogador.</p>
+<table>
+<thead>
+<tr>
+<th>Limite</th>
+<th>Padrão</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Relatórios por jogador, por jogo, por dia</td>
+<td>20</td>
+</tr>
+<tr>
+<td>Comprimento da descrição</td>
+<td>20.000 caracteres</td>
+</tr>
+<tr>
+<td>Anexos por relatório</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Bytes de anexo por relatório</td>
+<td>2 MiB</td>
+</tr>
+<tr>
+<td>Relatórios mantidos por jogo</td>
+<td>2,000</td>
+</tr>
+<tr>
+<td>Bytes mantidos por jogo</td>
+<td>256 MiB</td>
+</tr>
+<tr>
+<td>Retenção</td>
+<td>90 dias</td>
+</tr>
+</tbody>
+</table>
+<p>Quando um jogo atinge seu limite de armazenamento, os relatórios mais antigos — os resolvidos primeiro — são removidos para
+abra espaço. Um único relatório maior que todo o limite de bytes por jogo é recusado com <code>413</code>.</p>
+<h2 id="triage-reports-game-owner">Relatórios de triagem (proprietário do jogo)</h2>
+<p>A lista retorna <code>{ "items", "total", "page", "pageSize" }</code>; cada item traz o nome do repórter,
+<code>kind</code>, <code>status</code>, <code>title</code>, detalhes do cliente e sua contagem de anexos. Mover um relatório
+<code>open</code> → <code>acknowledged</code> → <code>resolved</code> com:</p>
+<pre><code class="language-http">PATCH /api/v1/me/github-games/{id}/reports/{reportId}
+Content-Type: application/json
+
+{ "status": "resolved" }
+</code></pre>
+<p>Os anexos são servidos como downloads (<code>Content-Disposition: attachment</code>, <code>nosniff</code>, uma caixa de areia
+CSP). Somente tipos inertes mantêm seu tipo de conteúdo declarado — texto, JSON, PNG, JPEG, WebP, GIF, zip e
+gzip; qualquer outra coisa, incluindo marcação, é servida como <code>application/octet-stream</code>.</p>
+<h2 id="from-the-javascript-sdk">Do SDK JavaScript</h2>
+<pre><code class="language-js">StarHermit.reportBug('Score did not save', 'Finished level 3, score shows 0', { clientVersion: '1.4.2' });
+StarHermit.captureCrashes({ clientVersion: '1.4.2' });   // opt-in: uncaught errors become crash reports
+</code></pre>
+<p>Veja o <a href="/pt/docs/sdk/javascript.html#crash-and-bug-reports">SDK JavaScript</a>.</p>
+<p>Compartilhado <a href="/pt/docs/api/conventions.html">Convenções de API</a> descreve a análise de resposta, carimbos de data/hora, paginação e novas tentativas.</p>
+<p>Ver <a href="/pt/docs/credentials.html">compatibilidade de credenciais</a> e <a href="/pt/docs/api/contracts.html">contratos legíveis por máquina</a>.</p>
+
+{% endraw %}

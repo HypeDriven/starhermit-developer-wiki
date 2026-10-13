@@ -1,0 +1,369 @@
+---
+layout: "wiki"
+lang: "ur"
+title: "ٹیوٹوریل: عوامی کلید کے ساتھ آن بورڈ پلیئرز"
+source_url: "/docs/tutorials/public-key-onboarding.html"
+source_path: "docs/tutorials/public-key-onboarding.md"
+source_hash: "49ebc031a538076978eab193219b2c0fd3cce731ed6327ede6768bbbcbb310f3"
+translation: "machine"
+permalink: "/ur/docs/tutorials/public-key-onboarding.html"
+---
+{% raw %}
+<h1 id="tutorial-onboard-players-with-a-public-key">ٹیوٹوریل: عوامی کلید کے ساتھ آن بورڈ پلیئرز</h1>
+<p>ایک StarHermit اکاؤنٹ کو Google، GitHub یا کسی دوسرے سائن ان فراہم کنندہ کی ضرورت نہیں ہے۔ اس کی سند ہو سکتی ہے۔
+ایک کلیدی جوڑا بنیں جو آپ کا گیم کھلاڑی کے آلے پر تیار کرتا ہے، نیز کھلاڑی کا ای میل پتہ
+ایک بار تصدیق کرتا ہے. اس کے بعد، آپ کا گیم ہر لانچ پر خاموشی سے ایک چیلنج پر دستخط کر کے سائن ان کرتا ہے۔
+چابی کھلاڑی کبھی بھی پاس ورڈ ٹائپ نہیں کرتا ہے اور نہ ہی کبھی StarHermit پیج پر جانا پڑتا ہے۔</p>
+<p>یہ ٹیوٹوریل اس بہاؤ کو آخر سے آخر تک بناتا ہے: کلید بنائیں، اسے رجسٹر کریں، کھلاڑی کا انتظار کریں
+تصدیق کریں، سائن ان کریں، سیشن رکھیں، اور دوسری ڈیوائسز اور کھوئی ہوئی چابیاں ہینڈل کریں۔</p>
+<p><strong>اس کے لیے استعمال کریں۔</strong> مقامی اور اسٹینڈ اسٹون گیمز، لانچرز، Steam/Epic/GOG تعمیرات اور ڈیسک ٹاپ ٹولز —
+کوئی بھی چیز جو کھلاڑی کی مشین پر چلتی ہے اور وہاں پرائیویٹ کلید رکھ سکتی ہے۔</p>
+<p><strong>کے لیے کچھ اور استعمال کریں۔</strong></p>
+<ul>
+<li><strong>StarHermit پر میزبان ایک براؤزر گیم</strong>، جو پہلے سے ہی ایک لانچ ٹوکن وصول کرتا ہے جب سے کھولا جاتا ہے۔
+ڈیش بورڈ، یا دکھا سکتا ہے۔ <a href="/ur/docs/api/auth.html#sign-in-from-a-directly-opened-browser-game">سائن ان بٹن</a>.</li>
+<li><strong>ایک CI پائپ لائن</strong>، جس کو بغیر ای میل قدم کے OAuth سیشن سے ایک کلید کا اندراج کرنا چاہئے:
+<a href="/ur/docs/tutorials/ci-cd-build-upload.html">ٹیوٹوریل: CI/CD سے تعمیرات اپ لوڈ کریں۔</a>.</li>
+<li><strong>ایک سرشار گیم سرور</strong>، جس کا اپنا تعیناتی ٹوکن ہے اور وہ بنا یا کام نہیں کر سکتا
+کھلاڑی: <a href="/ur/docs/tutorials/dedicated-server-onboarding.html">سبق: ایک سرشار سرور شائع کریں۔</a>.</li>
+</ul>
+<h2 id="what-the-player-sees">جو کھلاڑی دیکھتا ہے۔</h2>
+<ol>
+<li>آپ کا گیم StarHermit اکاؤنٹ بنانے کے لیے ای میل ایڈریس اور ان کی رضامندی طلب کرتا ہے۔</li>
+<li>وہ تصدیقی ای میل کھولتے ہیں، لنک پر کلک کرتے ہیں، اور دبائیں۔ <strong>تصدیق کریں۔</strong> جس صفحے پر یہ کھلتا ہے۔</li>
+<li>آپ کے گیم میں واپس، وہ سائن ان ہو گئے ہیں۔ بعد میں لانچ ہونے پر کچھ بھی نہیں پوچھا جاتا ہے۔</li>
+</ol>
+<p>ایک ای میل پتہ درکار ہے، اور کھلاڑی کو ایک بار اس کی تصدیق کرنی ہوگی۔ ایک بنانے کا کوئی طریقہ نہیں ہے۔
+StarHermit اکاؤنٹ خاموشی سے Steam، Epic یا GOG شناخت سے۔</p>
+<h2 id="before-you-start">اس سے پہلے کہ آپ شروع کریں۔</h2>
+<p>اس صفحہ پر کوڈ سادہ جاوا اسکرپٹ ہے WebCrypto استعمال کرتے ہوئے اور <code>fetch</code>، تو یہ براؤزر میں چلتا ہے۔
+الیکٹران اور نوڈ 20 یا بعد میں۔ <strong>دی <code>js</code> نیچے بلاکس، ترتیب میں، ایک ES ماڈیول بنائیں</strong> - ان کو بچائیں۔
+ایک ساتھ کے طور پر <code>starhermit-key-auth.js</code>. کوئی بھی دوسری زبان اسی طرح کام کرتی ہے: مرحلہ 1 بالکل درست بتاتا ہے۔
+بائٹ فارمیٹس، اور مرحلہ 3 سائن کرنے کے لیے عین بائٹس۔</p>
+<pre><code class="language-js">const API = 'https://api.starhermit.com';
+
+const b64 = (bytes) =&gt; btoa(String.fromCharCode(...new Uint8Array(bytes)));
+</code></pre>
+<h2 id="1-create-the-device-key">1. آلہ کی کلید بنائیں</h2>
+<p>پیدا کریں۔ <strong>ایک کلیدی جوڑی فی تنصیب</strong>، پہلی بار جب آپ کے گیم کو اکاؤنٹ کی ضرورت ہوتی ہے۔ نجی
+کلید کبھی بھی ڈیوائس کو نہیں چھوڑتی: آپ کے سرورز پر نہیں، StarHermit کو نہیں۔</p>
+<table>
+<thead>
+<tr>
+<th><code>keyType</code></th>
+<th><code>keyData</code> (معیاری بیس 64)</th>
+<th>دستخط (معیاری بیس 64)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Ed25519</code> - تجویز کردہ</td>
+<td>خام 32 بائٹ عوامی کلید</td>
+<td>خام 64 بائٹ Ed25519 دستخط</td>
+</tr>
+<tr>
+<td><code>ECDSA-P256</code></td>
+<td>عوامی نقطہ: 65 بائٹ غیر کمپریسڈ (<code>04‖X‖Y</code>) یا 33 بائٹ کمپریسڈ</td>
+<td>SHA-256 کے ساتھ ECDSA، <strong>ASN.1 DER-encoded</strong></td>
+</tr>
+<tr>
+<td><code>RSA-PSS</code></td>
+<td><code>SubjectPublicKeyInfo</code> DER، 2048–8192-bit ماڈیولس، exponent ≤ 32 بٹس</td>
+<td>RSASSA-PSS, SHA-256, MGF1-SHA-256, 32-بائٹ نمک</td>
+</tr>
+</tbody>
+</table>
+<p><code>keyData</code> زیادہ سے زیادہ 2,000 حروف ہیں۔ ایک کلید پورے پلیٹ فارم میں ایک اکاؤنٹ سے تعلق رکھتی ہے۔</p>
+<p>چنو <strong>ایڈ 25519</strong> جب تک کہ آپ کا پلیٹ فارم اسے تیار نہیں کرسکتا۔ اگر آپ ECDSA استعمال کرتے ہیں، تو نوٹ کریں کہ WebCrypto،
+ونڈوز سی این جی اور زیادہ تر ہارڈویئر کی اسٹورز دستخط کو خام کے طور پر واپس کرتے ہیں۔ <code>r‖s</code> (64 بائٹس)۔ StarHermit
+DER کی توقع ہے، لہذا اسے تبدیل کریں - ذیل کا ماڈیول کرتا ہے۔</p>
+<pre><code class="language-js">// One key per installation. The private key can sign but is never exported.
+export async function createDeviceKey(keyType = 'Ed25519') {
+  if (!['Ed25519', 'ECDSA-P256'].includes(keyType)) throw new Error('This helper supports Ed25519 or ECDSA-P256');
+  const algorithm = keyType === 'Ed25519'
+    ? { name: 'Ed25519' }
+    : { name: 'ECDSA', namedCurve: 'P-256' };
+  const pair = await crypto.subtle.generateKey(algorithm, false, ['sign', 'verify']);
+  return {
+    keyType: keyType === 'Ed25519' ? 'Ed25519' : 'ECDSA-P256',
+    keyData: b64(await crypto.subtle.exportKey('raw', pair.publicKey)),
+    privateKey: pair.privateKey,
+  };
+}
+</code></pre>
+<p><strong>نجی کلید کو ذخیرہ کریں جہاں آپریٹنگ سسٹم اس کی حفاظت کرتا ہے۔</strong> براؤزر یا الیکٹران رینڈرر میں،
+ایک غیر نکالنے کے قابل <code>CryptoKey</code> IndexedDB میں رکھا جا سکتا ہے جیسا کہ یہ ہے۔ ایک مقامی کھیل کو استعمال کرنا چاہئے۔
+پلیٹ فارم کی اسٹور - ونڈوز ڈی پی اے پی آئی یا سی این جی، میکوس کیچین، لینکس پر libsecret۔ اسٹور <code>keyType</code> اور
+<code>keyData</code> اس کے قریب؛ آپ انہیں ہر درخواست کے ساتھ بھیجتے ہیں۔</p>
+<h2 id="2-start-registration">2. رجسٹریشن شروع کریں۔</h2>
+<p>کھلاڑی کا ای میل پتہ اور رضامندی طلب کریں، پھر:</p>
+<pre><code class="language-js">async function post(path, body) {
+  const res = await fetch(API + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json().catch(() =&gt; ({})) };
+}
+
+function fail(step, { status, body }) {
+  return Object.assign(new Error(`${step}: ${body.error ?? status}`), { status, body });
+}
+
+export async function register(key, email) {
+  const res = await post('/api/v1/auth/public-key/register',
+    { email, keyType: key.keyType, keyData: key.keyData });
+  if (res.status !== 202) throw fail('register', res);
+  return res.body; // { registrationId, email, emailSent, deferralReason, message }
+}
+</code></pre>
+<p><code>202</code> یعنی StarHermit نے رجسٹریشن قبول کر لی۔ اگر <code>emailSent</code> ہے <code>false</code>، ای میل قطار میں ہے اور
+اب بھی پہنچیں گے؛ <code>deferralReason</code> کہتا ہے کہ انتظار کیوں کیا؟ ابھی تک کسی بھی اکاؤنٹ سے کچھ بھی منسلک نہیں ہے۔</p>
+<p>تین اصول آپ کے UI کو تشکیل دیتے ہیں:</p>
+<ul>
+<li><strong>ایک رجسٹریشن فی ای میل ایڈریس، اور ایک فی IP ایڈریس، ہر 24 گھنٹے۔</strong> دوسری کوشش
+ہے <code>429</code> کے ساتھ <code>Retry-After</code>. پلیئر کو ایڈریس بھیجنے سے پہلے اس کی تصدیق کروائیں، کیونکہ ٹائپنگ کی غلطی ہے۔
+ان کا ایک دن خرچ ہوتا ہے. پلیئر کے آلے سے درخواست بھیجیں، کبھی بھی اپنے سرور کے ذریعے: ہر
+پلیئر آپ کے سرور کا آئی پی اور اس کی روزانہ کی رجسٹریشن کا اشتراک کرے گا۔</li>
+<li><strong>لنک 4 گھنٹے بعد ختم ہو جاتا ہے۔</strong> اگر یہ ختم ہوجاتا ہے، تو کھلاڑی 24 گھنٹوں میں ایک بار دوبارہ رجسٹر ہوسکتا ہے۔
+اوپر ہیں</li>
+<li><strong><code>400</code></strong> مطلب ای میل ایڈریس یا کلیدی مواد کو مسترد کر دیا گیا تھا۔ <code>error</code> جو کہتا ہے.</li>
+</ul>
+<h2 id="3-sign-in-with-the-key">3. کلید کے ساتھ سائن ان کریں۔</h2>
+<p>سائن ان کرنا ایک چیلنج اور جواب ہے۔ <code>POST /api/v1/auth/public-key/challenge</code> واپسی:</p>
+<pre><code class="language-json">{
+  "challengeId": "4fc4d72b-4c12-41ca-a500-dc13cccc3865",
+  "payload": {
+    "challengeId": "4fc4d72b-4c12-41ca-a500-dc13cccc3865",
+    "fingerprint": "9c0b7a…",
+    "issuer": "starhermit",
+    "audience": "starhermit",
+    "expiry": "2026-10-09T14:21:41.9264875+00:00",
+    "nonce": "NmL+tgMum6HXU/pa3T9xjQ==",
+    "clientTimestamp": "2026-10-09T14:16:41.9265739+00:00"
+  },
+  "expiresIn": 300
+}
+</code></pre>
+<p><strong>آپ جس پر دستخط کرتے ہیں وہ JSON نہیں ہے جو آپ کو موصول ہوا ہے۔</strong> StarHermit اپنے دستخط کی تصدیق کرتا ہے۔
+کی سیریلائزیشن <code>payload</code>:</p>
+<ul>
+<li>کمپیکٹ JSON، کوئی خالی جگہ نہیں؛</li>
+<li><strong>پاسکل کیس</strong> اراکین کے نام، بالکل اسی ترتیب میں <code>ChallengeId</code>, <code>Fingerprint</code>, <code>Issuer</code>,
+<code>Audience</code>, <code>Expiry</code>, <code>Nonce</code>, <code>ClientTimestamp</code>;</li>
+<li>ہر قدر کاپی <strong>بالکل جیسا کہ پیش کیا گیا ہے۔</strong> - تاریخوں کو پارس اور ریفارمیٹ نہ کریں؛</li>
+<li>ہر <code>+</code> غیر میں کے طور پر لکھا ہے <code>\u002B</code>. دی <code>+</code> تاریخوں میں وہی رہتا ہے جیسا کہ یہ ہے۔</li>
+</ul>
+<p>مندرجہ بالا چیلنج کے لیے، دستخط شدہ بائٹس UTF-8 کی انکوڈنگ ہیں:</p>
+<pre><code class="language-text">{"ChallengeId":"4fc4d72b-4c12-41ca-a500-dc13cccc3865","Fingerprint":"9c0b7a…","Issuer":"starhermit","Audience":"starhermit","Expiry":"2026-10-09T14:21:41.9264875+00:00","Nonce":"NmL\u002BtgMum6HXU/pa3T9xjQ==","ClientTimestamp":"2026-10-09T14:16:41.9265739+00:00"}
+</code></pre>
+<p>اس میں سے کوئی بھی غلط حاصل کریں اور جواب ہے۔ <code>401 "Invalid signature."</code>، جسے دوبارہ کوشش کرنے سے ٹھیک نہیں ہوگا۔</p>
+<pre><code class="language-js">const FIELDS = ['challengeId', 'fingerprint', 'issuer', 'audience', 'expiry', 'nonce', 'clientTimestamp'];
+
+export function challengeSigningBytes(payload) {
+  const members = FIELDS.map((field) =&gt; {
+    let value = JSON.stringify(payload[field]);
+    if (field === 'nonce') value = value.replaceAll('+', '\\u002B');
+    return `"${field[0].toUpperCase()}${field.slice(1)}":${value}`;
+  });
+  return new TextEncoder().encode(`{${members.join(',')}}`);
+}
+
+export async function signChallenge(key, payload) {
+  const data = challengeSigningBytes(payload);
+  if (key.keyType === 'Ed25519')
+    return b64(await crypto.subtle.sign({ name: 'Ed25519' }, key.privateKey, data));
+  // WebCrypto returns an ECDSA signature as raw r||s; the server expects ASN.1 DER.
+  const rs = new Uint8Array(
+    await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key.privateKey, data));
+  return b64(derEcdsaSignature(rs));
+}
+
+function derEcdsaSignature(rs) {
+  const integer = (bytes) =&gt; {
+    let i = 0;
+    while (i &lt; bytes.length - 1 &amp;&amp; bytes[i] === 0) i++;
+    const value = [...bytes.slice(i)];
+    return value[0] &amp; 0x80 ? [0x02, value.length + 1, 0, ...value] : [0x02, value.length, ...value];
+  };
+  const body = [...integer(rs.slice(0, 32)), ...integer(rs.slice(32))];
+  return new Uint8Array([0x30, body.length, ...body]);
+}
+
+// Resolves to { userId, accessToken, refreshToken }, or null while the key is not attached to
+// an account yet — the player has not confirmed, the link expired, or the key was revoked.
+export async function signIn(key) {
+  const { keyType, keyData } = key;
+  const challenge = await post('/api/v1/auth/public-key/challenge', { keyType, keyData });
+  if (challenge.status !== 200) throw fail('challenge', challenge);
+  const signature = await signChallenge(key, challenge.body.payload);
+  const done = await post('/api/v1/auth/public-key/complete',
+    { challengeId: challenge.body.challengeId, signature, keyType, keyData });
+  if (done.status === 200) return done.body;
+  if (done.status === 401 &amp;&amp; done.body.error === 'Public key not registered or revoked.') return null;
+  throw fail('complete', done); // "Invalid signature." will never succeed: fix it, don't retry it
+}
+</code></pre>
+<p>ایک چیلنج پانچ منٹ تک جاری رہتا ہے اور یہ واحد استعمال ہوتا ہے، یہاں تک کہ جب کوشش ناکام ہو جائے، اس لیے ایک نئے کی درخواست کریں۔
+ہر کوشش کے لیے۔ چیلنج کریں اور فی آئی پی ایڈریس ایک منٹ میں 60 درخواستوں کی حد کو مکمل کریں۔</p>
+<h2 id="4-wait-for-the-player-to-confirm">4. کھلاڑی کی تصدیق کا انتظار کریں۔</h2>
+<p>ای میل شدہ لنک ایک StarHermit صفحہ کھولتا ہے جس میں کہا جاتا ہے کہ تصدیق کرنے سے کیا ہوگا؛ اسے کھولنے سے بدل جاتا ہے۔
+کچھ بھی نہیں، لہذا لنک کا پیش نظارہ کرنے والا میل اسکینر کھلاڑی کی جانب سے تصدیق نہیں کرسکتا۔ جب
+پلیئر پریس <strong>تصدیق کریں۔</strong>, StarHermit ان کا اکاؤنٹ بناتا ہے، آپ کی کلید منسلک کرتا ہے اور پتہ کو نشان زد کرتا ہے۔
+تصدیق شدہ اگر کوئی اکاؤنٹ پہلے سے ہی اس ایڈریس کو استعمال کرتا ہے، تو صفحہ ایسا کہتا ہے اور اس میں کلید شامل کردی جاتی ہے۔
+اس کے بجائے، لہذا ایک کھلاڑی جس کے پاس پہلے سے ہی StarHermit اکاؤنٹ ہے اسے رکھتا ہے۔ starhermit.com پر وہ پھر اترتے ہیں۔
+StarHermit ڈیش بورڈ پر، پہلے سے سائن ان ہے۔</p>
+<p><strong>آپ کا گیم کبھی بھی اس صفحہ سے ٹوکن وصول نہیں کرتا ہے۔</strong>، اور ان کی ضرورت نہیں ہے۔ کھلاڑی ہو سکتا ہے۔
+فون پر یا دوسرے براؤزر میں تصدیق کریں۔ کلید منسلک ہونے کے بعد، آپ کا گیم آسانی سے سائن ان کر سکتا ہے۔
+اس کے ساتھ تو دکھائیں a "اپنا ان باکس چیک کریں۔" اسکرین کریں اور کوشش کرتے رہیں:</p>
+<pre><code class="language-js">// Poll until the player confirms the emailed link. Two requests per attempt, so every 5 s stays
+// well inside the 60-per-minute sign-in limit.
+export async function waitUntilConfirmed(key, { intervalMs = 5000, signal } = {}) {
+  for (;;) {
+    signal?.throwIfAborted();
+    const session = await signIn(key);
+    if (session) return session;
+    await new Promise((resolve) =&gt; setTimeout(resolve, intervalMs));
+  }
+}
+</code></pre>
+<p>اقدامات 1 سے 4 کو ایک ساتھ رکھنا:</p>
+<pre><code class="language-javascript">import { createDeviceKey, register, signIn, waitUntilConfirmed } from './starhermit-key-auth.js';
+
+const key = await loadStoredKey() ?? await saveKey(await createDeviceKey());
+let session = await signIn(key);                // a returning player is signed in here
+if (!session) {
+  const email = await askForEmailAndConsent();
+  await register(key, email);
+  showCheckYourInbox(email);
+  session = await waitUntilConfirmed(key, { signal: cancelButton.signal });
+}
+</code></pre>
+<p><code>loadStoredKey</code>, <code>saveKey</code>, <code>askForEmailAndConsent</code> اور <code>showCheckYourInbox</code> آپ کو لکھنا ہے
+پیشکش a <strong>منسوخ کریں۔</strong> جو انتظار کو ختم کر دیتا ہے، اور لنک کی میعاد ختم ہونے پر چار گھنٹے بعد پولنگ روک دیتا ہے۔</p>
+<p>پولنگ جاری رکھیں چاہے آپ کے پلیٹ فارم کا تصدیقی صفحہ آپ کی سائٹ پر واپس بھیج دے۔ کھلاڑی اکثر
+ای میل کو انتظار کرنے والے سے مختلف ڈیوائس پر کھولتا ہے، اور پھر ری ڈائریکٹ کہیں نہیں پہنچتا
+آپ کی ویٹنگ اسکرین کے قریب؛ پولنگ وہ ہے جو ویٹنگ ڈیوائس کو سائن ان کرتی ہے۔ اگر ری ڈائریکٹ آتا ہے۔
+دوسرے ٹیب میں، ان میں سے صرف ایک کے ساتھ سائن ان کریں اور اضافی سیشن کو منسوخ کریں، یا کھلاڑی ختم ہو جائے گا۔
+دو کے ساتھ.</p>
+<h2 id="5-keep-the-session">5. سیشن رکھیں</h2>
+<p><code>complete</code> 15 منٹ تک رسائی کا ٹوکن اور ریفریش ٹوکن جو سات دنوں تک چلتا ہے اور گھومتا ہے۔
+رسائی ٹوکن بطور بھیجیں۔ <code>Authorization: Bearer …</code>، اور اس کی میعاد ختم ہونے سے پہلے ریفریش کریں:</p>
+<pre><code class="language-js">// Resolves to the new pair, or null when the session is over — sign in with the key again.
+export async function refresh(refreshToken) {
+  const res = await post('/api/v1/auth/refresh', { refreshToken });
+  return res.status === 200 ? res.body : null; // { accessToken, refreshToken }
+}
+</code></pre>
+<p>بدل دیں۔ <strong>دونوں</strong> ہر بار ٹوکن. استعمال شدہ ریفریش ٹوکن پیش کرنے سے پورا سیشن ختم ہو جاتا ہے، لہذا بنائیں
+یقینی طور پر دو دھاگے یا عمل کبھی بھی ایک ساتھ تازہ نہیں ہوتے ہیں۔ جب <code>refresh</code> واپسی <code>null</code>، کال کریں۔ <code>signIn</code> -
+کوئی ای میل شامل نہیں ہے. کلید طویل المدت سند ہے۔ ٹوکن اس کا صرف ایک ذخیرہ ہیں۔</p>
+<h2 id="6-finish-setting-up-the-account">6. اکاؤنٹ سیٹ اپ مکمل کریں۔</h2>
+<p><strong>شرائط</strong> نئے اکاؤنٹ کو اسٹار ہرمٹ کی موجودہ شرائط کو قبول کرنا ضروری ہے اس سے پہلے کہ وہ کوئی اور چیز استعمال کر سکے۔
+کال کریں۔ <code>GET /api/v1/me</code>. اگر <code>termsAcceptanceRequired</code> ہے <code>true</code>، سے متن دکھائیں۔
+<code>GET /api/v1/terms</code>، اور جب کھلاڑی اسے قبول کرتا ہے تو اس کی ہیش کو بھیجیں۔ <code>POST /api/v1/me/terms/accept</code>.
+بعد میں لانچوں پر دوبارہ چیک کریں، کیونکہ شرائط پر نظر ثانی کی گئی ہے۔ تفصیلات:
+<a href="/ur/docs/api/profile.html#terms-acceptance">شرائط کی قبولیت</a>.</p>
+<p><strong>نام</strong> اکاؤنٹ ایک سے شروع ہوتا ہے۔ <code>pk-…</code> صارف نام کھلاڑی کو ایک عرفی نام منتخب کرنے دیں:</p>
+<pre><code class="language-http">PATCH /api/v1/me
+Authorization: Bearer &lt;access-token&gt;
+Content-Type: application/json
+
+{ "nickname": "RookPilot" }
+</code></pre>
+<p>یہاں سے اکاؤنٹ کسی دوسرے کی طرح ہے: دوست، چیٹ، میچ میکنگ، کلاؤڈ سیو، کامیابیاں۔</p>
+<h2 id="7-second-devices-lost-keys-and-limits">7. دوسری ڈیوائسز، کھوئی ہوئی چابیاں، اور حدود</h2>
+<p><strong>دوسرا آلہ</strong> اپنی کلید تیار کرتا ہے اور اسے رجسٹر کرتا ہے۔ <strong>ایک ہی ای میل ایڈریس</strong>. جب
+پلیئر تصدیق کرتا ہے، کلید نیا بنانے کے بجائے ان کے موجودہ اکاؤنٹ میں شامل ہو جاتی ہے۔ 24 گھنٹے
+فی ایڈریس کی حد یہاں بھی لاگو ہوتی ہے۔</p>
+<p><strong>گم شدہ یا چوری شدہ آلہ۔</strong> <code>POST /api/v1/auth/public-key/revoke-request</code> کے ساتھ <code>{ "email": "…" }</code>
+کسی صفحے کا لنک ای میل کرتا ہے۔ وہاں کی تصدیق منسوخ ہو جاتی ہے۔ <strong>ہر</strong> اکاؤنٹ پر کلید اور سیشن ختم کرتا ہے۔
+وہ چابیاں سائن ان ہیں۔ اکیلے لنک کھولنے سے کچھ نہیں بدلتا۔ درخواست ہمیشہ جواب دیتی ہے۔ <code>202</code> اسی پیغام کے ساتھ، چاہے یا نہیں
+ایڈریس کا اکاؤنٹ ہے۔ لنک چار گھنٹے بعد ختم ہو جاتا ہے، اور اکاؤنٹ ہر 15 میں ایک بار پوچھ سکتا ہے۔
+منٹ اس کے بعد، ہر بقیہ آلہ دوبارہ رجسٹر ہو جاتا ہے (مرحلہ 2)۔</p>
+<p><strong>جو صرف کلیدی اکاؤنٹ نہیں کر سکتا۔</strong> چند تبدیلیاں اکاؤنٹ کی اسناد کی حفاظت کرتی ہیں، اس لیے وہ
+ایک سیشن کی ضرورت ہے جو گوگل یا GitHub جیسے فراہم کنندہ کے ذریعے سائن ان ہو:</p>
+<table>
+<thead>
+<tr>
+<th>ایکشن</th>
+<th>صرف کلیدی اکاؤنٹ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ایک کلید شامل کریں یا دوسرے آلات کو منسوخ کریں (<code>POST /me/public-keys</code>, <code>DELETE /me/public-keys/{id}</code> یا <code>/all</code>)</td>
+<td><code>403</code> - ای میل شدہ رجسٹریشن کے ذریعے اندراج کریں، یا OAuth سے تصدیق شدہ سیشن استعمال کریں۔</td>
+</tr>
+<tr>
+<td>اکاؤنٹ کا ای میل پتہ تبدیل کریں۔</td>
+<td><code>403 oauth_session_required</code> - اس وقت تک ممکن نہیں جب تک کہ فراہم کنندہ منسلک نہ ہو۔</td>
+</tr>
+<tr>
+<td>اس انسٹالیشن کی اپنی کلید کو منسوخ کریں۔</td>
+<td><code>DELETE /api/v1/me/public-keys/current</code>, اس کے مکمل عوامی کلید اکاؤنٹ سیشن کا استعمال کرتے ہوئے؛ کامیابی کے بعد مقامی اسناد کو رد کر دیں۔</td>
+</tr>
+</tbody>
+</table>
+<p>دیگر اسناد کا نظم کرنے یا ای میل تبدیل کرنے کے لیے، فراہم کنندہ کو لنک کریں۔ جب صرف کلیدی اکاؤنٹ ایک کو جوڑتا ہے، تو لنک کو روک دیا جاتا ہے۔
+جب تک کہ کھلاڑی اپنے ای میل سے اس کی تصدیق نہ کرے۔ اس کے بعد، ایک فراہم کنندہ سائن ان اوپر سب کچھ کر سکتا ہے۔
+دیکھیں <a href="/ur/docs/api/auth.html#get-apiv1authoauthproviderauthorizelinkclient"><code>authorize?link=true</code></a>.</p>
+<h2 id="troubleshooting">خرابی کا سراغ لگانا</h2>
+<table>
+<thead>
+<tr>
+<th>جواب</th>
+<th>مطلب</th>
+<th>درست کریں۔</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>register</code> → <code>400</code> "کلیدی ڈیٹا درست نہیں ہے … کلید"</td>
+<td><code>keyData</code> اس کے لیے غلط فارمیٹ میں ہے۔ <code>keyType</code></td>
+<td>مرحلہ 1 میں ٹیبل چیک کریں۔ Ed25519 اور ECDSA خام کلید بائٹس لیتے ہیں، نہیں۔ <code>SubjectPublicKeyInfo</code></td>
+</tr>
+<tr>
+<td><code>register</code> → <code>429</code></td>
+<td>یہ پتہ یا IP پچھلے 24 گھنٹوں میں رجسٹرڈ ہے۔</td>
+<td>انتظار کرو <code>Retry-After</code>; ایک لوپ میں دوبارہ کوشش نہ کریں</td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "عوامی کلید رجسٹر یا منسوخ نہیں کی گئی۔"</td>
+<td>کھلاڑی نے ابھی تک تصدیق نہیں کی ہے، لنک کی میعاد ختم ہو گئی ہے، یا کلید کو منسوخ کر دیا گیا ہے۔</td>
+<td>انتظار کرتے رہیں (مرحلہ 4)، یا دوبارہ رجسٹر کریں۔</td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "غلط دستخط۔"</td>
+<td>دستخط شدہ بائٹس یا دستخط کی شکل مماثل نہیں ہے۔</td>
+<td>دستخط شدہ سٹرنگ کو بالکل دوبارہ بنائیں (مرحلہ 3)۔ ECDSA کے لیے، DER بھیجیں، نہیں۔ <code>r‖s</code></td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "چیلنج نہیں ملا یا ختم ہو گیا۔"</td>
+<td>چیلنج پانچ منٹ سے زیادہ پرانا تھا یا پہلے ہی استعمال کیا گیا تھا۔</td>
+<td>ہر کوشش کے لیے ایک نئے چیلنج کی درخواست کریں۔</td>
+</tr>
+<tr>
+<td><code>challenge</code> / <code>complete</code> → <code>429</code></td>
+<td>اس IP سے ایک منٹ میں 60 سے زیادہ سائن ان کی درخواستیں ہیں۔</td>
+<td>کم کثرت سے رائے شماری کریں۔</td>
+</tr>
+<tr>
+<td>صفحہ کی تصدیق کریں → "یہ لنک استعمال نہیں کیا جا سکتا"</td>
+<td>پہلے سے تصدیق شدہ، میعاد ختم، نامکمل کاپی، یا اکاؤنٹ کا پتہ بھیجے جانے کے بعد تبدیل ہو گیا</td>
+<td>اگر آپ کا گیم سائن ان کر سکتا ہے، تو کلید منسلک ہے اور کچھ بھی غلط نہیں ہے۔ اگر نہیں تو دوبارہ رجسٹر کریں۔</td>
+</tr>
+<tr>
+<td>تصدیق → دبانے سے "وہ عوامی کلید پہلے ہی کسی دوسرے اکاؤنٹ میں رجسٹرڈ ہے۔"</td>
+<td>یہ کلید ایک مختلف اکاؤنٹ سے تعلق رکھتی ہے۔</td>
+<td>اس ڈیوائس پر ایک نئی کلید بنائیں</td>
+</tr>
+<tr>
+<td><code>403</code> "یہ اکاؤنٹ معطل ہے۔"</td>
+<td>اکاؤنٹ معطل ہے۔</td>
+<td>آپ کا گیم کچھ بھی ٹھیک نہیں کر سکتا</td>
+</tr>
+</tbody>
+</table>
+
+{% endraw %}

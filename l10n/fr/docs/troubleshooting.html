@@ -1,0 +1,245 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "Dépanner une intégration"
+source_url: "/docs/troubleshooting.html"
+source_path: "docs/troubleshooting.md"
+source_hash: "90e68e1757a4a8c75ac94bd580f2ff54e378593f19cbd554a1bba1ba70d4ebc2"
+translation: "machine"
+permalink: "/fr/docs/troubleshooting.html"
+---
+{% raw %}
+<h1 id="troubleshoot-an-integration">Dépanner une intégration</h1>
+<p>Commencez par le statut HTTP, le point de terminaison et la famille d'informations d'identification. Reproduisez la plus petite requête en utilisant
+le même identifiant de jeu et les mêmes informations d'identification, puis vérifiez l'état actuel de la ressource. Gardez les jetons et le joueur
+enregistrer les données des journaux et des rapports de support.</p>
+<h2 id="sign-in-and-access">Connexion et accès</h2>
+<table>
+<thead>
+<tr>
+<th>Symptôme</th>
+<th>Vérifier</th>
+<th>Action suivante</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>401</code> au REPOS</td>
+<td>Expiration du jeton et s'il s'agit d'un compte ou d'un jeton de lancement</td>
+<td>Actualisez une session de compte une fois&#160;; renouveler un jeton de lancement encore valide ou vous connecter pour un nouveau lancement</td>
+</tr>
+<tr>
+<td><code>403 terms_acceptance_required</code></td>
+<td>Document actuel de <code>/api/v1/terms</code></td>
+<td>Affichez-le et acceptez son hachage uniquement sur l'action du joueur&#160;; les jetons de lancement de compte et de joueur fonctionnent</td>
+</tr>
+<tr>
+<td><code>403</code> étendu à un autre jeu</td>
+<td><code>game_scope</code> par rapport au jeu/salle/sauvegarde demandé</td>
+<td>Utilisez votre propre UUID de jeu et l'exact <code>game:&lt;gameId&gt;</code> clé de sauvegarde dans le cloud</td>
+</tr>
+<tr>
+<td><code>403</code> sur <code>/me/game-invites</code> d'un jeu</td>
+<td>Le jeton de lancement ne peut pas lire la boîte de réception de l'ensemble du compte</td>
+<td>Sondage <code>/games/{slug}/invites</code> et <code>/realtime/rooms/invites</code></td>
+</tr>
+<tr>
+<td><code>403 oauth_session_required</code></td>
+<td>L'action modifie les informations d'identification du compte</td>
+<td>Connectez-vous via un fournisseur en direct&#160;; une session à clé publique ne peut révoquer que sa propre clé</td>
+</tr>
+<tr>
+<td><code>403</code> pour un compte suspendu</td>
+<td>Message renvoyé</td>
+<td>Arrêtez les tentatives de connexion/actualisation automatiques&#160;; diriger le joueur vers l'assistance du compte</td>
+</tr>
+<tr>
+<td>Retours de connexion directe <code>400</code></td>
+<td><code>returnUrl</code> doit être HTTPS exactement sur l'origine hébergée du jeu</td>
+<td>Utilisez l'URL du jeu hébergé&#160;; une URL de développement local n'est pas une destination de retour autorisée</td>
+</tr>
+<tr>
+<td>La connexion échoue par intermittence avec <code>Invalid signature.</code></td>
+<td>Défier la sérialisation, en particulier <code>+</code> en un instant</td>
+<td>Utilisez l'exact <a href="/fr/docs/tutorials/public-key-onboarding.html#3-sign-in-with-the-key">octets de signature de clé publique</a></td>
+</tr>
+<tr>
+<td>Retours d'inscription <code>429</code></td>
+<td>Allocation d'enregistrement e-mail/IP</td>
+<td>Honneur <code>Retry-After</code>; confirmer l'email avant d'envoyer une autre inscription</td>
+</tr>
+</tbody>
+</table>
+<h2 id="game-setup-and-storage">Configuration et stockage du jeu</h2>
+<table>
+<thead>
+<tr>
+<th>Symptôme</th>
+<th>Vérifier</th>
+<th>Action suivante</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/games/{slug}</code> retours <code>404</code>, mais les paramètres fonctionnent</td>
+<td>Le jeu a-t-il un backend de script ou de conteneur&#160;?</td>
+<td>Les jeux sur navigateur uniquement ont des paramètres et des jetons de lancement, mais pas de surface d'informations de jeu/de session faisant autorité</td>
+</tr>
+<tr>
+<td>Retour des contrôles <code>404</code></td>
+<td>Valide <code>control.*</code> lignes dans le manifeste publié</td>
+<td>Publier la déclaration&#160;; les écritures ne peuvent pas créer d'actions non déclarées</td>
+</tr>
+<tr>
+<td>Relier une clé en réinitialise les autres</td>
+<td>Contrôles <code>PUT</code> remplace tous les remplacements</td>
+<td>Envoyez la carte de remplacement complète ou utilisez le SDK <code>setControl()</code> qui préserve la carte effective</td>
+</tr>
+<tr>
+<td>Les paramètres ont disparu après <code>PUT</code></td>
+<td>Collection <code>PUT</code> remplace toute la carte</td>
+<td>Utiliser <code>PATCH</code> pour les clés de niveau supérieur modifiées&#160;; un objet imbriqué est remplacé comme une seule valeur</td>
+</tr>
+<tr>
+<td>La sauvegarde dans le cloud des nouveaux joueurs revient <code>404</code></td>
+<td>Aucune sauvegarde n'existe pour cet emplacement pour le moment</td>
+<td>Recommencez à zéro uniquement pour ce résultat&#160;; d'autres échecs doivent bloquer les téléchargements</td>
+</tr>
+<tr>
+<td>Enregistrer les retours d'écriture <code>412</code></td>
+<td>Un autre appareil a écrit une nouvelle version</td>
+<td>Recharger, valider et fusionner/adopter avant une autre écriture conditionnelle</td>
+</tr>
+<tr>
+<td>Enregistrer les retours <code>413</code>, <code>409</code>, ou <code>507</code></td>
+<td>Taille de sauvegarde, nombre d'emplacements ou quota de compte</td>
+<td>Inspectez le retour <code>code</code> et <code>limit</code>; réduire la taille ou résoudre la capacité</td>
+</tr>
+<tr>
+<td>La date limite est absente de la liste des sessions</td>
+<td><code>summary.deadline</code> taper</td>
+<td>Renvoie un horodatage Unix entier en millisecondes, pas une chaîne ISO</td>
+</tr>
+<tr>
+<td>Le score/réussite n’apparaît pas</td>
+<td>Clé, définition active, participant, limites de valeur</td>
+<td>Vérifier les définitions et la sortie du serveur&#160;; les écritures invalides sont ignorées&#160;; les rapports des clients ne sont pas une preuve</td>
+</tr>
+<tr>
+<td>Retours du matchmaking <code>404</code> après un match</td>
+<td>La session correspondante est peut-être terminée</td>
+<td>Retournez dans le hall et lancez une nouvelle recherche au lieu de rouvrir l'ancien ticket</td>
+</tr>
+</tbody>
+</table>
+<h2 id="websockets">WebSockets</h2>
+<p>L'échec de la mise à niveau d'un navigateur apparaît généralement sous la forme d'un code de fermeture <code>1006</code>, masquant la réponse HTTP.
+Avant de réessayer, effectuez un appel REST au même jeu/session/salle pour distinguer l'authentification,
+conditions, adhésion, session terminée et échecs temporaires de démarrage du serveur. Vérifier la compatibilité des builds
+via les informations de jeu lorsque vous fournissez <code>?build=</code>. Obtenez un nouveau ticket de connexion pour chaque mise à niveau.</p>
+<table>
+<thead>
+<tr>
+<th>Clôture/résultat</th>
+<th>Signification</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>1000</code></td>
+<td>Fermeture normale</td>
+<td>Arrêtez sauf si le lecteur démarre explicitement une autre connexion</td>
+</tr>
+<tr>
+<td><code>1001</code> plus erreur de reprise</td>
+<td>Le monde ne pouvait pas encore reprendre</td>
+<td>Reconnectez-vous avec interruption après avoir vérifié l'état de la session</td>
+</tr>
+<tr>
+<td><code>1006</code></td>
+<td>Perte de réseau ou mise à niveau refusée</td>
+<td>Vérifiez l'état REST et les informations d'identification actuelles&#160;; tentatives liées</td>
+</tr>
+<tr>
+<td><code>1008</code></td>
+<td>Violation des règles ou connexion remplacée</td>
+<td>Arrêtez la reconnexion automatique&#160;; proposer une reconnexion délibérée après avoir résolu la cause</td>
+</tr>
+<tr>
+<td><code>1009</code></td>
+<td>Message trop volumineux</td>
+<td>Réduisez la taille du cadre avant de vous reconnecter</td>
+</tr>
+<tr>
+<td>HTTP <code>409 build_mismatch</code></td>
+<td>Incompatibilité de build client/serveur</td>
+<td>Recharger une version compatible&#160;; n'inventez pas de valeur de construction correspondante</td>
+</tr>
+<tr>
+<td>HTTP <code>410 session_not_active</code></td>
+<td>Séance terminée</td>
+<td>Retourner au lobby ou rejouer&#160;; arrêter de se reconnecter</td>
+</tr>
+<tr>
+<td><code>error: "Too many commands; slow down."</code></td>
+<td>Allocation de commande durable du script</td>
+<td>Rythmer les commandes discrètes&#160;; mettre des entrées continues à l'intérieur <code>data</code> avec <code>type: "input", realtime: true</code></td>
+</tr>
+</tbody>
+</table>
+<p>Demander un état de jeu complet après la reconnexion&#160;; ne rejouez pas aveuglément des mouvements ou d'autres mouvements non idempotents
+commandes. <code>resumed</code> signifie rejeter la prédiction et resynchroniser. <code>abandoned</code> est terminale.
+Voir <a href="/fr/docs/api/contracts.html#websocket-contracts">Contrats WebSocket</a>.</p>
+<h2 id="publishing-and-container-startup">Publication et démarrage du conteneur</h2>
+<table>
+<thead>
+<tr>
+<th>Symptôme</th>
+<th>Vérifier</th>
+<th>Action suivante</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Télécharger <code>413</code> avec <code>limitBytes</code></td>
+<td>Allocation de téléchargement/d'hébergement effective</td>
+<td>Réduire le bundle ou l'arborescence fusionnée résultante</td>
+</tr>
+<tr>
+<td>Téléchargement HTTP volumineux <code>413</code> sans champs d'erreur de plateforme</td>
+<td>Limite du corps de la requête avant l'API</td>
+<td>Utiliser <code>ws/v1/game-upload</code>; envoyer <code>complete</code> après tous les octets</td>
+</tr>
+<tr>
+<td>Télécharger <code>422</code></td>
+<td>Disposition des archives, fichier de lancement, sécurité du chemin, manifeste</td>
+<td>Corrigez l'erreur nommée&#160;; l'API attend du brut <code>.tar.gz</code>, pas en plusieurs parties</td>
+</tr>
+<tr>
+<td>Le téléchargement a réussi mais le serveur n'est pas disponible</td>
+<td>Préparation au déploiement</td>
+<td>Déploiement du sondage&#160;; les octets acceptés ne signifient pas que le conteneur est prêt</td>
+</tr>
+<tr>
+<td>Le démarrage de la salle des conteneurs revient temporairement <code>503</code></td>
+<td>Le serveur est peut-être en train de se réveiller</td>
+<td>Gardez le lobby et réessayez avec recul&#160;; ne vous contentez pas d'une simulation client</td>
+</tr>
+<tr>
+<td>Les requêtes de conteneur échouent à la validation de la clé d'appel</td>
+<td>Environnement de démarrage et comparaison exacte des en-têtes</td>
+<td>Lire la clé d'appel actuellement injectée&#160;; signaler un échec persistant avec l'ID du jeu et des journaux nettoyés</td>
+</tr>
+<tr>
+<td>Échec de déploiement persistant</td>
+<td>État du déploiement et journaux/plantages visibles par le propriétaire</td>
+<td>Corrigez la version ou la configuration et publiez une nouvelle version de travail</td>
+</tr>
+</tbody>
+</table>
+<p>Pour un rapport d'assistance utile, incluez l'ID du jeu, la version client/build, le point de terminaison et la méthode, l'état/code,
+heure UTC approximative, étapes de reproduction et journaux nettoyés pertinents. Les identifiants de session/salle aident à localiser
+la ressource. Ne joignez pas d'informations d'identification, de clés privées ou la sauvegarde complète d'un joueur sans son consentement.</p>
+
+{% endraw %}

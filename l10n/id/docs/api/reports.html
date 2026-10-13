@@ -1,0 +1,185 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Laporan Kerusakan dan Bug"
+source_url: "/docs/api/reports.html"
+source_path: "docs/api/reports.md"
+source_hash: "6d28d99eae2ec0d57e0611ea1d1db48136d4f38dacbb270fd4242dbfd0f0e97a"
+translation: "machine"
+permalink: "/id/docs/api/reports.html"
+---
+{% raw %}
+<h1 id="crash-and-bug-reports">Laporan Kerusakan dan Bug</h1>
+<p>Pemain dapat melaporkan kerusakan atau bug dari dalam game apa pun yang memiliki slug — game khusus browser
+disertakan — menggunakan token peluncuran game atau token pengguna penuh. Pemilik game membaca, melakukan triase, dan
+menghapusnya melalui <code>/api/v1/me/github-games/{id}/reports</code>.</p>
+<p>Untuk keluaran server dan catatan kerusakan game kontainer itu sendiri, lihat
+<a href="/id/docs/api/container-games.html#your-servers-output-and-crash-reports">Server Game yang dihosting kontainer — Laporan keluaran dan kerusakan server Anda</a>.</p>
+<h2 id="endpoints">Titik akhir</h2>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/games/{slug}/reports</code></td>
+<td>Luncurkan token untuk game itu, atau JWT</td>
+<td>Ajukan laporan kerusakan atau bug</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/games/{slug}/reports/mine</code></td>
+<td>Luncurkan token untuk game itu, atau JWT</td>
+<td>50 laporan terbaru Anda untuk game ini, beserta statusnya</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/github-games/{id}/reports</code></td>
+<td>JWT (pemilik)</td>
+<td>Daftar laporan: <code>?kind=crash|bug&amp;status=open|acknowledged|resolved&amp;page=&amp;pageSize=</code> (≤100)</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (pemilik)</td>
+<td>Satu laporan, dengan daftar lampirannya</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}/attachments/{attachmentId}</code></td>
+<td>JWT (pemilik)</td>
+<td>Lampiran, selalu sebagai unduhan</td>
+</tr>
+<tr>
+<td>tambalan</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (pemilik)</td>
+<td>Mengatur <code>status</code></td>
+</tr>
+<tr>
+<td>MENGHAPUS</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (pemilik)</td>
+<td>Hapus laporan → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="file-a-report">Ajukan laporan</h2>
+<pre><code class="language-http">POST /api/v1/games/{slug}/reports
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  "kind": "crash",
+  "title": "Crash entering the second level",
+  "description": "TypeError: cannot read properties of undefined (reading 'tiles')\n    at loadLevel (game.js:812)",
+  "clientVersion": "1.4.2",
+  "platform": "web",
+  "buildId": "a1b2c3d",
+  "sessionId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "attachments": [
+    { "fileName": "console.log", "contentType": "text/plain", "dataBase64": "…" }
+  ]
+}
+</code></pre>
+<ul>
+<li><code>kind</code> adalah <code>crash</code> atau <code>bug</code>; <code>title</code> diperlukan (≤200 karakter).</li>
+<li>Segala sesuatu yang lain adalah opsional. <code>userAgent</code> default ke permintaan <code>User-Agent</code> tajuk.</li>
+<li>Tanggapan: <code>201 { "id", "kind", "status": "open", "createdAt" }</code>.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Arti</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td>Salah format: tidak diketahui <code>kind</code>, hilang <code>title</code>, base64 tidak valid, atau bukan JSON</td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>Game tidak dikenal atau dihapus</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>Deskripsi, jumlah lampiran, atau byte lampiran melebihi batas permainan</td>
+</tr>
+<tr>
+<td><code>429</code></td>
+<td>Melebihi batas laporan harian untuk game ini; melihat <code>Retry-After</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="limits">Batasan</h2>
+<p>Operator dapat mengubah masing-masing hal ini untuk keseluruhan platform dan untuk game individual; batas harian
+juga dapat diatur untuk satu pemain.</p>
+<table>
+<thead>
+<tr>
+<th>Membatasi</th>
+<th>Bawaan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Laporan per pemain per game per hari</td>
+<td>20</td>
+</tr>
+<tr>
+<td>Panjang deskripsi</td>
+<td>20.000 karakter</td>
+</tr>
+<tr>
+<td>Lampiran per laporan</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Byte lampiran per laporan</td>
+<td>2 MiB</td>
+</tr>
+<tr>
+<td>Laporan disimpan per game</td>
+<td>2,000</td>
+</tr>
+<tr>
+<td>Byte disimpan per game</td>
+<td>256 MiB</td>
+</tr>
+<tr>
+<td>Penyimpanan</td>
+<td>90 hari</td>
+</tr>
+</tbody>
+</table>
+<p>Saat game mencapai batas penyimpanannya, laporan terlama — yang diselesaikan terlebih dahulu — akan dihapus
+memberi ruang. Satu laporan yang lebih besar dari batas byte keseluruhan per game ditolak <code>413</code>.</p>
+<h2 id="triage-reports-game-owner">Laporan triase (pemilik game)</h2>
+<p>Daftarnya kembali <code>{ "items", "total", "page", "pageSize" }</code>; setiap item membawa nama reporter,
+<code>kind</code>, <code>status</code>, <code>title</code>, detail klien dan jumlah lampirannya. Pindahkan laporan
+<code>open</code> → <code>acknowledged</code> → <code>resolved</code> dengan:</p>
+<pre><code class="language-http">PATCH /api/v1/me/github-games/{id}/reports/{reportId}
+Content-Type: application/json
+
+{ "status": "resolved" }
+</code></pre>
+<p>Lampiran disajikan sebagai unduhan (<code>Content-Disposition: attachment</code>, <code>nosniff</code>, kotak pasir
+CSP). Hanya tipe inert yang mempertahankan tipe konten yang dinyatakan — teks, JSON, PNG, JPEG, WebP, GIF, zip, dan
+gzip; hal lain, termasuk markup, disajikan sebagai <code>application/octet-stream</code>.</p>
+<h2 id="from-the-javascript-sdk">Dari SDK JavaScript</h2>
+<pre><code class="language-js">StarHermit.reportBug('Score did not save', 'Finished level 3, score shows 0', { clientVersion: '1.4.2' });
+StarHermit.captureCrashes({ clientVersion: '1.4.2' });   // opt-in: uncaught errors become crash reports
+</code></pre>
+<p>Lihat <a href="/id/docs/sdk/javascript.html#crash-and-bug-reports">SDK JavaScript</a>.</p>
+<p>Dibagikan <a href="/id/docs/api/conventions.html">konvensi API</a> menjelaskan penguraian respons, stempel waktu, penomoran halaman, dan percobaan ulang.</p>
+<p>Melihat <a href="/id/docs/credentials.html">kompatibilitas kredensial</a> Dan <a href="/id/docs/api/contracts.html">kontrak yang dapat dibaca mesin</a>.</p>
+
+{% endraw %}

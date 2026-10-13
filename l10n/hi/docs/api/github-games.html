@@ -1,0 +1,848 @@
+---
+layout: "wiki"
+lang: "hi"
+title: "गिटहब गेम्स"
+source_url: "/docs/api/github-games.html"
+source_path: "docs/api/github-games.md"
+source_hash: "3ac05be03d6f084237353cccfe3c7a2c060046dd000d68711193907a1b4c6263"
+translation: "machine"
+permalink: "/hi/docs/api/github-games.html"
+---
+{% raw %}
+<h1 id="github-games">गिटहब गेम्स</h1>
+<p>GitHub रिपॉजिटरी से गेम प्रकाशित करें <a href="https://starhermit.com">स्टारहर्मिट</a>, या पहले से ही होस्ट किए गए वेब गेम को पंजीकृत करें। रिपॉजिटरी गेम के लिए, प्लेटफ़ॉर्म पढ़ता है <code>starhermit.txt</code>, रेपो को क्लोन करता है, और इसे यहां परोसता है <code>&lt;slug&gt;.starhermit.com</code>. क्योंकि <code>/api</code> और <code>/ws</code> उस उपडोमेन से समान-उत्पत्ति का अनुमान लगाया जाता है, एक प्लेटफ़ॉर्म-होस्टेड गेम की आवश्यकता होती है <strong>कोई सीओआरएस या एपीआई-बेस कॉन्फ़िगरेशन नहीं</strong>. एक पिन किया गया कमिट नियंत्रित करता है कि कौन सा रिपॉजिटरी संस्करण लाइव है। <a href="/hi/docs/tutorials/chess-walkthrough.html">शतरंज संदर्भ कार्यान्वयन</a> इस प्रकार प्रकाशित किया जाता है और मॉडल के संदर्भ उदाहरण के रूप में कार्य करता है।</p>
+<p>आधार यूआरएल: <code>https://api.starhermit.com</code>. सभी मार्ग नीचे हैं <code>api/v1/...</code> और जब तक उल्लेख न किया गया हो, JWT की आवश्यकता होती है।</p>
+<p>होस्ट की गई क्लाइंट फ़ाइलें घोषित कर सकती हैं <a href="/hi/docs/starhermit-txt.html#browser-asset-caching">फ़ोल्डर कैश जीवनकाल</a>
+और <a href="/hi/docs/starhermit-txt.html#allowing-another-website-to-access-your-hosted-game">अतिरिक्त CORS मूल</a>
+में <code>starhermit.txt</code>. वे नीतियाँ क्लाइंट फ़ाइलों के साथ प्रकाशित होती हैं; एक प्रकट-मुक्त मर्ज बरकरार रहता है
+मौजूदा सेटिंग्स, जबकि एक आपूर्ति किया गया मेनिफेस्ट उन्हें प्रतिस्थापित करता है।</p>
+<h2 id="the-manifest-starhermittxt">प्रकट: <code>starhermit.txt</code></h2>
+<p>जगह <code>starhermit.txt</code> रेपो रूट पर. प्रारूप: <code>key=value</code> पंक्तियाँ, <code>#</code> एक टिप्पणी शुरू करता है.</p>
+<pre><code class="language-text">name=Your Game
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html        # repo-relative HTML entry
+cover=art/cover.png      # optional cover art for the library tile; or an https:// URL
+description=One-line pitch\nSecond line   # optional; or description.file=DESCRIPTION.md
+release_notes.file=CHANGELOG.md          # optional; or release_notes=inline text
+owner=&lt;starhermit user id&gt;  # UUID from GET /api/v1/me; do not use username/nickname
+# Choose at most one authoritative backend, or omit both for a browser-only game:
+server=server.js         # sandboxed JavaScript; see game-scripts.md
+# container.image=ghcr.io/owner/game@sha256:&lt;64 lowercase hex&gt;; see container-games.md
+
+control.up=KeyW+ArrowUp | Move forward
+control.shoot=Space | Shoot
+</code></pre>
+<ul>
+<li>कोई नहीं है <code>slug</code> कुंजी: प्लेटफ़ॉर्म एक यूआईडी निर्दिष्ट करता है और इसे उपडोमेन दोनों के रूप में उपयोग करता है (<code>&lt;uid&gt;.starhermit.com</code>) और गेम एपीआई नेमस्पेस (<code>/api/v1/games/&lt;uid&gt;/…</code>).</li>
+<li><code>cover</code> (उपनाम <code>cover_art</code>, <code>coverart</code>) गेम की लाइब्रेरी टाइल पर दिखाई गई कलाकृति है: लॉन्च फ़ाइल से संबंधित एक पथ, या एक निरपेक्ष <code>https://</code> यूआरएल. वैकल्पिक - इसके बिना टाइल आपकी साइट का फ़ेविकॉन दिखाती है। प्रत्येक तैनाती पर दोबारा पढ़ें, इसलिए लाइन बदलने से कवर बदल जाता है। देखना <a href="#cover-art">कवर आर्ट</a> टाइल वाली फसलों के लिए.</li>
+<li><code>description</code> / <code>release_notes</code> (या <code>description.file</code> / <code>release_notes.file</code>, कौन सा नाम ए <code>.md</code>/<code>.markdown</code>/<code>.txt</code> मेनिफेस्ट से संबंधित फ़ाइल) आपके गेम के लिए वैकल्पिक टेक्स्ट हैं। उन्हें प्रत्येक परिनियोजन पर पुनः पढ़ा जाता है <code>cover</code>. देखना <a href="#description-and-release-notes">विवरण और रिलीज़ नोट्स</a>.</li>
+<li><code>server</code> एक सैंडबॉक्स्ड जावास्क्रिप्ट बैकएंड घोषित करता है; देखना <a href="/hi/docs/api/game-scripts.html">game-scripts.md</a>.</li>
+<li><code>container.image</code> एक कंटेनर बैकएंड घोषित करता है; देखना <a href="/hi/docs/api/container-games.html">container-games.md</a>. इसे डाइजेस्ट-पिन किया जाना चाहिए, एक स्वीकृत रजिस्ट्री पर सत्यापित GitHub मालिक के नामस्थान में होस्ट किया जाना चाहिए, और इसके साथ होना चाहिए <code>container.port</code>, <code>container.health</code>, <code>container.memory_mb</code>, <code>container.cpu</code>, और गैर-गुप्त <code>container.env.*</code> मूल्य.</li>
+<li>दोनों बैकएंड कुंजियाँ शुद्ध ब्राउज़र गेम के लिए वैकल्पिक हैं, लेकिन वे एक-दूसरे के साथ परस्पर अनन्य हैं।</li>
+</ul>
+<h3 id="default-control-bindings">डिफ़ॉल्ट नियंत्रण बाइंडिंग</h3>
+<p>एक गेम शून्य या अधिक डेस्कटॉप-ब्राउज़र क्रियाओं की घोषणा कर सकता है:</p>
+<pre><code class="language-text">control.&lt;action&gt;=&lt;code&gt;[+&lt;code&gt;...][ | &lt;label&gt;]
+</code></pre>
+<ul>
+<li>क्रियाएँ लोअरकेस हैं <code>[a-z0-9_]{1,32}</code> पहचानकर्ता और प्रकट क्रम बनाए रखें।</li>
+<li>कोड हैं <code>KeyboardEvent.code</code> मूल्य; <code>+</code> एक क्रिया के लिए वैकल्पिक कुंजियाँ अलग करता है।</li>
+<li>वैकल्पिक लेबल नियंत्रण-रीमैपिंग यूआई में दिखाया गया है और एक्शन आईडी पर डिफ़ॉल्ट है।</li>
+<li>एक मेनिफेस्ट प्रति क्रिया अधिकतम 32 क्रियाएँ और 4 कोड घोषित कर सकता है। एक कोड का उपयोग नहीं किया जा सकता
+दो क्रियाएं. अमान्य नियंत्रण रेखाओं पर ध्यान नहीं दिया जाता.</li>
+<li>नहीं के साथ खेल <code>control.*</code> घोषणाओं में कोई नियंत्रण नहीं है एपीआई/यूआई (<code>404 "This game declares no controls."</code>). प्रत्येक प्रकाशित बिल्ड - प्रत्येक परिनियोजन, फ़ोल्डर अपलोड से घोषणाएँ फिर से पढ़ी जाती हैं
+और बंडल पुश को प्रतिस्थापित करना। क्रमशः: <a href="/hi/docs/tutorials/game-controls.html">ट्यूटोरियल: अपने गेम में नियंत्रण जोड़ें</a>.</li>
+</ul>
+<p>खिलाड़ी प्रति गेम इन डिफॉल्ट्स को ओवरराइड कर सकते हैं
+<a href="/hi/docs/api/games.html#per-player-control-bindings">गेम्स एपीआई को नियंत्रित करते हैं</a>.</p>
+<h2 id="endpoints">अंतिमबिंदुओं</h2>
+<table>
+<thead>
+<tr>
+<th>तरीका</th>
+<th>पथ</th>
+<th>प्रमाणीकरण</th>
+<th>विवरण</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/me/github-games</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>रेपो यूआरएल से गेम रजिस्टर करें → <code>201 GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/me/github-games/upload</code></td>
+<td>जेडब्ल्यूटी</td>
+<td><strong>स्थानीय फ़ोल्डर से गेम जोड़ें</strong> — बिल्कुल भी कोई भंडार नहीं → <code>201 { game, bytesReceived }</code></td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/me/github-games/{id}/claim</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>GitHub लिंक या मेनिफेस्ट स्वामी द्वारा रिपॉजिटरी नियंत्रण साबित करने के बाद स्वामित्व लें → <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>रखना</td>
+<td><code>/api/v1/me/github-games/{id}/url</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>किसी मौजूदा गेम को किसी भिन्न URL पर इंगित करें; यूआईडी और प्लेटाइम जीवित रहते हैं</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/me/github-games</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>अपने पंजीकृत GitHub गेम्स की सूची बनाएं → <code>GitHubGameDto[]</code></td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/me/github-games/{id}/stats</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td><strong>आपके द्वारा जोड़े गए गेम के लिए दर्शकों के आंकड़े</strong> → <code>GameStatsDto</code></td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/me/github-games/{id}/sessions</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td>इस गेम के सर्वर के लाइव सत्र</td>
+</tr>
+<tr>
+<td>मिटाना</td>
+<td><code>/api/v1/me/github-games/{id}/sessions/{sessionId}</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td>एक लाइव सत्र समाप्त करें (<code>abandoned</code> / <code>operator_ended</code>)</td>
+</tr>
+<tr>
+<td>प्राप्त/पोस्ट करें</td>
+<td><code>/api/v1/me/github-games/{id}/achievements</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td><a href="/hi/docs/api/achievements.html#achievements-created-by-the-games-owner">आपके खेल की उपलब्धियाँ</a>: सभी की सूची बनाएं, एक बनाएं</td>
+</tr>
+<tr>
+<td>डालें/हटाएँ</td>
+<td><code>/api/v1/me/github-games/{id}/achievements/{achievementId}</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td>आपके द्वारा बनाए गए को अपडेट करें/हटाएं</td>
+</tr>
+<tr>
+<td>प्राप्त/पोस्ट करें</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td><a href="/hi/docs/api/leaderboards.html#your-games-own-leaderboards">आपके गेम के लीडरबोर्ड</a>: सभी की सूची बनाएं, एक बनाएं</td>
+</tr>
+<tr>
+<td>डालें/हटाएँ</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards/{leaderboardId}</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td>एक को अपडेट करें/हटाएं</td>
+</tr>
+<tr>
+<td>मिटाना</td>
+<td><code>/api/v1/me/github-games/{id}/players/{userId}/elo</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td><a href="/hi/docs/api/leaderboards.html#resetting-a-players-rating">एक खिलाड़ी की रेटिंग रीसेट करें</a> 1200 तक</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/me/github-games/{id}/transfer</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>किसी गेम को दूसरे उपयोगकर्ता को स्थानांतरित करें → <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>मिटाना</td>
+<td><code>/api/v1/me/github-games/{id}</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>पंजीकृत गेम हटाएँ → <code>204</code></td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/me/github-games/removed</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>आपके हटाए गए गेम: <code>restorable</code> (अपलोड किए गए गेम), <code>filesKept</code></td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/me/github-games/{id}/restore</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>हटाए गए अपलोड किए गए गेम को पुनर्स्थापित करें: समान आईडी और इतिहास, इसकी फ़ाइलें यदि अभी तक पुनः प्राप्त नहीं हुई हैं (30 दिन); <code>409</code> किसी स्रोत वाले गेम के लिए - उसका URL दोबारा जोड़ें</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/me/github-games/{id}/bundle</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>एक कच्चा प्रकाशित करें <code>.tar.gz</code> जिसमें क्लाइंट फ़ाइलें और/या एक सहेजी गई कंटेनर छवि शामिल है। <code>?mode=merge</code> लाइव क्लाइंट फ़ाइलों को बदलने के बजाय उन्हें पैच करता है</td>
+</tr>
+<tr>
+<td>डब्ल्यूएस</td>
+<td><code>/ws/v1/game-upload</code></td>
+<td>जेडब्ल्यूटी (<code>?access_token=</code>)</td>
+<td><strong>वेबसॉकेट पर वही दो अपलोड होते हैं</strong> - ~100 एमबी से अधिक की किसी भी चीज़ के लिए उपयोग किया जाने वाला परिवहन</td>
+</tr>
+<tr>
+<td>रखना</td>
+<td><code>/api/v1/me/github-games/{id}/hosting</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>होस्टिंग सक्षम/अक्षम करें ("स्टारहर्मिट पर तैनात करें") → <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/me/github-games/{id}/deployment</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>परिनियोजन/होस्टिंग स्थिति पढ़ें → <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>रखना</td>
+<td><code>/api/v1/me/github-games/{id}/deployment</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>किसी कमिट/शाखा को पिन करें; पुन: तैनाती को कतारबद्ध करें → <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/github-games</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>साझा GitHub गेम्स का सार्वजनिक ब्राउज़ → <code>SharedGitHubGameDto[]</code></td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/github-games/{id}/release-notes</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>गेम के रिलीज़ नोट्स इसके मेनिफ़ेस्ट से → <code>GitHubGameReleaseNotesDto</code>, या <code>404</code> किसी अज्ञात या हटाए गए गेम के लिए</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/github-games/{id}/icon</code></td>
+<td>गुमनाम</td>
+<td>गेम आइकन छवि बाइट्स (फ़ेविकॉन या स्वामी अवतार); <code>ResponseCache</code> 86400</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/github-games/{id}/cover</code></td>
+<td>गुमनाम</td>
+<td><strong>कवर कला छवि बाइट्स</strong>, या <code>404</code> जब खेल में कुछ भी न हो; <code>ResponseCache</code> 3600</td>
+</tr>
+<tr>
+<td>रखना</td>
+<td><code>/api/v1/me/github-games/{id}/cover</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td>मेनिफेस्ट को ओवरराइड करते हुए कवर आर्ट अपलोड करें <code>cover=</code> → <code>204</code></td>
+</tr>
+<tr>
+<td>मिटाना</td>
+<td><code>/api/v1/me/github-games/{id}/cover</code></td>
+<td>जेडब्ल्यूटी (मालिक)</td>
+<td>अपलोड किए गए कवर को छोड़ें, मैनिफ़ेस्ट पर वापस जाएं → <code>204</code></td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/me/github</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>GitHub पहचान लिंक स्थिति → <code>{ linked, login }</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="register-a-game">एक खेल पंजीकृत करें</h3>
+<p><code>POST /api/v1/me/github-games</code></p>
+<pre><code class="language-json">{
+  "repoUrl": "https://github.com/HypeDriven/starhermit-chess",
+  "displayName": "StarHermit Chess",
+  "launchPath": "index.html"
+}
+</code></pre>
+<p>अपने ऐतिहासिक नाम के बावजूद, <code>repoUrl</code> तीन लॉन्च स्रोत स्वीकार करता है:</p>
+<ol>
+<li>A <code>github.com/&lt;owner&gt;/&lt;repo&gt;</code> भण्डार. बैकएंड इसके मेनिफेस्ट को पढ़ता है और इसे तैनात कर सकता है
+StarHermit होस्टिंग के लिए।</li>
+<li>पहले से ही होस्ट किया गया GitHub पेज URL जैसे <code>https://owner.github.io/game/</code>. भण्डार
+यूआरएल से पहचान का अनुमान लगाया जाता है; यूआरएल स्वयं लॉन्च किया गया है, बिना किसी क्लोन या इंस्टॉल के।</li>
+<li>कोई अन्य जनता <code>http://</code> या <code>https://</code> होस्ट किया गया वेब-गेम URL. इसे सीधे लॉन्च किया जाता है और
+GitHub स्वामित्व के दावे में भाग नहीं लेता है।</li>
+</ol>
+<ul>
+<li><code>displayName</code> और <code>launchPath</code> वैकल्पिक फ़ॉलबैक हैं. वे तृतीय-पक्ष रेपो के लिए उपयोगी हैं
+विश्वसनीय प्रकट मेटाडेटा के बिना; प्रत्यक्ष रूप से होस्ट किया गया यूआरएल स्वयं लॉन्च स्थान है।</li>
+<li>सत्यापित रिपॉजिटरी मालिकों के लिए प्लेटफ़ॉर्म मान्य होता है <code>starhermit.txt</code>.</li>
+<li>एक वैकल्पिक <code>server=</code> स्क्रिप्ट या <code>container.image=</code> बैकएंड प्रावधान एक आधिकारिक खेल है; देखना <a href="/hi/docs/api/game-scripts.html">game-scripts.md</a> और <a href="/hi/docs/api/container-games.html">container-games.md</a>. कंटेनर होस्टिंग Starhermit.com पर साइन-इन किए गए किसी भी उपयोगकर्ता के लिए खुली है; एक स्व-होस्टेड परिनियोजन इसे ऑपरेटर अनुमति सूची तक सीमित कर सकता है।</li>
+<li><strong>एक घोषित सर्वर बैकएंड को एक सिद्ध स्वामी की आवश्यकता होती है।</strong> एक रेपो सबमिट करना जो घोषित करता है <code>server=</code> या <code>container.image=</code> GitHub-लॉगिन के बिना या <code>owner=</code> प्रमाण है <code>403</code> (दोनों प्रमाणों का नामकरण), केवल ब्राउज़र-सूची नहीं जो बैकएंड होने का दिखावा करती है।</li>
+<li>सीमाएँ: प्रति उपयोगकर्ता 100 गेम (प्रति खाता ऑपरेटर-ओवरराइडेबल)। डुप्लिकेट रिटर्न पंजीकृत करना <code>409</code>.</li>
+</ul>
+<p>पंजीकरण/तैनाती स्थितियों में शामिल हैं: <code>InvalidUrl</code>, <code>LimitReached</code>, <code>Duplicate</code>, <code>MissingManualMetadata</code>, <code>MissingStarhermitTxt</code>, <code>InvalidLaunchPath</code>, <code>InvalidServerScriptPath</code>, <code>InvalidContainerImage</code>, <code>ServerProvisionConflict</code>, <code>RemovedByOwner</code>.</p>
+<p>त्रुटियाँ मानक आकार का उपयोग करती हैं:</p>
+<pre><code class="language-json">{ "error": "..." }
+</code></pre>
+<h3 id="add-a-game-from-a-local-folder">स्थानीय फ़ोल्डर से गेम जोड़ें</h3>
+<p><code>POST /api/v1/me/github-games/upload</code> → <code>201</code></p>
+<p>URL पंजीकृत करने का समकक्ष: <strong>कोई भंडार नहीं है</strong>, और कुछ भी क्लोन नहीं किया गया है। फ़ोल्डर
+एक होकर यात्रा करता है <code>.tar.gz</code> अनुरोध निकाय पर और प्लेटफ़ॉर्म होस्ट करता है कि इसमें क्या शामिल है। वही पुरालेख
+के रूप में प्रारूपित करें <a href="#push-a-game-bundle">एक बंडल को धकेलना</a>, इसलिए एक ही पैकेजिंग दोनों के लिए काम करती है।</p>
+<p>बनाए गए गेम में एक है <code>gameSlug</code> शुरू से ही, यह एक सर्वर घोषित करता है या नहीं, इसलिए a
+ब्राउज़र-केवल अपलोड का उपयोग कर सकते हैं <a href="/hi/docs/api/games.html#per-player-control-bindings">को नियंत्रित करता है</a>,
+<a href="/hi/docs/api/games.html#per-player-game-settings">प्रति-खिलाड़ी सेटिंग्स</a>, इसका
+<a href="/hi/docs/api/catalog.html#saving-from-inside-a-game-launch-token">क्लाउड-सेव स्लॉट</a>, <a href="/hi/docs/api/realtime.html">वास्तविक समय के कमरे</a>
+और किसी भी अन्य गेम की तरह टोकन लॉन्च करें।</p>
+<pre><code class="language-text">client/           the game's files, published as-is
+starhermit.txt    name= and launch= instead of the query parameters
+</code></pre>
+<p>मेनिफेस्ट वैकल्पिक है <em>यह समापन बिंदु</em> - क्वेरी पैरामीटर समान मान प्रदान कर सकते हैं - और
+StarHermit क्लाइंट हमेशा अपने मेनिफेस्ट फ़ील्ड से निर्मित एक भेजते हैं। फ़ाइल को अंदर भेजना
+आपका निर्माण अभी भी करने योग्य है: यह निर्माण को स्व-वर्णन योग्य बनाता है और उन फ़ील्ड्स को पहले से भर देता है, इसलिए यह
+यह याद रखे बिना कि उसे किन मूल्यों की आवश्यकता है, पुनः अपलोड किया जा सकता है। देखना
+<a href="/hi/docs/starhermit-txt.html"> <code>starhermit.txt</code> घोषणापत्र</a> प्रारूप के लिए, और उस पर ध्यान दें <strong>सब कुछ
+मेनिफेस्ट के बगल में अपलोड किया गया है</strong> - एक वितरण योग्य बिल्ड अपलोड करें, स्रोत ट्री नहीं।</p>
+<p>बाइट्स को सीधे भेजें - मल्टीपार्ट फॉर्म डेटा नहीं - के साथ <code>Content-Type: application/gzip</code>:</p>
+<pre><code class="language-bash">tar -czf game.tar.gz client/ starhermit.txt
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/upload?displayName=My%20Game" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game.tar.gz
+</code></pre>
+<pre><code class="language-json">{
+  "game": { "id": "...", "displayName": "My Game", "launchPath": "index.html", "hosting": { "hostingEnabled": true } },
+  "bytesReceived": 4194304
+}
+</code></pre>
+<p>मेटाडेटा इस क्रम में हल होता है, इसलिए अधिकांश फ़ोल्डरों को किसी क्वेरी पैरामीटर की आवश्यकता नहीं होती है:</p>
+<ol>
+<li><code>?displayName=</code> / <code>?launchPath=</code> अनुरोध पर.</li>
+<li><code>name=</code> / <code>launch=</code> में एक <code>starhermit.txt</code> पुरालेख रूट पर.</li>
+<li><code>index.html</code> के मूल में <code>client/</code> - लॉन्च पथ के रूप में उपयोग किया जाता है जब कोई और नाम नहीं देता है।</li>
+</ol>
+<p>इस मार्ग के लिए विशिष्ट नोट्स:</p>
+<ul>
+<li><strong>कॉल रिटर्न होते ही गेम लाइव हो जाता है।</strong> कोई अलग होस्टिंग या तैनाती नहीं है
+कदम: <code>deployStatus</code> है <code>live</code> और <code>deployedCommitSha</code> है <code>null</code>, क्योंकि कोई प्रतिबद्धता नहीं है।</li>
+<li><strong>फ़ाइलें पुन: उत्पन्न नहीं की जा सकतीं</strong>, इसलिए प्लेटफ़ॉर्म उन्हें कभी भी कहीं से भी पुनः तैनात नहीं करता है। एक खेल
+इस प्रकार जोड़ा गया <code>contentSource: upload</code> और जब तक आप प्रकाशित नहीं करते तब तक इसका अपलोड किया गया निर्माण बरकरार रहता है
+एक और. के साथ एक नया निर्माण पुश करें
+<a href="#push-a-game-bundle">बंडल समापन बिंदु</a> या फ़ोल्डर को दोबारा अपलोड करें.</li>
+<li><strong>कोई रिपोजिटरी का मतलब कोई दावा नहीं है।</strong> <code>ownerLogin</code> खाली है, इसलिए कोई भी GitHub लॉगिन कभी भी इसका मिलान नहीं कर सकता;
+<code>repoUrl</code> एक सिंथेटिक ले जाता है <code>upload:&lt;id&gt;</code> यूआरएल के बजाय मूल्य।</li>
+<li><strong>A <code>server/image.tar</code> यहां मना कर दिया गया है</strong> (<code>422</code>). एक सर्वर छवि के लिए एक प्रावधानित गेम की आवश्यकता होती है
+संलग्न करें, जो गेम के अस्तित्व में आने तक अस्तित्व में नहीं है - पहले गेम बनाएं, फिर छवि को पुश करें
+को <code>/{id}/bundle</code>.</li>
+<li>जिस फ़ाइल को संग्रह में शामिल नहीं किया गया है उसका नामकरण करने वाले लॉन्च पथ को अस्वीकार कर दिया गया है (<code>422</code>) जबकि अपलोड है
+प्रत्येक खिलाड़ी के लिए 404 बनने के बजाय, अभी भी स्टेजिंग में है।</li>
+</ul>
+<p>सीमाएँ किसी भी अन्य धक्का के समान ही हैं: देखें <a href="#upload-limits">अपलोड सीमा</a>.</p>
+<h4 id="an-uploaded-folder-can-bring-its-own-server-backend">अपलोड किया गया फ़ोल्डर अपना स्वयं का सर्वर बैकएंड ला सकता है</h4>
+<p>यदि पुरालेख है <a href="/hi/docs/starhermit-txt.html"><code>starhermit.txt</code></a> सर्वर लॉजिक, अपलोड की घोषणा करता है
+इसका प्रावधान भी करता है - वही चीज़ जो रिपॉजिटरी प्रवाह करता है, बिना रिपॉजिटरी के। एक चुनें
+शैली; दोनों को घोषित करने से इंकार कर दिया गया है।</p>
+<table>
+<thead>
+<tr>
+<th>घोषणा</th>
+<th>क्या होता है</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server=path/to/server.js</code></td>
+<td>एक स्क्रिप्ट बैकएंड. फ़ाइल यात्रा करती है <strong>आपके द्वारा अपलोड किए गए फ़ोल्डर के अंदर</strong>, इसलिए इसका स्रोत सीधे संग्रह से पढ़ा जाता है - लाने के लिए कुछ भी नहीं है। देखना <a href="/hi/docs/api/game-scripts.html">game-scripts.md</a>.</td>
+</tr>
+<tr>
+<td><code>container.image=name@sha256:…</code></td>
+<td>एक कंटेनर बैकएंड, हमेशा की तरह डाइजेस्ट-पिन किया हुआ। देखना <a href="/hi/docs/api/container-games.html">container-games.md</a>. बाद में छवि को स्वयं ही धकेल दिया जाता है <code>/{id}/bundle</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>यहां इनकार करने से पूरी रचना विफल हो जाती है - कोई भी आधी-अधूरी गेम पंक्ति जीवित नहीं रहती है:</p>
+<ul>
+<li><code>server=</code> उस फ़ाइल का नामकरण करना जिसमें संग्रह शामिल नहीं है।</li>
+<li><code>server=</code> क्लाइंट फ़ाइलों के बाहर इंगित करते हुए (<code>../</code>).</li>
+<li>दोनों की घोषणा <code>server=</code> और <code>container.image=</code>.</li>
+<li>ऐसे कंटेनर के लिए पूछना जहां कंटेनर अक्षम हैं, या ऐसे मालिक से जिसके लिए उन्हें मंजूरी नहीं दी गई है।</li>
+</ul>
+<h3 id="cover-art">कवर आर्ट</h3>
+<p>लाइब्रेरी में आपके गेम की टाइल पर दिखाई गई छवि। इसे किसी भी तरह से सेट करें - आप जो भी उपयोग करें, वह
+गुमनाम <code>GET /api/v1/github-games/{id}/cover</code> यह वही है जो इसे परोसता है:</p>
+<ul>
+<li><strong>आपके निर्माण में</strong> — a <code>cover=</code> लाइन में <code>starhermit.txt</code>, लॉन्च से संबंधित एक छवि का नामकरण
+फ़ाइल या पूर्ण <code>https://</code> यूआरएल. प्रत्येक परिनियोजन पर दोबारा पढ़ें, ताकि आपका भंडार सत्य का स्रोत बना रहे।</li>
+<li><strong>अपलोड किए गए</strong> — <code>PUT /api/v1/me/github-games/{id}/cover</code> छवि बेस64-एन्कोडेड के साथ। ये है
+वेब डैशबोर्ड क्या है <em>प्रबंधित करें → कवर कला</em> करता है, और एक StarHermit ऑपरेटर आपके लिए क्या कर सकता है।</li>
+</ul>
+<pre><code class="language-http">PUT /api/v1/me/github-games/{id}/cover
+Authorization: Bearer &lt;token&gt;
+Content-Type: application/json
+
+{ "imageBase64": "iVBORw0KGgoAAAANSUhEUg..." }
+</code></pre>
+<p>एक अपलोड <strong>ओवरराइड</strong> प्रकट, जानबूझकर: एक तैनाती जो फिर से पढ़ती है <code>starhermit.txt</code> अवश्य
+किसी के हाथ से चुनी गई कला को कभी भी पूर्ववत न करें। <code>DELETE /api/v1/me/github-games/{id}/cover</code> वापसी का रास्ता है -
+यह अपलोड और मैनिफ़ेस्ट को हटा देता है <code>cover=</code> पुनः लागू होता है.</p>
+<p>पीएनजी, जेपीईजी, जीआईएफ, वेबपी, बीएमपी या एसवीजी, तक <strong>4 एमबी</strong>. प्रकार को बाइट्स से सूँघा जाता है, इसलिए a
+<code>Content-Type</code> आप दावा करते हैं कि न तो इसकी आवश्यकता है और न ही विश्वास किया जाता है, और बाइट्स जो डिकोड करने योग्य छवि नहीं हैं
+से इंकार कर दिया जाता है <code>400</code>. एक रिश्तेदार <code>cover=</code> पथ समाप्त होना चाहिए <code>.png</code>, <code>.jpg</code>/<code>.jpeg</code>, <code>.gif</code>,
+<code>.webp</code> या <code>.svg</code> (नहीं <code>..</code>, कोई नेतृत्व नहीं <code>/</code>); विफल होने के बजाय एक अनुपयोगी मान हटा दिया जाता है
+खेल.</p>
+<p>कवर कला पोस्टर कला है: दोनों पुस्तकालय <strong>टाइल और केंद्र-फसल को भरने के लिए इसे स्केल करें</strong> जो कुछ भी करता है
+उपयुक्त नहीं. टाइल्स का आकार एक जैसा नहीं है.</p>
+<table>
+<thead>
+<tr>
+<th>सतह</th>
+<th>टाइल</th>
+<th>काटना</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>विंडोज़ क्लाइंट</td>
+<td>96×128 पोर्ट्रेट (3:4)</td>
+<td>चित्र भरता है; व्यापक कला पक्ष खो देती है</td>
+</tr>
+<tr>
+<td>वेब डैशबोर्ड</td>
+<td>वर्ग</td>
+<td>वर्ग भरता है; लम्बी कला ऊपर और नीचे खो देती है</td>
+</tr>
+</tbody>
+</table>
+<p>विषय को केंद्र में रखें ताकि दोनों फसलें सही दिखें। एसवीजी वेब लाइब्रेरी पर शो को कवर करता है; द
+विंडोज़ क्लाइंट एसवीजी को डीकोड नहीं कर सकता है, इसलिए वह टाइल इसके बजाय फ़ेविकॉन दिखाती है। एक ऐसा खेल जिसमें कोई कवर नहीं है
+सभी वापस उसके फ़ेविकॉन पर आ जाते हैं (<code>GET /api/v1/github-games/{id}/icon</code>). आइकन से हल किया गया है
+आपके द्वारा सबमिट किया गया यूआरएल और, जब प्लेटफ़ॉर्म गेम होस्ट करता है, तो उस कॉपी से जिस पर वह काम करता है
+<code>&lt;uid&gt;.starhermit.com</code> - इसलिए फ़ाइलों में फ़ेविकॉन के साथ अपलोड किए गए बंडल को अभी भी एक आइकन मिलता है।</p>
+<h3 id="audience-figures-for-your-game">आपके खेल के लिए दर्शकों के आंकड़े</h3>
+<p><code>GET /api/v1/me/github-games/{id}/stats</code> → <code>GameStatsDto</code></p>
+<p>कितने लोग एक खेल खेलते हैं <strong>आपने जोड़ा</strong>. गेम के मालिक तक ही सीमित - किसी और को भी मिलता है <code>404</code>,
+एक खेल के समान उत्तर जो अस्तित्व में नहीं है।</p>
+<pre><code class="language-json">{
+  "totalPlayers": 42,
+  "playingNow": 3,
+  "totalSessions": 130,
+  "totalPlaytimeMinutes": 8140,
+  "lastPlayedAt": "2026-07-29T08:45:24Z",
+  "livenessWindowHours": 4
+}
+</code></pre>
+<ul>
+<li><strong>केवल समुच्चय.</strong> आप अपने दर्शकों का आकार सीखते हैं, यह नहीं कि इसमें कौन है।</li>
+<li><code>totalPlayers</code> गिनता <strong>विशिष्ट लोग</strong>, सत्र नहीं - जिसने छह बार खेला वह एक है
+खिलाड़ी.</li>
+<li><code>playingNow</code> उन विशिष्ट खिलाड़ियों की गणना करता है जिनका सत्र समाप्त नहीं हुआ है <em>और</em> अंदर शुरू हुआ
+<code>livenessWindowHours</code>. विंडो मायने रखती है: जो क्लाइंट क्रैश हो गया है या उसका नेटवर्क खो गया है वह कभी नहीं भेजता है
+सत्र समाप्त हो गया, और इसके बिना उन पंक्तियों को पढ़ा जाएगा जैसे लोग अभी भी अनिश्चित काल तक खेल रहे हैं।</li>
+<li><code>totalPlaytimeMinutes</code> गिनता <strong>केवल पूर्ण सत्र</strong>, प्रति-उपयोगकर्ता प्लेटाइम आंकड़ों का मिलान
+में <a href="/hi/docs/api/activity.html">activity.md</a>. उड़ान में एक सत्र अभी तक कुछ भी योगदान नहीं देता है।</li>
+<li><code>lastPlayedAt</code> है <code>null</code> एक ऐसे खेल के लिए जिसे किसी ने नहीं खेला है.</li>
+</ul>
+<p>आंकड़े उसी लॉन्च लेजर से आते हैं जो प्रत्येक ग्राहक लिखता है (देखें)। <a href="/hi/docs/api/activity.html">activity.md</a>), तो ए
+वह गेम जिसके खिलाड़ी कभी भी लॉन्च की रिपोर्ट नहीं करते, उसे शून्य पढ़ा जाएगा।</p>
+<h3 id="claim-ownership">स्वामित्व का दावा करें</h3>
+<p><code>POST /api/v1/me/github-games/{id}/claim</code> → <code>GitHubGameDto</code></p>
+<p>जब आप किसी मौजूदा सूची के भंडार को नियंत्रित करते हैं तो उसे अपने कब्जे में ले लें। या तो लिंक करके स्वामित्व सिद्ध करें
+व्यक्तिगत GitHub लॉगिन रिपॉजिटरी स्वामी से मेल खाता है, या कमिट करके
+<code>owner=&lt;your StarHermit user ID&gt;</code> भंडार के लिए <code>starhermit.txt</code>. <code>owner</code> होना चाहिए
+अपरिवर्तनीय यूयूआईडी के रूप में लौटाया गया <code>id</code> द्वारा <code>GET /api/v1/me</code>, <strong>नहीं</strong> एक उपयोक्तानाम या उपनाम. प्रकट
+विधि संगठन-स्वामित्व वाली रिपॉजिटरी का समर्थन करती है, जिसका अनुमान व्यक्तिगत GitHub org से नहीं लगाया जाता है
+सदस्यता.</p>
+<p>सफल होने पर, मौजूदा सूची अपनी आईडी/इतिहास रखती है, दावेदार द्वारा प्रबंधित हो जाती है, ताज़ा हो जाती है
+रिपॉजिटरी-नियंत्रित मेटाडेटा और बैकएंड घोषणाएं, और जहां उपलब्ध हो वहां होस्टिंग कतारें। द
+पिछला सबमिट करने वाला स्वामी-दायरे वाली प्रबंधन पहुंच खो देता है। उस सूची का दावा करना जिसे आप पहले से ही प्रबंधित कर रहे हैं
+किसी विरोध को वापस करने के बजाय इसे पुन: सिंक्रनाइज़ करता है।</p>
+<p>GitHub पहचान मेटाडेटा स्टोर <code>{"login":"…"}</code>; अपने GitHub खाते को OAuth प्रवाह के माध्यम से लिंक करें (देखें)।
+<a href="/hi/docs/api/auth.html">auth.md</a>). लिंक स्थिति जांचें <code>GET /api/v1/me/github</code> → <code>{ linked, login }</code>. देखें
+<a href="/hi/docs/tutorials/claim-existing-game.html">चरण-दर-चरण दावा ट्यूटोरियल</a> खोज के लिए, दोनों प्रमाण
+तरीके, सत्यापन, अधिग्रहण और समस्या निवारण।</p>
+<h3 id="transfer-ownership">स्थानांतरण स्वामित्व</h3>
+<p><code>POST /api/v1/me/github-games/{id}/transfer</code></p>
+<pre><code class="language-json">{ "toUserId": "&lt;user id&gt;" }
+</code></pre>
+<h3 id="push-a-game-bundle">गेम बंडल पुश करें</h3>
+<p><code>POST /api/v1/me/github-games/{id}/bundle</code> StarHermit से पूछे बिना निर्मित आउटपुट प्रकाशित करता है
+इसे फिर से क्लोन करें। कॉल करने वाले के पास पंजीकृत गेम होना चाहिए। भेजो <code>.tar.gz</code> सीधे बाइट्स—नहीं
+मल्टीपार्ट फॉर्म डेटा-साथ <code>Content-Type: application/gzip</code>:</p>
+<pre><code class="language-text">client/            optional static client files; must include the registered launch file
+server/image.tar   optional output from `docker save`
+starhermit.txt     optional manifest copy for bundle portability
+remove.txt         merge only: client-relative paths to delete, one per line
+</code></pre>
+<p>कम से कम <code>client/</code> या <code>server/image.tar</code> मौजूद होना चाहिए (एक विलय भी हो सकता है)। <code>remove.txt</code>). क्लाइंट फ़ाइलें परमाणु रूप से स्वैप की जाती हैं। ए
+सर्वर छवि को लोड किया जाता है, प्लेटफ़ॉर्म द्वारा डाइजेस्ट-पिन किया जाता है, और कंटेनर परिनियोजन को कतारबद्ध किया जाता है
+उस छवि पर पुनः आरंभ करें. अपलोड की गई छवि को मेनिफेस्ट के रजिस्ट्री संदर्भ पर प्राथमिकता दी जाती है,
+और एक से अधिक <code>server=</code> रेखा; दोनों की घोषणा करने वाला एक प्रकटीकरण <code>server=</code> और <code>container.image=</code> मना कर दिया जाता है
+कुछ भी लोड होने से पहले. संग्रह में अन्य किसी भी चीज़ को नज़रअंदाज कर दिया जाता है।</p>
+<p><strong>एक छवि अपलोड करना स्वयं ही घोषणा है।</strong> यदि गेम में अभी तक कोई सर्वर बैकएंड नहीं है - a
+अपलोड किया गया फ़ोल्डर जिसमें कोई नहीं घोषित किया गया - पुश करना <code>server/image.tar</code> डाइजेस्ट से केवल एक प्रावधान
+के अंतर्गत लोड किया गया <code>gameSlug</code> खेल पहले से ही है. आपको डाइजेस्ट-पिन की गई छवि को नाम देने की आवश्यकता नहीं है
+मेनिफेस्ट पहले, जो गोलाकार था: छवि प्राप्त करने से पहले परिभाषा का अस्तित्व होना आवश्यक था,
+और छवि ही एकमात्र ऐसी चीज़ थी जो इसका वर्णन कर सकती थी।</p>
+<p><strong>एक पुन: धक्का कंटेनर नॉब्स को उसकी प्रकट घोषणाओं पर लागू करता है, और केवल उन पर।</strong> शामिल करना
+<code>starhermit.txt</code> एक बदले हुए बंडल में <code>container.port</code>, <code>container.health</code>,
+<code>container.memory_mb</code> या <code>container.cpu</code> और परिनियोजन इसे पुनरारंभ करने पर उठाता है; एक घुंडी बाहर छोड़ें और
+यह वह सब रखता है जो आपने पिछली बार सेट किया था। मेनिफेस्ट को पूरी तरह से हटा दें और परिनियोजन के बारे में कुछ भी नहीं बताएं
+छवि को छोड़कर परिवर्तन.</p>
+<p>StarHermit क्लाइंट एक फ़ोल्डर से आपके लिए यह बंडल बनाते हैं <strong>या एक <code>.tar</code></strong>:</p>
+<ul>
+<li><strong>क्लाइंट फ़ाइलें</strong> - गेम का वितरण फ़ोल्डर, या a <code>.tar</code> इसका. नीचे एक फ़ोल्डर पैक किया गया है
+<code>client/</code>; a <code>.tar</code>की प्रविष्टियाँ वहां दोबारा रखी गई हैं (एक संग्रह पहले से ही नीचे है)। <code>client/</code> बाकी है
+अकेले)। केवल यूस्टार - जीएनयू लंबे नाम और पैक्स अभिलेखागार को अस्वीकार कर दिया गया है, क्योंकि उन्हें पुनः होम करने का मतलब है
+निम्नलिखित प्रविष्टि को नाम देने वाले मेटाडेटा ब्लॉक को फिर से लिखना।</li>
+<li><strong>समर्पित सेवक</strong> - सर्वर का वितरण फ़ोल्डर, या <code>docker save</code> <code>.tar</code> अपने दम पर।
+किसी फ़ोल्डर से केवल मैनिफ़ेस्ट और <code>image.tar</code> अपलोड किए गए हैं: छवि में पहले से ही आपका शामिल है
+सर्वर की अपनी फ़ाइलें हैं, इसलिए बाकी को पैक करने से प्लेटफ़ॉर्म को त्यागने के लिए गीगाबाइट भेज दिए जाएंगे।</li>
+</ul>
+<p>दोनों ही मामलों में <a href="/hi/docs/starhermit-txt.html"><code>starhermit.txt</code></a> संवाद में संपादन योग्य है. जो भी हो
+चुनी गई बिल्ड कैरी फ़ील्ड को पहले से भर देती है, और जो कुछ भी वे रखते हैं वह बंडल रूट पर लिखा होता है - इसलिए
+बिना मेनिफेस्ट वाला बिल्ड प्रकाशन योग्य है, और जो एक के रूप में भेजा जाता है <code>.tar</code> अभी भी इसका प्रकटीकरण हो सकता है
+अद्यतन किया गया।</p>
+<pre><code class="language-bash">docker save my-game-server:release -o image.tar
+mkdir -p bundle/server
+mv image.tar bundle/server/image.tar
+cp starhermit.txt bundle/
+tar -C bundle -czf game-bundle.tar.gz .
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game-bundle.tar.gz
+</code></pre>
+<pre><code class="language-json">{
+  "clientPublished": false,
+  "serverImageLoaded": true,
+  "imageDigest": "sha256:...",
+  "bytesReceived": 318767104,
+  "mode": "replace",
+  "filesRemoved": 0
+}
+</code></pre>
+<h4 id="partial-updates-modemerge">आंशिक अद्यतन: <code>?mode=merge</code></h4>
+<p>एक धक्का है एक <strong>प्रतिस्थापित करें</strong> जब तक आप अन्यथा न पूछें: संग्रह ही पूरा खेल है, और इसमें कुछ भी नहीं है
+यह चला गया है. <code>?mode=merge</code> (HTTP और अपलोड सॉकेट समान) इसे बनाता है <strong>पैबंद</strong> लाइव क्लाइंट का
+फ़ाइलें - एक-फ़ाइल सुधार के लिए अपरिवर्तित परिसंपत्तियों के गीगाबाइट को फिर से अपलोड करने का उत्तर।</p>
+<pre><code class="language-bash">printf '%s\n' '# one client-relative path per line; a directory removes everything under it' \
+    'assets/old-music.ogg' 'levels/cut/' &gt; remove.txt
+tar czf patch.tar.gz client/index.html client/js/app.js remove.txt
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle?mode=merge" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @patch.tar.gz
+</code></pre>
+<p>साथ <code>mode=merge</code>:</p>
+<ul>
+<li>फ़ाइलों के अंतर्गत <code>client/</code> जोड़ा या अधिलेखित किया गया है</li>
+<li>जड़ में पथ <code>remove.txt</code> (<code>#</code> टिप्पणियाँ; एक निर्देशिका अपने संपूर्ण उपवृक्ष को हटा देती है) हटा दिए जाते हैं</li>
+<li>हर दूसरी लाइव फ़ाइल बिल्कुल वैसी ही रहती है जैसी वह है</li>
+</ul>
+<p>मर्ज किए गए पेड़ को एक प्रतिलिपि के रूप में मंचित किया जाता है और परमाणु रूप से स्वैप किया जाता है - खिलाड़ी पुराने गेम या देखते हैं
+बिल्कुल नया, कभी मिश्रण नहीं। परिणाम से घिरा है <strong>खेल का</strong> भत्ता, अपलोड का नहीं, इसलिए
+एक खेल एक समय में एक छोटे पैच की सीमा से आगे नहीं बढ़ सकता। मर्ज केवल क्लाइंट फ़ाइलों के बारे में है; ए
+<code>server/image.tar</code> एक प्रतिस्थापन के रूप में बिल्कुल लोड किया गया है। एक पैच ले जाने वाला नं <code>starhermit.txt</code> पत्तियां
+कला को वैसा ही कवर करें जैसा वह था।</p>
+<p>विलय अस्वीकार कर दिया गया है (<code>409</code>/<code>422</code>, कुछ भी नहीं बदलता है) जब गेम में अभी तक कुछ भी प्रकाशित नहीं हुआ है, जब यह
+लॉन्च फ़ाइल को हटा देगा, या कब <code>remove.txt</code> खेल के बाहर अंक. ए <code>remove.txt</code> एक में
+सादा प्रतिस्थापन भी अस्वीकार कर दिया गया है (<code>422</code>), क्योंकि वहां इसका मतलब केवल वही हो सकता है जो आपने नहीं किया
+इरादा. <code>mode</code> होना ही चाहिए <code>replace</code> (डिफ़ॉल्ट) या <code>merge</code>; और कुछ भी है <code>400</code>.</p>
+<p>सॉकेट पर समान पैरामीटर काम करता है: <code>ws/v1/game-upload?gameId=…&amp;mode=merge</code>. <code>ready</code> ढाँचा
+इसे इस रूप में प्रतिध्वनित करता है <code>"apply":"merge"</code>.</p>
+<p>एंडपॉइंट मौजूदा पंजीकृत गेम को अपडेट करता है; यह कभी भी गेम रिकॉर्ड नहीं बनाता - उसके लिए, देखें
+<a href="#add-a-game-from-a-local-folder">स्थानीय फ़ोल्डर से गेम जोड़ना</a>. यह <em>कर सकना</em> खेल का प्रावधान करें
+सर्वर बैकएंड, एक सर्वर छवि को ऐसे गेम में लोड करने के साइड इफेक्ट के रूप में जिसमें कुछ भी नहीं था। देखें
+<a href="/hi/docs/tutorials/dedicated-server-onboarding.html">समर्पित-सर्वर प्रकाशन ट्यूटोरियल</a>.</p>
+<h3 id="upload-from-cicd">सीआई/सीडी से अपलोड करें</h3>
+<p>किसी इंटरैक्टिव OAuth टोकन को रिपॉजिटरी में गुप्त न रखें। एक बार OAuth के माध्यम से साइन इन करें और उपयोग करें
+उस सत्र के साथ एक अलग लेबल वाली परिनियोजन कुंजी जोड़ने के लिए <code>POST /api/v1/me/public-keys</code>. सीआई
+नौकरी तो हस्ताक्षर कर सकते हैं <code>/auth/public-key/challenge</code>, इसे एक्सचेंज करें <code>/auth/public-key/complete</code>, और उपयोग करें
+इस बंडल एंडपॉइंट पर 15 मिनट का एक्सेस टोकन लौटाया गया।</p>
+<p>परिनियोजन कुंजी उसके स्वामित्व वाले खाते के रूप में कार्य करती है, इसलिए उस खाते को लक्ष्य गेम का स्वामी होना चाहिए। यह नहीं हो सकता
+अन्य कुंजी जोड़ें या अन्य कुंजियाँ निरस्त करें। यह स्वयं को निरस्त कर सकता है <code>/me/public-keys/current</code>;
+OAuth-प्रमाणित सत्र से नामांकन और अन्य कुंजियाँ प्रबंधित करें। प्रति एक कुंजी का प्रयोग करें
+पर्यावरण ताकि एक वर्कफ़्लो को दूसरे को रोके बिना अक्षम किया जा सके। मोटे तौर पर पुरालेख
+100 एमबी को नीचे दिए गए वेबसॉकेट ट्रांसपोर्ट का उपयोग करना होगा।</p>
+<p>देखना <a href="/hi/docs/tutorials/ci-cd-build-upload.html">OAuth-नामांकित सार्वजनिक कुंजी के साथ CI/CD से बिल्ड अपलोड करें</a>
+कुंजी पीढ़ी के लिए, GitHub गुप्त सेटअप, एक पूर्ण चुनौती-हस्ताक्षर/अपलोडर स्क्रिप्ट, स्थिर और
+कंटेनर बंडल लेआउट, और एक GitHub क्रियाएँ वर्कफ़्लो।</p>
+<h3 id="upload-over-a-websocket">वेबसॉकेट पर अपलोड करें</h3>
+<p><code>GET /ws/v1/game-upload</code> (उन्नत करना) - <strong>लगभग 100 एमबी से अधिक की किसी भी चीज़ के लिए इसका उपयोग करें।</strong></p>
+<p>एपीआई के सामने सीडीएन मोटे तौर पर HTTP अनुरोध निकाय को अस्वीकार कर देता है <strong>100 एमबी</strong> के साथ <code>413</code> इसके
+अपना. वह इनकार कभी भी मंच तक नहीं पहुंचता, इसलिए उसका कोई मतलब नहीं है <code>limitBytes</code> और नो लॉग यू में दिखाई देता है
+पढ़ सकते हैं - ए <code>413</code> नहीं के साथ <code>limitBytes</code> फ़ील्ड सीडीएन है, आपके गेम का भत्ता नहीं, जो दो है
+परिमाण का क्रम बड़ा। कोई यथार्थवादी <code>docker save</code> इस पर प्रहार करेंगे.</p>
+<p>वेबसॉकेट अपग्रेड के बाद भेजे गए फ़्रेम अनुरोध निकाय नहीं हैं, इसलिए सीमा लागू नहीं होती है।
+<strong>केवल परिवहन भिन्न है।</strong> बाइनरी फ़्रेम बिल्कुल HTTP मार्गों के बाइट्स में संयोजित होते हैं
+पढ़ें, एक ही पाइपलाइन से गुजरें, और हर इनकार, भत्ता और सफलता निकाय HTTP ही है
+रूट का उत्पादन हुआ होगा - इसलिए एक ग्राहक दोनों में एक कोड पथ साझा कर सकता है।</p>
+<pre><code class="language-text">wss://api.starhermit.com/ws/v1/game-upload?gameId=$GAME_ID&amp;access_token=$TOKEN
+wss://api.starhermit.com/ws/v1/game-upload?gameId=$GAME_ID&amp;mode=merge&amp;access_token=$TOKEN
+wss://api.starhermit.com/ws/v1/game-upload?displayName=My%20Game&amp;launchPath=index.html&amp;access_token=$TOKEN
+</code></pre>
+<p>उत्तीर्ण <code>gameId</code> आपके स्वामित्व वाले गेम को आगे बढ़ाने के लिए (द <code>/{id}/bundle</code> मार्ग); इसे छोड़ें और पास करें
+<code>displayName</code>/<code>launchPath</code> किसी फ़ोल्डर से एक बनाने के लिए ( <code>/upload</code> मार्ग)। टोकन अंदर चला जाता है
+क्वेरी स्ट्रिंग क्योंकि ब्राउज़र सेट नहीं कर सकता <code>Authorization</code> वेबसॉकेट हैंडशेक पर हेडर; यह है
+हैंडशेक पर एक बार जांच की जाती है, इसलिए एक अपलोड जो इसके एक्सेस टोकन से अधिक समय तक रहता है, अभी भी समाप्त होता है।</p>
+<table>
+<thead>
+<tr>
+<th>दिशा</th>
+<th>चौखटा</th>
+<th>अर्थ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>सर्वर →</td>
+<td><code>{"type":"ready","mode":"bundle","apply":"replace","limitBytes":N,"heartbeatSeconds":15}</code></td>
+<td>भत्ते का निपटान और खाली स्थान की जाँच की गई। भेजना प्रारंभ करें. <code>mode</code> है <code>bundle</code> या <code>create</code>. <code>apply</code> है <code>merge</code> जब आपने आंशिक अद्यतन के लिए पूछा।</td>
+</tr>
+<tr>
+<td>→ सर्वर</td>
+<td><em>द्विआधारी</em></td>
+<td>पुरालेख बाइट्स, आपकी इच्छानुसार खंडित - सर्वर कभी भी संदेशों को दोबारा इकट्ठा नहीं करता है, इसलिए 256 केबी-1 एमबी एक अच्छा डिफ़ॉल्ट है। संयोजित, आपके फ़्रेम बिलकुल वैसे ही होने चाहिए <code>.tar.gz</code>.</td>
+</tr>
+<tr>
+<td>सर्वर →</td>
+<td><code>{"type":"ack","bytesReceived":N}</code></td>
+<td>रसीद की प्रगति, लगभग हर 8 एमबी। इससे अपनी प्रगति पट्टी चलाएँ।</td>
+</tr>
+<tr>
+<td>→ सर्वर</td>
+<td><code>{"type":"complete"}</code></td>
+<td>पूरा पुरालेख भेज दिया गया है.</td>
+</tr>
+<tr>
+<td>→ सर्वर</td>
+<td><code>{"type":"abort"}</code></td>
+<td>छोड़ देना। के साथ उत्तर दिया <code>status: 499</code>; कुछ भी प्रकाशित नहीं है.</td>
+</tr>
+<tr>
+<td>सर्वर →</td>
+<td><code>{"type":"progress","phase":"publishing","bytesReceived":N}</code></td>
+<td>अपलोड लैंड होने पर हर 15 सेकंड में दिल की धड़कन। उन्हें नज़रअंदाज करें, लेकिन उनसे उम्मीद रखें।</td>
+</tr>
+<tr>
+<td>सर्वर →</td>
+<td><code>{"type":"result","status":200,...}</code></td>
+<td>सफलता। ऑब्जेक्ट का शेष भाग HTTP प्रतिक्रिया निकाय शब्दशः है (<code>status</code> है <code>201</code> एक सृजन के लिए)।</td>
+</tr>
+<tr>
+<td>सर्वर →</td>
+<td><code>{"type":"error","status":413,"error":"...","limitBytes":N}</code></td>
+<td>इनकार. <code>status</code> और बॉडी वही है जो HTTP रूट ने उत्तर दिया होगा।</td>
+</tr>
+</tbody>
+</table>
+<p><strong>जब तक कुछ भी प्रकाशित नहीं होता <code>{"type":"complete"}</code> आता है.</strong> यह बिना HTTP वाला एक व्यवहार है
+समतुल्य, और यह जानबूझकर किया गया है: संग्रह का अंत मार्कर रहता है <em>अंदर</em> एक टार बाइट्स, तो
+प्लेटफ़ॉर्म कनेक्शन को कभी भी ख़त्म किए बिना एक संपूर्ण दिखने वाले संग्रह को पढ़ना समाप्त कर देता है। एक सॉकेट
+वह बस अंतिम बाइट के बाद गिरा दिया गया अन्यथा बिल्कुल उसी तरह प्रकाशित होगा जो समाप्त हुआ था -
+चुपचाप एक लाइव गेम को एक परित्यक्त पुश से बदल दिया गया। फ़्रेम अपलोड किए बिना सॉकेट बंद करना
+कुछ नहीं.</p>
+<p>आपके अंतिम बाइट के बाद प्रकाशन में समय लग सकता है, विशेषकर सर्वर छवि के लिए। अपेक्षा करना <code>progress</code>
+ख़त्म होते समय दिल की धड़कन; किसी शांत अंतराल को अपलोड विफलता न समझें।</p>
+<h3 id="upload-limits">अपलोड सीमा</h3>
+<p>सभी अपलोड रूट - HTTP एंडपॉइंट और वेबसॉकेट दोनों - समान नियम साझा करते हैं।</p>
+<table>
+<thead>
+<tr>
+<th>आप LIMIT</th>
+<th>कीमत</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>प्रति गेम डिस्क भत्ता</td>
+<td><strong>2 जीबी</strong> Starhermit.com पर (भत्ता खेल/तैनाती के अनुसार भिन्न हो सकता है)</td>
+</tr>
+<tr>
+<td>प्रति खाता होस्ट की गई फ़ाइलें</td>
+<td><strong>20 जीबी</strong> किसी खाते के सभी खेलों में (प्रति खाता ऑपरेटर-ट्यून करने योग्य)</td>
+</tr>
+<tr>
+<td>भंडार परिनियोजन</td>
+<td><strong>50 एमबी</strong> पुरालेख</td>
+</tr>
+<tr>
+<td><code>starhermit.txt</code> / <code>remove.txt</code></td>
+<td><strong>256 केबी</strong> प्रत्येक; <code>remove.txt</code> अधिकतम 10,000 पथों की सूची (<code>422</code>)</td>
+</tr>
+<tr>
+<td>प्रवर्तन</td>
+<td>लागू किया गया <strong>स्ट्रीमिंग करते समय</strong>, इसलिए एक बड़े आकार का धक्का उड़ान के बीच में ही काट दिया जाता है</td>
+</tr>
+</tbody>
+</table>
+<p>खाते के होस्टिंग भत्ते में से जो कुछ भी बचा है उस पर अपलोड या पुश काट दिया जाता है (<code>413</code> साथ
+<code>limitBytes</code>), और एक रिपोजिटरी परिनियोजन जो इसे पास करेगा वह भत्ते का नामकरण करने वाले कारण के साथ विफल हो जाता है।
+प्रति-पुश और प्रति-गेम एक प्रतिस्थापन पर समान संख्या हैं। एक विलय से घिरा है <strong>इस कारण हुई</strong>
+खेल का आकार, इसलिए एक छोटा सा पैच जो जीवित पेड़ को भत्ते से अधिक बना देगा, अस्वीकार कर दिया गया है।</p>
+<table>
+<thead>
+<tr>
+<th>स्थिति</th>
+<th>अर्थ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td><code>mode</code> नहीं है <code>replace</code> और न <code>merge</code>.</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>ऐसे गेम के विरुद्ध एक मर्ज जिसकी अभी तक कोई प्रकाशित फ़ाइल नहीं है।</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>भत्ते से अधिक. शरीर ढोता है <code>{ "error", "limitBytes" }</code>. A <code>413</code> <strong>बिना</strong> <code>limitBytes</code> सीडीएन की ~100 एमबी बॉडी कैप है, यह नहीं - <a href="#upload-over-a-websocket">अपलोड सॉकेट का उपयोग करें</a>.</td>
+</tr>
+<tr>
+<td><code>422</code></td>
+<td>विकृत संग्रह, या अनुपयोगी सामग्री (लापता लॉन्च फ़ाइल, नहीं)। <code>client/</code>, a <code>server/image.tar</code> क्रिएट रूट पर, एक मर्ज जो लॉन्च फ़ाइल को हटा देगा, <code>remove.txt</code> एक प्रतिस्थापन पर)। साथ ही ए <strong>छंटनी की गई</strong> संग्रह - अपलोड के बीच में कनेक्शन छूट जाने का सामान्य परिणाम।</td>
+</tr>
+<tr>
+<td><code>507</code></td>
+<td>अभी सर्वर में जगह नहीं है. अस्वीकार करना <strong>शरीर को पढ़ने से पहले</strong> जब प्रकाशन क्षमता अनुपलब्ध हो; बाद में पुनः प्रयास करें.</td>
+</tr>
+</tbody>
+</table>
+<p>पुरालेख अपने रूट से बाहर नहीं निकल सकते हैं या उनमें लिंक नहीं हो सकते हैं, और केवल नियमित फ़ाइलें और निर्देशिकाएं ही होती हैं
+निकाले गए - सिम्लिंक, हार्ड लिंक और डिवाइस नोड्स अस्वीकार कर दिए गए हैं। <code>git archive</code> PAX वैश्विक हेडर,
+<code>./</code>-उपसर्ग नाम से <code>tar -czf game.tgz .</code>, और फ़ाइल नाम जिनमें केवल शामिल हैं <code>..</code>
+(<code>sprite..png</code>) स्वीकार किये जाते हैं। ए <code>..</code> पथ खंड अभी भी अस्वीकृत है.</p>
+<h3 id="rate-limit">दर सीमा</h3>
+<p>सबमिट करें, दावा करें, URL बदलें, होस्टिंग और परिनियोजन सभी प्लेटफ़ॉर्म के एक टोकन पर GitHub तक पहुंचें, इसलिए
+कुल मिलाकर वे प्रति खाता प्रति मिनट 10 अनुरोधों तक सीमित हैं (<code>429</code>, साथ <code>Retry-After</code>). एक
+ऑपरेटर इसे एक खाते के लिए जुटा सकता है।</p>
+<h3 id="enable-hosting">होस्टिंग सक्षम करें</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/hosting</code> → <code>GameHostingView</code> ("स्टारहर्मिट पर तैनात करें")</p>
+<pre><code class="language-json">{ "enabled": true }
+</code></pre>
+<h3 id="pin-a-deployment">एक परिनियोजन पिन करें</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/deployment</code> → <code>GameHostingView</code></p>
+<pre><code class="language-json">{ "commit": "&lt;sha or branch&gt;" }
+</code></pre>
+<p><code>commit</code> वैकल्पिक है. शा/शाखा कतारों को पिन करने से पुनः तैनाती होती है; मतदान <code>GET /api/v1/me/github-games/{id}/deployment</code> स्थिति के लिए.</p>
+<p>यह उस गेम के लिए अस्वीकार कर दिया गया है जिसमें कोई रिपॉजिटरी (एक अपलोड किया गया बंडल) नाम नहीं है: एक कमिट पिन करना क्या है
+किसी गेम को उसके रिपॉजिटरी में ले जाता है, और बंडल-निर्मित गेम में कोई नहीं होता है। अपलोड किए गए गेम को पुनः परिनियोजित करना
+github.com लाने के बजाय वॉल्यूम पर अभी भी फ़ाइलों को सत्यापित करता है।</p>
+<h3 id="move-a-game-to-a-new-url">गेम को नए URL पर ले जाएं</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/url</code></p>
+<pre><code class="language-json">{ "repoUrl": "https://github.com/you/new-repo", "displayName": "optional for a hosted URL" }
+</code></pre>
+<p>पंक्ति जीवित रहती है - uid, <code>&lt;uid&gt;.starhermit.com</code>, खेलने का समय, रेटिंग्स - और से पुनः तैनात किया गया है
+गंतव्य. जीथब गंतव्य ऐसा होना चाहिए जिससे कॉल करने वाला यह साबित कर सके कि वे इसे नियंत्रित करते हैं (<code>403</code> अन्यथा),
+और उसके <code>starhermit.txt</code> ए का नाम नहीं लेना चाहिए <em>अलग</em> <code>owner=</code> (<code>403</code>). एक स्क्रिप्टेड या कंटेनर
+बैकएंड तब तक अक्षम है जब तक कि गंतव्य इसे घोषित न कर दे।</p>
+<h3 id="live-sessions-owner">लाइव सत्र (मालिक)</h3>
+<p><code>GET /api/v1/me/github-games/{id}/sessions</code> गेम के सर्वर के सक्रिय सत्रों को सूचीबद्ध करता है।
+<code>DELETE .../sessions/{sessionId}</code> प्लेटफ़ॉर्म परित्याग पथ के माध्यम से एक समाप्त होता है (कोई विजेता नहीं, नहीं
+एलो, कारण <code>operator_ended</code>). इससे अटके हुए सत्र की क्षमता वाली सीट वापस आ जाती है।</p>
+<h3 id="leaderboards-and-achievements-owner">लीडरबोर्ड और उपलब्धियाँ (मालिक)</h3>
+<p>किसी गेम का स्वामी उसका प्रकाशक होता है: आप बना सकते हैं <strong>लीडरबोर्ड</strong> और <strong>उपलब्धियों</strong> इसके लिए
+के अंतर्गत <code>/me/github-games/{id}/leaderboards</code> और <code>/achievements</code> बिना प्रकाशक खाते के. केवल
+आपके गेम का सर्वर उन्हें लिखता है, इसलिए गेम को इसकी आवश्यकता है <code>server=</code> स्क्रिप्ट या <code>container.image=</code>
+बैकएंड - एक ब्राउज़र-केवल गेम मिलता है <code>409</code>. देखना <a href="/hi/docs/api/leaderboards.html#your-games-own-leaderboards">लीडरबोर्ड</a>,
+<a href="/hi/docs/api/achievements.html#achievements-created-by-the-games-owner">उपलब्धियों</a> और यह
+<a href="/hi/docs/tutorials/game-leaderboards-achievements.html">ट्यूटोरियल</a>.</p>
+<h2 id="dtos">डीटीओ</h2>
+<pre><code class="language-json">// GitHubGameDto
+{
+  "id": "...",
+  "repoUrl": "...",
+  "ownerLogin": "...",
+  "repoName": "...",
+  "displayName": "...",
+  "launchPath": "index.html",
+  "serverScriptPath": "server.js",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "serverRuntime": "script",
+  "isVerifiedOwner": true,
+  "metadataSource": "...",
+  "createdAt": "...",
+  "coverArtSource": "manifest",
+  "coverArtUpdatedAt": "...",
+  "hosting": { "hostingEnabled": true },
+  "description": "Tend a garden on a drifting asteroid.",
+  "releaseNotesUpdatedAt": "..."
+}
+</code></pre>
+<ul>
+<li><code>serverScriptPath</code> केवल जावास्क्रिप्ट बैकएंड के लिए मौजूद है। वर्तमान डीटीओ कंटेनर छवि संदर्भ को उजागर नहीं करता है।</li>
+<li><code>gameSlug</code> स्थानीय फ़ोल्डर से जोड़े गए प्रत्येक गेम और सत्यापित स्वामी द्वारा जोड़े गए प्रत्येक गेम के लिए मौजूद है, <strong>सर्वर बैकएंड के साथ या उसके बिना</strong> - यह गेम के नियंत्रण, सेटिंग्स, क्लाउड-सेव स्लॉट, रूम और लॉन्च टोकन को संबोधित करता है। यह है <code>null</code> केवल एक रिपॉजिटरी सबमिशन के लिए जिसका स्वामी सिद्ध नहीं है। यह आपको नहीं बताता कि गेम में बैकएंड है या नहीं; <code>serverRuntime</code> करता है।</li>
+<li><code>serverRuntime</code> कहता है कि गेम में सर्वर बैकएंड है या नहीं: <code>"script"</code>, <code>"container"</code>, या <code>null</code> केवल-ब्राउज़र गेम के लिए। इससे सहमत है <code>GET /api/v1/games/{gameSlug}</code>, जो उत्तर देता है <code>404</code> बिल्कुल जब यह है <code>null</code>.</li>
+<li>स्थानीय फ़ोल्डर से जोड़े गए गेम के लिए, <code>repoUrl</code> एक सिंथेटिक है <code>upload:&lt;id&gt;</code> मार्कर और <code>ownerLogin</code>/<code>repoName</code> खाली हैं - नाम के लिए कोई भंडार नहीं है, और एक खाली मालिक ही सूची को दावा योग्य नहीं बनाता है।</li>
+<li><code>coverArtSource</code> है <code>"upload"</code>, <code>"manifest"</code> या <code>null</code>, और <code>coverArtUpdatedAt</code> वह समय है जब वह कवर आखिरी बार बदला गया था - इसका उपयोग कैश-बस्ट करने के लिए करें <code>/cover</code> यूआरएल. कुछ भी गैर-शून्य का मतलब है कि खेल में लाने के लिए कवर कला है; <code>null</code> मतलब वापस गिरना <code>/icon</code>. दोनों स्रोत समान नहीं हैं: एक अपलोड हमेशा जीतता है, और यह एकमात्र है <code>DELETE /cover</code> हटा सकते हैं.</li>
+<li><code>description</code> प्रकट का विवरण है, या <code>null</code>. <code>releaseNotesUpdatedAt</code> वह समय है जब रिलीज़ नोट अंतिम होते हैं <em>बदला हुआ पाठ</em> (<code>null</code> जब खेल में कुछ भी न हो)। समान नोटों को पुनः तैनात करने से यह स्थानांतरित नहीं होता है, इसलिए इसे चलाना सुरक्षित है "नया क्या है" बैज: खिलाड़ी द्वारा अंतिम बार देखे गए मूल्य को याद रखें और तुलना करें। नोट स्वयं सूची में नहीं हैं; देखना <a href="#description-and-release-notes">विवरण और रिलीज़ नोट्स</a>.</li>
+<li><code>SharedGitHubGameDto</code> का विस्तार <code>GitHubGameDto</code> साथ <code>submittedByUserId</code> और <code>submittedByUsername</code>.</li>
+</ul>
+<h3 id="description-and-release-notes">विवरण और रिलीज़ नोट्स</h3>
+<p>दोनों खेल से आते हैं <code>starhermit.txt</code>; देखना
+<a href="/hi/docs/starhermit-txt.html#description-and-release-notes">प्रकट संदर्भ</a> उन्हें कैसे लिखना है इसके लिए.
+विवरण उपरोक्त गेम सूची में है। रिलीज़ नोट 20,000 वर्णों तक चल सकते हैं, इसलिए वे
+ब्राउज़ सूची से बाहर रखा जाता है, जो प्रत्येक गेम को एक बार में लौटाता है, और प्रति गेम लाया जाता है:</p>
+<pre><code class="language-http">GET /api/v1/github-games/{id}/release-notes
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<pre><code class="language-json">// GitHubGameReleaseNotesDto
+{
+  "id": "...",
+  "releaseNotes": "- New: night cycle\n- Fixed: seeds vanishing after a reload",
+  "updatedAt": "2026-09-27T10:15:00+00:00",
+  "commitSha": "4f2a…"
+}
+</code></pre>
+<ul>
+<li><code>releaseNotes</code> और <code>updatedAt</code> हैं <code>null</code> जब गेम नो नोट्स घोषित करता है।</li>
+<li><code>commitSha</code> एक रिपॉजिटरी गेम के लिए तैनात प्रतिबद्धता है, और <code>null</code> अपलोड किए गए बिल्ड के लिए।</li>
+<li>केवल तभी पूछें जब <code>releaseNotesUpdatedAt</code> यह सूची आपके द्वारा पिछली बार दिखाई गई सूची से नई है।</li>
+<li>टेक्स्ट बिल्कुल वैसे ही लौटाया जाता है जैसे डेवलपर ने इसे लिखा था (आमतौर पर मार्कडाउन)। इसका प्रतिपादन है
+ग्राहक की पसंद, और इसे किसी भी उपयोगकर्ता पाठ की तरह अविश्वसनीय इनपुट के रूप में माना जाना चाहिए।</li>
+</ul>
+<pre><code class="language-json">// GameHostingView
+{
+  "hostingEnabled": true,
+  "hostedUrl": "https://yourgame.starhermit.com",
+  "deployStatus": "...",
+  "pinnedCommitSha": "...",
+  "deployedCommitSha": "...",
+  "deployError": null,
+  "deployedAt": "..."
+}
+</code></pre>
+<p><code>hostedUrl</code>, <code>pinnedCommitSha</code>, <code>deployedCommitSha</code>, <code>deployError</code>, और <code>deployedAt</code> वैकल्पिक हैं.</p>
+<pre><code class="language-json">// GameStatsDto  (GET /api/v1/me/github-games/{id}/stats — owner only)
+{
+  "totalPlayers": 42,
+  "playingNow": 3,
+  "totalSessions": 130,
+  "totalPlaytimeMinutes": 8140,
+  "lastPlayedAt": "2026-07-29T08:45:24Z",
+  "livenessWindowHours": 4
+}
+</code></pre>
+<h2 id="publish-your-own-game-walkthrough">अपना खुद का गेम प्रकाशित करें: वॉकथ्रू</h2>
+<p>इसमें दो मार्ग हैं। यदि आपका गेम गिट रिपॉजिटरी में रहता है, तो नीचे दिए गए चरणों का पालन करें।
+यदि यह आपकी मशीन पर सिर्फ एक फ़ोल्डर है, तो एक कॉल यह सब कर देती है:
+<a href="#add-a-game-from-a-local-folder">स्थानीय फ़ोल्डर से गेम जोड़ें</a> खेल को पंजीकृत करता है, प्रकाशित करता है
+फ़ाइलें, और इसे लाइव छोड़ देता है - कोई होस्टिंग टॉगल नहीं और कोई कमिट पिन नहीं, क्योंकि इसमें कोई रिपॉजिटरी नहीं है
+ट्रैक.</p>
+<ol>
+<li><strong>एक स्रोत चुनें</strong>: एक रेपो युक्त पुश करें <code>starhermit.txt</code> मूल पर (वैकल्पिक रूप से या तो a घोषित करना)। <code>server.js</code> स्क्रिप्ट या कंटेनर छवि), या पहले से होस्ट किए गए ब्राउज़र गेम का सार्वजनिक यूआरएल तैयार करें।</li>
+<li><strong>अपनी GitHub पहचान लिंक करें</strong> OAuth प्रवाह के माध्यम से (देखें <a href="/hi/docs/api/auth.html">auth.md</a>); के साथ सत्यापित करें <code>GET /api/v1/me/github</code>.</li>
+<li><strong>खेल को पंजीकृत करें</strong>: <code>POST /api/v1/me/github-games</code> रिपॉजिटरी या होस्टेड-गेम यूआरएल के साथ <code>repoUrl</code>.</li>
+<li><strong>केवल रिपॉजिटरी गेम - होस्टिंग सक्षम करें</strong>: <code>PUT /api/v1/me/github-games/{id}/hosting</code> साथ <code>{ "enabled": true }</code>.</li>
+<li><strong>केवल रिपॉजिटरी गेम - एक कमिट पिन करें</strong>: <code>PUT /api/v1/me/github-games/{id}/deployment</code> साथ <code>{ "commit": "&lt;sha&gt;" }</code>. पिन किया गया कमिट लाइव संस्करण को नियंत्रित करता है।</li>
+<li><strong>खिलाड़ी गेम लॉन्च करते हैं</strong>: एक तैनात रिपॉजिटरी गेम यहां परोसा जाता है <code>&lt;slug&gt;.starhermit.com</code>; प्रत्यक्ष रूप से होस्ट किया गया गेम अपना सबमिट किया गया URL खोलता है। ए के साथ हर खेल <code>gameSlug</code> - बैकएंड या नहीं - से एक लॉन्च टोकन प्राप्त होता है <code>POST /api/v1/games/&lt;slug&gt;/launch-token</code> यूआरएल खंड में (वैकल्पिक रूप से <code>&amp;session_id=&lt;guid&gt;</code> डीप-लिंक आमंत्रित करने के लिए)।</li>
+</ol>
+<p>पूर्ण क्लाइंट-साइड अनुबंध के लिए - गेम लॉन्च टोकन को कैसे पढ़ता है और एपीआई से बात करता है - देखें <a href="/hi/docs/tutorials/chess-walkthrough.html">शतरंज का पूर्वाभ्यास</a> संदर्भ कार्यान्वयन का.</p>
+<h2 id="see-also">यह भी देखें</h2>
+<ul>
+<li><a href="/hi/docs/api/games.html">games.md</a> - गेम एंडपॉइंट, लॉन्च टोकन</li>
+<li><a href="/hi/docs/api/game-scripts.html">game-scripts.md</a> - सैंडबॉक्स्ड जावास्क्रिप्ट गेम सर्वर</li>
+<li><a href="/hi/docs/api/container-games.html">container-games.md</a> - कंटेनर-होस्टेड गेम सर्वर</li>
+<li><a href="/hi/docs/api/auth.html">auth.md</a> - JWT और OAuth पहचान लिंकिंग</li>
+<li><a href="/hi/docs/tutorials/chess-walkthrough.html">ट्यूटोरियल/शतरंज-वॉकथ्रू.एमडी</a> - शुरू से अंत तक संदर्भ कार्यान्वयन</li>
+<li><a href="/hi/docs/tutorials/claim-existing-game.html">ट्यूटोरियल/दावा-मौजूदा-गेम.एमडी</a> - आपके स्वामित्व वाली मौजूदा सूची पर कब्ज़ा करें</li>
+</ul>
+<p>साझा <a href="/hi/docs/api/conventions.html">एपीआई कन्वेंशन</a> प्रतिक्रिया पार्सिंग, टाइमस्टैम्प, पेजिनेशन और पुनः प्रयास का वर्णन करें।</p>
+<p>देखना <a href="/hi/docs/credentials.html">क्रेडेंशियल अनुकूलता</a> और <a href="/hi/docs/api/contracts.html">मशीन-पठनीय अनुबंध</a>.</p>
+
+{% endraw %}

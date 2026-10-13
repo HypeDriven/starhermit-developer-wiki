@@ -1,0 +1,111 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Crea tu primer juego de navegador alojado"
+source_url: "/docs/tutorials/browser-quickstart.html"
+source_path: "docs/tutorials/browser-quickstart.md"
+source_hash: "41cf9fbedb43c0236d904fb42d9467a521861df09572f995e085dda2e06c1d23"
+translation: "machine"
+permalink: "/es/docs/tutorials/browser-quickstart.html"
+---
+{% raw %}
+<h1 id="build-your-first-hosted-browser-game">Crea tu primer juego de navegador alojado</h1>
+<p><a href="/docs/examples/browser-quickstart.zip">Descargar Coleccionista de Estrellas</a>, un pequeño juego completo con dos entradas.
+opciones: juego en cuenta con guardado en la nube y juego para un jugador cuyo progreso se guarda solo en la memoria.
+<a href="/docs/examples/browser-quickstart/index.html">Prueba el juego sin firmar</a> en esta wiki; el inicio de sesión de la cuenta se convierte
+disponible después de publicar su propia copia en StarHermit.</p>
+<p>Necesita una cuenta StarHermit para publicar. El juego en sí no necesita servidor backend ni dependencia.
+instalación, paso de compilación u organización del editor.</p>
+<h2 id="1-unzip-and-play-locally">1. Descomprime y juega localmente</h2>
+<p>El ZIP contiene <code>index.html</code>, <code>app.js</code>, <code>style.css</code>, <code>starhermit.txt</code>y los dos archivos auxiliares.
+Sirva la carpeta extraída con un servidor estático local, por ejemplo:</p>
+<pre><code class="language-bash">python3 -m http.server 8000 --directory star-collector
+</code></pre>
+<p>Aquí <code>star-collector</code> es la carpeta en la que extrajiste. Abierto <code>http://localhost:8000</code> y elige
+<strong>Juega para un jugador (el progreso no se guarda)</strong>. Haga clic en la estrella. Volver al inicio o recargar
+inicia una nueva ejecución sin seguimiento. Este modo no escribe ni el progreso local ni el progreso de la cuenta.</p>
+<h2 id="2-publish-the-distributable-folder">2. Publicar la carpeta distribuible.</h2>
+<p>El manifiesto ya está en la raíz de la carpeta:</p>
+<pre><code class="language-ini">name=Star Collector Quickstart
+launch=index.html
+description=A small single-player game with account saves or untracked play.
+</code></pre>
+<p>En la interfaz de usuario de publicación de juegos de StarHermit, agregue esta carpeta como un juego nuevo. Toda la carpeta seleccionada es la
+compilación publicada. Conserve sólo los archivos que desea publicar. El equivalente API empaqueta los archivos.
+bajo <code>client/</code> y envía un archivo gzip sin formato:</p>
+<pre><code class="language-bash">mkdir -p bundle/client
+cp -R star-collector/. bundle/client/
+cp star-collector/starhermit.txt bundle/starhermit.txt
+# Write the archive outside bundle so it cannot include itself.
+tar -C bundle -czf star-collector.tar.gz .
+
+curl --fail-with-body -X POST https://api.starhermit.com/api/v1/me/github-games/upload \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H 'Content-Type: application/gzip' \
+  --data-binary @star-collector.tar.gz
+</code></pre>
+<p><code>ACCESS_TOKEN</code> es el token completo de su cuenta, después de la aceptación explícita de los términos actuales. la respuesta
+<code>game.id</code>, <code>game.gameSlug</code>y el subdominio alojado identifican tu juego. Abra la URL alojada devuelta.
+Para lanzamientos posteriores, utilice el juego de ese juego. <a href="/es/docs/api/github-games.html#push-a-game-bundle">punto final del paquete</a>
+en lugar de crear otro anuncio. Ver <a href="/es/docs/tutorials/ci-cd-build-upload.html">publicación de CI</a> cuando esté listo.</p>
+<h2 id="3-try-the-two-account-entry-paths">3. Pruebe las dos rutas de ingreso a la cuenta</h2>
+<p><strong>Lanzamiento desde StarHermit:</strong> los suministros del lanzador <code>#game_token=&lt;jwt&gt;</code>. El ayudante lo captura y
+lo elimina de la URL antes de que se ejecute el módulo del juego. Elegir <strong>Continúe con su cuenta StarHermit</strong>.</p>
+<p><strong>Abra la URL alojada directamente:</strong> elegir <strong>Iniciar sesión con StarHermit</strong>. El selector de proveedores permite al
+El jugador inicia sesión con una cuenta existente o crea una. Regresa directamente a este juego con un alcance.
+<code>#access_token=&lt;jwt&gt;</code>; no se envía ninguna credencial de toda la cuenta al juego.</p>
+<p>El juego carga el progreso solo cuando el jugador elige jugar con cuenta. Si los términos actuales necesitan aceptación,
+muestra el documento como texto y ofrece <strong>Aceptar y continuar</strong>. La aceptación envía solo el hash.
+de la revisión mostrada. Una revisión modificada se vuelve a mostrar para otra decisión explícita.</p>
+<h2 id="4-check-progress-and-failures">4. Verifique el progreso y los fracasos</h2>
+<p>Recoge algunas estrellas en el modo cuenta, espera <strong>Guardado</strong>y recargar. El conteo regresa después de elegir
+juego de cuenta. Abra una segunda pestaña en el mismo recuento guardado: guarde en una y luego recopile en la otra. el
+el segundo debe mostrar un conflicto y ofrecer <strong>Cargar el último progreso en la nube</strong> en lugar de sobrescribirlo.</p>
+<p>El documento guardado es <code>{ version: 1, points: &lt;non-negative integer&gt; }</code>. El juego carga y valida.
+antes de escribir, utiliza la ETag cargada para actualizaciones condicionales y bloquea las escrituras después de una lectura fallida.
+Guarda en cada colección y etiqueta los datos guardados solo después del reconocimiento. Ver
+<a href="/es/docs/tutorials/cloud-save-sync.html">la receta salvadora</a> para formatos, migración y documentos de mayor tamaño.</p>
+<p>Al seleccionar el juego sin seguimiento, se descarta el token de jugador del juego y se detiene la renovación del fondo. Sin nube
+Se produce el guardado, el logro, la tabla de clasificación o la escritura de progreso local. Elegir jugar con cuenta nuevamente utiliza
+Regístrese para obtener un token nuevo.</p>
+<h2 id="5-adapt-it-to-your-game">5. Adáptalo a tu juego</h2>
+<p>Reemplaza el botón de estrella y el esquema de progreso con tu juego. Mantenga las opciones de entrada, token
+captura, aceptación de términos explícitos, regla de carga antes de guardar, manejo de errores y estado de guardado.
+Declare las acciones del teclado en el manifiesto y lea el <a href="/es/docs/api/games.html#per-player-control-bindings">API de controles</a>
+cuando tu juego necesita reenlaces. Ponga las preferencias de volumen y gráficos en <a href="/es/docs/api/games.html#per-player-game-settings">ajustes</a>.</p>
+<p>Para resultados multijugador o competitivos validados, agrega <a href="/es/docs/choosing-an-integration.html">un script o contenedor</a>.
+El contador en la nube de este inicio rápido es el progreso propiedad del cliente, no una prueba de una puntuación legítima.</p>
+<table>
+<thead>
+<tr>
+<th>Archivo</th>
+<th>Objetivo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index.html</code>, <code>style.css</code></td>
+<td>Interfaz de usuario de entrada, términos, jugabilidad y estado accesibles</td>
+</tr>
+<tr>
+<td><code>app.js</code></td>
+<td>Modos de entrada, consentimiento explícito, validación de progreso, puntos de control, conflictos</td>
+</tr>
+<tr>
+<td><code>starhermit-sdk.js</code></td>
+<td>Captura de token de lanzamiento, inicio de sesión alojado, renovación de token</td>
+</tr>
+<tr>
+<td><code>cloud-save-store.js</code></td>
+<td>Receta de carga JSON sin formato/guardado condicional</td>
+</tr>
+<tr>
+<td><code>starhermit.txt</code></td>
+<td>Metadatos de publicación pública</td>
+</tr>
+</tbody>
+</table>
+<p>Ver <a href="/es/docs/credentials.html">cartas credenciales</a>, <a href="/es/docs/api/conventions.html">Convenciones API</a>, y
+<a href="/es/docs/troubleshooting.html">solución de problemas</a> cuando una solicitud se comporta de manera diferente a lo esperado.</p>
+
+{% endraw %}

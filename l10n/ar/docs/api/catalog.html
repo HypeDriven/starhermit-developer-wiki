@@ -1,0 +1,365 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "كتالوج البرمجيات"
+source_url: "/docs/api/catalog.html"
+source_path: "docs/api/catalog.md"
+source_hash: "0dc7378c084cb717711091cd651d3fc514625f8737814c055edb6ab2fe19467a"
+translation: "machine"
+permalink: "/ar/docs/api/catalog.html"
+---
+{% raw %}
+<h1 id="software-catalog">كتالوج البرمجيات</h1>
+<p>يغطي كتالوج البرامج التصفح والمطالبة بالعناوين وإنشاء القوائم والتنزيل والحفظ السحابي وقائمة الرغبات والتقييمات. القراءات مجهولة المصدر. تتطلب الكتابة JWT.</p>
+<p>عنوان URL الأساسي: <code>https://api.starhermit.com</code>. جميع الطرق تحت <code>/api/v1/...</code>.</p>
+<h2 id="browsing-and-claiming-titles">التصفح والمطالبة بالعناوين</h2>
+<table>
+<thead>
+<tr>
+<th>طريقة</th>
+<th>طريق</th>
+<th>مصادقة</th>
+<th>وصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/software</code></td>
+<td>مجهول</td>
+<td>بحث وصفحة الكتالوج</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/software/{id}</code></td>
+<td>مجهول</td>
+<td>احصل على عنوان واحد، أو 404</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/software/{id}/builds?page=&amp;pageSize=</code></td>
+<td>مجهول</td>
+<td>قائمة مقسمة إلى صفحات للبنيات للحصول على عنوان</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/software/{id}/claim</code></td>
+<td>JWT</td>
+<td>المطالبة الذاتية بلقب مجاني، ومنح الاستحقاق</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/software/{id}/launch</code></td>
+<td>JWT</td>
+<td>بدء جلسة الإطلاق (يتطلب الاستحقاق)</td>
+</tr>
+</tbody>
+</table>
+<p><code>GET /api/v1/software</code> يقبل معلمات الاستعلام <code>q</code> (النص الكامل)، <code>category</code>, <code>tag</code>, <code>publisherId</code>, <code>platform</code>, <code>releaseStatus</code>, <code>sort</code>, <code>page</code>، و <code>pageSize</code>. صالح <code>sort</code> قيم: <code>name</code>, <code>name_desc</code>, <code>created</code>, <code>created_desc</code>, <code>updated</code>, <code>updated_desc</code>. يعود أ <code>PagedResult</code>:</p>
+<pre><code class="language-json">{
+  "items": [
+    {
+      "id": "…",
+      "name": "…",
+      "description": "…",
+      "publisherId": "…",
+      "category": "…",
+      "platform": "…",
+      "releaseStatus": "…",
+      "tags": ["…"],
+      "priceCents": 0,
+      "createdAt": "…",
+      "updatedAt": "…"
+    }
+  ],
+  "totalCount": 1,
+  "page": 1,
+  "pageSize": 20
+}
+</code></pre>
+<p><code>GET /api/v1/software/{id}/builds</code> يعود أ <code>PagedResult</code> ل <code>SoftwareBuild</code>:</p>
+<pre><code class="language-json">{
+  "items": [
+    {
+      "id": "…",
+      "titleId": "…",
+      "version": "…",
+      "releaseDate": "…",
+      "releaseNotes": "…",
+      "metadata": "…",
+      "createdAt": "…",
+      "updatedAt": "…"
+    }
+  ],
+  "totalCount": 1,
+  "page": 1,
+  "pageSize": 20
+}
+</code></pre>
+<p><code>POST /api/v1/software/{id}/claim</code> يعمل فقط مع العناوين المجانية (<code>priceCents == 0</code>); يمنح المتصل استحقاقًا ويعيد 204. أما بالنسبة للعناوين المدفوعة فيرجع 402 مع:</p>
+<pre><code class="language-json">{"error": "purchasing is not available yet"}
+</code></pre>
+<p><code>POST /api/v1/software/{id}/launch</code> يتطلب استحقاقًا (403 بخلاف ذلك) ويعيد أ <code>LaunchSession</code>:</p>
+<pre><code class="language-json">{
+  "launchId": "…",
+  "startTime": "…"
+}
+</code></pre>
+<p>يقوم بتسجيل نشاط الإطلاق، والذي يكون مخفيًا إذا كانت إعدادات خصوصية المستخدم تنص على ذلك (انظر <a href="/ar/docs/api/profile.html">profile.md</a>). انهاء الجلسة ب <code>POST /api/v1/activity/launches/{id}/end</code> - يرى <a href="/ar/docs/api/activity.html">activity.md</a>. يتم سرد استحقاقات المستخدم عبر <code>GET /api/v1/me/entitlements</code> (يرى <a href="/ar/docs/api/profile.html">profile.md</a>).</p>
+<h2 id="downloads">التنزيلات</h2>
+<table>
+<thead>
+<tr>
+<th>طريقة</th>
+<th>طريق</th>
+<th>مصادقة</th>
+<th>وصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/software/{id}/download</code></td>
+<td>JWT</td>
+<td>الحصول على عنوان URL للتنزيل الموقع (يتطلب الاستحقاق)</td>
+</tr>
+</tbody>
+</table>
+<p>ويتطلب استحقاقا (403 خلاف ذلك). العوائد:</p>
+<pre><code class="language-json">{
+  "downloadUrl": "…"
+}
+</code></pre>
+<p>يستهدف عنوان URL أول أصل قابل للتنزيل لأحدث إصدار. تسجل المكالمة نشاط التنزيل.
+التوزيع الثنائي للكتالوج هو حاليًا معاينة؛ عناوين URL التي تم إرجاعها ليست مضمونة الإنتاج
+التنزيلات. يرى <a href="/ar/docs/availability.html">توفر الميزة</a> قبل الاعتماد على تدفق النشر هذا.</p>
+<h2 id="cloud-saves">الحفظ السحابي</h2>
+<p>فتحة واحدة لكل لعبة، الكتابة الأخيرة تفوز. تتطلب كافة المسارات JWT — رمز مستخدم كامل، أو رمز لعبة
+رمز الإطلاق لفتحة تلك اللعبة الخاصة (أدناه).</p>
+<p>ينطبق الحد الأقصى البالغ 10 ميغابايت (10,485,760 بايت) على <strong>حفظ فك التشفير</strong>، وليس الطلب. <code>PUT</code> يأخذ
+حفظ بترميز base64 بتنسيق JSON، وبالتالي فإن النص أكبر بمقدار الثلث تقريبًا من الحفظ - حوالي 14 ميجابايت في
+الحد الأقصى - وتقبل واجهة برمجة التطبيقات (API) ذلك.</p>
+<table>
+<thead>
+<tr>
+<th>الحد (لكل حساب)</th>
+<th>تقصير</th>
+<th>رفض</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>حفظ واحد، فك التشفير</td>
+<td>10 ميجابايت</td>
+<td><code>413 cloud_save_too_large</code></td>
+</tr>
+<tr>
+<td>الألعاب مع الحفظ</td>
+<td>200</td>
+<td><code>409 cloud_save_slots_exhausted</code> (حفظ للعبة جديدة)</td>
+</tr>
+<tr>
+<td>كل شيء يحفظ معا</td>
+<td>1 جيجابايت</td>
+<td><code>507 cloud_save_quota_exceeded</code>، مع <code>used</code></td>
+</tr>
+<tr>
+<td>التحميلات</td>
+<td>30 دقيقة</td>
+<td><code>429</code>، مع <code>Retry-After</code></td>
+</tr>
+</tbody>
+</table>
+<p>كل رفض يذكر الرقم الساري باسم <code>limit</code>. يتم قياس المجموع على الحساب <em>آخر</em>
+يحفظ، لذلك يمكن دائمًا استبدال الفتحة بشيء ليس أكبر. يمكن للمشغلين تغيير أي من
+هذه لحساب واحد.</p>
+<table>
+<thead>
+<tr>
+<th>طريقة</th>
+<th>طريق</th>
+<th>مصادقة</th>
+<th>وصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}/info</code></td>
+<td>JWT</td>
+<td>حفظ البيانات الوصفية: <code>{ exists, sizeBytes, updatedAt? }</code></td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}</code></td>
+<td>JWT</td>
+<td><code>application/zip</code> بايت، 404 إذا لم يكن هناك</td>
+</tr>
+<tr>
+<td>يضع</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}</code></td>
+<td>JWT</td>
+<td>تحميل حفظ (حفظ تم فك ترميزه ≥ 10 ميجابايت، <code>gameKey</code> ≥ 300 حرف)</td>
+</tr>
+</tbody>
+</table>
+<p>وضع الجسم:</p>
+<pre><code class="language-json">{
+  "dataBase64": "…"
+}
+</code></pre>
+<p>وضع الاستجابة:</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "sizeBytes": 0,
+  "updatedAt": "…"
+}
+</code></pre>
+<h3 id="saving-from-inside-a-game-launch-token">الحفظ من داخل اللعبة (رمز الإطلاق)</h3>
+<p>يمكن للعبة التي يتم تشغيلها باستخدام رمز الإطلاق المميز قراءة وكتابة حفظ اللاعب لها <strong>تلك اللعبة</strong>.
+تحفظ لعبتك نفسها في أي مكان يتم تشغيله فيه — سواء كان متصفحًا أو تطبيق StarHermit لسطح المكتب الذي يتم تشغيله
+الألعاب المستضافة في المتصفح أيضًا - وبالتالي فإن عملية الحفظ تتبع اللاعب الموجود بينها.</p>
+<p>المفتاح هو <code>game:&lt;gameId&gt;</code>، أين <code>&lt;gameId&gt;</code> هو معرف لعبتك - نفس قيمة سبيكةها
+<code>&lt;gameId&gt;.starhermit.com</code> العنوان، و <code>game_scope</code> المطالبة برمز الإطلاق:</p>
+<pre><code class="language-js">const key = `game:${gameScope}`;            // e.g. "game:3fa85f64-5717-4562-b3fc-2c963f66afa6"
+
+// Load on startup — 404 means no save yet.
+const res = await fetch(`/api/v1/me/cloud-saves/${key}`, { headers: { Authorization: `Bearer ${launchToken}` } });
+if (res.status !== 404 &amp;&amp; !res.ok) throw new Error(`Save load failed: ${res.status}`);
+const save = res.status === 404 ? null : new Uint8Array(await res.arrayBuffer());
+const etag = res.headers.get("ETag");
+if (save &amp;&amp; !etag) throw new Error("Save version unavailable; do not overwrite it.");
+// Validate/decode your own save format before adopting it or enabling uploads.
+
+// Save at checkpoints, not every frame.
+const written = await fetch(`/api/v1/me/cloud-saves/${key}`, {
+  method: "PUT",
+  headers: {
+    Authorization: `Bearer ${launchToken}`, "Content-Type": "application/json",
+    ...(etag ? { "If-Match": etag } : { "If-None-Match": "*" }),
+  },
+  body: JSON.stringify({ dataBase64: base64(zipBytes) }), // Your ZIP encoder and bytes.
+});
+if (written.status === 412) throw new Error("Another device saved. Reload before writing again.");
+if (!written.ok) throw new Error(`Save write failed: ${written.status}`);
+const acknowledgement = await written.json(); // Retain acknowledgement.etag for your next write.
+</code></pre>
+<ul>
+<li><strong>فقط هذا المفتاح بالضبط.</strong> أي مفتاح آخر - لعبة أخرى، أو لعبة متجر، أو تهجئة مختلفة
+لك (الحرف الكبير، المعرف العاري) - هو <code>403</code> للحصول على رمز الإطلاق. يتضمن ذلك <code>github:&lt;gameId&gt;</code>,
+الفتحة المنفصلة التي يستخدمها تطبيق سطح المكتب عندما يقوم اللاعب بمزامنة مجلد حفظ محلي للعبتك
+لا يمكن لهذه المزامنة أبدًا استبدال الحفظ الذي تكتبه لعبتك.</li>
+<li><strong>أي تنسيق.</strong> لا تفتح المنصة الحفظ مطلقًا؛ قم بتخزين كل ما يمكن للعبتك قراءته (إنه كذلك
+بمثابة <code>application/zip</code> يغض النظر). ما يصل إلى 10 ميغابايت.</li>
+<li><strong>عمليات الكتابة غير المشروطة هي آخر انتصارات الكتابة</strong>، بلا تاريخ. استخدم الكتابة الشرطية للكشف
+حفظ علامتي تبويب/جهازين في وقت واحد. قم بالتحميل عند البداية وحفظه عند نقاط التفتيش الأمامية. خروج الصفحة
+تعتبر التحميلات أفضل جهد ولها حدود لحجم جسم المتصفح؛ يرى <a href="/ar/docs/tutorials/cloud-save-sync.html">وصفة الحفظ الآمن</a>.</li>
+<li><strong>كل حفظ له نسخة.</strong> إنه <code>ETag</code> قيد التنزيل، على <code>/info</code> (أيضا كما <code>etag</code>) وعلى
+ال <code>PUT</code> إجابة. إرسالها مرة أخرى كما <code>If-Match</code> والكتابة تحدث فقط إذا لم يقم أحد بحفظها
+منذ؛ خلاف ذلك <code>412 {"error":"precondition_failed","etag":"&lt;current&gt;"}</code> يخبرك الإصدار ل
+تحميل. <code>If-Match: *</code> يتطلب حفظًا موجودًا؛ <code>If-None-Match: *</code> يكتب فقط عندما لا يكون هناك شيء.
+مع عدم وجود رأس أ <code>PUT</code> غير مشروط - الكتابة الأخيرة تفوز. أ <code>GET</code> مع
+<code>If-None-Match: &lt;etag&gt;</code> إجابات <code>304</code> عندما يكون لديك بالفعل أحدث عملية حفظ.</li>
+<li>اللعبة التي لا تحتوي على قائمة مستضافة (لعبة يوفرها المشغل) لا تحتوي على فتحة.</li>
+</ul>
+<p>التفضيلات الصغيرة والمتغيرة بشكل متكرر تنتمي إليها <a href="/ar/docs/api/games.html#per-player-game-settings">إعدادات لكل لاعب</a>
+بدلاً من؛ ويمكن الوصول إليها أيضًا باستخدام رمز الإطلاق ودعم التحديثات الجزئية.</p>
+<h2 id="wishlist">قائمة الرغبات</h2>
+<p>تتطلب جميع الطرق JWT.</p>
+<table>
+<thead>
+<tr>
+<th>طريقة</th>
+<th>طريق</th>
+<th>مصادقة</th>
+<th>وصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/wishlist</code></td>
+<td>JWT</td>
+<td><code>{ titleIds: guid[] }</code></td>
+</tr>
+<tr>
+<td>يضع</td>
+<td><code>/api/v1/me/wishlist/{titleId}</code></td>
+<td>JWT</td>
+<td>أضف إلى قائمة الرغبات، 204 (عاجز)</td>
+</tr>
+<tr>
+<td>يمسح</td>
+<td><code>/api/v1/me/wishlist/{titleId}</code></td>
+<td>JWT</td>
+<td>إزالة من قائمة الرغبات، 204</td>
+</tr>
+</tbody>
+</table>
+<h2 id="ratings">التقييمات</h2>
+<p>تتطلب جميع الطرق JWT. مفتاح اللعبة الموحد هو دليل الكتالوج، أو <code>"provider:externalId"</code> للألعاب الخارجية (انظر <a href="/ar/docs/api/external-libraries.html">external-libraries.md</a>).</p>
+<table>
+<thead>
+<tr>
+<th>طريقة</th>
+<th>طريق</th>
+<th>مصادقة</th>
+<th>وصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>يضع</td>
+<td><code>/api/v1/me/ratings</code></td>
+<td>JWT</td>
+<td>رفع تقييمي للعبة</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/ratings/query</code></td>
+<td>JWT</td>
+<td>ملخصات تصنيف دفعة الجلب</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/ratings/reviews?key=&amp;top=</code></td>
+<td>JWT</td>
+<td>تقييمات للعبة (<code>top</code> الافتراضي 10)</td>
+</tr>
+</tbody>
+</table>
+<p>وضع الجسم:</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "stars": 4,
+  "review": "…"
+}
+</code></pre>
+<p><code>stars</code> هو 0-5؛ <code>review</code> هو اختياري. الرد هو أ <code>RatingSummaryDto</code>:</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "average": 4.5,
+  "count": 12,
+  "myStars": 4
+}
+</code></pre>
+<p><code>POST /api/v1/ratings/query</code> الجسم والاستجابة:</p>
+<pre><code class="language-json">{
+  "keys": ["…", "…"]
+}
+</code></pre>
+<p>يعود <code>RatingSummaryDto[]</code>. <code>GET /api/v1/ratings/reviews</code> يعود <code>GameReviewDto[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "userId": "…",
+    "username": "…",
+    "stars": 4,
+    "review": "…",
+    "timestamp": "…"
+  }
+]
+</code></pre>
+<p>يرى <a href="/ar/docs/api/conventions.html#requests-and-responses">اتفاقيات API</a> لتحليل الخطأ. متعلق ب: <a href="/ar/docs/api/achievements.html">achievements.md</a>, <a href="/ar/docs/api/leaderboards.html">leaderboards.md</a>.</p>
+<p>يرى <a href="/ar/docs/credentials.html">التوافق الاعتماد</a> و <a href="/ar/docs/api/contracts.html">العقود المقروءة آليا</a>.</p>
+
+{% endraw %}

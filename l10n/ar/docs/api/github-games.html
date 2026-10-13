@@ -1,0 +1,848 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "ألعاب جيثب"
+source_url: "/docs/api/github-games.html"
+source_path: "docs/api/github-games.md"
+source_hash: "3ac05be03d6f084237353cccfe3c7a2c060046dd000d68711193907a1b4c6263"
+translation: "machine"
+permalink: "/ar/docs/api/github-games.html"
+---
+{% raw %}
+<h1 id="github-games">ألعاب جيثب</h1>
+<p>انشر لعبة من مستودع GitHub على <a href="https://starhermit.com">ستارهيرميت</a>، أو قم بتسجيل لعبة ويب مستضافة بالفعل. بالنسبة لألعاب المستودع، يقرأ النظام الأساسي <code>starhermit.txt</code>، يستنسخ الريبو، ويقدمه في <code>&lt;slug&gt;.starhermit.com</code>. لأن <code>/api</code> و <code>/ws</code> يتم إنشاء وكيل من نفس الأصل من هذا النطاق الفرعي، وهو ما تحتاجه اللعبة المستضافة على النظام الأساسي <strong>لا يوجد تكوين CORS أو قاعدة API</strong>. يتحكم الالتزام المثبت في إصدار المستودع المباشر. ال <a href="/ar/docs/tutorials/chess-walkthrough.html">تنفيذ مرجع الشطرنج</a> يتم نشره بهذه الطريقة ويعمل كمثال مرجعي للنموذج.</p>
+<p>عنوان URL الأساسي: <code>https://api.starhermit.com</code>. جميع الطرق تحت <code>api/v1/...</code> وتتطلب JWT ما لم تتم الإشارة إليه.</p>
+<p>يمكن أن تعلن ملفات العميل المستضافة <a href="/ar/docs/starhermit-txt.html#browser-asset-caching">عمر ذاكرة التخزين المؤقت للمجلد</a>
+و <a href="/ar/docs/starhermit-txt.html#allowing-another-website-to-access-your-hosted-game">أصول CORS الإضافية</a>
+في <code>starhermit.txt</code>. يتم نشر هذه السياسات مع ملفات العميل؛ يحتفظ بالدمج الخالي من البيان
+الإعدادات الحالية، في حين يحل البيان المرفق محلها.</p>
+<h2 id="the-manifest-starhermittxt">البيان: <code>starhermit.txt</code></h2>
+<p>مكان <code>starhermit.txt</code> في جذر الريبو. شكل: <code>key=value</code> خطوط, <code>#</code> يبدأ التعليق.</p>
+<pre><code class="language-text">name=Your Game
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html        # repo-relative HTML entry
+cover=art/cover.png      # optional cover art for the library tile; or an https:// URL
+description=One-line pitch\nSecond line   # optional; or description.file=DESCRIPTION.md
+release_notes.file=CHANGELOG.md          # optional; or release_notes=inline text
+owner=&lt;starhermit user id&gt;  # UUID from GET /api/v1/me; do not use username/nickname
+# Choose at most one authoritative backend, or omit both for a browser-only game:
+server=server.js         # sandboxed JavaScript; see game-scripts.md
+# container.image=ghcr.io/owner/game@sha256:&lt;64 lowercase hex&gt;; see container-games.md
+
+control.up=KeyW+ArrowUp | Move forward
+control.shoot=Space | Shoot
+</code></pre>
+<ul>
+<li>لا يوجد <code>slug</code> المفتاح: يقوم النظام الأساسي بتعيين معرف مستخدم ويستخدمه كمجال فرعي (<code>&lt;uid&gt;.starhermit.com</code>) ومساحة اسم API للعبة (<code>/api/v1/games/&lt;uid&gt;/…</code>).</li>
+<li><code>cover</code> (الأسماء المستعارة <code>cover_art</code>, <code>coverart</code>) هو العمل الفني الذي يظهر على لوحة مكتبة اللعبة: مسار متعلق بملف التشغيل، أو مطلق <code>https://</code> عنوان URL. اختياري — بدون واحد، يعرض المربع الرمز المفضل لموقعك. أعد القراءة عند كل نشر، لذا فإن تغيير السطر يغير الغلاف. يرى <a href="#cover-art">فن الغلاف</a> لمحاصيل البلاط.</li>
+<li><code>description</code> / <code>release_notes</code> (أو <code>description.file</code> / <code>release_notes.file</code>، الذي اسمه أ <code>.md</code>/<code>.markdown</code>/<code>.txt</code> الملف المتعلق بالبيان) عبارة عن نص اختياري للعبتك. تتم إعادة قراءتها عند كل عملية نشر مثل <code>cover</code>. يرى <a href="#description-and-release-notes">الوصف وملاحظات الإصدار</a>.</li>
+<li><code>server</code> يعلن عن واجهة JavaScript الخلفية ذات وضع الحماية؛ يرى <a href="/ar/docs/api/game-scripts.html">game-scripts.md</a>.</li>
+<li><code>container.image</code> يعلن عن الواجهة الخلفية للحاوية؛ يرى <a href="/ar/docs/api/container-games.html">container-games.md</a>. يجب أن يتم تثبيته بشكل ملخص، واستضافته في مساحة اسم مالك GitHub الذي تم التحقق منه في سجل مدرج في القائمة المسموح بها، وقد يكون مصحوبًا <code>container.port</code>, <code>container.health</code>, <code>container.memory_mb</code>, <code>container.cpu</code>، وغير سرية <code>container.env.*</code> قيم.</li>
+<li>يعد كلا المفتاحين الخلفيين اختياريين للعبة متصفح خالصة، لكنهما متنافيان مع بعضهما البعض.</li>
+</ul>
+<h3 id="default-control-bindings">روابط التحكم الافتراضية</h3>
+<p>قد تعلن اللعبة عن صفر أو أكثر من إجراءات متصفح سطح المكتب:</p>
+<pre><code class="language-text">control.&lt;action&gt;=&lt;code&gt;[+&lt;code&gt;...][ | &lt;label&gt;]
+</code></pre>
+<ul>
+<li>الإجراءات صغيرة <code>[a-z0-9_]{1,32}</code> المعرفات والاحتفاظ بالأمر الواضح.</li>
+<li>الرموز هي <code>KeyboardEvent.code</code> قيم؛ <code>+</code> يفصل المفاتيح البديلة لإجراء واحد.</li>
+<li>يتم عرض التسمية الاختيارية في واجهات المستخدم لإعادة تعيين التحكم والإعدادات الافتراضية لمعرف الإجراء.</li>
+<li>قد يعلن البيان عن ما يصل إلى 32 إجراء و4 رموز لكل إجراء. لا يمكن استخدام الرمز من قبل
+عملين. يتم تجاهل خطوط التحكم غير الصالحة.</li>
+<li>ألعاب بدون <code>control.*</code> الإعلانات ليس لها ضوابط API/UI (<code>404 "This game declares no controls."</code>). تتم إعادة قراءة الإعلانات من كل إصدار منشور — كل نشر، وتحميل مجلد
+واستبدال دفع الحزمة. خطوة بخطوة: <a href="/ar/docs/tutorials/game-controls.html">البرنامج التعليمي: إضافة عناصر التحكم إلى لعبتك</a>.</li>
+</ul>
+<p>يمكن للاعبين تجاوز هذه الإعدادات الافتراضية في كل لعبة من خلال
+<a href="/ar/docs/api/games.html#per-player-control-bindings">واجهة برمجة تطبيقات التحكم في الألعاب</a>.</p>
+<h2 id="endpoints">نقاط النهاية</h2>
+<table>
+<thead>
+<tr>
+<th>طريقة</th>
+<th>طريق</th>
+<th>مصادقة</th>
+<th>وصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/me/github-games</code></td>
+<td>JWT</td>
+<td>سجل لعبة من عنوان URL الخاص بالريبو → <code>201 GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/me/github-games/upload</code></td>
+<td>JWT</td>
+<td><strong>أضف لعبة من مجلد محلي</strong> — لا يوجد مستودع على الإطلاق → <code>201 { game, bytesReceived }</code></td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/me/github-games/{id}/claim</code></td>
+<td>JWT</td>
+<td>احصل على الملكية بعد إثبات التحكم في المستودع عن طريق رابط GitHub أو مالك البيان → <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>يضع</td>
+<td><code>/api/v1/me/github-games/{id}/url</code></td>
+<td>JWT</td>
+<td>قم بتوجيه لعبة موجودة إلى عنوان URL مختلف؛ uid ووقت اللعب على قيد الحياة</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/github-games</code></td>
+<td>JWT</td>
+<td>قم بإدراج ألعاب GitHub المسجلة → <code>GitHubGameDto[]</code></td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/github-games/{id}/stats</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td><strong>أرقام الجمهور للعبة التي أضفتها</strong> → <code>GameStatsDto</code></td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/github-games/{id}/sessions</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td>جلسات حية لخادم هذه اللعبة</td>
+</tr>
+<tr>
+<td>يمسح</td>
+<td><code>/api/v1/me/github-games/{id}/sessions/{sessionId}</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td>إنهاء جلسة مباشرة واحدة (<code>abandoned</code> / <code>operator_ended</code>)</td>
+</tr>
+<tr>
+<td>الحصول على/النشر</td>
+<td><code>/api/v1/me/github-games/{id}/achievements</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td><a href="/ar/docs/api/achievements.html#achievements-created-by-the-games-owner">إنجازات لعبتك</a>: قائمة الكل، إنشاء واحدة</td>
+</tr>
+<tr>
+<td>وضع/حذف</td>
+<td><code>/api/v1/me/github-games/{id}/achievements/{achievementId}</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td>تحديث/حذف واحد قمت بإنشائه</td>
+</tr>
+<tr>
+<td>الحصول على/النشر</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td><a href="/ar/docs/api/leaderboards.html#your-games-own-leaderboards">المتصدرين لعبتك</a>: قائمة الكل، إنشاء واحدة</td>
+</tr>
+<tr>
+<td>وضع/حذف</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards/{leaderboardId}</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td>تحديث/حذف واحد</td>
+</tr>
+<tr>
+<td>يمسح</td>
+<td><code>/api/v1/me/github-games/{id}/players/{userId}/elo</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td><a href="/ar/docs/api/leaderboards.html#resetting-a-players-rating">إعادة تعيين تقييم لاعب واحد</a> إلى 1200</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/me/github-games/{id}/transfer</code></td>
+<td>JWT</td>
+<td>نقل لعبة إلى مستخدم آخر → <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>يمسح</td>
+<td><code>/api/v1/me/github-games/{id}</code></td>
+<td>JWT</td>
+<td>إزالة لعبة مسجلة → <code>204</code></td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/github-games/removed</code></td>
+<td>JWT</td>
+<td>الألعاب التي تمت إزالتها: <code>restorable</code> (الألعاب المحملة)، <code>filesKept</code></td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/me/github-games/{id}/restore</code></td>
+<td>JWT</td>
+<td>استعادة لعبة تم تحميلها: نفس المعرف والتاريخ، وملفاتها إذا لم يتم استعادتها بعد (30 يومًا)؛ <code>409</code> بالنسبة للعبة ذات مصدر — أضف عنوان URL الخاص بها مرة أخرى</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/me/github-games/{id}/bundle</code></td>
+<td>JWT</td>
+<td>نشر الخام <code>.tar.gz</code> تحتوي على ملفات العميل و/أو صورة الحاوية المحفوظة. <code>?mode=merge</code> تصحيح ملفات العميل المباشرة بدلاً من استبدالها</td>
+</tr>
+<tr>
+<td>دبليو اس</td>
+<td><code>/ws/v1/game-upload</code></td>
+<td>جوت (<code>?access_token=</code>)</td>
+<td><strong>نفس التحميلتين عبر WebSocket</strong> - وسيلة النقل المستخدمة لأي شيء يزيد حجمه عن 100 ميجا بايت تقريبًا</td>
+</tr>
+<tr>
+<td>يضع</td>
+<td><code>/api/v1/me/github-games/{id}/hosting</code></td>
+<td>JWT</td>
+<td>تمكين/تعطيل الاستضافة ("نشر في starhermit") → <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/github-games/{id}/deployment</code></td>
+<td>JWT</td>
+<td>اقرأ حالة النشر/الاستضافة → <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>يضع</td>
+<td><code>/api/v1/me/github-games/{id}/deployment</code></td>
+<td>JWT</td>
+<td>تثبيت الالتزام/الفرع؛ طوابير إعادة الانتشار → <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/github-games</code></td>
+<td>JWT</td>
+<td>التصفح العام لألعاب GitHub المشتركة → <code>SharedGitHubGameDto[]</code></td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/github-games/{id}/release-notes</code></td>
+<td>JWT</td>
+<td>ملاحظات إصدار اللعبة من بيانها → <code>GitHubGameReleaseNotesDto</code>، أو <code>404</code> للعبة غير معروفة أو تمت إزالتها</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/github-games/{id}/icon</code></td>
+<td>مجهول</td>
+<td>بايتات صورة رمز اللعبة (الرمز المفضل أو الصورة الرمزية للمالك)؛ <code>ResponseCache</code> 86400</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/github-games/{id}/cover</code></td>
+<td>مجهول</td>
+<td><strong>غلاف بايت الصورة الفنية</strong>، أو <code>404</code> عندما لا تحتوي اللعبة على أي شيء؛ <code>ResponseCache</code> 3600</td>
+</tr>
+<tr>
+<td>يضع</td>
+<td><code>/api/v1/me/github-games/{id}/cover</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td>قم بتحميل صورة الغلاف، وتجاوز البيان <code>cover=</code> → <code>204</code></td>
+</tr>
+<tr>
+<td>يمسح</td>
+<td><code>/api/v1/me/github-games/{id}/cover</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td>قم بإسقاط الغلاف الذي تم تحميله، والعودة إلى البيان → <code>204</code></td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/github</code></td>
+<td>JWT</td>
+<td>حالة رابط هوية GitHub → <code>{ linked, login }</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="register-a-game">سجل لعبة</h3>
+<p><code>POST /api/v1/me/github-games</code></p>
+<pre><code class="language-json">{
+  "repoUrl": "https://github.com/HypeDriven/starhermit-chess",
+  "displayName": "StarHermit Chess",
+  "launchPath": "index.html"
+}
+</code></pre>
+<p>رغم اسمها التاريخي <code>repoUrl</code> يقبل ثلاثة مصادر إطلاق:</p>
+<ol>
+<li>A <code>github.com/&lt;owner&gt;/&lt;repo&gt;</code> مستودع. تقرأ الواجهة الخلفية بيانها ويمكنها نشره
+لاستضافة StarHermit.</li>
+<li>عنوان URL لصفحات GitHub مستضاف بالفعل، مثل <code>https://owner.github.io/game/</code>. مستودع
+يتم استنتاج الهوية من عنوان URL؛ يتم تشغيل عنوان URL نفسه، بدون استنساخ أو تثبيت.</li>
+<li>أي عامة أخرى <code>http://</code> أو <code>https://</code> عنوان URL للعبة الويب المستضافة. يتم إطلاقه مباشرة و
+لا يشارك في المطالبة بملكية GitHub.</li>
+</ol>
+<ul>
+<li><code>displayName</code> و <code>launchPath</code> هي احتياطيات اختيارية. إنها مفيدة لمستودعات الطرف الثالث
+بدون بيانات وصفية موثوقة للبيان؛ عنوان URL المستضاف المباشر هو في حد ذاته موقع الإطلاق.</li>
+<li>بالنسبة لأصحاب المستودعات الذين تم التحقق منهم، تقوم المنصة بالتحقق من صحتها <code>starhermit.txt</code>.</li>
+<li>اختياري <code>server=</code> البرنامج النصي أو <code>container.image=</code> توفر الواجهة الخلفية لعبة موثوقة؛ يرى <a href="/ar/docs/api/game-scripts.html">game-scripts.md</a> و <a href="/ar/docs/api/container-games.html">container-games.md</a>. استضافة الحاوية مفتوحة لأي مستخدم مسجل الدخول على starhermit.com؛ يمكن أن يؤدي النشر المستضاف ذاتيًا إلى تقييده بالقائمة المسموح بها للمشغل.</li>
+<li><strong>تحتاج الواجهة الخلفية للخادم المعلنة إلى مالك مثبت.</strong> تقديم الريبو الذي يعلن <code>server=</code> أو <code>container.image=</code> بدون تسجيل الدخول إلى GitHub أو <code>owner=</code> الدليل هو <code>403</code> (تسمية كلا الدليلين)، وليست قائمة للمتصفح فقط تتظاهر بوجود واجهة خلفية.</li>
+<li>الحدود: 100 لعبة لكل مستخدم (يمكن تجاوزها بواسطة المشغل لكل حساب). تسجيل عوائد مكررة <code>409</code>.</li>
+</ul>
+<p>تتضمن حالات التسجيل/النشر ما يلي: <code>InvalidUrl</code>, <code>LimitReached</code>, <code>Duplicate</code>, <code>MissingManualMetadata</code>, <code>MissingStarhermitTxt</code>, <code>InvalidLaunchPath</code>, <code>InvalidServerScriptPath</code>, <code>InvalidContainerImage</code>, <code>ServerProvisionConflict</code>, <code>RemovedByOwner</code>.</p>
+<p>أخطاء تستخدم الشكل القياسي:</p>
+<pre><code class="language-json">{ "error": "..." }
+</code></pre>
+<h3 id="add-a-game-from-a-local-folder">أضف لعبة من مجلد محلي</h3>
+<p><code>POST /api/v1/me/github-games/upload</code> → <code>201</code></p>
+<p>النظير لتسجيل عنوان URL: <strong>لا يوجد مستودع</strong>، ولا يتم استنساخ أي شيء. المجلد
+يسافر كواحد <code>.tar.gz</code> على نص الطلب وتستضيف المنصة ما تحتوي عليه. نفس الأرشيف
+تنسيق كما <a href="#push-a-game-bundle">دفع حزمة</a>، وبالتالي فإن نفس العبوة تعمل لكليهما.</p>
+<p>اللعبة التي تم إنشاؤها لديها <code>gameSlug</code> من البداية، سواء أعلن عن خادم أم لا، لذلك أ
+يمكن استخدام التحميل في المتصفح فقط <a href="/ar/docs/api/games.html#per-player-control-bindings">الضوابط</a>,
+<a href="/ar/docs/api/games.html#per-player-game-settings">إعدادات لكل لاعب</a>، إنه
+<a href="/ar/docs/api/catalog.html#saving-from-inside-a-game-launch-token">فتحة الحفظ السحابي</a>, <a href="/ar/docs/api/realtime.html">غرف الوقت الحقيقي</a>
+وإطلاق الرموز مثل أي لعبة أخرى.</p>
+<pre><code class="language-text">client/           the game's files, published as-is
+starhermit.txt    name= and launch= instead of the query parameters
+</code></pre>
+<p>البيان اختياري ل <em>نقطة النهاية هذه</em> - يمكن لمعلمات الاستعلام توفير نفس القيم - و
+يرسل عملاء StarHermit دائمًا واحدًا، مبنيًا على حقول البيان الخاصة بهم. شحن الملف بالداخل
+لا يزال البناء الخاص بك يستحق القيام به: فهو يجعل البناء يصف نفسه بنفسه ويملأ هذه الحقول مسبقًا، لذلك
+يمكن إعادة تحميلها دون تذكر القيم التي تحتاجها. يرى
+<a href="/ar/docs/starhermit-txt.html">ال <code>starhermit.txt</code> يظهر</a> للتنسيق، ولاحظ ذلك <strong>كل شيء
+تم تحميل الملف المجاور للبيان</strong> - تحميل بناء قابل للتوزيع، وليس شجرة مصدر.</p>
+<p>أرسل البايتات مباشرة - وليس بيانات النموذج متعدد الأجزاء - باستخدام <code>Content-Type: application/gzip</code>:</p>
+<pre><code class="language-bash">tar -czf game.tar.gz client/ starhermit.txt
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/upload?displayName=My%20Game" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game.tar.gz
+</code></pre>
+<pre><code class="language-json">{
+  "game": { "id": "...", "displayName": "My Game", "launchPath": "index.html", "hosting": { "hostingEnabled": true } },
+  "bytesReceived": 4194304
+}
+</code></pre>
+<p>يتم حل البيانات التعريفية بهذا الترتيب، لذلك لا تحتاج معظم المجلدات إلى معلمات استعلام على الإطلاق:</p>
+<ol>
+<li><code>?displayName=</code> / <code>?launchPath=</code> على الطلب.</li>
+<li><code>name=</code> / <code>launch=</code> في أ <code>starhermit.txt</code> في جذر الأرشيف.</li>
+<li><code>index.html</code> في جذر <code>client/</code> - يستخدم كمسار الإطلاق عندما لا يوجد أي اسم آخر.</li>
+</ol>
+<p>ملاحظات خاصة بهذا المسار:</p>
+<ul>
+<li><strong>اللعبة مباشرة بمجرد عودة المكالمة.</strong> لا يوجد استضافة أو نشر منفصل
+خطوة: <code>deployStatus</code> يكون <code>live</code> و <code>deployedCommitSha</code> يكون <code>null</code>، لأنه لا يوجد التزام.</li>
+<li><strong>لا يمكن إعادة إنشاء الملفات</strong>، لذلك لا يقوم النظام الأساسي بإعادة نشرها من أي مكان أبدًا. لعبة
+وأضاف بهذه الطريقة يحمل <code>contentSource: upload</code> ويحتفظ ببنيته التي تم تحميلها حتى تقوم بالنشر
+واحد آخر. ادفع بناءًا جديدًا باستخدام
+<a href="#push-a-game-bundle">نقطة نهاية الحزمة</a> أو قم بتحميل المجلد مرة أخرى.</li>
+<li><strong>عدم وجود مستودع يعني عدم المطالبة.</strong> <code>ownerLogin</code> فارغ، لذا لا يمكن لأي تسجيل دخول إلى GitHub مطابقته على الإطلاق؛
+<code>repoUrl</code> يحمل الاصطناعية <code>upload:&lt;id&gt;</code> القيمة بدلاً من عنوان URL.</li>
+<li><strong>A <code>server/image.tar</code> مرفوض هنا</strong> (<code>422</code>). تحتاج صورة الخادم إلى لعبة متوفرة
+قم بإرفاقه، وهو غير موجود حتى يتم إنشاء اللعبة - أنشئ اللعبة أولاً، ثم ادفع الصورة
+ل <code>/{id}/bundle</code>.</li>
+<li>تم رفض مسار التشغيل الذي يسمي ملفًا لا يحتوي عليه الأرشيف (<code>422</code>) أثناء التحميل
+لا يزال في مرحلة التدريج، بدلاً من أن يصبح 404 لكل لاعب.</li>
+</ul>
+<p>الحدود هي نفس أي دفعة أخرى: انظر <a href="#upload-limits">حدود التحميل</a>.</p>
+<h4 id="an-uploaded-folder-can-bring-its-own-server-backend">يمكن للمجلد الذي تم تحميله إحضار الواجهة الخلفية للخادم الخاص به</h4>
+<p>إذا كان الأرشيف <a href="/ar/docs/starhermit-txt.html"><code>starhermit.txt</code></a> يعلن منطق الخادم، التحميل
+يوفرها أيضًا - وهو نفس الشيء الذي يفعله تدفق المستودع، بدون مستودع. اختر واحدة
+الاسلوب؛ تم رفض إعلان كلاهما.</p>
+<table>
+<thead>
+<tr>
+<th>تصريح</th>
+<th>ماذا يحدث</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server=path/to/server.js</code></td>
+<td>الخلفية البرنامج النصي. يسافر الملف <strong>داخل المجلد الذي قمت بتحميله</strong>، لذلك تتم قراءة مصدره مباشرة من الأرشيف - ولا يوجد شيء لجلبه. يرى <a href="/ar/docs/api/game-scripts.html">game-scripts.md</a>.</td>
+</tr>
+<tr>
+<td><code>container.image=name@sha256:…</code></td>
+<td>واجهة خلفية للحاوية، مثبتة على الملخص كما هو الحال دائمًا. يرى <a href="/ar/docs/api/container-games.html">container-games.md</a>. يتم دفع الصورة نفسها بعد ذلك إلى <code>/{id}/bundle</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>تؤدي حالات الرفض هنا إلى فشل عملية الإنشاء بأكملها - ولا ينجو أي صف لعبة نصف مكتمل من صف واحد:</p>
+<ul>
+<li><code>server=</code> تسمية ملف لا يحتوي عليه الأرشيف.</li>
+<li><code>server=</code> لافتا خارج ملفات العميل (<code>../</code>).</li>
+<li>التصريح بكلا الأمرين <code>server=</code> و <code>container.image=</code>.</li>
+<li>طلب حاوية معطلة للحاويات، أو من مالك غير معتمد لها.</li>
+</ul>
+<h3 id="cover-art">فن الغلاف</h3>
+<p>الصورة المعروضة على بلاط لعبتك في المكتبة. اضبطه في كلتا الحالتين — أيًا كان ما تستخدمه، فإن
+مجهول <code>GET /api/v1/github-games/{id}/cover</code> هو ما يخدم ذلك:</p>
+<ul>
+<li><strong>في بنيتك</strong> — a <code>cover=</code> خط في <code>starhermit.txt</code>، تسمية صورة نسبة إلى الإطلاق
+ملف أو مطلق <code>https://</code> عنوان URL. أعد القراءة عند كل عملية نشر، حتى يظل مستودعك هو مصدر الحقيقة.</li>
+<li><strong>تم الرفع</strong> — <code>PUT /api/v1/me/github-games/{id}/cover</code> مع الصورة المشفرة Base64. هذا هو
+ما هي لوحة القيادة على شبكة الإنترنت <em>إدارة → صورة الغلاف</em> ما يفعله، وما يمكن لمشغل StarHermit أن يفعله لك.</li>
+</ul>
+<pre><code class="language-http">PUT /api/v1/me/github-games/{id}/cover
+Authorization: Bearer &lt;token&gt;
+Content-Type: application/json
+
+{ "imageBase64": "iVBORw0KGgoAAAANSUhEUg..." }
+</code></pre>
+<p>تحميل <strong>يتجاوز</strong> البيان عمدا: نشر يعيد القراءة <code>starhermit.txt</code> يجب
+لا تتراجع أبدًا عن الفن الذي اختاره شخص ما يدويًا. <code>DELETE /api/v1/me/github-games/{id}/cover</code> هو طريق العودة —
+فإنه يسقط التحميل والبيان <code>cover=</code> ينطبق مرة أخرى.</p>
+<p>PNG أو JPEG أو GIF أو WEBP أو BMP أو SVG، حتى <strong>4 ميجا بايت</strong>. يتم استنشاق النوع من البايتات، لذلك أ
+<code>Content-Type</code> أنت تؤكد ليست هناك حاجة ولا يعتقد، والبايتات التي ليست صورة قابلة للفك
+يتم رفض مع <code>400</code>. قريب <code>cover=</code> يجب أن ينتهي المسار في <code>.png</code>, <code>.jpg</code>/<code>.jpeg</code>, <code>.gif</code>,
+<code>.webp</code> أو <code>.svg</code> (لا <code>..</code>، لا الرائدة <code>/</code>); يتم إسقاط قيمة غير قابلة للاستخدام بدلاً من فشل
+لعبة.</p>
+<p>فن الغلاف هو فن الملصق: كلتا المكتبتين <strong>قم بقياسه لملء البلاط والمحصول المركزي</strong> مهما كان ما يفعله
+غير مناسب. البلاط ليس بنفس الشكل.</p>
+<table>
+<thead>
+<tr>
+<th>سطح</th>
+<th>بلاط</th>
+<th>اقتصاص</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>عميل ويندوز</td>
+<td>صورة شخصية 96×128 (3:4)</td>
+<td>يملأ الصورة؛ الفن الأوسع يفقد الجوانب</td>
+</tr>
+<tr>
+<td>لوحة تحكم الويب</td>
+<td>مربع</td>
+<td>يملأ المربع الفن الأطول يفقد القمة والأسفل</td>
+</tr>
+</tbody>
+</table>
+<p>أبقِ الموضوع في المنتصف حتى يبدو كلا المحصولين صحيحين. تظهر أغلفة SVG في مكتبة الويب؛ ال
+يتعذر على عميل Windows فك تشفير SVG، لذا يعرض هذا المربع الرمز المفضل بدلاً من ذلك. لعبة بدون غطاء في
+يعود كل شيء إلى رمزه المفضل (<code>GET /api/v1/github-games/{id}/icon</code>). يتم حل الرمز من
+عنوان URL الذي أرسلته، وعندما يستضيف النظام الأساسي اللعبة، من النسخة التي يتم عرضها عليها
+<code>&lt;uid&gt;.starhermit.com</code> - لذا فإن الحزمة التي تم تحميلها والتي تحتوي على رمز مفضل في ملفاتها لا تزال تحصل على رمز.</p>
+<h3 id="audience-figures-for-your-game">أرقام الجمهور للعبتك</h3>
+<p><code>GET /api/v1/me/github-games/{id}/stats</code> → <code>GameStatsDto</code></p>
+<p>كم من الناس يلعبون لعبة <strong>قمت بإضافة</strong>. يقتصر على مالك اللعبة — أي شخص آخر يحصل عليها <code>404</code>,
+نفس الإجابة على أنها لعبة غير موجودة.</p>
+<pre><code class="language-json">{
+  "totalPlayers": 42,
+  "playingNow": 3,
+  "totalSessions": 130,
+  "totalPlaytimeMinutes": 8140,
+  "lastPlayedAt": "2026-07-29T08:45:24Z",
+  "livenessWindowHours": 4
+}
+</code></pre>
+<ul>
+<li><strong>الجامع فقط.</strong> أنت تتعلم حجم جمهورك، وليس من هو بداخله أبدًا.</li>
+<li><code>totalPlayers</code> التهم <strong>أشخاص متميزون</strong>، وليس الجلسات - الشخص الذي لعب ست مرات هو مرة واحدة
+لاعب.</li>
+<li><code>playingNow</code> يحسب اللاعبين المتميزين الذين لم تنتهي جلستهم <em>و</em> بدأت في الداخل
+<code>livenessWindowHours</code>. النافذة مهمة: العميل الذي تعطل أو فقد شبكته لا يرسل أبدًا
+نهاية الجلسة، وبدونها ستُقرأ هذه الصفوف كما لو كان الأشخاص ما زالوا يلعبون إلى أجل غير مسمى.</li>
+<li><code>totalPlaytimeMinutes</code> التهم <strong>الجلسات المكتملة فقط</strong>، مطابقة أرقام وقت اللعب لكل مستخدم
+في <a href="/ar/docs/api/activity.html">activity.md</a>. جلسة الطيران لا تساهم بأي شيء حتى الآن.</li>
+<li><code>lastPlayedAt</code> يكون <code>null</code> للعبة لم يلعبها أحد.</li>
+</ul>
+<p>تأتي الأرقام من نفس دفتر الأستاذ الذي يكتبه كل عميل (انظر <a href="/ar/docs/api/activity.html">activity.md</a>)، لذلك أ
+اللعبة التي لم يبلغ لاعبوها مطلقًا عن عمليات الإطلاق ستقرأ على أنها صفر.</p>
+<h3 id="claim-ownership">المطالبة بالملكية</h3>
+<p><code>POST /api/v1/me/github-games/{id}/claim</code> → <code>GitHubGameDto</code></p>
+<p>السيطرة على قائمة موجودة عندما تتحكم في مستودعها. إثبات الملكية إما عن طريق ربط
+تسجيل الدخول الشخصي إلى GitHub يتطابق مع مالك المستودع، أو عن طريق الالتزام
+<code>owner=&lt;your StarHermit user ID&gt;</code> إلى المستودع <code>starhermit.txt</code>. <code>owner</code> ينبغي أن يكون
+تم إرجاع UUID غير القابل للتغيير كـ <code>id</code> بواسطة <code>GET /api/v1/me</code>, <strong>لا</strong> اسم المستخدم أو اللقب. البيان
+تدعم الطريقة المستودعات المملوكة للمؤسسة، والتي لا يتم استنتاجها من مؤسسة GitHub الشخصية
+العضوية.</p>
+<p>عند النجاح، تحتفظ القائمة الحالية بمعرفها/سجلها، وتصبح مدارة من قبل المدعي، ويتم تحديثها
+البيانات الوصفية التي يتحكم فيها المستودع وإعلانات الواجهة الخلفية واستضافة قوائم الانتظار حيثما كان ذلك متاحًا. ال
+يفقد المُرسِل السابق حق الوصول إلى الإدارة على نطاق المالك. المطالبة ببطاقة بيانات تديرها بالفعل
+يعيد مزامنته بدلاً من إرجاع الصراع.</p>
+<p>مخازن البيانات التعريفية لهوية GitHub <code>{"login":"…"}</code>; ربط حساب GitHub الخاص بك عبر تدفق OAuth (انظر
+<a href="/ar/docs/api/auth.html">auth.md</a>). التحقق من حالة الارتباط مع <code>GET /api/v1/me/github</code> → <code>{ linked, login }</code>. انظر
+<a href="/ar/docs/tutorials/claim-existing-game.html">برنامج تعليمي للمطالبة خطوة بخطوة</a> للاكتشاف، وكلاهما دليل
+الأساليب والتحقق والاستيلاء واستكشاف الأخطاء وإصلاحها.</p>
+<h3 id="transfer-ownership">نقل الملكية</h3>
+<p><code>POST /api/v1/me/github-games/{id}/transfer</code></p>
+<pre><code class="language-json">{ "toUserId": "&lt;user id&gt;" }
+</code></pre>
+<h3 id="push-a-game-bundle">ادفع حزمة اللعبة</h3>
+<p><code>POST /api/v1/me/github-games/{id}/bundle</code> ينشر مخرجات مبنية دون أن يطلب من StarHermit ذلك
+استنساخه مرة أخرى. يجب أن يمتلك المتصل اللعبة المسجلة. أرسل <code>.tar.gz</code> بايت مباشرة - لا
+بيانات النموذج متعددة الأجزاء - مع <code>Content-Type: application/gzip</code>:</p>
+<pre><code class="language-text">client/            optional static client files; must include the registered launch file
+server/image.tar   optional output from `docker save`
+starhermit.txt     optional manifest copy for bundle portability
+remove.txt         merge only: client-relative paths to delete, one per line
+</code></pre>
+<p>على الأقل <code>client/</code> أو <code>server/image.tar</code> يجب أن يكون موجودًا (قد يكون الدمج أيضًا فقط <code>remove.txt</code>). يتم تبديل ملفات العميل تلقائيًا. أ
+يتم تحميل صورة الخادم، وتثبيتها بواسطة النظام الأساسي، ووضعها في قائمة انتظار نشر الحاوية
+إعادة التشغيل على تلك الصورة. الصورة التي تم تحميلها لها الأسبقية على مرجع التسجيل الخاص بالبيان،
+وأكثر من أ <code>server=</code> خط؛ بيان يعلن كلاهما <code>server=</code> و <code>container.image=</code> تم رفضه
+قبل أن يتم تحميل أي شيء. يتم تجاهل أي شيء آخر في الأرشيف.</p>
+<p><strong>إن تحميل الصورة هو في حد ذاته إعلان.</strong> إذا لم يكن للعبة واجهة خلفية للخادم حتى الآن —
+المجلد الذي تم تحميله والذي أعلن أنه لا شيء - يدفع <code>server/image.tar</code> أحكام واحدة من الملخص فقط
+محملة، تحت <code>gameSlug</code> اللعبة لديها بالفعل. ليس عليك تسمية صورة مثبتة بالملخص في ملف
+واضح أولاً، والذي كان دائريًا: يجب أن يكون التعريف موجودًا قبل أن يتمكن من تلقي صورة،
+وكانت الصورة هي الشيء الوحيد الذي يمكن أن يصفه.</p>
+<p><strong>تطبق عملية إعادة الدفع على مقابض الحاوية التي يعلن عنها بيانها، وتلك فقط.</strong> يشمل
+<code>starhermit.txt</code> في الحزمة مع تغيير <code>container.port</code>, <code>container.health</code>,
+<code>container.memory_mb</code> أو <code>container.cpu</code> ويلتقطه النشر عند إعادة التشغيل؛ اترك المقبض و
+فهو يحتفظ بكل ما قمت بتعيينه في المرة الأخيرة. احذف البيان بالكامل ولا شيء يتعلق بالنشر
+التغييرات باستثناء الصورة.</p>
+<p>يقوم عملاء StarHermit ببناء هذه الحزمة لك، من مجلد <strong>أو واحدة <code>.tar</code></strong>:</p>
+<ul>
+<li><strong>ملفات العميل</strong> - مجلد توزيع اللعبة، أو <code>.tar</code> منه. مجلد معبأة تحت
+<code>client/</code>; a <code>.tar</code>تتم إعادة إدخالات 's إلى هناك (أرشيف موجود بالفعل ضمن <code>client/</code> بقي
+وحده). usstar فقط - يتم رفض أرشيفات GNU ذات الأسماء الطويلة وPAX، لأن إعادة توجيهها تعني
+إعادة كتابة كتل البيانات الوصفية التي تسمي الإدخال التالي.</li>
+<li><strong>خادم مخصص</strong> — مجلد توزيع الخادم، أو <code>docker save</code> <code>.tar</code> من تلقاء نفسها.
+من مجلد فقط البيان و <code>image.tar</code> تم تحميلها: الصورة تحتوي بالفعل على الخاص بك
+ملفات الخادم الخاصة، لذا فإن تعبئة الباقي سترسل غيغابايت إلى النظام الأساسي لتجاهلها.</li>
+</ul>
+<p>وفي كلتا الحالتين <a href="/ar/docs/starhermit-txt.html"><code>starhermit.txt</code></a> قابل للتحرير في مربع الحوار. مهما كان
+تحمل البنية المختارة ملء الحقول مسبقًا، وكل ما تحتويه مكتوب في جذر الحزمة - لذا
+البناء بدون بيان قابل للنشر، والذي يتم شحنه كملف <code>.tar</code> لا يزال من الممكن أن يكون له بيانه
+محدث.</p>
+<pre><code class="language-bash">docker save my-game-server:release -o image.tar
+mkdir -p bundle/server
+mv image.tar bundle/server/image.tar
+cp starhermit.txt bundle/
+tar -C bundle -czf game-bundle.tar.gz .
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game-bundle.tar.gz
+</code></pre>
+<pre><code class="language-json">{
+  "clientPublished": false,
+  "serverImageLoaded": true,
+  "imageDigest": "sha256:...",
+  "bytesReceived": 318767104,
+  "mode": "replace",
+  "filesRemoved": 0
+}
+</code></pre>
+<h4 id="partial-updates-modemerge">التحديثات الجزئية: <code>?mode=merge</code></h4>
+<p>الدفعة هي أ <strong>يستبدل</strong> إلا إذا طلبت خلاف ذلك: الأرشيف هو اللعبة بأكملها، وأي شيء ليس موجودًا فيها
+لقد ذهب. <code>?mode=merge</code> (HTTP ومقبس التحميل على حد سواء) يجعله <strong>رقعة</strong> من العميل الحي
+الملفات - الحل لإعادة تحميل غيغابايت من الأصول التي لم تتغير لإصلاح ملف واحد.</p>
+<pre><code class="language-bash">printf '%s\n' '# one client-relative path per line; a directory removes everything under it' \
+    'assets/old-music.ogg' 'levels/cut/' &gt; remove.txt
+tar czf patch.tar.gz client/index.html client/js/app.js remove.txt
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle?mode=merge" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @patch.tar.gz
+</code></pre>
+<p>مع <code>mode=merge</code>:</p>
+<ul>
+<li>الملفات تحت <code>client/</code> تتم إضافتها أو الكتابة فوقها</li>
+<li>المسارات في الجذر <code>remove.txt</code> (<code>#</code> تعليقات؛ يتم حذف الدليل الذي يزيل الشجرة الفرعية بالكامل).</li>
+<li>يبقى كل ملف مباشر آخر كما هو تمامًا</li>
+</ul>
+<p>يتم تنظيم الشجرة المدمجة كنسخة ويتم تبديلها ذريًا - يرى اللاعبون اللعبة القديمة أو اللعبة القديمة
+جديدة تمامًا، لا تخلط أبدًا. ويحدها النتيجة <strong>ألعاب</strong> بدل، وليس للتحميل، لذلك
+لا يمكن للعبة أن تتجاوز حدودها برقعة صغيرة واحدة في كل مرة. يتم الدمج فقط حول ملفات العميل؛ أ
+<code>server/image.tar</code> يتم تحميله تمامًا كما في الاستبدال. رقعة تحمل رقم <code>starhermit.txt</code> أوراق
+غلاف الفن كما كان.</p>
+<p>تم رفض الدمج (<code>409</code>/<code>422</code>، لا شيء يتغير) عندما لا يتم نشر أي شيء في اللعبة بعد، عندما
+من شأنه إزالة ملف الإطلاق، أو متى <code>remove.txt</code> نقاط خارج اللعبة. أ <code>remove.txt</code> في أ
+تم أيضًا رفض الاستبدال العادي (<code>422</code>)، لأنه لا يمكن أن يعني إلا شيئًا لم تفعله
+تنوي. <code>mode</code> يجب أن يكون <code>replace</code> (الافتراضي) أو <code>merge</code>; أي شيء آخر هو <code>400</code>.</p>
+<p>نفس المعلمة تعمل على المقبس: <code>ws/v1/game-upload?gameId=…&amp;mode=merge</code>. ال <code>ready</code> إطار
+يرددها كما <code>"apply":"merge"</code>.</p>
+<p>تقوم نقطة النهاية بتحديث لعبة مسجلة موجودة؛ فهو لا يقوم أبدًا بإنشاء سجل اللعبة - لذلك، انظر
+<a href="#add-a-game-from-a-local-folder">إضافة لعبة من مجلد محلي</a>. هو - هي <em>يستطيع</em> توفير اللعبة
+الواجهة الخلفية للخادم، كأثر جانبي لتحميل صورة الخادم في لعبة لا تحتوي على أي صورة. انظر
+<a href="/ar/docs/tutorials/dedicated-server-onboarding.html">البرنامج التعليمي للنشر على خادم مخصص</a>.</p>
+<h3 id="upload-from-cicd">تحميل من CI/CD</h3>
+<p>لا تحتفظ برمز OAuth التفاعلي في سر المستودع. قم بتسجيل الدخول من خلال OAuth مرة واحدة واستخدمه
+تلك الجلسة لإضافة مفتاح نشر مُسمى بشكل منفصل <code>POST /api/v1/me/public-keys</code>. سي.آي
+يمكن بعد ذلك التوقيع على الوظيفة <code>/auth/public-key/challenge</code>، قم باستبدالها على <code>/auth/public-key/complete</code>، واستخدام
+رمز الوصول الذي تم إرجاعه لمدة 15 دقيقة على نقطة نهاية الحزمة هذه.</p>
+<p>يعمل مفتاح النشر كحساب مالك، لذا يجب أن يمتلك هذا الحساب اللعبة المستهدفة. لا يمكن ذلك
+إضافة مفتاح آخر أو إلغاء المفاتيح الأخرى. يمكنها إلغاء نفسها من خلال <code>/me/public-keys/current</code>;
+إدارة التسجيل والمفاتيح الأخرى من جلسة مصادقة OAuth. استخدم مفتاحًا واحدًا لكل
+البيئة بحيث يمكن تعطيل سير عمل واحد دون إيقاف سير العمل الآخر. المحفوظات أكثر من تقريبا
+يجب أن يستخدم 100 ميجابايت وسيلة النقل WebSocket أدناه.</p>
+<p>يرى <a href="/ar/docs/tutorials/ci-cd-build-upload.html">يتم إنشاء التحميل من CI/CD باستخدام مفتاح عام مسجل في OAuth</a>
+لإنشاء المفاتيح، والإعداد السري لـ GitHub، والبرنامج النصي الكامل لتوقيع التحدي/التحميل، والبرنامج الثابت و
+تخطيطات حزمة الحاوية وسير عمل GitHub Actions.</p>
+<h3 id="upload-over-a-websocket">التحميل عبر WebSocket</h3>
+<p><code>GET /ws/v1/game-upload</code> (يرقي) - <strong>استخدم هذا لأي شيء يزيد حجمه عن 100 ميجابايت.</strong></p>
+<p>يرفض CDN الموجود أمام واجهة برمجة التطبيقات (API) نص طلب HTTP بشكل تقريبي <strong>100 ميجا بايت</strong> مع أ <code>413</code> منها
+الخاصة. هذا الرفض لا يصل أبدًا إلى المنصة، لذا فهو لا يحمل أي معنى <code>limitBytes</code> ويظهر في أي سجل لك
+يستطيع القراءة - أ <code>413</code> مع لا <code>limitBytes</code> الحقل هو CDN، وليس بدل لعبتك، وهو اثنان
+أوامر من حجم أكبر. أي واقعية <code>docker save</code> سوف يضربها.</p>
+<p>الإطارات المرسلة بعد ترقية WebSocket ليست نص طلب، لذا لا ينطبق الحد الأقصى.
+<strong>فقط النقل يختلف</strong> تتسلسل الإطارات الثنائية في البايتات بالضبط التي توجهها HTTP
+اقرأ، وانتقل عبر نفس المسار، وكل نص رفض وبدل ونجاح هو HTTP
+كان من الممكن أن يتم إنتاج المسار - بحيث يمكن للعميل مشاركة مسار رمز واحد عبر كليهما.</p>
+<pre><code class="language-text">wss://api.starhermit.com/ws/v1/game-upload?gameId=$GAME_ID&amp;access_token=$TOKEN
+wss://api.starhermit.com/ws/v1/game-upload?gameId=$GAME_ID&amp;mode=merge&amp;access_token=$TOKEN
+wss://api.starhermit.com/ws/v1/game-upload?displayName=My%20Game&amp;launchPath=index.html&amp;access_token=$TOKEN
+</code></pre>
+<p>يمر <code>gameId</code> للدفع إلى لعبة تمتلكها ( <code>/{id}/bundle</code> طريق)؛ حذفها وتمرير
+<code>displayName</code>/<code>launchPath</code> لإنشاء واحد من مجلد ( <code>/upload</code> طريق). يذهب الرمز المميز إلى
+سلسلة استعلام لأن المتصفح لا يمكنه تعيين <code>Authorization</code> رأس على مصافحة WebSocket؛ إنه كذلك
+تم تحديده مرة واحدة، عند المصافحة، وبالتالي فإن التحميل الذي يتجاوز عمر رمز الوصول الخاص به لا يزال ينتهي.</p>
+<table>
+<thead>
+<tr>
+<th>اتجاه</th>
+<th>إطار</th>
+<th>معنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>الخادم →</td>
+<td><code>{"type":"ready","mode":"bundle","apply":"replace","limitBytes":N,"heartbeatSeconds":15}</code></td>
+<td>تمت تسوية البدل وفحص المساحة الحرة. ابدأ في الإرسال. <code>mode</code> يكون <code>bundle</code> أو <code>create</code>. <code>apply</code> يكون <code>merge</code> عندما طلبت التحديث الجزئي.</td>
+</tr>
+<tr>
+<td>→ الخادم</td>
+<td><em>ثنائي</em></td>
+<td>وحدات بايت للأرشفة، مقسمة كيفما تشاء - لا يقوم الخادم أبدًا بإعادة تجميع الرسائل، لذا فإن 256 كيلو بايت - 1 ميجا بايت هو الإعداد الافتراضي الجيد. متسلسلة، يجب أن تكون الإطارات الخاصة بك هي نفسها تمامًا <code>.tar.gz</code>.</td>
+</tr>
+<tr>
+<td>الخادم →</td>
+<td><code>{"type":"ack","bytesReceived":N}</code></td>
+<td>تقدم الاستلام، تقريبًا كل 8 ميجابايت. قم بقيادة شريط التقدم الخاص بك من هذا.</td>
+</tr>
+<tr>
+<td>→ الخادم</td>
+<td><code>{"type":"complete"}</code></td>
+<td>تم إرسال الأرشيف كاملا.</td>
+</tr>
+<tr>
+<td>→ الخادم</td>
+<td><code>{"type":"abort"}</code></td>
+<td>يستسلم. أجاب مع <code>status: 499</code>; لم يتم نشر أي شيء.</td>
+</tr>
+<tr>
+<td>الخادم →</td>
+<td><code>{"type":"progress","phase":"publishing","bytesReceived":N}</code></td>
+<td>نبضات القلب كل 15 ثانية أثناء وصول التحميل. تجاهلهم، ولكن توقعهم.</td>
+</tr>
+<tr>
+<td>الخادم →</td>
+<td><code>{"type":"result","status":200,...}</code></td>
+<td>نجاح. باقي الكائن هو نص استجابة HTTP حرفيًا (<code>status</code> يكون <code>201</code> من أجل خلق).</td>
+</tr>
+<tr>
+<td>الخادم →</td>
+<td><code>{"type":"error","status":413,"error":"...","limitBytes":N}</code></td>
+<td>رفض. <code>status</code> والنص هو ما سيجيب عليه مسار HTTP.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>لا يتم نشر أي شيء حتى <code>{"type":"complete"}</code> يصل.</strong> هذا هو السلوك الوحيد الذي لا يحتوي على HTTP
+مكافئ، وهو متعمد: علامة نهاية الأرشيف موجودة <em>داخل</em> بايت القطران، لذلك
+تنتهي المنصة من قراءة أرشيف كامل المظهر دون انتهاء الاتصال على الإطلاق. مقبس
+الذي سقط ببساطة بعد البايت الأخير كان سيتم نشره تمامًا مثل البايت الذي انتهى -
+استبدال اللعبة المباشرة بصمت بدفعة مهجورة. إغلاق المقبس دون تحميلات الإطار
+لا شيء.</p>
+<p>قد يستغرق النشر بعد البايت الأخير بعض الوقت، خاصة بالنسبة لصورة الخادم. يتوقع <code>progress</code>
+دقات القلب بينما تنتهي؛ لا تعامل الفاصل الزمني الهادئ على أنه فشل في التحميل.</p>
+<h3 id="upload-limits">حدود التحميل</h3>
+<p>تشترك جميع مسارات التحميل — نقاط نهاية HTTP وWebSocket — في نفس القواعد.</p>
+<table>
+<thead>
+<tr>
+<th>حد</th>
+<th>قيمة</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>بدل القرص لكل لعبة</td>
+<td><strong>2 جيجابايت</strong> على starhermit.com (قد يختلف البدل حسب اللعبة/النشر)</td>
+</tr>
+<tr>
+<td>الملفات المستضافة لكل حساب</td>
+<td><strong>20 جيجابايت</strong> عبر جميع ألعاب الحساب (يمكن ضبط المشغل لكل حساب)</td>
+</tr>
+<tr>
+<td>نشر المستودع</td>
+<td><strong>50 ميجابايت</strong> أرشيف</td>
+</tr>
+<tr>
+<td><code>starhermit.txt</code> / <code>remove.txt</code></td>
+<td><strong>256 كيلو بايت</strong> كل؛ <code>remove.txt</code> يسرد ما لا يقل عن 10000 مسار (<code>422</code>)</td>
+</tr>
+<tr>
+<td>التنفيذ</td>
+<td>مُطبَّق <strong>أثناء البث</strong>، لذلك يتم قطع الدفعة كبيرة الحجم في منتصف الرحلة</td>
+</tr>
+</tbody>
+</table>
+<p>يتم قطع التحميل أو الدفع عند ما تبقى من بدل استضافة الحساب (<code>413</code> مع
+<code>limitBytes</code>)، ويفشل نشر المستودع الذي من شأنه اجتيازه بسبب تسمية البدل.
+لكل دفعة ولكل لعبة نفس الرقم عند الاستبدال. الدمج يحده <strong>الناتجة</strong>
+حجم اللعبة، لذلك يتم رفض التصحيح الصغير الذي من شأنه أن يجعل الشجرة الحية تتجاوز الحد المسموح به.</p>
+<table>
+<thead>
+<tr>
+<th>حالة</th>
+<th>معنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td><code>mode</code> ليس كذلك <code>replace</code> ولا <code>merge</code>.</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>دمج ضد لعبة لا تحتوي على ملفات منشورة حتى الآن.</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>فوق البدل. يحمل الجسم <code>{ "error", "limitBytes" }</code>. A <code>413</code> <strong>بدون</strong> <code>limitBytes</code> هو الحد الأقصى لهيكل CDN الذي يصل إلى 100 ميجابايت تقريبًا، وليس هذا — <a href="#upload-over-a-websocket">استخدم مقبس التحميل</a>.</td>
+</tr>
+<tr>
+<td><code>422</code></td>
+<td>أرشيف تالف، أو محتويات غير قابلة للاستخدام (ملف التشغيل مفقود، رقم <code>client/</code>, a <code>server/image.tar</code> على مسار الإنشاء، عملية دمج قد تؤدي إلى حذف ملف التشغيل، <code>remove.txt</code> على الاستبدال). أيضا أ <strong>مبتورة</strong> الأرشيف - النتيجة العادية لانقطاع الاتصال أثناء التحميل.</td>
+</tr>
+<tr>
+<td><code>507</code></td>
+<td>الخادم ليس لديه مساحة الآن. رفض <strong>قبل قراءة الجسم</strong> عندما تكون القدرة على النشر غير متوفرة؛ أعد المحاولة لاحقًا.</td>
+</tr>
+</tbody>
+</table>
+<p>لا يجوز للأرشيفات الهروب من جذرها أو تحتوي على روابط، ولا يمكن ذلك إلا للملفات والأدلة العادية
+المستخرج - يتم رفض الارتباطات الرمزية والروابط الثابتة وعقد الجهاز. <code>git archive</code> رؤوس PAX العالمية،
+<code>./</code>-الأسماء السابقة من <code>tar -czf game.tgz .</code>وأسماء الملفات التي تحتوي فقط على <code>..</code>
+(<code>sprite..png</code>) مقبولة. أ <code>..</code> لا يزال يتم رفض جزء المسار.</p>
+<h3 id="rate-limit">حد المعدل</h3>
+<p>الإرسال والمطالبة وتغيير عنوان URL والاستضافة والنشر كلها تصل إلى GitHub على رمز واحد للنظام الأساسي، لذلك
+فهي تقتصر معًا على 10 طلبات في الدقيقة لكل حساب (<code>429</code>، مع <code>Retry-After</code>). ان
+يمكن للمشغل رفعه لحساب واحد.</p>
+<h3 id="enable-hosting">تمكين الاستضافة</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/hosting</code> → <code>GameHostingView</code> ("نشر في starhermit")</p>
+<pre><code class="language-json">{ "enabled": true }
+</code></pre>
+<h3 id="pin-a-deployment">تثبيت النشر</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/deployment</code> → <code>GameHostingView</code></p>
+<pre><code class="language-json">{ "commit": "&lt;sha or branch&gt;" }
+</code></pre>
+<p><code>commit</code> هو اختياري. يؤدي تثبيت فرع/فرع إلى إعادة النشر في قائمة الانتظار؛ استطلاع <code>GET /api/v1/me/github-games/{id}/deployment</code> للحالة.</p>
+<p>يتم رفض هذا بالنسبة للعبة التي لا تحتوي على مستودع (حزمة تم تحميلها): تثبيت الالتزام هو ما
+ينقل اللعبة إلى مستودعها، ولا تحتوي اللعبة التي تم إنشاؤها في الحزمة على أي منها. إعادة نشر لعبة تم تحميلها
+يتحقق من الملفات التي لا تزال موجودة على وحدة التخزين بدلاً من جلب github.com.</p>
+<h3 id="move-a-game-to-a-new-url">انقل لعبة إلى عنوان URL جديد</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/url</code></p>
+<pre><code class="language-json">{ "repoUrl": "https://github.com/you/new-repo", "displayName": "optional for a hosted URL" }
+</code></pre>
+<p>يبقى الصف على قيد الحياة — uid، <code>&lt;uid&gt;.starhermit.com</code>، وقت اللعب، التقييمات - ويتم إعادة نشرها من
+الوجهة. يجب أن تكون وجهة github هي الوجهة التي يمكن للمتصل إثبات سيطرته عليها (<code>403</code> خلاف ذلك)،
+ولها <code>starhermit.txt</code> لا يجب تسمية أ <em>مختلف</em> <code>owner=</code> (<code>403</code>). مكتوبة أو حاوية
+يتم تعطيل الواجهة الخلفية ما لم تعلن الوجهة عن واحدة.</p>
+<h3 id="live-sessions-owner">الجلسات المباشرة (المالك)</h3>
+<p><code>GET /api/v1/me/github-games/{id}/sessions</code> يسرد الجلسات النشطة لخادم اللعبة.
+<code>DELETE .../sessions/{sessionId}</code> ينتهي بواحد من خلال مسار التخلي عن المنصة (لا يوجد فائز، لا
+إلو، السبب <code>operator_ended</code>). يؤدي ذلك إلى إرجاع مقعد السعة الذي كانت الجلسة المتوقفة تعقده.</p>
+<h3 id="leaderboards-and-achievements-owner">المتصدرين والإنجازات (المالك)</h3>
+<p>مالك اللعبة هو ناشرها: يمكنك إنشاءها <strong>المتصدرين</strong> و <strong>الإنجازات</strong> لذلك
+تحت <code>/me/github-games/{id}/leaderboards</code> و <code>/achievements</code> بدون حساب الناشر. فقط
+يكتب لهم خادم لعبتك، لذا تحتاج اللعبة إلى ملف <code>server=</code> البرنامج النصي أو <code>container.image=</code>
+الواجهة الخلفية - تحصل على لعبة للمتصفح فقط <code>409</code>. يرى <a href="/ar/docs/api/leaderboards.html#your-games-own-leaderboards">المتصدرين</a>,
+<a href="/ar/docs/api/achievements.html#achievements-created-by-the-games-owner">الإنجازات</a> و
+<a href="/ar/docs/tutorials/game-leaderboards-achievements.html">درس تعليمي</a>.</p>
+<h2 id="dtos">DTOs</h2>
+<pre><code class="language-json">// GitHubGameDto
+{
+  "id": "...",
+  "repoUrl": "...",
+  "ownerLogin": "...",
+  "repoName": "...",
+  "displayName": "...",
+  "launchPath": "index.html",
+  "serverScriptPath": "server.js",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "serverRuntime": "script",
+  "isVerifiedOwner": true,
+  "metadataSource": "...",
+  "createdAt": "...",
+  "coverArtSource": "manifest",
+  "coverArtUpdatedAt": "...",
+  "hosting": { "hostingEnabled": true },
+  "description": "Tend a garden on a drifting asteroid.",
+  "releaseNotesUpdatedAt": "..."
+}
+</code></pre>
+<ul>
+<li><code>serverScriptPath</code> موجود فقط لواجهة JavaScript الخلفية. لا يعرض DTO الحالي مرجع صورة الحاوية.</li>
+<li><code>gameSlug</code> موجود لكل لعبة تمت إضافتها من مجلد محلي وكل لعبة أضافها مالك معتمد، <strong>مع أو بدون الواجهة الخلفية للخادم</strong> - يتناول عناصر التحكم في اللعبة والإعدادات وفتحة الحفظ السحابي والغرف ورموز الإطلاق. إنها <code>null</code> فقط لتقديم المستودع الذي لم يثبت صاحبه. لا يخبرك ما إذا كانت اللعبة لها واجهة خلفية أم لا؛ <code>serverRuntime</code> يفعل.</li>
+<li><code>serverRuntime</code> يوضح ما إذا كانت اللعبة تحتوي على واجهة خلفية للخادم: <code>"script"</code>, <code>"container"</code>، أو <code>null</code> للعبة للمتصفح فقط. يتفق مع <code>GET /api/v1/games/{gameSlug}</code>، الذي يجيب <code>404</code> بالضبط عندما يكون <code>null</code>.</li>
+<li>بالنسبة للعبة تمت إضافتها من مجلد محلي، <code>repoUrl</code> هو مادة اصطناعية <code>upload:&lt;id&gt;</code> علامة و <code>ownerLogin</code>/<code>repoName</code> فارغة - لا يوجد مستودع للاسم، والمالك الفارغ هو ما يجعل القائمة غير قابلة للمطالبة بها.</li>
+<li><code>coverArtSource</code> يكون <code>"upload"</code>, <code>"manifest"</code> أو <code>null</code>، و <code>coverArtUpdatedAt</code> هو آخر مرة تم فيها تغيير هذا الغطاء - استخدمه للتخزين المؤقت <code>/cover</code> عنوان URL. أي شيء غير فارغ يعني أن اللعبة تحتوي على غلاف فني لجلبه؛ <code>null</code> يعني الرجوع إلى <code>/icon</code>. المصدران غير متساويين: التحميل يفوز دائمًا، وهو الوحيد <code>DELETE /cover</code> يمكن إزالة.</li>
+<li><code>description</code> هو وصف البيان، أو <code>null</code>. <code>releaseNotesUpdatedAt</code> عندما تكون ملاحظات الإصدار الأخيرة <em>تم تغيير النص</em> (<code>null</code> عندما لا تحتوي اللعبة على شيء). إن إعادة نشر الملاحظات المتطابقة لا يؤدي إلى تحريكها، لذا فمن الآمن قيادة أ "ما هو الجديد" الشارة: تذكر القيمة التي شاهدها اللاعب آخر مرة وقارنها. الملاحظات نفسها ليست في القائمة؛ يرى <a href="#description-and-release-notes">الوصف وملاحظات الإصدار</a>.</li>
+<li><code>SharedGitHubGameDto</code> يمتد <code>GitHubGameDto</code> مع <code>submittedByUserId</code> و <code>submittedByUsername</code>.</li>
+</ul>
+<h3 id="description-and-release-notes">الوصف وملاحظات الإصدار</h3>
+<p>كلاهما يأتي من اللعبة <code>starhermit.txt</code>; يرى
+<a href="/ar/docs/starhermit-txt.html#description-and-release-notes">المرجع الواضح</a> لكيفية كتابتها.
+الوصف موجود في قوائم اللعبة أعلاه. يمكن أن تصل ملاحظات الإصدار إلى 20000 حرف، لذا فهي
+يتم الاحتفاظ بها خارج قائمة التصفح، التي تعرض كل لعبة مرة واحدة، ويتم جلبها لكل لعبة:</p>
+<pre><code class="language-http">GET /api/v1/github-games/{id}/release-notes
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<pre><code class="language-json">// GitHubGameReleaseNotesDto
+{
+  "id": "...",
+  "releaseNotes": "- New: night cycle\n- Fixed: seeds vanishing after a reload",
+  "updatedAt": "2026-09-27T10:15:00+00:00",
+  "commitSha": "4f2a…"
+}
+</code></pre>
+<ul>
+<li><code>releaseNotes</code> و <code>updatedAt</code> نكون <code>null</code> عندما تعلن اللعبة عدم وجود ملاحظات.</li>
+<li><code>commitSha</code> هو الالتزام المنشور للعبة المستودع، و <code>null</code> للبناء الذي تم تحميله.</li>
+<li>اسأل فقط متى <code>releaseNotesUpdatedAt</code> في القائمة أحدث مما أظهرته آخر مرة.</li>
+<li>يتم إرجاع النص تمامًا كما كتبه المطور (عادةً Markdown). تقديم ذلك هو
+اختيار العميل، ويجب التعامل معها على أنها مدخلات غير موثوقة مثل أي نص مستخدم.</li>
+</ul>
+<pre><code class="language-json">// GameHostingView
+{
+  "hostingEnabled": true,
+  "hostedUrl": "https://yourgame.starhermit.com",
+  "deployStatus": "...",
+  "pinnedCommitSha": "...",
+  "deployedCommitSha": "...",
+  "deployError": null,
+  "deployedAt": "..."
+}
+</code></pre>
+<p><code>hostedUrl</code>, <code>pinnedCommitSha</code>, <code>deployedCommitSha</code>, <code>deployError</code>، و <code>deployedAt</code> هي اختيارية.</p>
+<pre><code class="language-json">// GameStatsDto  (GET /api/v1/me/github-games/{id}/stats — owner only)
+{
+  "totalPlayers": 42,
+  "playingNow": 3,
+  "totalSessions": 130,
+  "totalPlaytimeMinutes": 8140,
+  "lastPlayedAt": "2026-07-29T08:45:24Z",
+  "livenessWindowHours": 4
+}
+</code></pre>
+<h2 id="publish-your-own-game-walkthrough">انشر لعبتك الخاصة: الإرشادات التفصيلية</h2>
+<p>هناك طريقان للدخول. إذا كانت لعبتك موجودة في مستودع git، فاتبع الخطوات المرقمة أدناه.
+إذا كان مجرد مجلد على جهازك، فستقوم مكالمة واحدة بكل ذلك:
+<a href="#add-a-game-from-a-local-folder">إضافة لعبة من مجلد محلي</a> يسجل اللعبة وينشر
+الملفات، ويتركها مباشرة - لا يوجد تبديل للاستضافة ولا دبوس التزام، لأنه لا يوجد مستودع لها
+المسار.</p>
+<ol>
+<li><strong>اختر مصدرًا</strong>: دفع الريبو الذي يحتوي على <code>starhermit.txt</code> في الجذر (الإعلان اختياريًا عن a <code>server.js</code> البرنامج النصي أو صورة الحاوية)، أو قم بإعداد عنوان URL العام للعبة متصفح مستضافة بالفعل.</li>
+<li><strong>اربط هوية GitHub الخاصة بك</strong> عبر تدفق OAuth (انظر <a href="/ar/docs/api/auth.html">auth.md</a>); تحقق مع <code>GET /api/v1/me/github</code>.</li>
+<li><strong>سجل اللعبة</strong>: <code>POST /api/v1/me/github-games</code> مع المستودع أو عنوان URL للعبة المستضافة في <code>repoUrl</code>.</li>
+<li><strong>ألعاب المستودع فقط — تمكين الاستضافة</strong>: <code>PUT /api/v1/me/github-games/{id}/hosting</code> مع <code>{ "enabled": true }</code>.</li>
+<li><strong>ألعاب المستودع فقط - قم بتثبيت الالتزام</strong>: <code>PUT /api/v1/me/github-games/{id}/deployment</code> مع <code>{ "commit": "&lt;sha&gt;" }</code>. يتحكم الالتزام المثبت في النسخة المباشرة.</li>
+<li><strong>يبدأ اللاعبون اللعبة</strong>: يتم تقديم لعبة المستودع المنشورة في <code>&lt;slug&gt;.starhermit.com</code>; تفتح اللعبة المستضافة المباشرة عنوان URL المقدم الخاص بها. كل مباراة مع <code>gameSlug</code> — الخلفية أم لا — يتلقى رمز الإطلاق من <code>POST /api/v1/games/&lt;slug&gt;/launch-token</code> في جزء عنوان URL (اختياريًا مع <code>&amp;session_id=&lt;guid&gt;</code> لدعوة الروابط العميقة).</li>
+</ol>
+<p>للحصول على العقد الكامل من جانب العميل - كيف تقرأ اللعبة رمز الإطلاق المميز وتتحدث إلى واجهة برمجة التطبيقات (API) - راجع <a href="/ar/docs/tutorials/chess-walkthrough.html">تجول الشطرنج</a> من التنفيذ المرجعي</p>
+<h2 id="see-also">انظر أيضا</h2>
+<ul>
+<li><a href="/ar/docs/api/games.html">games.md</a> - نقاط نهاية اللعبة، إطلاق الرموز</li>
+<li><a href="/ar/docs/api/game-scripts.html">game-scripts.md</a> - خوادم ألعاب جافا سكريبت ذات وضع الحماية</li>
+<li><a href="/ar/docs/api/container-games.html">container-games.md</a> - خوادم الألعاب المستضافة بالحاويات</li>
+<li><a href="/ar/docs/api/auth.html">auth.md</a> — ربط هوية JWT وOAuth</li>
+<li><a href="/ar/docs/tutorials/chess-walkthrough.html">دروس/الشطرنج-walkthrough.md</a> - التنفيذ المرجعي الشامل</li>
+<li><a href="/ar/docs/tutorials/claim-existing-game.html">دروس/المطالبة-game.md الموجودة</a> - تولي قائمة موجودة تملكها</li>
+</ul>
+<p>مشترك <a href="/ar/docs/api/conventions.html">اتفاقيات API</a> وصف تحليل الاستجابة، والطوابع الزمنية، وترقيم الصفحات، وإعادة المحاولة.</p>
+<p>يرى <a href="/ar/docs/credentials.html">التوافق الاعتماد</a> و <a href="/ar/docs/api/contracts.html">العقود المقروءة آليا</a>.</p>
+
+{% endraw %}

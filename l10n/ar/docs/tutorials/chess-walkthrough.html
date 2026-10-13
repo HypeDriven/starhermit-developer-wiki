@@ -1,0 +1,357 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "إرشادات التكامل: إنشاء لعبة على StarHermit"
+source_url: "/docs/tutorials/chess-walkthrough.html"
+source_path: "docs/tutorials/chess-walkthrough.md"
+source_hash: "7821c7dca4a5960c279cb38770c02c54213ef04443d3147dac75b7d222022dec"
+translation: "machine"
+permalink: "/ar/docs/tutorials/chess-walkthrough.html"
+---
+{% raw %}
+<h1 id="integration-walkthrough-building-a-game-on-starhermit">إرشادات التكامل: إنشاء لعبة على StarHermit</h1>
+<p>تستعرض هذه الصفحة دورة الحياة الكاملة لدمج اللعبة مع StarHermit، خطوة بخطوة - النشر، الإطلاق، القائمة، التوفيق، اللعب، الدردشة، الصوت، التقييمات، الإعادة. كل ما هو مبين ينطبق على <strong>أي</strong> اللعبة: تستبدل لعبتك سبيكة ثابتة خاصة بها، وأوامرها الخاصة، ونص قواعدها الخاص.</p>
+<p>المثال الجاري هو تطبيق مرجع الشطرنج مفتوح المصدر، <a href="https://github.com/HypeDriven/starhermit-chess">starhermit-الشطرنج</a>: لعبة شطرنج بالمراسلة (24 ساعة لكل حركة، مصنفة بتصنيف elo) تم تصميمها كلعبة متصفح ثابتة بدون إنشاء بتنسيق HTML/JS/CSS. في كل خطوة، تعرض الإرشادات التفصيلية المكالمات الدقيقة التي يجريها عميل اللعبة والملف الموجود في الريبو المرجعي الذي يجريها. أينما تظهر القيم الخاصة بالشطرنج - UUID للعبة المرجعية، وأوامر النقل، وترميز اللوحة، و "هال" الذكاء الاصطناعي، الموعد النهائي للتحرك لمدة 24 ساعة - هي أمثلة على القيم التي تحددها لعبتك لنفسها في نصها الخاص.</p>
+<p>اقرأها بجانب الصفحات المرجعية لواجهة برمجة التطبيقات (API) التي ترتبط بها. تقوم قائمة المراجعة الموجودة في النهاية بتكثيف كل شيء في ما تحتاج لعبتك إلى تكراره.</p>
+<h2 id="1-anatomy-of-a-platform-hosted-game">1. تشريح اللعبة التي تستضيفها المنصة</h2>
+<p>لعبة النظام الأساسي المكتوبة عبارة عن موقع ثابت عادي بالإضافة إلى ملف قواعد واحد. على سبيل المثال، لا يحتوي تطبيق مرجع الشطرنج على مُجمّع ولا إطار عمل ولا خطوة بناء:</p>
+<table>
+<thead>
+<tr>
+<th>ملف</th>
+<th>دور</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index.html</code></td>
+<td>الصفحة بأكملها: اللوحة والقائمة والدردشة وواجهة المستخدم الصوتية</td>
+</tr>
+<tr>
+<td><code>app.js</code></td>
+<td>تمهيد التطبيق، القائمة الرئيسية، التوفيق، الدعوات، الإعادة، الملفات الشخصية</td>
+</tr>
+<tr>
+<td><code>net.js</code></td>
+<td>طبقة HTTP: مسارات اللعبة المحددة النطاق، ورموز الإطلاق، وتحديث الرمز المميز</td>
+</tr>
+<tr>
+<td><code>game.js</code></td>
+<td>وحدة التحكم داخل اللعبة: اللعب WebSocket والدردشة والصوت</td>
+</tr>
+<tr>
+<td><code>ui.js</code></td>
+<td>تقديم اللوحة والقائمة</td>
+</tr>
+<tr>
+<td><code>style.css</code></td>
+<td>الأنماط</td>
+</tr>
+<tr>
+<td><code>server.js</code></td>
+<td>القواعد – انظر أدناه</td>
+</tr>
+<tr>
+<td><code>starhermit.txt</code></td>
+<td>نشر البيان</td>
+</tr>
+</tbody>
+</table>
+<p>في التنفيذ المرجعي <code>server.js</code> يستحق اهتماما خاصا. إنها <strong>كلاهما</strong> الأشياء في وقت واحد:</p>
+<ul>
+<li>ال <strong>البرنامج النصي المعتمد للخادم</strong> يتم تنفيذ النظام الأساسي (عبر مضيف Jint الخاص به) عن طريق الكشف <code>globalThis.game</code>. يتم التحقق من صحة كل خطوة هنا، على الخادم، وفقًا للعقد المبرم <a href="/ar/docs/api/game-scripts.html">game-scripts.md</a>.</li>
+<li>العميل <strong>محرك القواعد المشتركة</strong>، مكشوف كما <code>globalThis.chessRules</code>، والذي يستخدمه المتصفح لعرض اللوحة ونقل المعاينات وإعادة التشغيل.</li>
+</ul>
+<p>ملف واحد، مصدر واحد للحقيقة، <strong>صفر قواعد السلطة على العميل</strong>. لا يقرر عميل اللعبة الذي يتبع هذا النمط أبدًا ما إذا كانت النقلة قانونية أم لا، فهو يعرض ما يبثه الخادم. هذه هي الفكرة المعمارية الأكثر أهمية في لعبة منصة مكتوبة، والتنفيذ المرجعي يوضح ذلك.</p>
+<h2 id="2-publishing-your-game">2. نشر لعبتك</h2>
+<p>يبدأ نشر أي لعبة بـ <code>starhermit.txt</code> واضح في جذر الريبو. ويعلن عن اللعبة <code>name</code>, <code>launch</code> نقطة الدخول, <code>owner</code>، و <code>server</code> script. خياري <code>cover=</code> هو العمل الفني الموجود على بلاط المكتبة - انظر <a href="/ar/docs/starhermit-txt.html#game-with-cover-art">ال <code>starhermit.txt</code> يظهر</a>. بيان تنفيذ المرجع، على سبيل المثال:</p>
+<pre><code class="language-text">name=StarHermit Chess
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6  # StarHermit user ID, not username/nickname
+server=server.js
+</code></pre>
+<p>استخدم غير قابل للتغيير <code>id</code> من <code>GET /api/v1/me</code> ل <code>owner</code>; يتم عرض أسماء المستخدمين والألقاب
+القيم ولا ينبغي استخدامها كمعرفات ملكية واضحة.</p>
+<p>يقوم النظام باستنساخ الريبو، ويخدم الملفات الثابتة في <code>&lt;slug&gt;.starhermit.com</code> — سبيكة هو معرف المستخدم الذي يعينه النظام الأساسي للعبة، وليس الاسم الذي تختاره أبدًا؛ اللعبة المرجعية هي <code>83fd04b1-3cbe-4b09-a251-3733ad4b9d94</code>، لذلك يمكن تشغيلها مباشرة على <a href="https://83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com">83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com</a> - والوكلاء <code>/api</code> و <code>/ws</code> إلى الخلفية <strong>نفس الأصل</strong>. يؤدي هذا القرار إلى إزالة فئة كاملة من العمل: لا يوجد CORS، ولا تكوين قاعدة API، ولا اكتشاف البيئة - يستخدم عملاء اللعبة فقط المسارات النسبية.</p>
+<p>التدفق الكامل: <a href="/ar/docs/api/github-games.html">github-games.md</a> و <a href="/ar/docs/api/publisher.html">publisher.md</a>.</p>
+<h2 id="3-launch-and-authentication">3. الإطلاق والمصادقة</h2>
+<p>يتلقى التدفق المرجعي للشطرنج بيانات الاعتماد من مشغل النظام الأساسي:</p>
+<ol>
+<li>يدعو قاذفة <code>POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/launch-token</code> (يظهر مع UUID الخاص باللعبة المرجعية؛ استبدله بنفسك) باستخدام النظام الأساسي الكامل للمستخدم JWT.</li>
+<li>ويعود لفترة قصيرة، <strong>نطاق اللعبة</strong> رمز:</li>
+</ol>
+<pre><code class="language-json">{ "token": "&lt;jwt&gt;", "expiresInSeconds": 3600 }
+</code></pre>
+<ol start="3">
+<li>تفتح اللعبة في <code>index.html#game_token=&lt;jwt&gt;</code>، اختياريا مع <code>&amp;session_id=&lt;guid&gt;</code> تم إلحاقه بدعوة الروابط العميقة.</li>
+</ol>
+<p>في التنفيذ المرجعي، يقرأ العميل التجزئة <strong>مرة واحدة</strong>، ثم يجردها <code>history.replaceState</code> لذلك لا يبقى الرمز المميز أبدًا في شريط URL أو السجل (<code>app.js</code>, <code>App.init</code>). يقوم بفك تشفير حمولة JWT لمطالبتين:</p>
+<ul>
+<li><code>sub</code> - معرف المستخدم</li>
+<li><code>game_scope</code> — سبيكة اللعبة</li>
+</ul>
+<p>وهذا الادعاء الثاني مهم: <strong>لا ينبغي لعميل اللعبة مطلقًا أن يقوم بترميز سبيكةته الثابتة</strong>. ينشئ التنفيذ المرجعي كل عنوان URL لواجهة برمجة التطبيقات (API) كـ <code>/api/v1/games/&lt;slug&gt;</code> بالإضافة إلى لاحقة (<code>net.js</code>, <code>Net.gamePath</code>)، لذا فإن نفس الكود يعمل مع أي لعبة، أو أي سبيكة، أو أي نشر.</p>
+<p><strong>ينعش.</strong> يُسمح للرمز المميز بإعادة الاتصال <code>launch-token</code> للعبتها الخاصة، لذلك عادةً ما يتم تحديث العملاء بشكل دوري — يتم تحديث التنفيذ المرجعي كل 45 دقيقة (<code>net.js</code>, <code>Net.startRefresh</code>)، بشكل مريح خلال عمر 60 دقيقة.</p>
+<p>يمكن للعبة المفتوحة مباشرة أن تقدم بدلاً من ذلك <a href="/ar/docs/api/auth.html#sign-in-from-a-directly-opened-browser-game">تسجيل الدخول إلى المتصفح</a>,
+الذي يعود <code>#access_token</code> بدلاً من المشغل <code>#game_token</code>. التعامل مع كلا مسارات الدخول إذا
+أنت تدعم كليهما. قم بالتجديد باستخدام العمر المرتجع واحترم سلسلة التجديد الافتراضية البالغة 12 ساعة
+السقف. أ <code>403 terms_acceptance_required</code> يتطلب من اللاعب <a href="/ar/docs/api/profile.html#terms-acceptance">قبول من خلال حساباتهم</a>;
+أو اعرض الشروط داخل اللعبة واقبلها باستخدام رمز إطلاق اللاعب. تسجيل الدخول مرة أخرى لا
+قبول السجل.</p>
+<p>مرجع المصادقة: <a href="/ar/docs/api/auth.html">auth.md</a>, <a href="/ar/docs/api/games.html">games.md</a>.</p>
+<h2 id="4-loading-the-main-menu">4. تحميل القائمة الرئيسية</h2>
+<p>عادةً ما يتم فتح قائمة اللعبة بمجموعة صغيرة من عناصر GET مقابل المجموعة الثابتة الخاصة بها. في التنفيذ المرجعي هذا هو <code>refreshMenu</code> في <code>app.js</code>:</p>
+<p><strong>معلومات اللعبة + احصائياتي:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94
+</code></pre>
+<pre><code class="language-json">{
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "name": "StarHermit Chess",
+  "enabled": true,
+  "leaderboardId": "&lt;guid&gt;",
+  "maxConcurrentSessionsPerPlayer": 20,
+  "me": {
+    "userId": "&lt;guid&gt;",
+    "elo": 1420,
+    "wins": 31,
+    "losses": 18,
+    "draws": 4,
+    "activeSessionCount": 3
+  }
+}
+</code></pre>
+<p>ال <code>me</code> الكتلة هي بطاقة اللاعب بأكملها — elo، والتسجيل، وعدد الجلسات المتزامنة المسموح بها قيد الاستخدام (20 في مثال الشطرنج).</p>
+<p><strong>جلساتي:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/mine
+</code></pre>
+<pre><code class="language-json">[
+  {
+    "sessionId": "&lt;guid&gt;",
+    "status": "active",
+    "players": [ /* ... */ ],
+    "createdAt": "…",
+    "finishedAt": null,
+    "myTurn": true,
+    "deadline": 1784642591000
+  }
+]
+</code></pre>
+<p><code>myTurn</code> و <code>deadline</code> هي ما يجعل قائمة جلسات لعبة المراسلة مفيدة - يرى اللاعب في لمحة سريعة الألعاب التي تنتظره ومتى يحين موعد كل خطوة.</p>
+<p><strong>لوحة المتصدرين للأصدقاء:</strong></p>
+<pre><code class="language-http">GET /api/v1/leaderboards/{leaderboardId}/entries?friendsOnly=true&amp;page=1&amp;pageSize=10
+</code></pre>
+<p>باستخدام <code>leaderboardId</code> من استجابة معلومات اللعبة.</p>
+<p><strong>الإعادة الأخيرة:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/mine?limit=10
+</code></pre>
+<p><strong>الدعوات المعلقة:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites
+</code></pre>
+<p>مراجع: <a href="/ar/docs/api/games.html">games.md</a>, <a href="/ar/docs/api/leaderboards.html">leaderboards.md</a>.</p>
+<h2 id="5-getting-players-into-a-session--three-ways">5. إشراك اللاعبين في الجلسة – ثلاث طرق</h2>
+<p>تستخدم هذه الإرشادات ممارسة التوفيق وقبول الدعوة والذكاء الاصطناعي لإنشاء الجلسات. يمكن استخدام الألعاب التي تحتاج إلى ردهة <a href="/ar/docs/api/realtime.html">غرف الوقت الحقيقي</a>، والذي يمكن أن يؤدي تدفق البداية الخاص به أيضًا إلى إنشاء جلسة موثوقة مقيدة.</p>
+<h3 id="a-matchmaking">أ. التوفيق بين</h3>
+<p>في التنفيذ المرجعي <code>App.startMatchmaking</code> في <code>app.js</code>:</p>
+<pre><code class="language-http">POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking
+</code></pre>
+<p>الرد إما أن يكون تذكرة:</p>
+<pre><code class="language-json">{ "ticketId": "&lt;guid&gt;", "status": "queued" }
+</code></pre>
+<p>أو مباراة فورية:</p>
+<pre><code class="language-json">{ "status": "matched", "sessionId": "&lt;guid&gt;" }
+</code></pre>
+<p>أثناء الوقوف في قائمة الانتظار، يقوم العملاء باستطلاع نقطة نهاية التوفيق — استطلاعات التنفيذ المرجعية <code>GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking</code> كل 3 ثواني، و <code>DELETE /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking</code> يلغي التذكرة. يتأكد العميل المرجعي أيضًا من أن اللاعب لن يظل مطلقًا محدقًا في القرص الدوار: بعد 30 ثانية من عدم التطابق، <strong>"العب ضد هال"</strong> يظهر الزر ("هال" هو خصم الذكاء الاصطناعي المدمج في مثال الشطرنج - راجع الفقرة 12)، و <code>POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/ai</code> يعود <code>{ "sessionId" }</code>.</p>
+<h3 id="b-friend-invite">ب. دعوة صديق</h3>
+<p>في التنفيذ المرجعي <code>App.inviteFriend</code> في <code>app.js</code>. قم أولاً بإدراج الأصدقاء - نقطة النهاية هذه مسموح بها صراحةً للرموز المميزة على مستوى اللعبة:</p>
+<pre><code class="language-http">GET /api/v1/me/friends
+</code></pre>
+<p>ثم أرسل الدعوة:</p>
+<pre><code class="language-http">POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites
+{ "toUserId": "&lt;guid&gt;" }
+</code></pre>
+<p>يقبل المستلم (أو يرفض) من عميله:</p>
+<pre><code class="language-http">POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/{id}/accept   → { "sessionId": "&lt;guid&gt;" }
+POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/{id}/decline  → 204
+</code></pre>
+<p>القبول هو ما يخلق الجلسة. ال <code>&amp;session_id=</code> يقوم Launch-hash Deep Link (§3) بإسقاط اللاعب المدعو مباشرة فيه.</p>
+<p>تصل دعوات الصداقة فقط إلى الأشخاص الذين هم أصدقاء بالفعل. لجذب شخص ليس موجودًا (أو ليس موجودًا على النظام الأساسي على الإطلاق)، يوفر التنفيذ المرجعي أيضًا <strong>مشاركة رابط الدعوة</strong> زر (<code>App.shareInviteLink</code>): سطر واحد من بناء السلسلة الذي ينسخ</p>
+<pre><code>https://dashboard.starhermit.com/game-invite/&lt;Net.userId&gt;/&lt;slug&gt;
+</code></pre>
+<p>إلى الحافظة. تتعامل لوحة تحكم الويب مع كل ما يحتاجه المستلم - تسجيل الدخول، طلب الصداقة، اللقب، تشغيل اللعبة - ثم ترسل دعوة اللعب مرة أخرى إلى المشارك، بحيث يتم إدراجها في قائمة الدعوات نفسها. يرى <a href="/ar/docs/api/games.html#share-links-invite-by-url">مشاركة الروابط</a> للعقد كاملا.</p>
+<h3 id="c-the-rule">ج. القاعدة</h3>
+<p>يتم إنشاء الجلسات عن طريق التوفيق، وقبول الدعوة، <code>sessions/ai</code>، أو بدء غرفة في الوقت الفعلي باستخدام
+الواجهة الخلفية للخادم. بالنسبة للردهة التي تحتوي على مقاعد، استخدم <a href="/ar/docs/api/realtime.html">غرف الوقت الحقيقي API</a>.</p>
+<h2 id="6-playing-over-the-gameplay-websocket">6. اللعب عبر طريقة اللعب WebSocket</h2>
+<p>حلقة التشغيل هي نفسها بالنسبة لكل لعبة مكتوبة: جلب الجلسة، فتح المقبس، عرض البث، إرسال الأوامر. في التنفيذ المرجعي يعيش هذا <code>game.js</code>, <code>GameController</code>.</p>
+<p><strong>جلب الجلسة:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/{sessionId}
+</code></pre>
+<pre><code class="language-json">{
+  "sessionId": "&lt;guid&gt;",
+  "status": "active",
+  "players": [ /* ... */ ],
+  "createdAt": "…",
+  "finishedAt": null,
+  "chatConversationId": "&lt;guid&gt;",
+  "result": null
+}
+</code></pre>
+<p>ملحوظة <code>chatConversationId</code> — سوف تحتاج إليها للدردشة (§7) والصوت (§8).</p>
+<p><strong>قم بتوصيل مقبس اللعب:</strong></p>
+<pre><code class="language-text">ws(s)://&lt;host&gt;/ws/v1/games?sessionId=&lt;id&gt;&amp;access_token=&lt;token&gt;
+</code></pre>
+<p>على <code>open</code>، يرسل العميل على الفور أمر المزامنة:</p>
+<pre><code class="language-json">{ "type": "cmd", "data": { "type": "sync" } }
+</code></pre>
+<p>في أي قطع يتم إعادة الاتصال مع تراجع أسي من ثانية واحدة حتى سقف 30 ثانية، و <strong>يعيد إرسال المزامنة عند كل عملية فتح</strong>. يجعل أمر المزامنة إعادة الاتصال عديمة الحالة وغير فعالة: مهما فاته العميل، يعيد الخادم البث.</p>
+<p><strong>المغلف.</strong> كل إطار عبارة عن مظروف JSON رقيق:</p>
+<ul>
+<li>العميل → الخادم: <code>{"type":"cmd","data":&lt;command&gt;}</code></li>
+<li>الخادم → العميل: <code>{"type":"game","data":…}</code>, <code>{"type":"error","error":…}</code>, <code>{"type":"presence","userId","online"}</code></li>
+</ul>
+<p><strong>يتم تحديد أوامر اللعبة من خلال برنامج القواعد الخاص بك.</strong> أوامر مثال الشطرنج، على سبيل المثال ( <code>data</code> حمولة أ <code>cmd</code> إطار):</p>
+<pre><code class="language-json">{ "type": "sync" }
+{ "type": "move", "from": "e2", "to": "e4", "promo": "q" }
+{ "type": "resign" }
+{ "type": "offer-draw" }
+{ "type": "accept-draw" }
+{ "type": "decline-draw" }
+</code></pre>
+<p>وفي مثال الشطرنج <code>promo</code> موجود فقط في التحركات الترويجية.</p>
+<p><strong>يتم تحديد عمليات البث بالمثل.</strong> بث مثال الشطرنج ( <code>data</code> حمولة أ <code>game</code> إطار):</p>
+<ul>
+<li><code>state</code> - اللقطة الكاملة:</li>
+</ul>
+<pre><code class="language-json">{
+  "type": "state",
+  "white": "&lt;userId&gt;",
+  "black": "&lt;userId&gt;",
+  "ratings": { "white": 1420, "black": 1388 },
+  "board": "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr",
+  "turn": "w",
+  "moves": [ { "from": "e2", "to": "e4", "promo": null, "san": "e4", "at": "…" } ],
+  "status": "active",
+  "result": null,
+  "deadline": 1784642591000,
+  "drawOfferBy": null,
+  "ai": false,
+  "aiName": null
+}
+</code></pre>
+<p>ال <code>board</code> عبارة عن سلسلة مكونة من 64 حرفًا، <code>index = rank * 8 + file</code> مع <code>a1 = 0</code>، استخدام <code>PNBRQK</code> للأبيض، <code>pnbrqk</code> للأسود، <code>.</code> للمربعات الفارغة - ترميز خاص بالشطرنج؛ تحدد لعبتك شكل حالتها الخاصة.</p>
+<ul>
+<li><code>moved</code> — تم تطبيق خطوة واحدة.</li>
+<li><code>draw-offered</code> / <code>draw-declined</code>.</li>
+<li><code>game-over</code> — <code>{ "result": { "kind", "reason", "at" }, "view" }</code>، أين <code>reason</code> يتم تعريف القيم بالبرنامج النصي؛ يستخدم مثال الشطرنج <code>checkmate</code>, <code>stalemate</code>, <code>threefold-repetition</code>, <code>fifty-move-rule</code>, <code>insufficient-material</code>, <code>resignation</code>, <code>agreement</code>, <code>timeout</code>, <code>timeout-no-moves</code>.</li>
+</ul>
+<p><strong>لا يتم أخذ الهوية أبدًا من الحمولات.</strong> يرسل العميل أوامر بدون معرف مستخدم، ولا يثق البرنامج النصي مطلقًا في أي أمر من السلك - حيث تقوم المنصة بتمرير المرسل المصادق عليه إلى البرنامج النصي. لا يوجد شيء للتحايل.</p>
+<p>يرى <a href="/ar/docs/api/game-scripts.html">game-scripts.md</a> لعقد النص وراء كل هذا.</p>
+<h2 id="7-in-game-chat">7. الدردشة داخل اللعبة</h2>
+<p>كل جلسة تحمل <code>chatConversationId</code> (§6) التي يمكن لعملاء اللعبة استخدامها للدردشة داخل اللعبة. في التنفيذ المرجعي <code>initChat</code> في <code>game.js</code> يستخدمه مثل هذا:</p>
+<pre><code class="language-http">GET  /api/v1/chat/conversations/{id}/messages?page=1&amp;pageSize=50
+POST /api/v1/chat/conversations/{id}/messages
+     { "content": "good luck!" }
+</code></pre>
+<p>مقبس الدردشة في الوقت الحقيقي <code>ws/v1/chat</code> يكون <strong>محظور للرموز المميزة على نطاق اللعبة</strong>. يحاول العميل المرجعي ذلك مرة واحدة، ويتم رفضه، ويعود إلى استطلاع نقطة نهاية REST كل 5 ثوانٍ - خطط للاستفتاء من البداية في لعبتك الخاصة.</p>
+<p>تعمل الدردشة حتى لو لم يكن اللاعبان صديقين: محادثة الجلسة (اكتب <code>"game"</code>) مع كلا اللاعبين كمشاركين، لذا فإن قواعد أذونات الدردشة المعتادة مستوفاة بالفعل.</p>
+<p>مرجع: <a href="/ar/docs/api/chat.html">chat.md</a>.</p>
+<h2 id="8-voice">8. الصوت</h2>
+<p>يتم الاشتراك في الصوت، وعادةً ما يحتفظ به عملاء اللعبة <strong>إيقاف بشكل افتراضي</strong>. التنفيذ المرجعي يتعامل معه <code>game.js</code>, <code>VoiceController</code>. عندما يقوم اللاعب بتمكينه:</p>
+<ol>
+<li>ابحث عن الغرفة المرتبطة بمحادثة الجلسة أو قم بإنشائها:</li>
+</ol>
+<pre><code class="language-http">GET  /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;
+POST /api/v1/voice/rooms
+     { "conversationId": "&lt;chatConversationId&gt;" }
+</code></pre>
+<ol start="2">
+<li>انضم إليه:</li>
+</ol>
+<pre><code class="language-http">POST /api/v1/voice/rooms/{roomId}/join
+</code></pre>
+<ol start="3">
+<li>قم بتوصيل مقبس الصوت:</li>
+</ol>
+<pre><code class="language-text">ws(s)://&lt;host&gt;/ws/v1/voice?roomId=&lt;id&gt;&amp;access_token=&lt;token&gt;
+</code></pre>
+<p>وسائل الإعلام هي <strong>WebRTC نظير إلى نظير مع تفاوض مثالي</strong>; يحمل المقبس الإشارات والتحكم فقط:</p>
+<ul>
+<li>الإشارة: <code>{"type":"rtc","to":&lt;userId&gt;,"payload":{"sdp":…}}</code> أو <code>{"type":"rtc","to":&lt;userId&gt;,"payload":{"ice":…}}</code></li>
+<li>يتحكم: <code>{"type":"mute","muted":…}</code>, <code>{"type":"speaking","speaking":…}</code></li>
+<li>أحداث الخادم: <code>voice.roster</code>, <code>voice.participant_joined</code>, <code>voice.participant_left</code>, <code>voice.mute_changed</code>, <code>voice.speaking</code>, <code>voice.rtc</code></li>
+</ul>
+<p>إذا فشل P2P، فإن الإجراء الاحتياطي هو الإطارات الثنائية التي يتم ترحيلها بواسطة الخادم: معرف مرسل 16 بايت متبوعًا بالحمولة الصوتية.</p>
+<p>الصوت هو <strong>معطل في ألعاب الذكاء الاصطناعي</strong> — يتحقق العميل المرجعي <code>view.ai</code> من البث الحكومي ولا يعرض التبديل مطلقًا.</p>
+<p>مرجع: <a href="/ar/docs/api/voice.html">voice.md</a>.</p>
+<h2 id="9-ratings-and-leaderboard">9. التقييمات والمتصدرين</h2>
+<p>عملاء اللعبة لا يرسلون النتيجة أبدًا. عندما تنتهي اللعبة، <strong>script</strong> يعود <code>eloUpdates</code> و <strong>منصة</strong> ينشرها على لوحة المتصدرين للعبة. لا يمكن للعملاء مطلقًا كتابة إدخالات لوحة المتصدرين مباشرةً؛ يجب على الخادم أيضًا التحقق من صحة طريقة اللعب خلف تحديثات التصنيف الخاصة به.</p>
+<p>لذلك فإن جانب العميل تافه: اقرأ الإدخالات (الفقرة 4) وقم بتقديمها، كما يفعل التنفيذ المرجعي. يرى <a href="/ar/docs/api/leaderboards.html">leaderboards.md</a>.</p>
+<h2 id="10-replays">10. الإعادة</h2>
+<p>لعبة تعلن <code>replays: true</code> يحتوي نصه على كل جلسة نهائية تحتفظ بها المنصة؛ يقوم العملاء فقط بإحضاره وتقديمه. يفحص <code>replaysEnabled</code> على <code>GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94</code> قبل تقديم الشاشة - يمكن للمشغل الإجابة عن لعبة في كلتا الحالتين، وتعود نقاط النهاية الموجودة أدناه <code>404</code> عندما تكون الإعادة متوقفة. في التنفيذ المرجعي يكون الجلب <code>App.loadReplays</code> / <code>App.openReplay</code> في <code>app.js</code>:</p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/mine?limit=10
+GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/{sessionId}
+</code></pre>
+<p>حمولة إعادة التشغيل (موضحة في شكل نتيجة مثال الشطرنج):</p>
+<pre><code class="language-json">{
+  "sessionId": "&lt;guid&gt;",
+  "players": [ /* ... */ ],
+  "finishedAt": "…",
+  "result": {
+    "kind": "win",
+    "reason": "checkmate",
+    "at": "…",
+    "white": "&lt;userId&gt;",
+    "black": "&lt;userId&gt;",
+    "moveCount": 41,
+    "eloBefore": { "white": 1420, "black": 1388 },
+    "eloAfter": { "white": 1436, "black": 1372 }
+  },
+  "state": { "game": { "moves": [ /* ... */ ] } }
+}
+</code></pre>
+<p>خطوات المشاهد <code>state.game.moves</code> من خلال المشتركة <code>chessRules</code> المحرك محليا — نفس الشيء <code>server.js</code> ملف القواعد، الذي يتم تشغيله في المتصفح - لذلك لا تحتاج عمليات إعادة التشغيل إلى رحلات ذهابًا وإيابًا على الخادم؛ الحفاظ على إصدار القواعد المستخدم للمباراة المؤرشفة عند تغيير القواعد. هذه هي المكافأة الثانية لتصميم الملف الواحد والدورين من الفقرة 1، وهو نمط يمكن لأي لعبة أن تتبناه بملف القواعد الخاص بها.</p>
+<h2 id="11-player-profiles">11. ملفات تعريف اللاعب</h2>
+<p>يقوم عملاء اللعبة بتحليل اللاعبين الآخرين من خلال نقاط نهاية الملف الشخصي العام. في التنفيذ المرجعي <code>App.profileFor</code> في <code>app.js</code>:</p>
+<pre><code class="language-http">GET /api/v1/users/{id}/profile  → { "id": "…", "username": "…", "nickname": "…" }
+GET /api/v1/users/{id}/avatar   → image/png, or 404
+</code></pre>
+<p>هناك قاعدتان لواجهة المستخدم يتبعها العميل المرجعي:</p>
+<ul>
+<li>يجعل <strong>ألقاب</strong>، أبدًا أسماء المستخدمين.</li>
+<li>العودة إلى <code>"Player " + id.slice(0, 8)</code> عندما يكون الملف التعريفي مفقودًا أو اللقب فارغًا.</li>
+</ul>
+<p>مرجع: <a href="/ar/docs/api/profile.html">profile.md</a>.</p>
+<h2 id="12-ai-practice-opponents">12. تدريب المعارضين على الذكاء الاصطناعي</h2>
+<p><code>POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/ai</code> (كما هو موضح في المثال سبيكة) يُنشئ جلسة حيث تقوم المنصة بوضع علامة على مقعد واحد <code>ai: true</code> في <code>createSession</code>. يقوم البرنامج النصي نفسه بتشغيل هذا المقعد - سلوك الذكاء الاصطناعي هو شيء يحدده البرنامج النصي الخاص بك. في مثال الشطرنج، يتم لعب المقعد بواسطة "هال"، محرك جشع لالتقاط المواد يرد <strong>في نفس الدعوة</strong> الذي يعالج حركة الإنسان.</p>
+<p>يقرر نص اللعبة ما إذا كان التدريب سيغير تصنيف اللاعب البشري. مقعد الذكاء الاصطناعي لا يمكنه ذلك
+تلقي كتابات حالة اللاعب أو التصنيف أو الإنجاز. احتفظ بأي إحصائيات للذكاء الاصطناعي في حالة الجلسة.</p>
+<h2 id="13-what-the-reference-game-does-not-use">13. ما الذي لا تستخدمه اللعبة المرجعية</h2>
+<p>لا يمس تطبيق مرجع الشطرنج أيًا من هذه العناصر، ولكنها جميعها متاحة للألعاب التي تحتاج إليها:</p>
+<ul>
+<li><strong>الإنجازات</strong> — أي لعبة مع <code>server=</code> يمكن للبرنامج النصي أن يعلن عنها (<code>game.achievements</code>) ومنحهم صلاحية الخادم من أي ربط لدورة الحياة؛ الشطرنج ببساطة لا. تحتوي عناوين الكتالوج على مسار منفصل يطالب به العميل: <a href="/ar/docs/api/achievements.html">achievements.md</a>, <a href="/ar/docs/api/game-scripts.html#achievements">game-scripts.md</a>.</li>
+<li><strong>الكتالوج / الاستحقاقات</strong> - للألعاب الموزعة والمباعة من خلال الكتالوج: <a href="/ar/docs/api/catalog.html">catalog.md</a>.</li>
+<li><strong>تتابع</strong> - قناة الترحيل عالية التردد للألعاب سريعة الوتيرة في الوقت الفعلي حيث يكون البرنامج النصي لكل أمر بطيئًا للغاية: <a href="/ar/docs/api/relay.html">relay.md</a>.</li>
+<li><strong>المكتبات الخارجية</strong> - ربط مكتبات ألعاب Steam أو Epic أو GOG: <a href="/ar/docs/api/external-libraries.html">external-libraries.md</a>.</li>
+</ul>
+<p>مثال الشطرنج، وهي لعبة لوحية تعتمد على تبادل الأدوار، لا يحتاج إلى أي منها. إذا كانت لعبتك في الوقت الفعلي، أو موزعة عبر الكتالوج، أو تحتاج إلى حمولات ثنائية، فهذه الصفحات هي المكان الذي يجب البحث فيه بعد ذلك.</p>
+<h2 id="14-integration-checklist">14. قائمة مراجعة التكامل</h2>
+<ul>
+<li>[ ] أضف أ <code>starhermit.txt</code> يظهر (<code>name</code>, <code>launch</code>, <code>owner</code>, <code>server</code>; خياري <code>cover=</code> لبلاط المكتبة).</li>
+<li>[ ] يقرأ <code>#game_token</code> من تجزئة عنوان URL مرة واحدة، ثم قم بإزالتها <code>history.replaceState</code>.</li>
+<li>[ ] قم بفك تشفير JWT لـ <code>sub</code> (معرف المستخدم) و <code>game_scope</code> (سبيكة) - لا تقم مطلقًا بترميز البزاقة الخاصة بك.</li>
+<li>[ ] أنشئ كافة مسارات واجهة برمجة التطبيقات (API) كعناوين URL نسبية من نفس الأصل: <code>/api/v1/games/&lt;slug&gt;</code> + لاحقة.</li>
+<li>[ ] قم بتحديث رمز الإطلاق كل 45 دقيقة عبر <code>POST …/launch-token</code>.</li>
+<li>[ ] استخدم <code>cmd</code> / <code>sync</code> نمط WebSocket: قم بتغليف كل شيء، والمزامنة عند كل عملية فتح، وإعادة الاتصال مع 1s → 30s backoff.</li>
+<li>[ ] صمم أوامر البرنامج النصي وعمليات البث <strong>مثل عقد العميل</strong> — يقوم العميل بالبث وإرسال الأوامر، لا أكثر.</li>
+<li>[ ] إرجاع كائن ملخص <code>{ turnPlayerId, deadline, status, moveCount }</code> حتى تتمكن قائمة الجلسات من إظهار دوره.</li>
+<li>[ ] إنهاء المباريات بالعودة أ <code>result</code> - تلك القيمة المرتجعة هي ما يقوي كلاً من عمليات الإعادة والإيلو.</li>
+<li>[ ] يعلن <code>replays: true</code> في البرنامج النصي الخاص بك إذا كنت تريد الاحتفاظ بالجلسات النهائية، وقم بتفرع واجهة مستخدم إعادة التشغيل <code>replaysEnabled</code>.</li>
+</ul>
+<p>توفر المنصة المصادقة والجلسات والتوفيق والتخزين؛ البرنامج النصي الخاص بك يوفر
+قواعد اللعبة. ابدأ بـ <a href="/ar/docs/tutorials/browser-quickstart.html">البدء السريع للمتصفح</a> للتحميل الأول الكامل.</p>
+
+{% endraw %}

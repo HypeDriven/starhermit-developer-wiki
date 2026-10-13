@@ -1,0 +1,473 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Guiones de juego"
+source_url: "/docs/api/game-scripts.html"
+source_path: "docs/api/game-scripts.md"
+source_hash: "cd6edb40d369c5c960591888b2d4bcb941948f0cd0a801d320fe8ae34ab69966"
+translation: "machine"
+permalink: "/es/docs/api/game-scripts.html"
+---
+{% raw %}
+<h1 id="game-scripts">Guiones de juego</h1>
+<p>Un juego autorizado de StarHermit puede definirse mediante un <strong>único archivo JavaScript</strong> ejecutado en el lado del servidor en un espacio aislado <a href="https://github.com/sebastienros/jint">Jint</a> motor. El script es la única autoridad sobre las reglas de ese juego: valida cada comando de jugador, muta el estado, decide lo que cada cliente puede ver, calcula Elo y finaliza los juegos. Los clientes no tienen autoridad. Esta página documenta el tiempo de ejecución de JavaScript; Los juegos que necesitan otro idioma pueden implementar el <a href="/es/docs/api/container-games.html">Servidor de juegos de contenedores</a> protocolo. Ambos usan la misma orientación hacia el jugador. <a href="/es/docs/api/games.html">API de juegos</a>. El ejemplo trabajado en todo momento es el ajedrez, la implementación de referencia en <a href="https://github.com/HypeDriven/starhermit-chess">HypeDriven/ajedrez ermitaño estrella</a>.</p>
+<h2 id="execution-model">Modelo de ejecución</h2>
+<ul>
+<li>Un archivo JS por juego, ejecutado en un <strong>Motor Jint nuevo en espacio aislado por invocación</strong>. Nada persiste en la memoria entre llamadas: todo el estado reside en los documentos que devuelve.</li>
+<li>Sin ambiente <code>Date</code> o <code>Math.random</code>. El tiempo y la aleatoriedad se proporcionan como: <code>ctx.now</code> (época ms) y <code>ctx.random</code> (flotar en <code>[0, 1)</code>).</li>
+<li>La plataforma invoca el script cuando un jugador envía un comando duradero, cuando se crea una sesión y periódicamente. <code>onTick</code> barridos (ver <a href="/es/docs/api/games.html#runtime-timing">API de juegos: tiempo de ejecución</a>). En tiempo real <code>{type:"input", realtime:true}</code> los fotogramas son la excepción: se almacenan en buffer y se entregan como un lote para el siguiente tick.</li>
+</ul>
+<h2 id="entry-points">Puntos de entrada</h2>
+<p>Exponer a los manipuladores en <code>globalThis.game</code>. Seis opcionales <strong>estático</strong> Las declaraciones se encuentran junto a ellos:
+<code>tickRateHz</code> pregunta a la plataforma con qué frecuencia invocar <code>onTick</code> — declaralo si tu juego depende del
+tick, ya que un juego que no dice nada se marca una vez cada cuatro segundos (ver <a href="#tick-rate">tasa de tic</a>),
+<code>achievements</code> registra los logros del juego (ver <a href="#achievements">Logros</a>), <code>replays</code>
+solicita a la plataforma que conserve sus sesiones finalizadas (ver <a href="#replays">Repeticiones</a>), <code>persistent</code> pausas
+sesiones en lugar de finalizarlas cuando todos se van (ver <a href="#persistent-sessions">Sesiones persistentes</a>),
+<code>linkedAchievements</code> nombra otros juegos cuyos desbloqueos recibes en <code>ctx.linkedAchievements</code> (ver
+<a href="/es/docs/api/achievements.html#achievements-from-other-games">Logros de otros juegos.</a>), y <code>queues</code> declara
+las formas de emparejamiento casamentero acepta (ver <a href="/es/docs/api/games.html#matchmaking">Juegos: emparejamiento</a>). un juego
+que no declara colas tiene un 1v1 implícito:</p>
+<pre><code class="language-js">globalThis.game = {
+  tickRateHz: 0, // turn-based: opt out of periodic ticks
+  replays: true, // keep finished sessions as replays
+  queues: [{ key: "duos", teams: 2, teamSize: 2 }],
+  achievements: [
+    { key: "first-win", name: "First Win", description: "Win a match.", points: 10 }
+  ],
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<p>Las declaraciones se leen evaluando su guión. <strong>cuando el juego se publica o actualiza</strong>,
+no en cada invocación, por lo que deben ser valores estáticos en el <code>game</code> objeto. Publicar una actualización
+para aplicar un cambio.</p>
+<ul>
+<li><code>createSession(ctx)</code> - se llama cuando se crea una sesión (emparejamiento, aceptación de invitación, práctica de IA o inicio de una sala en tiempo real; consulte <a href="#room-bound-sessions">Sesiones en sala</a>).</li>
+<li><code>onPlayerMessage(ctx)</code> — solicitó comandos de cliente duraderos recibidos a través del WebSocket del juego. Entradas marcadas explícitamente <code>realtime:true</code> omita este punto de entrada.</li>
+<li><code>onMembershipChange(ctx)</code> - opcional. Se llama cuando un jugador se une o abandona una sesión de carrera (una <a href="/es/docs/api/realtime.html">sala de unión en progreso</a>, o un <a href="/es/docs/api/games.html#inviting-a-friend-into-a-game-in-progress">invitar a un juego en progreso</a>). <code>ctx.players</code> ya refleja el cambio, y <code>ctx.membership</code> es <code>{ change: "joined" | "left", userId, name, team, slot }</code>. Devolver <code>{ ok: false }</code> rechazar una unión; un script sin este gancho rechaza todas las uniones. Un permiso es definitivo independientemente de lo que regrese. Los logros y las puntuaciones pueden influir en el resultado; a <code>sessionState</code> es ignorado.</li>
+<li><code>onTick(ctx)</code> — llamado por el servicio de cronómetro de la plataforma al ritmo de tick efectivo; Las últimas entradas en tiempo real están disponibles en <code>ctx.inputs</code>. Un juego que se resuelve a 0 Hz no recibe llamadas periódicas, pero la función aún debería estar presente para cumplir con el contrato del script.</li>
+</ul>
+<h2 id="context-object">Objeto de contexto</h2>
+<pre><code class="language-js">ctx = {
+  now: 1721473200000,              // ms epoch, from the host clock
+  random: 0.7231,                  // float in [0, 1), from the host RNG
+  sessionId: "0f8fad5b-...",       // current session id
+  pausedMs: 0,                     // persistent games only: total ms this session has spent paused
+  players: [                       // session participants
+    { id: "7c9e6679-...", name: "alice" },
+    { id: "00000000-0000-4000-8000-00000000a1a1", name: "The House", ai: true }
+  ],
+  sessionState: { /* ... */ },     // this script's session document, or null
+  playerStates: {                  // per-player documents (elo, history), or null
+    "7c9e6679-...": { elo: 1200, wins: 4, losses: 2, draws: 1, /* ... */ }
+  },
+  message: {                       // onPlayerMessage only
+    from: "7c9e6679-...",          // the authenticated user id — trusted
+    data: { type: "move", from: "e2", to: "e4" }  // client payload — untrusted (example: a chess move)
+  },
+  inputs: [                        // onTick only; omitted when none are pending
+    { from: "7c9e6679-...",        // authenticated sender id — trusted
+      data: { type: "input", seq: 42, mx: 0.7, mz: -0.2 } }
+  ]
+}
+</code></pre>
+<ul>
+<li>El asiento AI (si está presente) está marcado con <code>ai: true</code> en su entrada de jugador.</li>
+<li>Un juego que declara <code>linkedAchievements</code> también obtiene <code>ctx.linkedAchievements</code>: <code>{ &lt;playerId&gt;: { &lt;otherSlug&gt;: [unlocked keys] } }</code>, vuelva a leer en cada invocación. Ver <a href="/es/docs/api/achievements.html#achievements-from-other-games">Logros de otros juegos.</a>.</li>
+<li>Las sesiones limitadas a una sala (iniciadas desde una sala en tiempo real) obtienen dos campos ctx adicionales, <code>ctx.room</code> y <code>ctx.presence</code>, en <strong>cada</strong> invocación - ver <a href="#room-bound-sessions">Sesiones en sala</a>.</li>
+<li><strong>No confíes en nada de <code>ctx.message.data</code> o <code>ctx.inputs[].data</code>.</strong> La identidad confiable es la correspondiente. <code>from</code>, que el servidor adjunta desde la conexión autenticada; el cliente nunca podrá proporcionarlo ni falsificarlo.</li>
+<li>Las entradas optan por el procesamiento por lotes con <code>{type:"input", realtime:true, ...}</code>. No notificado <code>input</code> Los comandos siguen siendo duraderos. <code>onPlayerMessage</code> exige compatibilidad con versiones anteriores. Las entradas en tiempo real utilizan un espacio pendiente por remitente: el movimiento es el último en ganar, mientras que <code>pass</code>, <code>shoot</code>, y <code>tackle</code> Los bordes de acción se fusionan para que una muestra de movimiento siguiente no pueda borrarlos antes del siguiente tic. Los scripts deben fijar y validar cada valor al consumir el lote.</li>
+</ul>
+<h2 id="tick-rate">tasa de tic</h2>
+<p>La plataforma funciona <code>onTick</code> barridos por sesión activa a un ritmo configurable. <strong>Su script solicita la tarifa que quiere</strong> declarando una estática <code>tickRateHz</code> en el objeto del juego, junto a los puntos de entrada:</p>
+<pre><code class="language-js">globalThis.game = {
+  tickRateHz: 15,          // ask the platform to tick this game 15x/second
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<ul>
+<li>Se lee la declaración <strong>cuando tu juego se publica o actualiza</strong>, no en cada tic. Publicar una actualización después de cambiarla.</li>
+<li><strong>Un juego que no declara ninguna frecuencia se marca en 0,25 Hz.</strong> – una vez cada cuatro segundos. Eso es suficiente para
+adjudicar un reloj de movimiento o un tiempo de espera y no le cuesta casi nada a la plataforma, pero es demasiado lento
+para cualquier cosa de la que dependa tu juego. Si <code>onTick</code> impulsa tu juego, declara la tarifa que necesitas.</li>
+<li>Las solicitudes se limitan al máximo de la plataforma (<strong>30Hz</strong> por defecto), por lo que un juego puede pedir menos
+de lo que permite la plataforma pero nunca por más. Pedir <strong>0</strong> Desactivar ticks por completo para un juego.
+que sólo reacciona a los comandos del jugador.</li>
+<li>Las tarifas pueden ser <strong>fraccionario</strong>: <code>0.5</code> es un tic cada dos segundos. La tasa más pequeña distinta de cero es
+<code>0.01</code> Hz: se le eleva un número positivo más pequeño en lugar de leerse como una exclusión voluntaria, porque
+pequeña fracción es un juego lento. El tictac está desactivado sólo para <code>0</code> o una tasa negativa. Un desaparecido o
+declaración inutilizable (una cadena, <code>null</code>, <code>NaN</code>) toma el valor predeterminado de 0,25 Hz.</li>
+<li>Un operador puede anular la tarifa de un juego en particular, en cualquier dirección.</li>
+<li>Las entradas en tiempo real son las últimas ganancias entre ticks, mientras que los bordes de acción discretos permanecen ordenados. Un destinatario lento puede omitir una instantánea obsoleta, pero no puede retrasar la simulación ni a otros destinatarios.</li>
+</ul>
+<h2 id="replays">Repeticiones</h2>
+<p>Cuando finaliza una sesión, la plataforma puede mantener su final <code>sessionState</code> como el <strong>repetición</strong> — el
+documento entregado por <code>GET /api/v1/games/{slug}/replays/{sessionId}</code> (ver
+<a href="/es/docs/api/games.html#replays">API de juegos: repeticiones</a>). Una repetición se almacena mientras dure el registro del partido.
+es, entonces <strong>tu juego obtiene uno solo si te lo pide</strong>:</p>
+<pre><code class="language-js">globalThis.game = {
+  replays: true,           // keep finished sessions as replays
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<ul>
+<li>La declaración debe ser literal. <code>true</code> o <code>false</code> — cualquier otra cosa se considerará sin declaración, y
+un juego que no declara nada no tiene repeticiones.</li>
+<li>se lee <strong>cuando tu juego se publica o actualiza</strong>. Publicar una actualización después de cambiarla.</li>
+<li>Un operador de plataforma puede responder por un juego en particular de cualquier manera, por lo que la declaración es una solicitud.
+en lugar de una garantía. <code>GET /api/v1/games/{slug}</code> informa la respuesta como <code>replaysEnabled</code> —
+ramifique su interfaz de usuario de repetición en eso, no en lo que solicitó su secuencia de comandos.</li>
+<li>Nada más cambia con las repeticiones desactivadas: el estado de tu sesión aún se almacena y se devuelve a
+cada invocación como <code>ctx.sessionState</code>, y sigue siendo el punto de restauración por fallo. que juego
+sin repeticiones no se obtiene una copia que sobrevive a la sesión, por lo que sus puntos finales de reproducción responden
+<code>404</code>.</li>
+<li>Diseñar la final <code>sessionState</code> para que valga la pena reproducirlo: un registro de movimientos o lo que su cliente necesite
+para reconstruir el partido. La implementación de referencia de ajedrez mantiene <code>state.game.moves</code> y lo pisa
+a través del mismo módulo de reglas que ejecuta la plataforma.</li>
+</ul>
+<h2 id="persistent-sessions">Sesiones persistentes</h2>
+<p>Un juego que declara <code>persistent: true</code> mantiene sus sesiones cuando cada jugador se va. alrededor de 15
+Segundos después de la última desconexión, la sesión se interrumpe. <strong>pausado</strong> - No <code>onTick</code> llamadas - y la primera
+El reproductor se vuelve a conectar y lo reanuda. La desconexión o la inactividad pausan la sesión en lugar de abandonarla. Un resultado del juego, dueño.
+acción, la licencia explícita del miembro final, el vencimiento de la retención configurada o la falla de recuperación del terminal pueden
+todavía terminarlo. Ver <a href="/es/docs/session-lifecycle.html">Ciclo de vida de la sesión</a>.</p>
+<pre><code class="language-js">globalThis.game = {
+  persistent: true,        // pause empty sessions instead of ending them
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<ul>
+<li>debe ser literal <code>true</code> o <code>false</code>. se lee <strong>cuando tu juego se publica o actualiza</strong>.</li>
+<li><code>ctx.now</code> se queda el reloj de pared. Las sesiones persistentes también obtienen <code>ctx.pausedMs</code>, el tiempo total empleado
+pausado, entonces <code>ctx.now - ctx.pausedMs</code> Es un reloj que se detiene mientras no hay nadie.</li>
+<li>Las sesiones en pausa cuentan para el límite de sesiones por jugador, así que dales a los jugadores un comando que finalice una
+mundo con un <code>result</code>.</li>
+</ul>
+<p>Ver el <a href="/es/docs/tutorials/persistent-sessions.html">tutorial de sesiones persistentes</a> para ver un ejemplo trabajado y el flujo de clientes.</p>
+<h2 id="matchmaking-seat-layout">Disposición de los asientos de emparejamiento</h2>
+<p>Nuevas sesiones emparejadas reciben <code>ctx.matchmaking</code> en <strong>cada</strong> invocación (crear, ordenar y marcar).
+Conserva la forma de la cola y los asientos incluso si el juego se vuelve a implementar más tarde:</p>
+<pre><code class="language-js">ctx.matchmaking = {
+  queue: "ffa", teams: 4, teamSize: 1,
+  seats: [
+    { id: "human-uuid", name: "Alice", team: 0, slot: 0, ai: false },
+    { id: "synthetic-ai-uuid", name: "AI 2-1", team: 1, slot: 0, ai: true },
+    { id: null, name: null, team: 2, slot: 0, ai: false },
+    { id: null, name: null, team: 3, slot: 0, ai: false }
+  ]
+};
+</code></pre>
+<p><code>ctx.players</code> contiene únicamente asientos ocupados, con <code>team</code> y <code>ai:true</code> para IA. Los índices de equipo/espacio son
+de base cero. Los ID de AI son estables dentro de esta sesión y no son ID de cuenta de StarHermit. Solo humanos
+tiene membresía de sesión/chat y puede recibir escrituras sobre el estado del jugador, la calificación o los logros de la cuenta.
+Mantener el estado de la IA en <code>sessionState</code>. Copie los campos de la lista que los clientes necesiten en el estado de su juego.
+o transmisiones. Se pueden omitir las sesiones más antiguas y las que no son de emparejamiento. <code>ctx.matchmaking</code>.</p>
+<p>Declarar una fecha límite de inicio y el recuento máximo de IA en
+<a href="/es/docs/starhermit-txt.html#starting-matchmaking-before-every-human-seat-is-filled"><code>starhermit.txt</code></a>.
+Con recuento de IA <code>0</code>, los asientos vacantes permanecen vacíos. El mismo contexto se entrega a los servidores de contenedores.</p>
+<h2 id="room-bound-sessions">Sesiones en sala</h2>
+<p>Una sesión puede ser <strong>vinculado a una habitación en tiempo real</strong>: cuando un <a href="/es/docs/api/realtime.html">sala en tiempo real</a> para un juego con un <code>server=</code> Cuando se inicia el script, la plataforma crea una sesión de N jugadores para la sala. <strong>humano</strong> participantes (los asientos AI existen solo en la lista orientada al guión). Así es como se ejecutan los juegos en tiempo real autorizados por el servidor (por ejemplo, fútbol): las salas proporcionan el lobby/emparejamiento, el script ejecuta el partido. Ver <a href="/es/docs/api/realtime.html#room-bound-sessions">Salas en tiempo real: el puente</a> para el ciclo de vida del lado de la habitación.</p>
+<p>Cada invocación (<code>createSession</code>, <code>onPlayerMessage</code>, <code>onTick</code>) de una sesión limitada a una sala recibe dos campos ctx adicionales:</p>
+<pre><code class="language-js">ctx.room = {
+  roomId: "0f8fad5b-...",
+  metadata: { /* ... */ },        // the room's opaque config.metadata blob
+  roster: [                       // frozen match roster, humans AND AI seats,
+    { userId: "7c9e6679-...",     //   ordered by team then slot
+      name: "alice", team: 0, slot: 0, ai: false },
+    { userId: null,               // AI seat — never a session player
+      name: "Rafa Vento", team: 0, slot: 1, ai: true }
+  ]
+};
+ctx.presence = {                  // every user who is or was a human participant
+  "7c9e6679-...": { online: true, left: false }
+};
+</code></pre>
+<ul>
+<li><code>presence.online</code> — el usuario tiene un socket en vivo en cualquiera de los registros de conexión (salas en tiempo real <strong>o</strong> <code>ws/v1/games</code>).</li>
+<li><code>presence.left</code> — el usuario ya no tiene un asiento activo: lo abandonó explícitamente y su asiento se convirtió en un participante de IA. <code>left</code> es permanente; <code>online</code> puede aletear. Se espera que el script impulse la lógica de adquisición/reunión de la IA desde estos indicadores.</li>
+<li>La lista se relee en cada invocación, por lo que las conversiones de asientos (humanos → IA) aparecen a medida que ocurren.</li>
+</ul>
+<p>Cuando regresa un guión limitado a una habitación <code>result</code>, la plataforma finaliza la sesión, <strong>almacena el resultado en la habitación y cierra la habitación</strong> — no se trata de ningún resultado enviado por el anfitrión.</p>
+<p>Lo contrario no es cierto: <strong>un cierre de sala no finaliza su sesión.</strong> Si la sala se cierra primero (por ejemplo, porque el último ser humano abandonó una sala sin unirse en progreso, nunca simplemente porque el anfitrión se desconectó, lo que solo mueve la función de anfitrión mientras la sesión está activa), la sesión continúa ejecutándose. <code>ctx.room.roster</code> se vuelve vacío y cada ser humano muestra <code>left: true</code>. Devolver <code>result</code> entonces si el partido debe terminar con la habitación. Ver <a href="/es/docs/api/realtime.html#the-60-second-host-rule-and-room-bound-sessions">Salas en tiempo real: la regla del anfitrión de 60 segundos y sesiones limitadas a la sala</a>.</p>
+<h2 id="return-shape">Forma de retorno</h2>
+<p>Cada punto de entrada devuelve la misma forma (todos los campos son opcionales excepto <code>ok</code>):</p>
+<pre><code class="language-js">return {
+  ok: true,                        // false on failure
+  error: "Illegal move",           // goes only to the sender (as a WS "error" frame)
+  sessionState: { /* ... */ },     // REPLACES the stored session document
+  playerStates: {                  // REPLACES stored per-player documents
+    "7c9e6679-...": { elo: 1216, /* ... */ }
+  },
+  broadcast: [                     // only these messages ever reach clients
+    { to: "all", data: { type: "moved", /* ... */ } },
+    { to: ["9b2f8c1a-..."], data: { type: "state", /* ... */ } }
+  ],
+  eloUpdates: {                    // published to the game's leaderboard by the host
+    "7c9e6679-...": 1216,
+    "9b2f8c1a-...": 1184
+  },
+  achievements: {                  // server-authoritative unlocks, by player id
+    "7c9e6679-...": ["first-win", "flawless"]
+  },
+  scores: {                        // to your game's own leaderboards, by board key
+    "high-score": { "7c9e6679-...": 4200 }
+  },
+  result: { kind: "white-win", reason: "checkmate" }  // ends the session (example: a chess result)
+};
+</code></pre>
+<p>Reglas clave:</p>
+<ul>
+<li><code>sessionState</code> y cada entrada de <code>playerStates</code> <strong>reemplazar</strong> los documentos almacenados: siempre devuelve documentos completos, nunca diferencias.</li>
+<li>Sólo los mensajes enumerados en <code>broadcast</code> se entregan a los clientes, cada uno dirigido a identificadores de jugador explícitos o <code>"all"</code>. No se filtra nada más.</li>
+<li><code>eloUpdates</code> es la única forma en que cambian las calificaciones. Los valores son de cada jugador. <strong>nueva calificación absoluta</strong>, aplicado tal como se envió: la plataforma no limita el cambio por partido, así que fíjelo usted mismo (consulte <a href="/es/docs/api/games.html#elo-per-match">Elo por partido</a>). El anfitrión los utiliza para buscar emparejamientos y los publica en la tabla de clasificación del juego; Los clientes nunca pueden enviar puntuaciones directamente (ver <a href="/es/docs/api/leaderboards.html">Tablas de clasificación</a>). Mantener la calificación en <code>playerStates[id].elo</code> entonces un dueño <a href="/es/docs/api/leaderboards.html#resetting-a-players-rating">reinicio de calificación</a> llega a tu copia también.</li>
+<li><code>achievements</code> es la única forma en que se otorgan los logros. Las claves se resuelven en función de los logros del juego (declarados o creados por su propietario) y la plataforma las conserva; ver <a href="#achievements">Logros</a>.</li>
+<li><code>scores</code> es la única forma en que cambian las tablas de clasificación de tu juego; consulta <a href="#leaderboards">Tablas de clasificación</a>.</li>
+<li>Finalizar juegos vía <code>result</code>. Luego, el anfitrión finaliza la sesión y, para un juego con <a href="#replays">repeticiones</a> <strong>archiva la final <code>sessionState</code></strong> como la repetición (servida por <code>GET .../replays/{sessionId}</code> - ver <a href="/es/docs/api/games.html#replays">API de juegos</a>).</li>
+</ul>
+<h2 id="achievements">Logros</h2>
+<p>Tu guión es el <strong>solo</strong> cosa que puede desbloquear los logros de tu juego. no hay cliente
+punto final para ellos: <code>POST /api/v1/me/achievements/unlock</code> rechaza de plano los logros relacionados con el juego,
+y los puntos finales CRUD del editor se niegan a tocarlos. El propietario del juego puede agregar logros al lado
+los declarados mediante
+<a href="/es/docs/api/achievements.html#achievements-created-by-the-games-owner"><code>/me/github-games/{id}/achievements</code></a>;
+su secuencia de comandos los desbloquea mediante clave exactamente de la misma manera. Esto hace que los logros como servidor-
+autoritario como el resto del juego, y es el mecanismo <strong>cualquier</strong> juego con un <code>server=</code> guión
+debería usar, incluido uno cuyo juego se ejecuta en otro lugar (consulte
+<a href="/es/docs/api/achievements.html#which-games-can-use-this">¿Qué juegos pueden usar esto?</a>).</p>
+<h3 id="declare">Declarar</h3>
+<p>una estática <code>achievements</code> matriz en el <code>game</code> objeto. Solo <code>key</code> se requiere:</p>
+<pre><code class="language-js">globalThis.game = {
+  achievements: [
+    { key: "first-win", name: "First Win", description: "Win a match.", points: 10 },
+    { key: "flawless",  name: "Flawless",  description: "Win without conceding.",
+      points: 50, secret: true, icon: "https://cdn.example/flawless.png" }
+  ],
+  // ...entry points
+};
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Tipo</th>
+<th>Notas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>key</code></td>
+<td>cadena</td>
+<td><strong>Requerido.</strong> Identificación estable, ≤ 128 caracteres, única dentro del juego. Los duplicados posteriores al primero se ignoran.</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>cadena</td>
+<td>El valor predeterminado es <code>key</code>.</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>cadena</td>
+<td>El valor predeterminado es <code>""</code>.</td>
+</tr>
+<tr>
+<td><code>icon</code></td>
+<td>cadena</td>
+<td>URL opcional.</td>
+</tr>
+<tr>
+<td><code>secret</code></td>
+<td>booleano</td>
+<td>Oculto de un jugador hasta <em>ellos</em> desbloquearlo. El valor predeterminado es <code>false</code>.</td>
+</tr>
+<tr>
+<td><code>points</code></td>
+<td>número</td>
+<td>Sujetado a 0–10000. El valor predeterminado es <code>0</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>La matriz se aplica cuando el juego se publica o actualiza:</p>
+<ul>
+<li>Las definiciones coinciden con <code>key</code> — editar un nombre, icono, puntos o bandera secreta actualiza la definición existente y todos los que ya la obtuvieron la conservan.</li>
+<li>Se elimina una clave que dejas de declarar <strong>solo mientras nadie lo haya desbloqueado</strong>. El historial obtenido nunca se destruye, por lo que un logro retirado permanece visible para los jugadores que lo poseen.</li>
+<li>A lo sumo <strong>100</strong> logros por juego; los extras más allá de eso se eliminan.</li>
+<li>La declaración es <strong>mejor esfuerzo</strong>: se omiten las entradas con formato incorrecto. Confirme siempre las definiciones publicadas con <code>GET /api/v1/games/{slug}/achievements</code> después de actualizar el juego.</li>
+</ul>
+<h3 id="unlock">Descubrir</h3>
+<p>Devolver un <code>achievements</code> mapa de <strong>cualquier</strong> punto de entrada— <code>createSession</code>, <code>onPlayerMessage</code>, o
+<code>onTick</code>:</p>
+<pre><code class="language-js">onTick(ctx) {
+  const state = JSON.parse(JSON.stringify(ctx.sessionState));
+  const unlocks = {};
+  for (const p of ctx.players) {
+    if (!p.ai &amp;&amp; state.scores[p.id] &gt;= 10) unlocks[p.id] = ["ten-points"];
+  }
+  return { ok: true, sessionState: state, achievements: unlocks };
+}
+</code></pre>
+<ul>
+<li>Los desbloqueos son <strong>idempotente</strong> — reafirmar una clave que el jugador ya posee no es una operación, por lo que un script puede otorgar con seguridad una condición que reevalúa en cada tick en lugar de realizar un seguimiento "ya premiado" en su propio estado.</li>
+<li>Las claves desconocidas (ni declaradas ni creadas por el propietario del juego), los usuarios que no participan en esta sesión y el puesto de IA se ignoran silenciosamente.</li>
+<li>A lo sumo <strong>32</strong> las claves se aceptan por jugador por invocación; Se eliminan más claves en la misma matriz.</li>
+<li>Las filas persisten con el resto de las escrituras de la invocación, por lo que un desbloqueo no puede sobrevivir a una invocación fallida.</li>
+</ul>
+<h3 id="delivery">Entrega</h3>
+<p>Cada desbloqueo recién otorgado se envía al jugador que lo obtuvo. <code>ws/v1/games</code> como un marco distinto -
+es la verdad de la plataforma, no una de tus <code>broadcast</code> mensajes:</p>
+<pre><code class="language-json">{ "type": "achievement",
+  "data": { "key": "first-win", "name": "First Win", "description": "Win a match.",
+            "icon": null, "points": 10, "unlockedAt": "2026-07-25T09:14:02Z" } }
+</code></pre>
+<p>Desbloqueos otorgados desde <code>createSession</code> aterrizan antes de que exista cualquier enchufe, por lo que llegan sin marco.
+los clientes deben leer <code>GET /api/v1/games/{slug}/achievements</code> en carga y trate el marco como el
+ruta de actualización en vivo. Superficie completa en <a href="/es/docs/api/achievements.html">Logros</a>.</p>
+<h2 id="leaderboards">Tablas de clasificación</h2>
+<p>Además del tablero elo, tu juego puede tener tablas de clasificación que su propietario crea a través de
+<a href="/es/docs/api/leaderboards.html#your-games-own-leaderboards"><code>POST /api/v1/me/github-games/{id}/leaderboards</code></a>,
+cada uno con un <code>key</code>. Publicarles regresando <code>scores</code> desde cualquier punto de entrada: clave del tablero → identificación del jugador →
+número:</p>
+<pre><code class="language-js">onPlayerMessage(ctx) {
+  var s = ctx.sessionState;
+  if (ctx.message.data.type === "finish-run") {
+    var scores = { "high-score": {}, "fastest-run": {} };
+    scores["high-score"][ctx.message.from] = s.points[ctx.message.from];
+    scores["fastest-run"][ctx.message.from] = ctx.now - s.startedAt;   // a time-ms board
+    return { ok: true, sessionState: s, scores: scores };
+  }
+  /* ... */
+}
+</code></pre>
+<ul>
+<li>Cada jugador mantiene su <strong>mejor</strong> puntuación en cada tablero, según la dirección de clasificación del tablero, así que informe
+cada resultado, uno peor, simplemente se ignora.</li>
+<li>Sólo cuentan los participantes de la sesión. Claves desconocidas o inactivas y puntuaciones fuera de las reglas del tablero.
+se dejan caer silenciosamente. Como máximo 16 tableros por devolución.</li>
+<li>A diferencia de <code>eloUpdates</code>, no se publica nada en <code>playerStates</code> — guarde su propia copia en
+<code>playerStates</code> si el juego necesita leer una marca personal.</li>
+</ul>
+<h2 id="where-your-script-runs">Dónde se ejecuta tu script</h2>
+<p>Un script que se repite sin límite, agota su memoria o excede su presupuesto de tiempo falla.
+invocación. Su resultado fallido no se aplica. El comando o tick informa uno de:</p>
+<ul>
+<li><code>Game script error: the script crashed its runtime (for example, by recursing without limit).</code></li>
+<li><code>Game script error: the script exceeded its memory budget.</code></li>
+<li><code>Game script error: the script exceeded its time budget.</code></li>
+</ul>
+<h2 id="your-games-share-of-the-server">La parte del servidor que le corresponde a tu juego</h2>
+<ul>
+<li><strong>Hora del guión.</strong> Todas las sesiones de un juego comparten un presupuesto de tiempo de guión, 2000 ms por segundo por
+por defecto, cargado con lo que realmente tomó cada invocación. Un juego sobre su parte se rechaza más bien
+que en cola: se omite un tic, se responde a un comando con "Este juego está usando más de lo que le corresponde.
+del servidor ahora mismo; Inténtalo de nuevo en breve.", y al crear una sesión se devuelve <code>429</code>.</li>
+<li><strong>Comandos.</strong> Cada jugador puede enviar 20 comandos duraderos por segundo por sesión (con una breve ráfaga
+asignación); más allá de eso, una orden se responde con un <code>error</code> marco, "Demasiados comandos; desacelerar." El marco no incluye un estado HTTP. La entrada en tiempo real está limitada por separado.</li>
+<li><strong>Resultados.</strong> El resultado con el que finaliza una sesión puede ser como máximo 64 KB; uno más grande es rechazado con
+<code>422</code>.</li>
+<li><strong>Tamaño del guión.</strong> A <code>server=</code> el script puede tener como máximo 2 MB; uno más grande es rechazado con <code>422</code> antes
+se almacena o analiza.</li>
+</ul>
+<p>Los operadores pueden subir o bajar cada uno de estos para un juego individual.</p>
+<h2 id="budgets">Presupuestos</h2>
+<p>Los scripts se ejecutan con estos presupuestos de recursos:</p>
+<ul>
+<li>~250 ms de CPU por invocación</li>
+<li>Memoria de 32MB</li>
+<li>Un límite de declaración por invocación</li>
+<li>Un presupuesto de bytes estatales por jugador: todos los documentos estatales deben ser serializables y pequeños</li>
+<li>Los valores se anidan como máximo en 64 niveles de profundidad cuando se convierten en texto. Todo lo que devuelve un punto de entrada, cada
+declaración, <code>JSON.stringify</code>, y <code>Array.prototype.join</code>/<code>toString</code>/<code>toLocaleString</code> rechazar un
+valor más profundo con un <code>RangeError</code> (uno devuelto falla la invocación: "anidado más de 64 niveles
+profundo"). <code>JSON.parse</code> ya se detuvo en 64, por lo que un valor más profundo nunca podría regresar. <code>flat</code>
+se aplana hasta 64 niveles y se lanza si la matriz se anida más profundamente, incluida una matriz que contiene
+mismo.</li>
+<li>Una llamada no puede asignar más que el presupuesto de memoria. <code>repeat</code>, <code>padStart</code>/<code>padEnd</code>, <code>concat</code> y
+<code>replace</code>/<code>replaceAll</code> tirar <code>RangeError: Invalid string length</code> cuando el resultado podría exceder la mitad
+el presupuesto en caracteres (16M con el valor predeterminado de 32 MB; un reemplazo de expresiones regulares está limitado como si cada
+posición coincidente, que sólo afecta a cadenas de aproximadamente un millón de caracteres o más).
+<code>ArrayBuffer</code> y arrojar matrices escritas <code>RangeError</code> más allá del presupuesto en bytes y matrices más allá
+presupuesto/8 elementos son rechazados. El presupuesto también se verifica después de que regrese su anzuelo, por lo que un
+La declaración final por encima del presupuesto fracasa en la invocación en lugar de tener éxito.</li>
+</ul>
+<p>El script de referencia de ajedrez mantiene sus documentos pequeños a propósito; como ejemplo de cómo mantenerse dentro del presupuesto, su documento por jugador es</p>
+<pre><code class="language-js">{
+  elo: 1200,
+  wins: 0, losses: 0, draws: 0,
+  lastColorVs: "9b2f8c1a-...",        // for color alternation on rematch
+  lastColorOrder: "w",
+  recentGames: [ /* up to 30 summaries */ ]
+}
+</code></pre>
+<p>El límite de sesiones simultáneas es de 20 por jugador de forma predeterminada.</p>
+<h2 id="the-platform-readable-window">La ventana legible por la plataforma</h2>
+<p>Todo en <code>sessionState</code> es opaco a la plataforma <strong>excepto</strong> un campo:</p>
+<pre><code class="language-js">sessionState.summary = {
+  turnPlayerId: "7c9e6679-...",
+  deadline: 1784642591000,
+  status: "active",
+  moveCount: 41
+};
+</code></pre>
+<p><code>deadline</code> es una marca de tiempo entera de Unix en <strong>milisegundos</strong>, u omitido cuando no hay fecha límite.
+No se reconoce una cadena de fecha ISO. <code>turnPlayerId</code> es el UUID del jugador.</p>
+<p><code>GET /api/v1/games/{slug}/sessions/mine</code> lee <code>summary</code> calcular <code>myTurn</code> y <code>deadline</code> para la persona que llama. Manténgalo preciso en cada cambio de estado; Mantenga todo lo demás donde quiera su guión.</p>
+<h2 id="worked-example-the-chess-script">Ejemplo resuelto: el guión de ajedrez</h2>
+<p>Todo lo que se incluye en esta sección es específico de la implementación de referencia del ajedrez: la forma del estado, la codificación del tablero, el conjunto de comandos, los motivos de finalización del juego, la constante Elo, la IA y los tiempos de espera a continuación son elecciones propias del ajedrez, definidas en su guión. Nada de esto es comportamiento de plataforma; Tu juego define sus propios equivalentes.</p>
+<p>Estado de la sesión:</p>
+<pre><code class="language-js">{
+  white: "7c9e6679-...",
+  black: "9b2f8c1a-...",
+  aiId: "00000000-0000-4000-8000-00000000a1a1",   // present in AI games
+  game: {
+    board: "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr", // 64 chars
+    turn: "w",
+    castling: { K: true, Q: true, k: true, q: true },
+    epSquare: null,
+    halfmoveClock: 0,
+    fullmove: 1,
+    moves: [ { from: "e2", to: "e4", promo: null, san: "e4", at: 1721473200000 } ],
+    positionCounts: { /* fen-key: count, for threefold repetition */ },
+    status: "active"
+  },
+  createdAt: 1721473200000,
+  deadline: 1721559600000,
+  result: null,
+  drawOfferBy: null,
+  summary: { turnPlayerId: "...", deadline: "...", status: "active", moveCount: 1 }
+}
+</code></pre>
+<p>Codificación del tablero: una cadena de 64 caracteres donde <code>index = rank * 8 + file</code> y <code>a1</code> es el índice 0. <code>PNBRQK</code> son piezas blancas, <code>pnbrqk</code> negro, <code>.</code> es un cuadrado vacío.</p>
+<p>Comandos manejados por <code>onPlayerMessage</code>: <code>sync</code>, <code>move</code>, <code>resign</code>, <code>offer-draw</code>, <code>accept-draw</code>, <code>decline-draw</code> (formas de alambre en <a href="/es/docs/api/games.html#example-chess-command-shapes">API de juegos</a>).</p>
+<p>Juego terminado <code>reason</code> valores: <code>checkmate</code>, <code>stalemate</code>, <code>threefold-repetition</code>, <code>fifty-move-rule</code>, <code>insufficient-material</code>, <code>resignation</code>, <code>agreement</code>, <code>timeout</code>, <code>timeout-no-moves</code>.</p>
+<p>Otros detalles del ajedrez:</p>
+<ul>
+<li><strong>elo</strong> utiliza K=32, calculado en <code>finishGame</code> cuando termina un juego y regresa a través de <code>eloUpdates</code>.</li>
+<li><strong>Juego de IA:</strong> cuando el asiento de la IA se va a mover, <code>aiReply</code> juega <strong>"hala"</strong> – un codicioso motor de captura de material – dentro de la misma invocación. No hay ningún bot externo.</li>
+<li><strong>Tiempos de espera:</strong> <code>onTick</code> adjudica el reloj de movimientos de 24 horas: si no se han realizado movimientos, el juego es un <code>timeout-no-moves</code> dibujar; de lo contrario, el jugador que mueve pierde por <code>timeout</code>.</li>
+</ul>
+<h2 id="deployment">Despliegue</h2>
+<p>Declara el script en el repositorio de tu juego. <code>starhermit.txt</code> manifiesto:</p>
+<pre><code>server=server.js
+</code></pre>
+<p>La publicación fluye a través de la integración de GitHub; consulte <a href="/es/docs/api/github-games.html">Juegos de GitHub</a>. La plataforma ejecuta el script dentro de los presupuestos documentados. no combinar <code>server=</code> con <code>container.image=</code>; utilizar el <a href="/es/docs/api/container-games.html">tiempo de ejecución del contenedor</a> en su lugar al enviar una imagen.</p>
+<h2 id="best-practices">Mejores prácticas</h2>
+<ul>
+<li><strong>Valida cada comando.</strong> Tratar <code>ctx.message.data</code> como hostil: verifique los tipos, rangos, orden de turno y estado del juego antes de tocar el estado.</li>
+<li><strong>Mantenga las invocaciones rápidas y el estado pequeño.</strong> Tienes ~250 ms y un presupuesto de bytes por documento de reproductor; el guión de referencia de ajedrez, por ejemplo, mayúsculas <code>recentGames</code> en 30 entradas por este motivo.</li>
+<li><strong>Usar <code>ctx.now</code> / <code>ctx.random</code> solo.</strong> No <code>Date</code>, No <code>Math.random</code> — el anfitrión es dueño del reloj y de los dados.</li>
+<li><strong>Diseño <code>broadcast</code> mensajes como único contrato de cliente.</strong> Los clientes deben poder renderizar el juego completo a partir de lo que envía el script; todo lo que no se transmite no existe para ellos.</li>
+<li><strong>Una lima, dos superficies.</strong> El mismo archivo puede funcionar como reglas del lado del cliente a través de una exportación separada: la implementación de referencia de ajedrez, por ejemplo, expone <code>globalThis.chessRules</code> para el navegador (mover vista previa, sugerencias de validación) y <code>globalThis.game</code> para el anfitrión. Una fuente de verdad, cero autoridad sobre el cliente.</li>
+<li><strong>Finalizar siempre los juegos mediante <code>result</code></strong> para que la plataforma publique actualizaciones de Elo y archive la repetición cuando tu juego haya terminado. <a href="#replays">repeticiones</a>.</li>
+</ul>
+<p>Ver el <a href="/es/docs/tutorials/chess-walkthrough.html">Tutorial de ajedrez</a> para un recorrido línea por línea, y <a href="/es/docs/tutorials/ai-prompts.html">Avisos de IA</a> para obtener ayuda para generar su propio script.</p>
+<p>Compartido <a href="/es/docs/api/conventions.html">Convenciones API</a> Describe el análisis de respuestas, las marcas de tiempo, la paginación y los reintentos.</p>
+<p>Ver <a href="/es/docs/credentials.html">compatibilidad de credenciales</a> y <a href="/es/docs/api/contracts.html">contratos legibles por máquina</a>.</p>
+
+{% endraw %}

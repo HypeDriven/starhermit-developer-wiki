@@ -1,0 +1,550 @@
+---
+layout: "wiki"
+lang: "hi"
+title: "प्रमाणीकरण"
+source_url: "/docs/api/auth.html"
+source_path: "docs/api/auth.md"
+source_hash: "7c5d28fbaf648ef5811fa8660eb49076563e9f4b439f256cf9632e72ae1130ed"
+translation: "machine"
+permalink: "/hi/docs/api/auth.html"
+---
+{% raw %}
+<h1 id="authentication">प्रमाणीकरण</h1>
+<p>स्टारहर्मिट के पास है <strong>कोई पासवर्ड प्रमाणीकरण नहीं</strong>. दो साइन-इन प्रवाह हैं: सार्वजनिक-कुंजी प्रमाणीकरण (Ed25519, ECDSA-P256, या RSA-PSS, ईमेल-सत्यापित पंजीकरण के साथ) और OAuth। सभी ऑथ रूट नीचे रहते हैं <code>api/v1/auth</code> और जहाँ उल्लेख किया गया है उसे छोड़कर गुमनाम हैं। इस पृष्ठ में टोकन जीवनचक्र, गेम-स्कोप्ड लॉन्च टोकन और वेबसॉकेट कनेक्शन टिकट भी शामिल हैं।</p>
+<p>त्रुटि निकाय अलग-अलग होते हैं; देखना <a href="/hi/docs/api/conventions.html#requests-and-responses">एपीआई कन्वेंशन</a>.</p>
+<h2 id="endpoints">अंतिमबिंदुओं</h2>
+<table>
+<thead>
+<tr>
+<th>तरीका</th>
+<th>पथ</th>
+<th>प्रमाणीकरण</th>
+<th>विवरण</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/auth/public-key/register</code></td>
+<td>गुमनाम</td>
+<td>सार्वजनिक-कुंजी पंजीकरण प्रारंभ करें; एक सत्यापन ईमेल भेजता है</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/auth/public-key/verify</code></td>
+<td>एक बार का टोकन ईमेल किया गया</td>
+<td>सत्यापन ईमेल जिस पृष्ठ को खोलता है; कुछ भी नहीं बदलता</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/auth/public-key/verify</code></td>
+<td>एक बार का टोकन ईमेल किया गया</td>
+<td>पूरा पंजीकरण</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/auth/public-key/challenge</code></td>
+<td>गुमनाम</td>
+<td>हस्ताक्षर करने के लिए लॉगिन चुनौती का अनुरोध करें</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/auth/public-key/complete</code></td>
+<td>गुमनाम</td>
+<td>लॉग इन करने के लिए एक हस्ताक्षरित चुनौती सबमिट करें</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/auth/refresh</code></td>
+<td>गुमनाम</td>
+<td>नई टोकन जोड़ी के लिए ताज़ा टोकन घुमाएँ</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/auth/logout</code></td>
+<td>गुमनाम</td>
+<td>ताज़ा टोकन रद्द करें</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/auth/public-key/revoke-request</code></td>
+<td>गुमनाम</td>
+<td>एक लिंक ईमेल करें जो मेल खाने वाले खाते की प्रत्येक सक्रिय कुंजी को रद्द कर देता है</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/auth/public-key/revoke/confirm</code></td>
+<td>एक बार का टोकन ईमेल किया गया</td>
+<td>निरसन ईमेल वाला पृष्ठ खुलता है; कुछ भी नहीं बदलता</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/auth/public-key/revoke/confirm</code></td>
+<td>एक बार का टोकन ईमेल किया गया</td>
+<td>उस निरसन की पुष्टि करें; कोई सत्र जारी नहीं करता</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/auth/games/{gameId}/sign-in</code></td>
+<td>गुमनाम</td>
+<td>साइन इन करें या एक खाता बनाएं, फिर सीधे होस्ट किए गए गेम पर वापस लौटें</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/auth/oauth/providers</code></td>
+<td>गुमनाम</td>
+<td>लाइव OAuth प्रदाता यह परिनियोजन वास्तव में लोगों को साइन इन कर सकते हैं</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/auth/oauth/{provider}/authorize</code></td>
+<td>गुमनाम</td>
+<td>OAuth प्रदाता पर पुनर्निर्देशित करें</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/auth/oauth/{provider}/callback</code></td>
+<td>गुमनाम</td>
+<td>OAuth कॉलबैक; टोकन के साथ फ्रंटएंड पर रीडायरेक्ट करता है</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/api/v1/auth/oauth/link/confirm</code></td>
+<td>एक बार का टोकन ईमेल किया गया</td>
+<td>पहचान-लिंक ईमेल जो पेज खोलता है; कुछ भी नहीं बदलता</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/auth/oauth/link/confirm</code></td>
+<td>एक बार का टोकन ईमेल किया गया</td>
+<td>खाता-स्वामी अनुमोदन के लिए रखे गए पहचान लिंक की पुष्टि करें</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/games/{slug}/launch-token</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>एक गेम-स्कोप्ड लॉन्च टोकन बनाएं (नीचे देखें)</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/api/v1/realtime/connection-tickets</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>खोलने के लिए एकमुश्त टिकट <code>/ws/**</code> सॉकेट</td>
+</tr>
+</tbody>
+</table>
+<h2 id="after-sign-in-current-terms">साइन-इन के बाद: वर्तमान शर्तें</h2>
+<p>सफल साइन-इन का मतलब संरक्षित एपीआई का उपयोग करने की अनुमति नहीं है। खाताधारकों को अवश्य
+<a href="/hi/docs/api/profile.html#terms-acceptance">वर्तमान StarHermit शर्तों को स्वीकार करें</a> संरक्षित REST कॉल से पहले या
+वेबसॉकेट अपग्रेड सफल हुआ। खाता ग्राहक जांच कर सकते हैं <code>GET /api/v1/me</code>, लाना <code>GET /api/v1/terms</code>,
+और स्पष्ट स्वीकृति दर्ज करें <code>POST /api/v1/me/terms/accept</code>. OAuth और सार्वजनिक-कुंजी दोनों
+खाता सत्र इस प्रवाह का समर्थन करते हैं. क्रेडेंशियल ताज़ा करने से लंबित स्वीकृति का समाधान नहीं होता है।</p>
+<p>खाते द्वारा स्वीकार किए जाने से पहले सीधे खोला गया ब्राउज़र गेम एक स्कोप्ड टोकन प्राप्त कर सकता है।
+यदि कोई गेम कॉल वापस आती है <code>403</code> साथ <code>error: "terms_acceptance_required"</code>, लाना <code>GET /api/v1/terms</code>,
+इसका पाठ प्रदर्शित करें, और एक स्पष्ट स्वीकार कार्रवाई की पेशकश करें। एक खिलाड़ी लॉन्च टोकन प्रदर्शित सबमिट कर सकता है
+हैश टू <code>POST /api/v1/me/terms/accept</code>; स्वीकृति के बाद मूल अनुरोध पुनः प्रयास करें। इसका इलाज न करें
+एक समाप्त-टोकन साइन-इन लूप के रूप में प्रतिक्रिया।</p>
+<h2 id="public-key-registration">सार्वजनिक-कुंजी पंजीकरण</h2>
+<p>परीक्षणित क्लाइंट कोड के साथ चरण दर चरण: <a href="/hi/docs/tutorials/public-key-onboarding.html">ट्यूटोरियल: सार्वजनिक कुंजी के साथ खिलाड़ियों को ऑनबोर्ड करें</a>.</p>
+<table>
+<thead>
+<tr>
+<th><code>keyType</code></th>
+<th><code>keyData</code> (मानक बेस64)</th>
+<th>हस्ताक्षर</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Ed25519</code></td>
+<td>कच्ची 32-बाइट सार्वजनिक कुंजी</td>
+<td>कच्चा 64-बाइट Ed25519 हस्ताक्षर</td>
+</tr>
+<tr>
+<td><code>ECDSA-P256</code></td>
+<td>सार्वजनिक बिंदु, 65-बाइट असंपीड़ित या 33-बाइट संपीड़ित</td>
+<td>ECDSA-SHA256, ASN.1 DER (कच्चा नहीं <code>r‖s</code>)</td>
+</tr>
+<tr>
+<td><code>RSA-PSS</code></td>
+<td><code>SubjectPublicKeyInfo</code> डीईआर, 2048-8192 बिट्स, घातांक ≤ 32 बिट्स</td>
+<td>आरएसएएसएसए-पीएसएस, एसएचए-256, एमजीएफ1-एसएचए-256, 32-बाइट नमक</td>
+</tr>
+</tbody>
+</table>
+<h3 id="post-apiv1authpublic-keyregister"><code>POST /api/v1/auth/public-key/register</code></h3>
+<p>सार्वजनिक-कुंजी पंजीकरण शुरू करता है और एक सत्यापन ईमेल भेजता है। लंबित पंजीकरण रिकॉर्ड 4 घंटे के बाद समाप्त हो जाता है। अगर <code>userId</code> सेट है, ईमेल उस खाते से मेल खाना चाहिए। प्रति पते पर 1 ईमेल और प्रति 24 घंटे में प्रति आईपी पर थ्रॉटल किया जाता है - जब थ्रॉटल किया जाता है, तो प्रतिक्रिया 429 होती है <code>Retry-After</code> शीर्षक.</p>
+<p>कब <code>userId</code> सेट है और जोड़ी जांच नहीं करती है, प्रतिक्रिया है <code>403</code> एक ही संदेश के साथ
+परवाह किए बिना <em>क्यों</em>: एक अज्ञात खाता और गलत पता एक जैसे उत्तर देते हैं। यह समापन बिंदु लेता है
+कोई क्रेडेंशियल नहीं - यह होना ही है, क्योंकि इसी तरह एक नई कुंजी जुड़ी होती है - इसलिए उन्हें अलग करना होगा
+इसे एक ओरेकल बनाएं जिसके लिए उपयोगकर्ता आईडी मौजूद हों और फिर उनके पते के लिए। एक कॉल करने वाला जो इसका मालिक है
+अकाउंट को पहले से ही पता है कि दोनों में से उन्होंने क्या गलत किया।</p>
+<p>अनुरोध:</p>
+<pre><code class="language-json">{
+  "email": "dev@example.com",
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;",
+  "userId": null
+}
+</code></pre>
+<p>प्रतिक्रिया - 202:</p>
+<pre><code class="language-json">{
+  "registrationId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "email": "dev@example.com",
+  "emailSent": true,
+  "deferralReason": null,
+  "message": "A verification email has been sent. The key will be attached once you confirm."
+}
+</code></pre>
+<p><code>emailSent: false</code> इसका मतलब है कि ईमेल पुनः प्रयास के लिए कतारबद्ध है (<code>deferralReason</code> कहते हैं क्यों); पंजीकरण
+अभी भी स्वीकार किया जाता है. अमान्य ईमेल या कुंजी सामग्री है <code>400</code>.</p>
+<h3 id="get--post-apiv1authpublic-keyverifytoken"><code>GET</code> / <code>POST /api/v1/auth/public-key/verify?token=</code></h3>
+<p><strong>ईमेल किए गए लिंक को खोलने से कुछ भी नहीं बदलता है।</strong> <code>GET</code> एक पृष्ठ दिखाता है जिसमें कहा गया है कि पुष्टि करने से क्या होगा -
+एक खाता बनाएँ, या <strong>मौजूदा खाते में एक कुंजी जोड़ें</strong> वह पहले से ही पते का उपयोग करता है - a के साथ
+पुष्टि करें बटन. मेल स्कैनर उनका पूर्वावलोकन करने के लिए लिंक लाते हैं, इसलिए एक ईमेल किया गया लिंक जिस पर कार्रवाई की जाती है <code>GET</code>
+जो कुछ भी इसे स्कैन करेगा उसे भुनाया जाएगा। यही बात इन पर भी लागू होती है
+<a href="#emailed-key-revocation">निरसन</a> और <a href="#get-apiv1authoauthproviderauthorizelinkclient">पहचान-लिंक</a>
+नीचे पुष्टिकरण।</p>
+<p><code>POST</code> इसे उसी URL पर रिडीम किया जाता है: कुंजी संलग्न करता है, जिससे उपयोगकर्ता (उपयोगकर्ता नाम) बनता है <code>pk-&lt;hex12&gt;</code>, भूमिका
+<code>User</code>) जब तक कि कोई खाता पहले से ही उस ईमेल पते का उपयोग नहीं करता है, उस स्थिति में कुंजी उस खाते से जुड़ जाती है।
+ईमेल को सत्यापित के रूप में चिह्नित किया गया है. लिंक एकल-उपयोग है और 4 घंटे के बाद समाप्त हो जाता है; एक अज्ञात, प्रयुक्त या
+समाप्त टोकन है <code>400</code>, और ऐसा ही एक लिंक है जिसका पता अब खाते का नहीं है - यह साबित होता है
+उस इनबॉक्स का नियंत्रण जिस पर इसे भेजा गया था, और केवल जबकि वह पता अभी भी खाते का है।</p>
+<p>जब प्लेयर पेज पर कन्फ़र्म दबाता है और परिनियोजन सेट हो जाता है
+<code>PublicKeyAuth:VerificationSuccessRedirectUri</code> -starhermit.com डैशबोर्ड पर करता है - वे हैं
+टुकड़े में टोकन के साथ वहां भेजा गया
+(<code>#access_token=…&amp;refresh_token=…&amp;token_type=Bearer&amp;expires_in=900</code>), डैशबोर्ड में साइन इन किया गया। ए
+इसलिए मूल ग्राहक को ये टोकन प्राप्त नहीं होते हैं; एक बार खिलाड़ी के पास अपनी कुंजी के साथ साइन इन हो जाता है
+पुष्टि की गई. एक एपीआई क्लाइंट जो <code>POST</code>यूआरएल स्वयं JSON प्राप्त करता है:</p>
+<pre><code class="language-json">{
+  "userId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "keyId": "9b2f5c74-1d2e-4a6b-8c0d-1e2f3a4b5c6d",
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "dGhpcyBpcyBh..."
+}
+</code></pre>
+<h2 id="public-key-login">सार्वजनिक-कुंजी लॉगिन</h2>
+<h3 id="post-apiv1authpublic-keychallenge"><code>POST /api/v1/auth/public-key/challenge</code></h3>
+<p>एक लॉगिन चुनौती जारी करता है, जो 5 मिनट और एकल-उपयोग के लिए वैध है।</p>
+<p><strong>हस्ताक्षर सर्वर के स्वयं के क्रमांकन को कवर करता है <code>payload</code>, न कि आपको प्राप्त JSON:</strong>
+क्रम में कॉम्पैक्ट, पास्कलकेस नाम <code>ChallengeId</code>, <code>Fingerprint</code>, <code>Issuer</code>, <code>Audience</code>, <code>Expiry</code>,
+<code>Nonce</code>, <code>ClientTimestamp</code>, बिल्कुल परोसे गए मानों की प्रतिलिपि बनाई गई, और प्रत्येक <code>+</code> नॉन में इस प्रकार लिखा गया है
+<code>\u002B</code> (तारीखें अपनी रखती हैं <code>+</code>). देखें
+<a href="/hi/docs/tutorials/public-key-onboarding.html#3-sign-in-with-the-key">काम किया उदाहरण</a>.</p>
+<p>अनुरोध:</p>
+<pre><code class="language-json">{
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;"
+}
+</code></pre>
+<p>प्रतिक्रिया:</p>
+<pre><code class="language-json">{
+  "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "payload": {
+    "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "fingerprint": "4d9f3c...",
+    "issuer": "starhermit",
+    "audience": "starhermit",
+    "expiry": "2026-07-22T07:24:44.1234567+00:00",
+    "nonce": "NmL+tgMum6HXU/pa3T9xjQ==",
+    "clientTimestamp": "2026-07-22T07:19:44.1235521+00:00"
+  },
+  "expiresIn": 300
+}
+</code></pre>
+<h3 id="post-apiv1authpublic-keycomplete"><code>POST /api/v1/auth/public-key/complete</code></h3>
+<p>एक पंजीकृत, गैर-निरस्त कुंजी के विरुद्ध हस्ताक्षर सत्यापित करता है और एक टोकन जोड़ी लौटाता है। एक विफलता है
+<code>401</code>: <code>"Public key not registered or revoked."</code> (एक कुंजी सहित जिसका ईमेल लिंक नहीं किया गया है
+अभी तक खुला है), <code>"Invalid signature."</code>, या <code>"Challenge not found or expired."</code>. चुनौती दें और पूरा करें
+प्रति आईपी प्रति मिनट 60 अनुरोधों की सीमा साझा करें (<code>429</code>).</p>
+<p>अनुरोध:</p>
+<pre><code class="language-json">{
+  "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "signature": "base64-signature...",
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;"
+}
+</code></pre>
+<p>प्रतिक्रिया:</p>
+<pre><code class="language-json">{
+  "userId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "dGhpcyBpcyBh..."
+}
+</code></pre>
+<h2 id="token-lifecycle">टोकन जीवनचक्र</h2>
+<h3 id="post-apiv1authrefresh"><code>POST /api/v1/auth/refresh</code></h3>
+<p>घूर्णनशील ताज़ा: पुराना टोकन निरस्त कर दिया जाता है और बदल दिया जाता है। निरस्त ताज़ा टोकन का पुन: उपयोग पूरे टोकन परिवार को निरस्त कर देता है।</p>
+<p>अनुरोध:</p>
+<pre><code class="language-json">{ "refreshToken": "dGhpcyBpcyBh..." }
+</code></pre>
+<p>प्रतिक्रिया:</p>
+<pre><code class="language-json">{
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "bmV3IHJlZnJlc2g..."
+}
+</code></pre>
+<h4 id="when-refresh-stops-working">जब रिफ्रेश काम करना बंद कर देता है</h4>
+<p>रिफ्रेश टोकन उस खाते की स्थिति को रिकॉर्ड करता है जिसके तहत इसे जारी किया गया था, और रिफ्रेश इसकी जांच करता है। दो उत्तर
+आपके ग्राहक को पुनः प्रयास करने के बजाय इसे संभालना होगा:</p>
+<table>
+<thead>
+<tr>
+<th>स्थिति</th>
+<th>अर्थ</th>
+<th>ग्राहक को क्या करना चाहिए</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>401</code></td>
+<td>सत्र को प्लेटफ़ॉर्म-साइड रद्द कर दिया गया था - ए "हर जगह साइन आउट करें", या एक समझौता प्रतिक्रिया। पूरा टोकन परिवार जला दिया गया है, जिसमें अभी प्रस्तुत किया गया टोकन भी शामिल है।</td>
+<td>दोनों टोकन त्यागें और नए सिरे से साइन-इन प्रारंभ करें।</td>
+</tr>
+<tr>
+<td><code>403</code></td>
+<td>खाता है <strong>निलंबित</strong>.</td>
+<td>रुकना। दोबारा साइन इन करने से मदद नहीं मिलेगी; जो उसी <code>403</code> निलंबन हटने तक प्रत्येक साइन-इन मार्ग से वापस आता है।</td>
+</tr>
+</tbody>
+</table>
+<p> <code>403</code> जानबूझकर अलग है <code>401</code>, क्योंकि दोनों को विपरीत प्रतिक्रियाओं की आवश्यकता है: एक का मतलब है
+"पुनः प्रमाणित करें", दूसरा साधन "दोबारा प्रमाणीकरण करना व्यर्थ है". एक निलंबित खाता है
+द्वारा मना कर दिया गया <em>प्रत्येक</em> क्रेडेंशियल-मिंटिंग मार्ग - ताज़ा करें, सार्वजनिक-कुंजी पूर्णता, OAuth कॉलबैक,
+और गेम लॉन्च टोकन - केवल रिफ्रेश द्वारा नहीं।</p>
+<h3 id="post-apiv1authlogout"><code>POST /api/v1/auth/logout</code></h3>
+<p>दिए गए ताज़ा टोकन को रद्द कर देता है। 200 लौटाता है.</p>
+<pre><code class="language-json">{ "refreshToken": "dGhpcyBpcyBh..." }
+</code></pre>
+<h2 id="oauth">OAuth</h2>
+<p>प्लेटफ़ॉर्म सात प्रदाताओं को शिप करता है: <code>google</code>, <code>github</code>, <code>discord</code>, <code>twitch</code>, <code>gitlab</code>, <code>linkedin</code>,
+<code>bitbucket</code>. <strong>केवल वे प्रदाता जिनके पास इस परिनियोजन के लिए क्रेडेंशियल हैं, वे लाइव हैं।</strong> एक ग्राहक को नहीं करना चाहिए
+सूची को हार्ड-कोड करें।</p>
+<h3 id="get-apiv1authoauthproviders"><code>GET /api/v1/auth/oauth/providers</code></h3>
+<p>गुमनाम। लाइव प्रदाताओं को उसी क्रम में लौटाता है जिस क्रम में उन्हें पेश किया जाना चाहिए:</p>
+<pre><code class="language-json">{
+  "providers": [
+    {
+      "provider": "google",
+      "displayName": "Google",
+      "authorizeUrl": "/api/v1/auth/oauth/google/authorize",
+      "linksExistingAccountsByEmail": true
+    }
+  ]
+}
+</code></pre>
+<p><code>linksExistingAccountsByEmail</code> यह है कि क्या उस प्रदाता पर साइन-इन करने वाला व्यक्ति खाता ढूंढ सकता है
+पहले से ही (उस प्रदाता के लिए ऑपरेटर की ट्रस्ट सेटिंग) है। एक ऐसे नाम को अधिकृत करने के लिए कहा जा रहा है जो नहीं है
+जीना है <code>404</code>, प्रदाता के स्वयं के त्रुटि पृष्ठ पर रीडायरेक्ट नहीं।</p>
+<h3 id="get-apiv1authoauthproviderauthorizelinkclient"><code>GET /api/v1/auth/oauth/{provider}/authorize?link=&amp;client=</code></h3>
+<p>प्रदाता को 302 रीडायरेक्ट लौटाता है और एक सेट करता है <code>oauth_state</code> कुकी (केवल Http, सेमसाइट=लैक्स, 10
+मिनट)। <code>link=true</code> पहचान को वर्तमान में लॉग-इन किए गए उपयोगकर्ता से लिंक करना प्रारंभ करता है; लिंक करना आवश्यक है
+हालिया प्रमाणीकरण (5 मिनट के भीतर)। <code>client</code> एक समर्थित क्लाइंट रीडायरेक्ट का चयन करता है। एक के लिए
+सीधे खोला गया गेम, उपयोग करें <code>gameId</code> और वैकल्पिक <code>returnUrl</code> बजाय; देखना
+<a href="#sign-in-from-a-directly-opened-browser-game">सीधे खोले गए ब्राउज़र गेम से साइन इन करें</a>.</p>
+<h3 id="get-apiv1authoauthprovidercallbackcodestate"><code>GET /api/v1/auth/oauth/{provider}/callback?code=&amp;state=</code></h3>
+<p>सामान्य खाता साइन-इन के लिए, टोकन के साथ फ्रंटएंड यूआरएल पर 302 रीडायरेक्ट लौटाता है
+फ़्रैगमेंट (गेम साइन-इन इसके बजाय सीधे गेम में एक स्कोप्ड टोकन लौटाता है, जैसा कि नीचे बताया गया है):</p>
+<pre><code>#access_token=…&amp;refresh_token=…&amp;token_type=Bearer&amp;expires_in=900
+</code></pre>
+<p>यदि प्रदाता टोकन एक्सचेंज से इनकार करता है, तो कॉलबैक उत्तर देता है <code>409</code> प्रदाता की त्रुटि का नामकरण
+<strong>कोड</strong> (विवरण सर्वर लॉग में रहता है)।</p>
+<p>एक सामान्य साइन-इन उपयोगकर्ता को ढूंढता है या बनाता है (उपयोगकर्ता नाम)। <code>oauth-{provider}-{guid}</code>, भूमिका <code>User</code>) और
+नए सत्र के रिकॉर्ड <code>auth_method=oauth</code>. एक साइन-इन जिसका <code>(provider, providerUserId)</code> अज्ञात है है
+<strong>किसी मौजूदा खाते पर अपनाया गया</strong> केवल तभी जब प्रदाता के दावे पर भरोसा किया जाता है, बिल्कुल एक
+खाते में पहले से ही वह सत्यापित ईमेल है, और उस खाते की अभी तक इस प्रदाता से कोई पहचान नहीं है।
+अन्य कोई भी चीज़ एक अलग खाते का प्रावधान करती है। दत्तक ग्रहण प्रदाता का नाम बताने वाले खाते को ईमेल करता है।</p>
+<p>यह मायने रखता है क्योंकि केवल एक OAuth-प्रमाणित सत्र
+उच्च प्रभाव वाले क्रेडेंशियल परिवर्तन कर सकते हैं:</p>
+<ul>
+<li>खाता सार्वजनिक कुंजियाँ जोड़ें या निरस्त करें;</li>
+<li>खाता ईमेल बदलें;</li>
+<li>OAuth-प्रबंधित पहचान हटाएँ।</li>
+</ul>
+<p>गेम-स्कोप्ड टोकन कभी भी ये ऑपरेशन नहीं कर सकते। ताज़ा टोकन मूल को बरकरार रखता है
+सत्र की प्रमाणीकरण विधि, इसलिए OAuth सत्र को ताज़ा करने से यह क्षमता नहीं हटती है
+सार्वजनिक-कुंजी सत्र को ताज़ा करने से यह नहीं जुड़ता है।</p>
+<p>कब <code>link=true</code>, कॉलबैक स्वचालित रूप से सत्र को बढ़ावा नहीं देता है क्योंकि यह दौरा किया गया था
+एक OAuth प्रदाता. OAuth सत्र से प्रारंभ किया गया एक लिंक तुरंत संलग्न किया जाता है। एक लिंक से शुरू हुआ
+सार्वजनिक-कुंजी, ईमेल-सत्यापन, या विरासत सत्र तब तक आयोजित किया जाता है जब तक कि खाता स्वामी इसे खोल न दे
+पुष्टिकरण खाते के सत्यापित ईमेल पर भेजा गया; पुनर्निर्देशन खंड रिपोर्ट
+<code>link=pending_email_confirmation</code>. एक बार का ईमेल खुलता है <code>GET /api/v1/auth/oauth/link/confirm?token=…</code>,
+प्रदाता खाते का नामकरण करने वाला एक पृष्ठ जो कुछ भी नहीं बदलता है; इसका कन्फर्म बटन <code>POST</code>यह वही यूआरएल है,
+जो पहचान बनाता है (<code>{ "provider", "linked": true }</code> एक एपीआई क्लाइंट के लिए)। एक लिंक जिसका पता
+अब खाता अस्वीकृत नहीं है. यह चोरी हुई सार्वजनिक कुंजी को लिंक करने से रोकता है
+हमलावर का प्रदाता खाता और उसे स्थायी OAuth साइन-इन में बदलना।</p>
+<p>GitHub पहचान मेटाडेटा स्टोर <code>{"login":"…"}</code> - इसका उपयोग रिपॉजिटरी-स्वामित्व जांच के लिए किया जाता है
+<a href="/hi/docs/api/github-games.html">गिटहब गेम्स</a>.</p>
+<h3 id="oauth-enrolled-public-keys-for-automation">स्वचालन के लिए OAuth-नामांकित सार्वजनिक कुंजियाँ</h3>
+<p>एक OAuth सत्र कॉल कर सकता है <code>POST /api/v1/me/public-keys</code> तुरंत एक लेबल वाली मशीन कुंजी संलग्न करें।
+बाद में, सीआई सामान्य सार्वजनिक-कुंजी चुनौती पर हस्ताक्षर करता है और अपलोड करने के लिए अपने अल्पकालिक एक्सेस टोकन का उपयोग करता है
+स्वामित्व वाले गेम का बंडल; निजी कुंजी सीआई गुप्त स्टोर को कभी नहीं छोड़ती। देखना
+<a href="/hi/docs/tutorials/ci-cd-build-upload.html">सीआई/सीडी बिल्ड-अपलोड ट्यूटोरियल</a> सेटअप के लिए, एक हस्ताक्षर सहायक, और
+एक GitHub क्रियाएँ वर्कफ़्लो।</p>
+<h2 id="tokens">टोकन</h2>
+<ul>
+<li><strong>एक्सेस टोकन</strong> - जेडब्ल्यूटी, 15 मिनट का जीवनकाल (<code>expires_in=900</code>). दावों में शामिल हैं <code>sub</code> (उपयोगकर्ता आईडी) प्लस <code>permission</code> और भूमिका के दावे। निरसन तुरंत प्रभाव से लागू होता है.</li>
+<li><strong>टोकन ताज़ा करें</strong> - 7 दिन के जीवनकाल वाला एक अपारदर्शी घूमने वाला टोकन। प्रत्येक रिफ्रेश एक नया रिफ्रेश टोकन जारी करता है और पुराने को रद्द कर देता है; निरस्त टोकन का पुन: उपयोग करने से पूरा टोकन परिवार निरस्त हो जाता है।</li>
+</ul>
+<h2 id="sign-in-from-a-directly-opened-browser-game">सीधे खोले गए ब्राउज़र गेम से साइन इन करें</h2>
+<p>डैशबोर्ड के बाहर खोला गया एक होस्ट किया गया गेम दिखा सकता है <strong>दाखिल करना</strong> बटन इससे लिंक हो रहा है:</p>
+<pre><code class="language-text">https://api.starhermit.com/api/v1/auth/games/{gameId}/sign-in
+</code></pre>
+<p><code>gameId</code> गेम का अपरिवर्तनीय यूयूआईडी (उपडोमेन) है <code>{gameId}.starhermit.com</code>). स्टारहर्मिट
+इसके सक्षम साइन-इन प्रदाताओं को दिखाता है। किसी मौजूदा प्लेयर में साइन जारी रखना या नया बनाना
+सामान्य OAuth खाता-मिलान नियमों का उपयोग करके खाता, फिर रीडायरेक्ट करता है <strong>सीधे वापस
+खेल</strong>, डैशबोर्ड पर जाए बिना।</p>
+<p>वैकल्पिक <code>returnUrl</code> एक विशिष्ट गेम पेज, क्वेरी स्ट्रिंग या हैश रूट को सुरक्षित रखता है। यह होना ही चाहिए
+ठीक उसी गेम की होस्ट की गई उत्पत्ति पर एक पूर्ण HTTPS URL; अन्य खेल, बाहरी मेज़बान,
+यूआरएल और वैकल्पिक पोर्ट में क्रेडेंशियल अस्वीकार कर दिए जाते हैं <code>400</code>. पर वापस लौटने के लिए इसे छोड़ दें
+प्रकाशित लॉन्च फ़ाइल. अज्ञात, हटाए गए, होस्ट न किए गए या कभी न प्रकाशित हुए गेम वापस आते हैं <code>404</code>. दोनों
+रिपॉजिटरी परिनियोजन और अपलोड किए गए गेम समर्थित हैं; मनमाने ढंग से बाहरी/स्थानीय यूआरएल नहीं हैं।</p>
+<p>ब्राउज़र को नेविगेट करें <strong>सार्वजनिक एपीआई मूल</strong> पृष्ठ लाने या प्रारंभ करने के बजाय ऊपर
+खेल के माध्यम से <code>/api</code> प्रॉक्सी. OAuth स्थिति कुकी और प्रदाता कॉलबैक को समान उपयोग करना चाहिए
+एपीआई होस्ट. इस प्रवाह का उपयोग तब करें जब गेम में कोई वैध लॉन्चर-प्रदत्त या पहले प्राप्त टोकन न हो।</p>
+<h3 id="button-and-return-token-example">बटन और रिटर्न-टोकन उदाहरण</h3>
+<pre><code class="language-html">&lt;button id="starhermit-sign-in"&gt;Sign in&lt;/button&gt;
+&lt;script type="module"&gt;
+const api = 'https://api.starhermit.com';
+const gameId = 'YOUR_GAME_UID';
+const signIn = document.querySelector('#starhermit-sign-in');
+let gameToken = null; // Or your existing launcher-provided game token.
+
+// Read this before your game router or third-party scripts consume the fragment.
+const auth = new URLSearchParams(location.hash.slice(1));
+if (auth.has('access_token')) {
+  gameToken = auth.get('access_token');
+  const originalHash = auth.get('game_fragment');
+  history.replaceState(null, '', location.pathname + location.search +
+    (originalHash ? '#' + originalHash : ''));
+}
+signIn.hidden = Boolean(gameToken);
+signIn.addEventListener('click', () =&gt; {
+  const url = new URL(`/api/v1/auth/games/${gameId}/sign-in`, api);
+  url.searchParams.set('returnUrl', location.href);
+  location.assign(url.href);
+});
+
+// Pass gameToken to your game's API client as Authorization: Bearer &lt;gameToken&gt;.
+// This example keeps it in memory; a reload can require sign-in again.
+&lt;/script&gt;
+</code></pre>
+<p>वापसी खंड है:</p>
+<pre><code class="language-text">#access_token=…&amp;token_type=Bearer&amp;expires_in=3600
+</code></pre>
+<p><code>access_token</code> एक है <strong>गेम-स्कोप्ड लॉन्च टोकन</strong>, खाता-व्यापी एक्सेस टोकन नहीं। कोई ताज़ा टोकन नहीं
+जारी किया जाता है. <code>expires_in</code> परिनियोजन के कॉन्फ़िगर किए गए लॉन्च-टोकन जीवनकाल (डिफ़ॉल्ट 3600) का उपयोग करता है
+सेकंड)। एक मूल रिटर्न यूआरएल टुकड़ा वैकल्पिक में एन्कोड किया गया है <code>game_fragment</code> मैदान;
+टोकन कैप्चर करने और ब्राउज़र इतिहास से प्रमाणीकरण डेटा हटाने के बाद इसे पुनर्स्थापित करें।
+टोकन को लॉग या अग्रेषित न करें.</p>
+<p>उपयोग समाप्ति से पहले नवीनीकृत करें <code>POST /api/v1/games/{gameId}/launch-token</code> वर्तमान टोकन के साथ
+बियरर प्राधिकरण, फिर इसे लौटाए गए से बदलें <code>token</code>. सामान्य नवीनीकरण-श्रृंखला सीमा
+लागू होता है (डिफ़ॉल्ट 12 घंटे)। यदि टोकन समाप्त हो जाता है या नवीनीकरण से इनकार कर दिया जाता है, तो इसे साफ़ करें और साइन इन दिखाएं
+पुनः. देखना <a href="#game-launch-tokens">गेम लॉन्च टोकन</a>.</p>
+<h3 id="choosing-a-provider-yourself">प्रदाता स्वयं चुनना</h3>
+<p>इसके बजाय खेल पढ़ सकते हैं <code>GET /api/v1/auth/oauth/providers</code> और प्रस्तावित पर नेविगेट करें <code>authorizeUrl</code>
+सार्वजनिक एपीआई मूल पर, जोड़ना <code>gameId</code> और वैकल्पिक रूप से <code>returnUrl</code>. प्राधिकरण कदम
+मौजूदा दस मिनट की OAuth स्थिति में लक्ष्य को मान्य और संग्रहीत करता है; कॉलबैक क्वेरी पैरामीटर
+इसे बदल नहीं सकते. आरंभ करने वाले ब्राउज़र की कुकी अभी भी आवश्यक है, और गेम की फिर से जाँच की जाती है
+टोकन जारी करने से पहले. निलंबित खातों को टोकन प्राप्त नहीं हो सकता.</p>
+<p>गेम साइन-इन को इसके साथ न जोड़ें <code>client</code> या <code>link</code> (<code>400</code>). A <code>returnUrl</code> बिना <code>gameId</code> ई आल्सो
+<code>400</code>. सामान्य डैशबोर्ड और डेस्कटॉप साइन-इन अपने कॉन्फ़िगर किए गए फ्रंटएंड गंतव्यों का उपयोग करना जारी रखते हैं
+और साधारण खाता टोकन जोड़े।</p>
+<h2 id="game-launch-tokens">गेम लॉन्च टोकन</h2>
+<p><code>POST /api/v1/games/{slug}/launch-token</code> (JWT) एक गेम-स्कोप्ड JWT बनाता है:</p>
+<pre><code class="language-json">{
+  "token": "eyJhbGciOi...",
+  "expiresInSeconds": 3600
+}
+</code></pre>
+<p>टोकन में एक होता है <code>game_scope</code> 60 मिनट के जीवनकाल के लिए दावा करें और चूक करें। नवीकरण प्रतियां ए
+<code>launch_chain</code> प्रारंभ समय आगे; पिछले 12 घंटे (डिफ़ॉल्ट) नवीनीकरण है <code>403</code> और धारक को जाना होगा
+पूर्ण खाता सत्र पर वापस जाएँ। पूरी जानकारी अंदर है <a href="/hi/docs/api/games.html">खेल</a>.</p>
+<p><strong>सॉकेट पुनः कनेक्ट करना.</strong> लॉन्च टोकन के साथ एक सॉकेट खोला गया (<code>?access_token=</code> पर <code>ws/v1/games</code>,
+<code>ws/v1/realtime</code>, <code>ws/v1/voice</code>) उस टोकन को अपने यूआरएल में रखता है, और एक समाप्त टोकन के साथ एक हैंडशेक रखता है
+से इंकार कर दिया गया है <code>401</code> अपग्रेड से पहले - ब्राउज़र केवल क्लोज़ कोड की रिपोर्ट करता है <code>1006</code>, एक के समान
+नेटवर्क ड्रॉप. किसी असफल पुनः कनेक्ट को संभवतः एक प्रमाणीकरण विफलता के रूप में मानें: पुनः खोलने से पहले, नवीनीकरण करें
+<code>POST /api/v1/games/{slug}/launch-token</code> (केवल तभी संभव है जब वर्तमान टोकन अभी भी वैध है और
+मूल लॉन्च के 12 घंटों के भीतर) और नए टोकन के साथ यूआरएल बनाएं। एक बार नवीनीकरण होता है
+इनकार कर दिया, प्लेयर को लॉन्चर पर वापस भेजें, या उसके माध्यम से
+<a href="#sign-in-from-a-directly-opened-browser-game">गेम साइन-इन</a> यदि इस तरह खेल खोला गया।
+एक ही URL पुनः प्रयास करने से कभी भी पुनर्प्राप्त नहीं हो सकता.</p>
+<h3 id="game-scope-fencing">गेम-स्कोप बाड़ लगाना</h3>
+<p>गेम-स्कोप वाला टोकन केवल निम्नलिखित तक पहुंच सकता है:</p>
+<ul>
+<li>अपना ही है <code>/api/v1/games/{scope}</code> पेड़,</li>
+<li><code>/ws/v1/games</code>,</li>
+<li><a href="/hi/docs/api/realtime.html">वास्तविक समय-कक्ष</a> बाकी मार्ग और <code>/ws/v1/realtime</code> अपने स्वयं के गेम के लिए, जिसमें कनेक्शन टिकट भी शामिल है,</li>
+<li><code>GET /api/v1/time</code> और <code>GET /api/v1/terms</code>,</li>
+<li><code>POST /api/v1/me/terms/accept</code> प्रमाणित खिलाड़ी की स्पष्ट सहमति के लिए,</li>
+<li><code>GET /api/v1/me/friends</code>,</li>
+<li><code>GET /api/v1/users/{id}/avatar</code> और <code>GET /api/v1/users/{id}/profile</code>,</li>
+<li>यह गेम का लीडरबोर्ड है,</li>
+<li>खिलाडियों <a href="/hi/docs/api/catalog.html#saving-from-inside-a-game-launch-token">बादल बचाओ</a> अपने खेल के लिए (<code>/api/v1/me/cloud-saves/game:&lt;scope&gt;</code> और इसके <code>/info</code>) - कोई अन्य कुंजी नहीं,</li>
+<li>चैट/वॉइस REST और WebSocket एंडपॉइंट अपने स्वयं के गेम सत्रों से जुड़े हुए हैं,</li>
+<li><code>GET /api/v1/github-games/{id}/icon</code> और <code>/cover</code> किसी भी खेल के लिए (वैसे भी दोनों सार्वजनिक हैं),</li>
+<li><code>POST /api/v1/me/heartbeat</code>, जो केवल खिलाड़ी को ऑनलाइन चिह्नित करता है,</li>
+<li><code>GET /api/v1/github-games/{id}/release-notes</code> अपने ही खेल के लिए,</li>
+<li><a href="/hi/docs/api/relay.html">रिले</a> अपने खेल के सत्रों या कमरों में से किसी एक से जुड़े रिले के लिए मार्ग।</li>
+</ul>
+<p><code>/ws/v1/chat</code> लॉन्च टोकन के लिए अवरुद्ध है। बाकी सब कुछ 403 लौटाता है।</p>
+<h2 id="typical-login-flow-curl">विशिष्ट लॉगिन प्रवाह (कर्ल)</h2>
+<p>सार्वजनिक-कुंजी लॉगिन, चुनौती से प्रमाणित कॉल तक:</p>
+<pre><code class="language-bash"># 1. Request a challenge
+curl -s -X POST https://api.starhermit.com/api/v1/auth/public-key/challenge \
+  -H "Content-Type: application/json" \
+  -d '{"keyType":"Ed25519","keyData":"&lt;base64-raw-32-byte-public-key&gt;"}'
+# → { "challengeId": "...", "payload": { ... }, "expiresIn": 300 }
+
+# 2. Sign the serialized payload JSON with your private key, then complete
+curl -s -X POST https://api.starhermit.com/api/v1/auth/public-key/complete \
+  -H "Content-Type: application/json" \
+  -d '{"challengeId":"...","signature":"base64-signature...","keyType":"Ed25519","keyData":"&lt;base64-raw-32-byte-public-key&gt;"}'
+# → { "userId": "...", "accessToken": "...", "refreshToken": "..." }
+
+# 3. Call the API with the access token
+curl -s https://api.starhermit.com/api/v1/me \
+  -H "Authorization: Bearer eyJhbGciOi..."
+
+# 4. When the access token expires (after 15 min), rotate the refresh token
+curl -s -X POST https://api.starhermit.com/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"dGhpcyBpcyBh..."}'
+
+# 5. On logout, revoke the refresh token
+curl -s -X POST https://api.starhermit.com/api/v1/auth/logout \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"dGhpcyBpcyBh..."}'
+</code></pre>
+<p>OAuth लॉगिन ब्राउज़र-संचालित है: पढ़ें <code>GET /api/v1/auth/oauth/providers</code>, एक लाइव प्रदाता खोलें
+<code>authorizeUrl</code>, पूर्ण सहमति, और कॉलबैक उपयोगकर्ता को फ्रंटएंड पर ले आता है
+<code>#access_token=…&amp;refresh_token=…</code> यूआरएल खंड में.</p>
+<h2 id="emailed-key-revocation">कुंजी निरस्तीकरण ईमेल किया गया</h2>
+<p>ऐसे मालिक के लिए जो पहुंच नहीं सकता <code>DELETE /me/public-keys</code> (कोई OAuth सत्र नहीं, या चोरी से लॉक कर दिया गया
+कुंजी). <code>POST /api/v1/auth/public-key/revoke-request</code> साथ <code>{ "email": "…" }</code> एक अनुरोध रखता है और
+एक लिंक ईमेल करता है. इसे खोलना (<code>GET /api/v1/auth/public-key/revoke/confirm?token=…</code>) एक पेज दिखाता है
+कुछ भी नहीं बदलता; इसका कन्फर्म बटन <code>POST</code>यह वही यूआरएल है, जो निरस्त हो जाता है <strong>प्रत्येक</strong> उस पर सक्रिय कुंजी
+खाता और उनके द्वारा प्रमाणित सत्र समाप्त होता है। दोनों अप्रामाणिक हैं और <strong>अंक संख्या
+सत्र</strong>. अनुरोध हमेशा उत्तर देता है <code>202</code> उसी शरीर के साथ, जो कुछ भी वह पाता है; प्रति एक अनुरोध
+प्रति 15 मिनट में खाता, और लिंक 4 घंटे के बाद समाप्त हो जाता है। पुष्टि करने वाला <code>POST</code> जवाब <code>200</code>
+<code>{ "revoked": &lt;count&gt;, "sessionsEnded": &lt;count&gt; }</code> किसी एपीआई क्लाइंट के लिए, या <code>400</code> किसी अज्ञात के लिए, प्रयुक्त या
+समाप्त टोकन, या जिसका पता अब खाते का नहीं है।</p>
+<h2 id="websocket-connection-tickets">वेबसॉकेट कनेक्शन टिकट</h2>
+<p><code>POST /api/v1/realtime/connection-tickets</code> एक बार के टिकट के लिए कॉल करने वाले के वाहक टोकन का आदान-प्रदान करता है
+लगभग 30 सेकंड के लिए वैध। इसे ऐसे पास करें <code>?ticket=</code> किसी पर <code>/ws/v1/*</code> हाथ मिलाना यह कॉल करने वाले को ले जाता है
+शब्दशः दावा (सहित) <code>game_scope</code> और <code>pk</code>), REST पर अस्वीकार कर दिया जाता है, और पहले उपयोग पर खर्च किया जाता है।
+गेम-स्कोप्ड लॉन्च टोकन सहित कोई भी प्रमाणित कॉलर पूछ सकता है। <code>?access_token=</code> अभी भी काम करता है
+जब तक ग्राहक स्थानांतरित नहीं हो जाते।</p>
+<p><strong>एक खुला सॉकेट तब समाप्त हो जाता है जब उसका क्रेडेंशियल रद्द कर दिया जाता है।</strong> इसे खोलने वाली सार्वजनिक कुंजी को रद्द करने से यह समाप्त हो जाती है
+यह तुरंत; हर जगह एक निलंबन या साइन-आउट इसे लगभग 30 सेकंड के भीतर समाप्त कर देता है। टोकन समाप्ति
+खुले सॉकेट को समाप्त नहीं करता - पुन: कनेक्ट करने से पहले ताज़ा करें।</p>
+<h2 id="embedded-onboarding-for-nativestorefront-games">देशी/स्टोरफ्रंट गेम्स के लिए एंबेडेड ऑनबोर्डिंग</h2>
+<p>एक स्टीम, एपिक, जीओजी, या स्टैंडअलोन क्लाइंट प्लेयर के डिवाइस पर एक कुंजी उत्पन्न कर सकता है और प्रस्तुत कर सकता है
+सार्वजनिक-कुंजी पंजीकरण अपने स्वयं के यूआई के अंदर प्रवाहित होता है, OAuth और StarHermit की यात्रा से बचता है
+डैशबोर्ड. पंजीकरण मौन नहीं है: खिलाड़ी को सहमति देनी होगी, एक ईमेल प्रदान करना होगा और उसका पालन करना होगा
+एक बार सत्यापन लिंक। गेम सर्वर टोकन खिलाड़ियों को बना या उनका प्रतिरूपण नहीं कर सकता है। देखना
+<a href="/hi/docs/tutorials/public-key-onboarding.html">ट्यूटोरियल: सार्वजनिक कुंजी के साथ खिलाड़ियों को ऑनबोर्ड करें</a>, और यह
+<a href="/hi/docs/tutorials/dedicated-server-onboarding.html">समर्पित-सर्वर ट्यूटोरियल</a> ऐसे गेम के लिए जो एक सर्वर भी शिप करता है।</p>
+<p>देखना <a href="/hi/docs/credentials.html">क्रेडेंशियल अनुकूलता</a> और <a href="/hi/docs/api/contracts.html">मशीन-पठनीय अनुबंध</a>.</p>
+
+{% endraw %}

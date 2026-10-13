@@ -1,0 +1,365 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Catálogo de software"
+source_url: "/docs/api/catalog.html"
+source_path: "docs/api/catalog.md"
+source_hash: "0dc7378c084cb717711091cd651d3fc514625f8737814c055edb6ab2fe19467a"
+translation: "machine"
+permalink: "/pt/docs/api/catalog.html"
+---
+{% raw %}
+<h1 id="software-catalog">Catálogo de software</h1>
+<p>O catálogo de software cobre navegação e reivindicação de títulos, listagem de compilações, download, salvamentos na nuvem, lista de desejos e classificações. As leituras são anônimas; as gravações exigem um JWT.</p>
+<p>URL base: <code>https://api.starhermit.com</code>. Todas as rotas estão sob <code>/api/v1/...</code>.</p>
+<h2 id="browsing-and-claiming-titles">Navegando e reivindicando títulos</h2>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Caminho</th>
+<th>Autenticação</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/software</code></td>
+<td>Anônimo</td>
+<td>Pesquisar e paginar o catálogo</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/software/{id}</code></td>
+<td>Anônimo</td>
+<td>Obtenha um título ou 404</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/software/{id}/builds?page=&amp;pageSize=</code></td>
+<td>Anônimo</td>
+<td>Lista paginada de compilações para um título</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/software/{id}/claim</code></td>
+<td>JWT</td>
+<td>Auto-reivindicar um título gratuito, concedendo um direito</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/software/{id}/launch</code></td>
+<td>JWT</td>
+<td>Iniciar uma sessão de lançamento (requer autorização)</td>
+</tr>
+</tbody>
+</table>
+<p><code>GET /api/v1/software</code> aceita parâmetros de consulta <code>q</code> (texto completo), <code>category</code>, <code>tag</code>, <code>publisherId</code>, <code>platform</code>, <code>releaseStatus</code>, <code>sort</code>, <code>page</code>, e <code>pageSize</code>. Válido <code>sort</code> valores: <code>name</code>, <code>name_desc</code>, <code>created</code>, <code>created_desc</code>, <code>updated</code>, <code>updated_desc</code>. Ele retorna um <code>PagedResult</code>:</p>
+<pre><code class="language-json">{
+  "items": [
+    {
+      "id": "…",
+      "name": "…",
+      "description": "…",
+      "publisherId": "…",
+      "category": "…",
+      "platform": "…",
+      "releaseStatus": "…",
+      "tags": ["…"],
+      "priceCents": 0,
+      "createdAt": "…",
+      "updatedAt": "…"
+    }
+  ],
+  "totalCount": 1,
+  "page": 1,
+  "pageSize": 20
+}
+</code></pre>
+<p><code>GET /api/v1/software/{id}/builds</code> retorna um <code>PagedResult</code> de <code>SoftwareBuild</code>:</p>
+<pre><code class="language-json">{
+  "items": [
+    {
+      "id": "…",
+      "titleId": "…",
+      "version": "…",
+      "releaseDate": "…",
+      "releaseNotes": "…",
+      "metadata": "…",
+      "createdAt": "…",
+      "updatedAt": "…"
+    }
+  ],
+  "totalCount": 1,
+  "page": 1,
+  "pageSize": 20
+}
+</code></pre>
+<p><code>POST /api/v1/software/{id}/claim</code> funciona apenas para títulos gratuitos (<code>priceCents == 0</code>); concede ao chamador um direito e retorna 204. Para títulos pagos, retorna 402 com:</p>
+<pre><code class="language-json">{"error": "purchasing is not available yet"}
+</code></pre>
+<p><code>POST /api/v1/software/{id}/launch</code> requer um direito (403 caso contrário) e retorna um <code>LaunchSession</code>:</p>
+<pre><code class="language-json">{
+  "launchId": "…",
+  "startTime": "…"
+}
+</code></pre>
+<p>Ele registra uma atividade de lançamento, que fica oculta se as configurações de privacidade do usuário assim o indicarem (consulte <a href="/pt/docs/api/profile.html">profile.md</a>). Termine a sessão com <code>POST /api/v1/activity/launches/{id}/end</code> - ver <a href="/pt/docs/api/activity.html">activity.md</a>. Os direitos de um usuário são listados por meio <code>GET /api/v1/me/entitlements</code> (ver <a href="/pt/docs/api/profile.html">profile.md</a>).</p>
+<h2 id="downloads">Transferências</h2>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Caminho</th>
+<th>Autenticação</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/software/{id}/download</code></td>
+<td>JWT</td>
+<td>Obtenha um URL de download assinado (requer autorização)</td>
+</tr>
+</tbody>
+</table>
+<p>Requer um direito (403 caso contrário). Retorna:</p>
+<pre><code class="language-json">{
+  "downloadUrl": "…"
+}
+</code></pre>
+<p>O URL tem como alvo o primeiro ativo para download da versão mais recente. A chamada registra uma atividade de download.
+A distribuição binária do catálogo é atualmente uma prévia; URLs retornados não têm produção garantida
+downloads. Ver <a href="/pt/docs/availability.html">disponibilidade de recursos</a> antes de confiar neste fluxo de publicação.</p>
+<h2 id="cloud-saves">Salvamentos na nuvem</h2>
+<p>Um slot por jogo, a última gravação vence. Todas as rotas requerem um JWT – um token de usuário completo ou um token de jogo
+token de lançamento para o slot do próprio jogo (abaixo).</p>
+<p>O limite de 10 MB (10.485.760 bytes) se aplica ao <strong>salvamento decodificado</strong>, não o pedido. <code>PUT</code> leva o
+salve codificado em base64 em JSON, então o corpo é cerca de um terço maior que o salvo - aproximadamente 14 MB em
+o limite – e a API aceita isso.</p>
+<table>
+<thead>
+<tr>
+<th>Limite (por conta)</th>
+<th>Padrão</th>
+<th>Recusa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Um salvamento, decodificado</td>
+<td>10MB</td>
+<td><code>413 cloud_save_too_large</code></td>
+</tr>
+<tr>
+<td>Jogos com salvamento</td>
+<td>200</td>
+<td><code>409 cloud_save_slots_exhausted</code> (um salvamento para um novo jogo)</td>
+</tr>
+<tr>
+<td>Todos salvam juntos</td>
+<td>1GB</td>
+<td><code>507 cloud_save_quota_exceeded</code>, com <code>used</code></td>
+</tr>
+<tr>
+<td>Envios</td>
+<td>30 por minuto</td>
+<td><code>429</code>, com <code>Retry-After</code></td>
+</tr>
+</tbody>
+</table>
+<p>Cada recusa nomeia o número em vigor como <code>limit</code>. O total é medido sobre o valor da conta <em>outro</em>
+salva, então um slot sempre pode ser substituído por algo não maior. Os operadores podem alterar qualquer um dos
+estes para uma conta.</p>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Caminho</th>
+<th>Autenticação</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}/info</code></td>
+<td>JWT</td>
+<td>Salvar metadados: <code>{ exists, sizeBytes, updatedAt? }</code></td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}</code></td>
+<td>JWT</td>
+<td><code>application/zip</code> bytes, 404 se nenhum</td>
+</tr>
+<tr>
+<td>COLOCAR</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}</code></td>
+<td>JWT</td>
+<td>Carregar um save (salvamento decodificado ≤ 10 MB, <code>gameKey</code> ≤ 300 caracteres)</td>
+</tr>
+</tbody>
+</table>
+<p>COLOCAR corpo:</p>
+<pre><code class="language-json">{
+  "dataBase64": "…"
+}
+</code></pre>
+<p>Resposta COLOCAR:</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "sizeBytes": 0,
+  "updatedAt": "…"
+}
+</code></pre>
+<h3 id="saving-from-inside-a-game-launch-token">Salvando de dentro de um jogo (token de lançamento)</h3>
+<p>Um jogo rodando com seu token de lançamento pode ler e gravar o salvamento do jogador para <strong>aquele jogo</strong>.
+Seu jogo se salva onde quer que seja executado – um navegador ou o aplicativo de desktop StarHermit, que é executado
+jogos hospedados em um navegador também – então o salvamento segue o jogador entre eles.</p>
+<p>A chave é <code>game:&lt;gameId&gt;</code>, onde <code>&lt;gameId&gt;</code> é o ID do seu jogo - o mesmo valor do seu slug, seu
+<code>&lt;gameId&gt;.starhermit.com</code> endereço e o <code>game_scope</code> reivindicação do token de lançamento:</p>
+<pre><code class="language-js">const key = `game:${gameScope}`;            // e.g. "game:3fa85f64-5717-4562-b3fc-2c963f66afa6"
+
+// Load on startup — 404 means no save yet.
+const res = await fetch(`/api/v1/me/cloud-saves/${key}`, { headers: { Authorization: `Bearer ${launchToken}` } });
+if (res.status !== 404 &amp;&amp; !res.ok) throw new Error(`Save load failed: ${res.status}`);
+const save = res.status === 404 ? null : new Uint8Array(await res.arrayBuffer());
+const etag = res.headers.get("ETag");
+if (save &amp;&amp; !etag) throw new Error("Save version unavailable; do not overwrite it.");
+// Validate/decode your own save format before adopting it or enabling uploads.
+
+// Save at checkpoints, not every frame.
+const written = await fetch(`/api/v1/me/cloud-saves/${key}`, {
+  method: "PUT",
+  headers: {
+    Authorization: `Bearer ${launchToken}`, "Content-Type": "application/json",
+    ...(etag ? { "If-Match": etag } : { "If-None-Match": "*" }),
+  },
+  body: JSON.stringify({ dataBase64: base64(zipBytes) }), // Your ZIP encoder and bytes.
+});
+if (written.status === 412) throw new Error("Another device saved. Reload before writing again.");
+if (!written.ok) throw new Error(`Save write failed: ${written.status}`);
+const acknowledgement = await written.json(); // Retain acknowledgement.etag for your next write.
+</code></pre>
+<ul>
+<li><strong>Apenas essa chave exata.</strong> Qualquer outra chave – de outro jogo, de um jogo de loja ou com uma grafia diferente
+seu (maiúsculas, o id simples) - é <code>403</code> para um token de lançamento. Isso inclui <code>github:&lt;gameId&gt;</code>,
+o slot separado que o aplicativo de desktop usa quando um jogador sincroniza uma pasta salva local para o seu jogo, então
+essa sincronização nunca pode substituir as gravações salvas do jogo.</li>
+<li><strong>Qualquer formato.</strong> A plataforma nunca abre o save; armazene tudo o que seu jogo pode ler (é
+serviu como <code>application/zip</code> sem considerar). Até 10 MB.</li>
+<li><strong>Gravações incondicionais são vitórias de última gravação</strong>, sem histórico. Use gravações condicionais para detectar
+duas guias/dispositivos salvando ao mesmo tempo. Carregue no início e salve nos pontos de verificação em primeiro plano. Saída da página
+os uploads são de melhor esforço e têm limites de tamanho do corpo do navegador; ver <a href="/pt/docs/tutorials/cloud-save-sync.html">a receita de poupança segura</a>.</li>
+<li><strong>Cada save tem uma versão.</strong> Isso é <code>ETag</code> está no download, em <code>/info</code> (também como <code>etag</code>) e em
+o <code>PUT</code> resposta. Envie de volta como <code>If-Match</code> e a gravação só acontece se ninguém salvou
+desde então; de outra forma <code>412 {"error":"precondition_failed","etag":"&lt;current&gt;"}</code> informa a versão para
+carga. <code>If-Match: *</code> requer um salvamento existente; <code>If-None-Match: *</code> escreve apenas quando não há nenhum.
+Sem nenhum cabeçalho <code>PUT</code> é incondicional – a última gravação vence. UM <code>GET</code> com
+<code>If-None-Match: &lt;etag&gt;</code> respostas <code>304</code> quando você já possui o save mais recente.</li>
+<li>Um jogo sem listagem hospedada (um jogo fornecido pelo operador) não possui slot.</li>
+</ul>
+<p>Preferências pequenas e que mudam frequentemente pertencem a <a href="/pt/docs/api/games.html#per-player-game-settings">configurações por jogador</a>
+em vez de; eles também podem ser acessados ​​com o token de lançamento e suportam atualizações parciais.</p>
+<h2 id="wishlist">Lista de desejos</h2>
+<p>Todas as rotas requerem um JWT.</p>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Caminho</th>
+<th>Autenticação</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/me/wishlist</code></td>
+<td>JWT</td>
+<td><code>{ titleIds: guid[] }</code></td>
+</tr>
+<tr>
+<td>COLOCAR</td>
+<td><code>/api/v1/me/wishlist/{titleId}</code></td>
+<td>JWT</td>
+<td>Adicionar à lista de desejos, 204 (idempotente)</td>
+</tr>
+<tr>
+<td>EXCLUIR</td>
+<td><code>/api/v1/me/wishlist/{titleId}</code></td>
+<td>JWT</td>
+<td>Remover da lista de desejos, 204</td>
+</tr>
+</tbody>
+</table>
+<h2 id="ratings">Avaliações</h2>
+<p>Todas as rotas requerem um JWT. A chave uniforme do jogo é um guia de catálogo ou <code>"provider:externalId"</code> para jogos externos (veja <a href="/pt/docs/api/external-libraries.html">external-libraries.md</a>).</p>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Caminho</th>
+<th>Autenticação</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>COLOCAR</td>
+<td><code>/api/v1/me/ratings</code></td>
+<td>JWT</td>
+<td>Aumentar minha classificação para um jogo</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/ratings/query</code></td>
+<td>JWT</td>
+<td>Resumos de classificação de busca em lote</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/ratings/reviews?key=&amp;top=</code></td>
+<td>JWT</td>
+<td>Críticas de um jogo (<code>top</code> padrão 10)</td>
+</tr>
+</tbody>
+</table>
+<p>COLOCAR corpo:</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "stars": 4,
+  "review": "…"
+}
+</code></pre>
+<p><code>stars</code> é 0–5; <code>review</code> é opcional. A resposta é uma <code>RatingSummaryDto</code>:</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "average": 4.5,
+  "count": 12,
+  "myStars": 4
+}
+</code></pre>
+<p><code>POST /api/v1/ratings/query</code> corpo e resposta:</p>
+<pre><code class="language-json">{
+  "keys": ["…", "…"]
+}
+</code></pre>
+<p>retorna <code>RatingSummaryDto[]</code>. <code>GET /api/v1/ratings/reviews</code> retorna <code>GameReviewDto[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "userId": "…",
+    "username": "…",
+    "stars": 4,
+    "review": "…",
+    "timestamp": "…"
+  }
+]
+</code></pre>
+<p>Ver <a href="/pt/docs/api/conventions.html#requests-and-responses">Convenções de API</a> para análise de erros. Relacionado: <a href="/pt/docs/api/achievements.html">achievements.md</a>, <a href="/pt/docs/api/leaderboards.html">leaderboards.md</a>.</p>
+<p>Ver <a href="/pt/docs/credentials.html">compatibilidade de credenciais</a> e <a href="/pt/docs/api/contracts.html">contratos legíveis por máquina</a>.</p>
+
+{% endraw %}

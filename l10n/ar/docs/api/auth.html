@@ -1,0 +1,550 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "المصادقة"
+source_url: "/docs/api/auth.html"
+source_path: "docs/api/auth.md"
+source_hash: "7c5d28fbaf648ef5811fa8660eb49076563e9f4b439f256cf9632e72ae1130ed"
+translation: "machine"
+permalink: "/ar/docs/api/auth.html"
+---
+{% raw %}
+<h1 id="authentication">المصادقة</h1>
+<p>ستارهيرميت لديه <strong>لا مصادقة كلمة المرور</strong>. هناك مساران لتسجيل الدخول: مصادقة المفتاح العام (Ed25519، أو ECDSA-P256، أو RSA-PSS، مع تسجيل تم التحقق منه عبر البريد الإلكتروني) وOAuth. جميع طرق المصادقة تعيش تحت <code>api/v1/auth</code> وتكون مجهولة المصدر إلا في حالة الإشارة إليها. تغطي هذه الصفحة أيضًا دورات حياة الرمز المميز، ورموز الإطلاق المميزة على مستوى اللعبة، وتذاكر اتصال WebSocket.</p>
+<p>تختلف أجسام الخطأ؛ يرى <a href="/ar/docs/api/conventions.html#requests-and-responses">اتفاقيات API</a>.</p>
+<h2 id="endpoints">نقاط النهاية</h2>
+<table>
+<thead>
+<tr>
+<th>طريقة</th>
+<th>طريق</th>
+<th>مصادقة</th>
+<th>وصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/auth/public-key/register</code></td>
+<td>مجهول</td>
+<td>بدء تسجيل المفتاح العام؛ يرسل رسالة التحقق بالبريد الإلكتروني</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/auth/public-key/verify</code></td>
+<td>تم إرسال رمز مميز لمرة واحدة عبر البريد الإلكتروني</td>
+<td>الصفحة التي يتم فتحها لرسالة التحقق الإلكترونية؛ لا يغير شيئا</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/auth/public-key/verify</code></td>
+<td>تم إرسال رمز مميز لمرة واحدة عبر البريد الإلكتروني</td>
+<td>التسجيل الكامل</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/auth/public-key/challenge</code></td>
+<td>مجهول</td>
+<td>طلب تحدي تسجيل الدخول للتوقيع</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/auth/public-key/complete</code></td>
+<td>مجهول</td>
+<td>أرسل تحديًا موقعًا لتسجيل الدخول</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/auth/refresh</code></td>
+<td>مجهول</td>
+<td>قم بتدوير رمز التحديث لزوج رمزي جديد</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/auth/logout</code></td>
+<td>مجهول</td>
+<td>إبطال رمز التحديث</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/auth/public-key/revoke-request</code></td>
+<td>مجهول</td>
+<td>أرسل رابطًا بالبريد الإلكتروني يلغي كل مفتاح نشط في الحساب المطابق</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/auth/public-key/revoke/confirm</code></td>
+<td>تم إرسال رمز مميز لمرة واحدة عبر البريد الإلكتروني</td>
+<td>الصفحة التي يتم فتحها عبر البريد الإلكتروني الخاص بالإلغاء؛ لا يغير شيئا</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/auth/public-key/revoke/confirm</code></td>
+<td>تم إرسال رمز مميز لمرة واحدة عبر البريد الإلكتروني</td>
+<td>تأكيد هذا الإلغاء؛ لا توجد جلسة</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/auth/games/{gameId}/sign-in</code></td>
+<td>مجهول</td>
+<td>قم بتسجيل الدخول أو إنشاء حساب، ثم قم بالعودة مباشرة إلى اللعبة المستضافة</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/auth/oauth/providers</code></td>
+<td>مجهول</td>
+<td>يمكن لموفري OAuth المباشر هذا النشر تسجيل دخول الأشخاص باستخدامهم</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/auth/oauth/{provider}/authorize</code></td>
+<td>مجهول</td>
+<td>إعادة التوجيه إلى موفر OAuth</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/auth/oauth/{provider}/callback</code></td>
+<td>مجهول</td>
+<td>رد اتصال OAuth؛ يعيد التوجيه إلى الواجهة الأمامية باستخدام الرموز المميزة</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/auth/oauth/link/confirm</code></td>
+<td>تم إرسال رمز مميز لمرة واحدة عبر البريد الإلكتروني</td>
+<td>الصفحة التي يفتحها البريد الإلكتروني الخاص برابط الهوية؛ لا يغير شيئا</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/auth/oauth/link/confirm</code></td>
+<td>تم إرسال رمز مميز لمرة واحدة عبر البريد الإلكتروني</td>
+<td>قم بتأكيد رابط الهوية المحتفظ به لموافقة مالك الحساب</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/games/{slug}/launch-token</code></td>
+<td>JWT</td>
+<td>سك رمز إطلاق على نطاق اللعبة (انظر أدناه)</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/realtime/connection-tickets</code></td>
+<td>JWT</td>
+<td>تذكرة لمرة واحدة لفتح أ <code>/ws/**</code> المقبس</td>
+</tr>
+</tbody>
+</table>
+<h2 id="after-sign-in-current-terms">بعد تسجيل الدخول: الشروط الحالية</h2>
+<p>لا يعني تسجيل الدخول الناجح الحصول على إذن لاستخدام واجهات برمجة التطبيقات المحمية. يجب على أصحاب الحسابات
+<a href="/ar/docs/api/profile.html#terms-acceptance">اقبل شروط StarHermit الحالية</a> قبل مكالمات REST المحمية أو
+نجاح ترقيات WebSocket. يمكن لعملاء الحساب التحقق <code>GET /api/v1/me</code>، أحضر <code>GET /api/v1/terms</code>,
+وتسجيل القبول الصريح مع <code>POST /api/v1/me/terms/accept</code>. كل من OAuth والمفتاح العام
+تدعم جلسات الحساب هذا التدفق. لا يؤدي تحديث بيانات الاعتماد إلى حل مشكلة القبول المعلقة.</p>
+<p>يمكن أن تتلقى لعبة المتصفح المفتوحة مباشرة رمزًا مميزًا قبل قبول الحساب.
+إذا عادت مكالمة اللعبة <code>403</code> مع <code>error: "terms_acceptance_required"</code>، أحضر <code>GET /api/v1/terms</code>,
+عرض النص الخاص به، وتقديم إجراء قبول صريح. يمكن لرمز إطلاق اللاعب إرسال المعروض
+التجزئة ل <code>POST /api/v1/me/terms/accept</code>; أعد محاولة الطلب الأصلي بعد القبول. لا تعامل هذا
+الاستجابة كحلقة تسجيل دخول للرمز المميز منتهية الصلاحية.</p>
+<h2 id="public-key-registration">تسجيل المفتاح العام</h2>
+<p>خطوة بخطوة، مع رمز العميل الذي تم اختباره: <a href="/ar/docs/tutorials/public-key-onboarding.html">البرنامج التعليمي: لاعبين على متن الطائرة بمفتاح عام</a>.</p>
+<table>
+<thead>
+<tr>
+<th><code>keyType</code></th>
+<th><code>keyData</code> (قاعدة 64 القياسية)</th>
+<th>إمضاء</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Ed25519</code></td>
+<td>المفتاح العام الخام 32 بايت</td>
+<td>توقيع Ed25519 خام بحجم 64 بايت</td>
+</tr>
+<tr>
+<td><code>ECDSA-P256</code></td>
+<td>النقطة العامة، 65 بايت غير مضغوطة أو 33 بايت مضغوطة</td>
+<td>ECDSA-SHA256، ASN.1 DER (غير خام <code>r‖s</code>)</td>
+</tr>
+<tr>
+<td><code>RSA-PSS</code></td>
+<td><code>SubjectPublicKeyInfo</code> DER، 2048–8192 بت، الأس ≥ 32 بت</td>
+<td>RSASSA-PSS، SHA-256، MGF1-SHA-256، ملح 32 بايت</td>
+</tr>
+</tbody>
+</table>
+<h3 id="post-apiv1authpublic-keyregister"><code>POST /api/v1/auth/public-key/register</code></h3>
+<p>يبدأ تسجيل المفتاح العام ويرسل بريدًا إلكترونيًا للتحقق. تنتهي صلاحية سجل التسجيل المعلق بعد 4 ساعات. لو <code>userId</code> تم تعيين البريد الإلكتروني، ويجب أن يتطابق مع هذا الحساب. تم التقليص إلى بريد إلكتروني واحد لكل عنوان ولكل IP كل 24 ساعة - عند التخفيض، يكون الرد 429 مع <code>Retry-After</code> header.</p>
+<p>متى <code>userId</code> تم تعيين والزوج لا تحقق، والرد <code>403</code> برسالة واحدة
+بغض النظر عن <em>لماذا</em>: حساب غير معروف وعنوان خاطئ الإجابة على نحو مماثل. تأخذ نقطة النهاية هذه
+لا توجد بيانات اعتماد - لا بد من ذلك، نظرًا لأن هذه هي الطريقة التي يتم بها إرفاق مفتاح جديد - لذا فإن التمييز بينها سيكون أمرًا ممكنًا
+اجعله أوراكل توجد له معرفات المستخدمين ثم لعناوينهم. المتصل الذي يملك
+يعرف الحساب بالفعل أيًا من الاثنين أخطأ.</p>
+<p>طلب:</p>
+<pre><code class="language-json">{
+  "email": "dev@example.com",
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;",
+  "userId": null
+}
+</code></pre>
+<p>الرد — 202:</p>
+<pre><code class="language-json">{
+  "registrationId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "email": "dev@example.com",
+  "emailSent": true,
+  "deferralReason": null,
+  "message": "A verification email has been sent. The key will be attached once you confirm."
+}
+</code></pre>
+<p><code>emailSent: false</code> يعني أن البريد الإلكتروني في قائمة الانتظار لإعادة المحاولة (<code>deferralReason</code> يقول لماذا)؛ التسجيل
+لا يزال مقبولا. البريد الإلكتروني غير صالح أو المواد الرئيسية <code>400</code>.</p>
+<h3 id="get--post-apiv1authpublic-keyverifytoken"><code>GET</code> / <code>POST /api/v1/auth/public-key/verify?token=</code></h3>
+<p><strong>فتح الرابط المرسل بالبريد الإلكتروني لا يغير شيئًا.</strong> <code>GET</code> يعرض صفحة توضح ما سيفعله التأكيد -
+إنشاء حساب، أو <strong>إضافة مفتاح إلى الحساب الحالي</strong> الذي يستخدم العنوان بالفعل - مع
+زر التأكيد. تقوم ماسحات البريد بإحضار الروابط لمعاينتها، وبالتالي يتم إرسال الرابط عبر البريد الإلكتروني الذي تم التصرف بناءً عليه <code>GET</code>
+سيتم استبداله بأي شيء تم مسحه ضوئيًا. الأمر نفسه ينطبق على
+<a href="#emailed-key-revocation">إبطال</a> و <a href="#get-apiv1authoauthproviderauthorizelinkclient">رابط الهوية</a>
+التأكيدات أدناه.</p>
+<p><code>POST</code> إلى نفس عنوان URL يسترده: إرفاق المفتاح وإنشاء المستخدم (اسم المستخدم <code>pk-&lt;hex12&gt;</code>، دور
+<code>User</code>) ما لم يستخدم الحساب عنوان البريد الإلكتروني هذا بالفعل، وفي هذه الحالة ينضم المفتاح إلى هذا الحساب.
+تم وضع علامة التحقق على البريد الإلكتروني. الرابط مخصص للاستخدام مرة واحدة وتنتهي صلاحيته بعد 4 ساعات؛ غير معروف، المستخدمة أو
+الرمز منتهي الصلاحية هو <code>400</code>، وكذلك الرابط الذي لم يعد عنوانه هو عنوان الحساب - فهذا يثبت
+التحكم في البريد الوارد الذي تم إرساله إليه، وفقط عندما يظل هذا العنوان ملكًا للحساب.</p>
+<p>عندما يضغط اللاعب على تأكيد في الصفحة ومجموعات النشر
+<code>PublicKeyAuth:VerificationSuccessRedirectUri</code> - موقع starhermit.com موجود على لوحة القيادة - هم كذلك
+أرسلت هناك مع الرموز الموجودة في القطعة
+(<code>#access_token=…&amp;refresh_token=…&amp;token_type=Bearer&amp;expires_in=900</code>)، تم تسجيل الدخول إلى لوحة التحكم. أ
+وبالتالي فإن العميل الأصلي لا يتلقى هذه الرموز المميزة؛ يقوم بتسجيل الدخول باستخدام مفتاحه بمجرد قيام اللاعب بذلك
+مؤكد. عميل API ذلك <code>POST</code>عنوان URL نفسه يحصل على JSON:</p>
+<pre><code class="language-json">{
+  "userId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "keyId": "9b2f5c74-1d2e-4a6b-8c0d-1e2f3a4b5c6d",
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "dGhpcyBpcyBh..."
+}
+</code></pre>
+<h2 id="public-key-login">تسجيل الدخول بالمفتاح العام</h2>
+<h3 id="post-apiv1authpublic-keychallenge"><code>POST /api/v1/auth/public-key/challenge</code></h3>
+<p>يصدر تحدي تسجيل الدخول، صالح لمدة 5 دقائق وللاستخدام مرة واحدة.</p>
+<p><strong>يغطي التوقيع التسلسل الخاص بالخادم لـ <code>payload</code>، وليس JSON الذي تلقيته:</strong>
+مضغوط، أسماء PascalCase بالترتيب <code>ChallengeId</code>, <code>Fingerprint</code>, <code>Issuer</code>, <code>Audience</code>, <code>Expiry</code>,
+<code>Nonce</code>, <code>ClientTimestamp</code>، تم نسخ القيم تمامًا كما تم تقديمها، وكل <code>+</code> في nonce مكتوبة باسم
+<code>\u002B</code> (التواريخ تحتفظ بها <code>+</code>). انظر
+<a href="/ar/docs/tutorials/public-key-onboarding.html#3-sign-in-with-the-key">عملت المثال</a>.</p>
+<p>طلب:</p>
+<pre><code class="language-json">{
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;"
+}
+</code></pre>
+<p>إجابة:</p>
+<pre><code class="language-json">{
+  "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "payload": {
+    "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "fingerprint": "4d9f3c...",
+    "issuer": "starhermit",
+    "audience": "starhermit",
+    "expiry": "2026-07-22T07:24:44.1234567+00:00",
+    "nonce": "NmL+tgMum6HXU/pa3T9xjQ==",
+    "clientTimestamp": "2026-07-22T07:19:44.1235521+00:00"
+  },
+  "expiresIn": 300
+}
+</code></pre>
+<h3 id="post-apiv1authpublic-keycomplete"><code>POST /api/v1/auth/public-key/complete</code></h3>
+<p>يتحقق من التوقيع مقابل مفتاح مسجل وغير مُلغى ويعيد زوجًا من الرموز المميزة. الفشل هو
+<code>401</code>: <code>"Public key not registered or revoked."</code> (بما في ذلك المفتاح الذي لم يتم إرسال رابطه عبر البريد الإلكتروني
+لم يفتح بعد) <code>"Invalid signature."</code>، أو <code>"Challenge not found or expired."</code>. التحدي واستكمال
+مشاركة حد 60 طلبًا في الدقيقة لكل IP (<code>429</code>).</p>
+<p>طلب:</p>
+<pre><code class="language-json">{
+  "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "signature": "base64-signature...",
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;"
+}
+</code></pre>
+<p>إجابة:</p>
+<pre><code class="language-json">{
+  "userId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "dGhpcyBpcyBh..."
+}
+</code></pre>
+<h2 id="token-lifecycle">دورة حياة الرمز المميز</h2>
+<h3 id="post-apiv1authrefresh"><code>POST /api/v1/auth/refresh</code></h3>
+<p>التحديث الدوري: يتم إبطال الرمز القديم واستبداله. تؤدي إعادة استخدام رمز التحديث الذي تم إبطاله إلى إبطال عائلة الرمز المميز بالكامل.</p>
+<p>طلب:</p>
+<pre><code class="language-json">{ "refreshToken": "dGhpcyBpcyBh..." }
+</code></pre>
+<p>إجابة:</p>
+<pre><code class="language-json">{
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "bmV3IHJlZnJlc2g..."
+}
+</code></pre>
+<h4 id="when-refresh-stops-working">عندما يتوقف التحديث عن العمل</h4>
+<p>يسجل رمز التحديث حالة الحساب الذي تم إصداره بموجبه، ويتحقق التحديث منه. إجابتين
+يجب على عميلك التعامل مع ما يلي بدلاً من إعادة المحاولة:</p>
+<table>
+<thead>
+<tr>
+<th>حالة</th>
+<th>معنى</th>
+<th>ما يجب على العميل فعله</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>401</code></td>
+<td>تم إلغاء الجلسة من جانب المنصة — أ "تسجيل الخروج في كل مكان"، أو الرد الوسط. يتم حرق عائلة الرمز المميز بالكامل، بما في ذلك الرمز المميز الذي تم تقديمه للتو.</td>
+<td>تخلص من كلا الرمزين وابدأ تسجيل دخول جديد.</td>
+</tr>
+<tr>
+<td><code>403</code></td>
+<td>الحساب هو <strong>معلق</strong>.</td>
+<td>قف. لن يساعد تسجيل الدخول مرة أخرى؛ نفس الشيء <code>403</code> يعود من كل طريق تسجيل دخول حتى يتم رفع التعليق.</td>
+</tr>
+</tbody>
+</table>
+<p>ال <code>403</code> يختلف عمدا عن <code>401</code>لأن الاثنين يحتاجان إلى ردود أفعال متضادة: أحدهما يعني
+"المصادقة مرة أخرى"، والوسيلة الأخرى "المصادقة مرة أخرى لا معنى لها". الحساب الموقوف هو
+رفض من قبل <em>كل</em> مسار استخراج بيانات الاعتماد - التحديث، وإكمال المفتاح العام، ورد اتصال OAuth،
+ورموز إطلاق اللعبة - ليس فقط عن طريق التحديث.</p>
+<h3 id="post-apiv1authlogout"><code>POST /api/v1/auth/logout</code></h3>
+<p>يلغي رمز التحديث المحدد. يعود 200.</p>
+<pre><code class="language-json">{ "refreshToken": "dGhpcyBpcyBh..." }
+</code></pre>
+<h2 id="oauth">OAuth</h2>
+<p>تشحن المنصة سبعة مقدمي خدمات: <code>google</code>, <code>github</code>, <code>discord</code>, <code>twitch</code>, <code>gitlab</code>, <code>linkedin</code>,
+<code>bitbucket</code>. <strong>فقط موفرو هذا النشر لديهم بيانات اعتماد مباشرة.</strong> لا يجب على العميل
+رمز الثابت القائمة.</p>
+<h3 id="get-apiv1authoauthproviders"><code>GET /api/v1/auth/oauth/providers</code></h3>
+<p>مجهول. إرجاع موفري الخدمة المباشرة بالترتيب الذي يجب تقديمهم به:</p>
+<pre><code class="language-json">{
+  "providers": [
+    {
+      "provider": "google",
+      "displayName": "Google",
+      "authorizeUrl": "/api/v1/auth/oauth/google/authorize",
+      "linksExistingAccountsByEmail": true
+    }
+  ]
+}
+</code></pre>
+<p><code>linksExistingAccountsByEmail</code> هو ما إذا كان تسجيل الدخول لدى هذا المزود يمكنه العثور على حساب الشخص
+لديه بالفعل (إعداد ثقة المشغل لهذا الموفر). طلب ترخيص اسم ليس كذلك
+العيش هو <code>404</code>، وليس إعادة توجيه إلى صفحة الخطأ الخاصة بالموفر.</p>
+<h3 id="get-apiv1authoauthproviderauthorizelinkclient"><code>GET /api/v1/auth/oauth/{provider}/authorize?link=&amp;client=</code></h3>
+<p>إرجاع إعادة توجيه 302 إلى الموفر وتعيين <code>oauth_state</code> ملف تعريف الارتباط (HttpOnly، SameSite=Lax، 10
+دقائق). <code>link=true</code> يبدأ بربط الهوية بالمستخدم الذي قام بتسجيل الدخول حاليًا؛ يتطلب الربط
+المصادقة الأخيرة (في غضون 5 دقائق). <code>client</code> يحدد إعادة توجيه العميل المدعومة. ل
+لعبة مفتوحة مباشرة، استخدم <code>gameId</code> واختياري <code>returnUrl</code> بدلاً من؛ يرى
+<a href="#sign-in-from-a-directly-opened-browser-game">قم بتسجيل الدخول من لعبة متصفح مفتوحة مباشرة</a>.</p>
+<h3 id="get-apiv1authoauthprovidercallbackcodestate"><code>GET /api/v1/auth/oauth/{provider}/callback?code=&amp;state=</code></h3>
+<p>بالنسبة لتسجيل الدخول العادي إلى الحساب، يتم إرجاع إعادة التوجيه 302 إلى عنوان URL للواجهة الأمامية مع الرموز المميزة في ملف
+جزء (يؤدي تسجيل الدخول إلى اللعبة بدلاً من ذلك إلى إرجاع رمز مميز محدد إلى اللعبة مباشرةً، كما هو موضح أدناه):</p>
+<pre><code>#access_token=…&amp;refresh_token=…&amp;token_type=Bearer&amp;expires_in=900
+</code></pre>
+<p>إذا رفض الموفر تبادل الرمز المميز، فسيتم الرد على رد الاتصال <code>409</code> تسمية خطأ الموفر
+<strong>شفرة</strong> (يبقى الوصف في سجل الخادم).</p>
+<p>يؤدي تسجيل الدخول العادي إلى العثور على المستخدم (اسم المستخدم). <code>oauth-{provider}-{guid}</code>، دور <code>User</code>) و
+سجلات الجلسة الجديدة <code>auth_method=oauth</code>. تسجيل الدخول الذي <code>(provider, providerUserId)</code> غير معروف هو
+<strong>اعتمد على حساب موجود</strong> فقط عندما يتم الوثوق بتأكيد الموفر، بالضبط واحد
+يحتوي الحساب بالفعل على هذا البريد الإلكتروني الذي تم التحقق منه، ولا يحتوي هذا الحساب على هوية من هذا المزود حتى الآن.
+أي شيء آخر يوفر حساب منفصل. يتم إرسال رسالة اعتماد عبر البريد الإلكتروني إلى الحساب الذي يذكر اسم الموفر.</p>
+<p>وهذا مهم لأن جلسة مصادقة OAuth فقط
+قد يقوم بإجراء تغييرات عالية التأثير على بيانات الاعتماد:</p>
+<ul>
+<li>إضافة أو إلغاء المفاتيح العامة للحساب؛</li>
+<li>تغيير البريد الإلكتروني للحساب؛</li>
+<li>إزالة الهوية المُدارة بواسطة OAuth.</li>
+</ul>
+<p>لا يمكن للرموز المميزة على مستوى اللعبة إجراء هذه العمليات أبدًا. يحتفظ رمز التحديث بالأصل
+طريقة مصادقة الجلسة، لذا فإن تحديث جلسة OAuth لا يؤدي إلى إزالة هذه الإمكانية و
+تحديث جلسة المفتاح العام لا يضيفها.</p>
+<p>متى <code>link=true</code>، لا يقوم رد الاتصال تلقائيًا بترقية الجلسة لمجرد زيارتها
+موفر OAuth. يتم إرفاق الرابط الذي بدأ من جلسة OAuth على الفور. رابط بدأ من
+يتم الاحتفاظ بالمفتاح العام أو التحقق من البريد الإلكتروني أو الجلسة القديمة حتى يفتح مالك الحساب الملف
+تم إرسال التأكيد إلى البريد الإلكتروني الذي تم التحقق منه للحساب؛ تقارير جزء إعادة التوجيه
+<code>link=pending_email_confirmation</code>. يتم فتح البريد الإلكتروني لمرة واحدة <code>GET /api/v1/auth/oauth/link/confirm?token=…</code>,
+صفحة تحمل اسم حساب المزود ولا تغير شيئًا؛ زر التأكيد الخاص به <code>POST</code>إنه نفس عنوان URL،
+مما يخلق الهوية (<code>{ "provider", "linked": true }</code> إلى عميل API). الرابط الذي عنوانه
+لم يعد تم رفض الحساب. وهذا يمنع المفتاح العام المسروق من ربط الملف
+حساب موفر المهاجم وتحويله إلى تسجيل دخول دائم عبر OAuth.</p>
+<p>مخازن البيانات التعريفية لهوية GitHub <code>{"login":"…"}</code> - يُستخدم هذا للتحقق من ملكية المستودع
+<a href="/ar/docs/api/github-games.html">ألعاب جيثب</a>.</p>
+<h3 id="oauth-enrolled-public-keys-for-automation">المفاتيح العامة المسجلة بواسطة OAuth للأتمتة</h3>
+<p>يمكن لجلسة OAuth الاتصال <code>POST /api/v1/me/public-keys</code> لإرفاق مفتاح الجهاز المسمى على الفور.
+لاحقًا، توقع CI تحدي المفتاح العام العادي وتستخدم رمز الوصول قصير الأمد الخاص بها لتحميل ملف
+حزمة اللعبة المملوكة؛ المفتاح الخاص لا يغادر متجر CI السري أبدًا. يرى
+<a href="/ar/docs/tutorials/ci-cd-build-upload.html">البرنامج التعليمي لتحميل CI/CD</a> للإعداد، ومساعد التوقيع، و
+سير عمل إجراءات GitHub.</p>
+<h2 id="tokens">الرموز</h2>
+<ul>
+<li><strong>رمز الوصول</strong> - JWT، عمر 15 دقيقة (<code>expires_in=900</code>). تشمل المطالبات <code>sub</code> (معرف المستخدم) زائد <code>permission</code> ومطالبات الدور. يصبح الإلغاء ساري المفعول على الفور.</li>
+<li><strong>تحديث الرمز المميز</strong> - رمز دوار غير شفاف بعمر 7 أيام. يُصدر كل تحديث رمزًا مميزًا للتحديث جديدًا ويلغي الرمز القديم؛ تؤدي إعادة استخدام الرمز المميز الذي تم إبطاله إلى إلغاء عائلة الرمز المميز بأكملها.</li>
+</ul>
+<h2 id="sign-in-from-a-directly-opened-browser-game">قم بتسجيل الدخول من لعبة متصفح مفتوحة مباشرة</h2>
+<p>يمكن للعبة المستضافة المفتوحة خارج لوحة المعلومات أن تعرض ملف <strong>تسجيل الدخول</strong> زر ربط إلى:</p>
+<pre><code class="language-text">https://api.starhermit.com/api/v1/auth/games/{gameId}/sign-in
+</code></pre>
+<p><code>gameId</code> هو UUID غير القابل للتغيير للعبة (النطاق الفرعي في <code>{gameId}.starhermit.com</code>). ستارهيرميت
+يعرض موفري تسجيل الدخول الممكّنين. الاستمرار في تسجيل الدخول إلى لاعب موجود أو إنشاء لاعب جديد
+الحساب باستخدام قواعد مطابقة حساب OAuth العادية، ثم يعيد التوجيه <strong>العودة مباشرة إلى
+لعبة</strong>، دون زيارة لوحة القيادة.</p>
+<p>الاختياري <code>returnUrl</code> يحتفظ بصفحة لعبة محددة أو سلسلة استعلام أو مسار تجزئة. يجب أن يكون
+عنوان URL مطلق لـ HTTPS على الأصل المستضاف لتلك اللعبة بالضبط؛ ألعاب أخرى، مضيفين خارجيين،
+يتم رفض بيانات الاعتماد الموجودة في عنوان URL والمنافذ البديلة <code>400</code>. احذفها لتعود إلى
+ملف الإطلاق المنشور. تعود الألعاب غير المعروفة أو المحذوفة أو غير المستضافة أو التي لم يتم نشرها مطلقًا <code>404</code>. كلاهما
+يتم دعم عمليات نشر المستودع والألعاب التي تم تحميلها؛ عناوين URL الخارجية/المحلية التعسفية ليست كذلك.</p>
+<p>انتقل بالمتصفح إلى <strong>أصل واجهة برمجة التطبيقات العامة</strong> أعلاه، بدلاً من جلب الصفحة أو البدء
+من خلال اللعبة <code>/api</code> الوكيل. يجب أن يستخدم ملف تعريف ارتباط حالة OAuth ورد اتصال الموفر نفس الشيء
+مضيف واجهة برمجة التطبيقات. استخدم هذا التدفق عندما لا تحتوي اللعبة على رمز مميز مقدم من المشغل أو تم الحصول عليه مسبقًا.</p>
+<h3 id="button-and-return-token-example">مثال على الزر ورمز الإرجاع</h3>
+<pre><code class="language-html">&lt;button id="starhermit-sign-in"&gt;Sign in&lt;/button&gt;
+&lt;script type="module"&gt;
+const api = 'https://api.starhermit.com';
+const gameId = 'YOUR_GAME_UID';
+const signIn = document.querySelector('#starhermit-sign-in');
+let gameToken = null; // Or your existing launcher-provided game token.
+
+// Read this before your game router or third-party scripts consume the fragment.
+const auth = new URLSearchParams(location.hash.slice(1));
+if (auth.has('access_token')) {
+  gameToken = auth.get('access_token');
+  const originalHash = auth.get('game_fragment');
+  history.replaceState(null, '', location.pathname + location.search +
+    (originalHash ? '#' + originalHash : ''));
+}
+signIn.hidden = Boolean(gameToken);
+signIn.addEventListener('click', () =&gt; {
+  const url = new URL(`/api/v1/auth/games/${gameId}/sign-in`, api);
+  url.searchParams.set('returnUrl', location.href);
+  location.assign(url.href);
+});
+
+// Pass gameToken to your game's API client as Authorization: Bearer &lt;gameToken&gt;.
+// This example keeps it in memory; a reload can require sign-in again.
+&lt;/script&gt;
+</code></pre>
+<p>جزء الإرجاع هو:</p>
+<pre><code class="language-text">#access_token=…&amp;token_type=Bearer&amp;expires_in=3600
+</code></pre>
+<p><code>access_token</code> هو أ <strong>رمز الإطلاق على نطاق اللعبة</strong>، وليس رمز وصول على مستوى الحساب. لا يوجد رمز التحديث
+تم إصداره. <code>expires_in</code> يستخدم عمر رمز الإطلاق المميز للنشر (الافتراضي 3600
+ثواني). يتم ترميز جزء عنوان URL الأصلي في الملف الاختياري <code>game_fragment</code> مجال؛
+استعادته بعد التقاط الرمز المميز وإزالة بيانات المصادقة من سجل المتصفح.
+لا تقم بتسجيل أو إعادة توجيه الرمز المميز.</p>
+<p>تجديد قبل انتهاء الصلاحية باستخدام <code>POST /api/v1/games/{gameId}/launch-token</code> مع الرمز الحالي كما
+تفويض حامله، ثم استبداله بالمرتجع <code>token</code>. سقف سلسلة التجديد المعتاد
+ينطبق (الافتراضي 12 ساعة). إذا انتهت صلاحية الرمز المميز أو تم رفض التجديد، فقم بمسحه وإظهار تسجيل الدخول
+مرة أخرى. يرى <a href="#game-launch-tokens">رموز إطلاق اللعبة</a>.</p>
+<h3 id="choosing-a-provider-yourself">اختيار المزود بنفسك</h3>
+<p>قد تقرأ الألعاب بدلاً من ذلك <code>GET /api/v1/auth/oauth/providers</code> وانتقل إلى عرض معروض <code>authorizeUrl</code>
+على أصل API العام، إضافة <code>gameId</code> واختياريا <code>returnUrl</code>. خطوة التفويض
+التحقق من صحة الهدف وتخزينه في حالة OAuth الحالية التي تبلغ مدتها عشر دقائق؛ معلمات استعلام رد الاتصال
+لا يمكن تغييره. لا يزال ملف تعريف الارتباط الخاص بالمتصفح البادئ مطلوبًا، ويتم فحص اللعبة مرة أخرى
+قبل إصدار الرمز المميز. لا يمكن للحسابات المعلقة الحصول على رمز مميز.</p>
+<p>لا تجمع بين تسجيل الدخول إلى اللعبة و <code>client</code> أو <code>link</code> (<code>400</code>). A <code>returnUrl</code> بدون <code>gameId</code> هو أيضا
+<code>400</code>. يستمر تسجيل الدخول العادي للوحة المعلومات وسطح المكتب في استخدام وجهات الواجهة الأمامية التي تم تكوينها
+وأزواج الرموز المميزة للحساب العادي.</p>
+<h2 id="game-launch-tokens">رموز إطلاق اللعبة</h2>
+<p><code>POST /api/v1/games/{slug}/launch-token</code> (JWT) تصوغ JWT على نطاق اللعبة:</p>
+<pre><code class="language-json">{
+  "token": "eyJhbGciOi...",
+  "expiresInSeconds": 3600
+}
+</code></pre>
+<p>يحمل الرمز أ <code>game_scope</code> المطالبة والتخلف عن العمل لمدة 60 دقيقة. تجديد النسخ أ
+<code>launch_chain</code> وقت البدء إلى الأمام؛ التجديد خلال الـ 12 ساعة الماضية (الافتراضي) هو <code>403</code> ويجب أن يذهب الحامل
+العودة إلى جلسة الحساب الكاملة. التفاصيل الكاملة في <a href="/ar/docs/api/games.html">ألعاب</a>.</p>
+<p><strong>إعادة توصيل المقابس.</strong> تم فتح مأخذ توصيل باستخدام رمز الإطلاق (<code>?access_token=</code> على <code>ws/v1/games</code>,
+<code>ws/v1/realtime</code>, <code>ws/v1/voice</code>) يحمل هذا الرمز المميز في عنوان URL الخاص به، ومصافحة برمز مميز منتهي الصلاحية
+تم رفضه مع <code>401</code> قبل الترقية — يُبلغ المتصفح عن التعليمات البرمجية المغلقة فقط <code>1006</code>، نفس أ
+إسقاط الشبكة. تعامل مع عملية إعادة الاتصال الفاشلة على أنها فشل في المصادقة: قبل إعادة الفتح، قم بالتجديد حتى النهاية
+<code>POST /api/v1/games/{slug}/launch-token</code> (ممكن فقط عندما يكون الرمز المميز الحالي صالحًا و
+في غضون 12 ساعة من الإطلاق الأصلي) وقم بإنشاء عنوان URL باستخدام الرمز المميز الجديد. بمجرد التجديد
+رفض، أرسل اللاعب مرة أخرى إلى المشغل، أو من خلاله
+<a href="#sign-in-from-a-directly-opened-browser-game">تسجيل الدخول للعبة</a> إذا كانت هذه هي الطريقة التي تم بها فتح اللعبة.
+لا يمكن أبدًا استرداد نفس عنوان URL لإعادة المحاولة.</p>
+<h3 id="game-scope-fencing">سياج نطاق اللعبة</h3>
+<p>يمكن للرمز المميز على مستوى اللعبة أن يصل فقط إلى:</p>
+<ul>
+<li>خاص بها <code>/api/v1/games/{scope}</code> شجرة،</li>
+<li><code>/ws/v1/games</code>,</li>
+<li><a href="/ar/docs/api/realtime.html">غرفة الوقت الحقيقي</a> طرق الراحة و <code>/ws/v1/realtime</code> للعبة الخاصة بها، بما في ذلك تذاكر الاتصال،</li>
+<li><code>GET /api/v1/time</code> و <code>GET /api/v1/terms</code>,</li>
+<li><code>POST /api/v1/me/terms/accept</code> للحصول على موافقة صريحة من اللاعب المصادق عليه،</li>
+<li><code>GET /api/v1/me/friends</code>,</li>
+<li><code>GET /api/v1/users/{id}/avatar</code> و <code>GET /api/v1/users/{id}/profile</code>,</li>
+<li>لوحة المتصدرين للعبة،</li>
+<li>اللاعب <a href="/ar/docs/api/catalog.html#saving-from-inside-a-game-launch-token">حفظ السحابة</a> للعبة الخاصة (<code>/api/v1/me/cloud-saves/game:&lt;scope&gt;</code> ولها <code>/info</code>) - لا يوجد مفتاح آخر،</li>
+<li>نقاط نهاية الدردشة/الصوت REST وWebSocket المرتبطة بجلسات اللعبة الخاصة بها،</li>
+<li><code>GET /api/v1/github-games/{id}/icon</code> و <code>/cover</code> لأي لعبة (كلاهما عام على أي حال)،</li>
+<li><code>POST /api/v1/me/heartbeat</code>، والذي يميز اللاعب عبر الإنترنت فقط،</li>
+<li><code>GET /api/v1/github-games/{id}/release-notes</code> للعبة الخاصة بها،</li>
+<li><a href="/ar/docs/api/relay.html">تتابع</a> المسارات، للمرحلات المرتبطة بإحدى جلسات أو غرف اللعبة الخاصة بها.</li>
+</ul>
+<p><code>/ws/v1/chat</code> تم حظره لرموز الإطلاق. كل شيء آخر يعود 403.</p>
+<h2 id="typical-login-flow-curl">تدفق تسجيل الدخول النموذجي (الضفيرة)</h2>
+<p>تسجيل الدخول بالمفتاح العام، بدءًا من التحدي وحتى الاتصال المصادق عليه:</p>
+<pre><code class="language-bash"># 1. Request a challenge
+curl -s -X POST https://api.starhermit.com/api/v1/auth/public-key/challenge \
+  -H "Content-Type: application/json" \
+  -d '{"keyType":"Ed25519","keyData":"&lt;base64-raw-32-byte-public-key&gt;"}'
+# → { "challengeId": "...", "payload": { ... }, "expiresIn": 300 }
+
+# 2. Sign the serialized payload JSON with your private key, then complete
+curl -s -X POST https://api.starhermit.com/api/v1/auth/public-key/complete \
+  -H "Content-Type: application/json" \
+  -d '{"challengeId":"...","signature":"base64-signature...","keyType":"Ed25519","keyData":"&lt;base64-raw-32-byte-public-key&gt;"}'
+# → { "userId": "...", "accessToken": "...", "refreshToken": "..." }
+
+# 3. Call the API with the access token
+curl -s https://api.starhermit.com/api/v1/me \
+  -H "Authorization: Bearer eyJhbGciOi..."
+
+# 4. When the access token expires (after 15 min), rotate the refresh token
+curl -s -X POST https://api.starhermit.com/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"dGhpcyBpcyBh..."}'
+
+# 5. On logout, revoke the refresh token
+curl -s -X POST https://api.starhermit.com/api/v1/auth/logout \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"dGhpcyBpcyBh..."}'
+</code></pre>
+<p>تسجيل الدخول إلى OAuth يعتمد على المتصفح: قراءة <code>GET /api/v1/auth/oauth/providers</code>، افتح المزود المباشر
+<code>authorizeUrl</code>، والموافقة الكاملة، ويصل رد الاتصال بالمستخدم إلى الواجهة الأمامية
+<code>#access_token=…&amp;refresh_token=…</code> في جزء URL.</p>
+<h2 id="emailed-key-revocation">إلغاء المفتاح عبر البريد الإلكتروني</h2>
+<p>للمالك الذي لا يستطيع الوصول <code>DELETE /me/public-keys</code> (لا توجد جلسة OAuth، أو تم قفلها بواسطة ملف مسروق
+المفتاح). <code>POST /api/v1/auth/public-key/revoke-request</code> مع <code>{ "email": "…" }</code> يحمل طلبا و
+رسائل البريد الإلكتروني رابط. فتحه (<code>GET /api/v1/auth/public-key/revoke/confirm?token=…</code>) يظهر صفحة ذلك
+لا يغير شيئا؛ زر التأكيد الخاص به <code>POST</code>إنه نفس عنوان URL، الذي يلغي <strong>كل</strong> المفتاح النشط على ذلك
+الحساب وينهي الجلسات التي تمت مصادقتها. كلاهما غير مصادق عليه و <strong>العدد رقم
+جلسة</strong>. الطلب يجيب دائما <code>202</code> بنفس الجسد مهما وجد. طلب واحد لكل
+الحساب كل 15 دقيقة، وتنتهي صلاحية الرابط بعد 4 ساعات. التأكيد <code>POST</code> إجابات <code>200</code>
+<code>{ "revoked": &lt;count&gt;, "sessionsEnded": &lt;count&gt; }</code> إلى عميل API، أو <code>400</code> لمجهول أو مستعمل أو
+رمز منتهي الصلاحية، أو رمز لم يعد عنوانه يخص الحساب.</p>
+<h2 id="websocket-connection-tickets">تذاكر اتصال WebSocket</h2>
+<p><code>POST /api/v1/realtime/connection-tickets</code> استبدال الرمز المميز لحامل المتصل بتذكرة لمرة واحدة
+صالحة حوالي 30 ثانية. تمريرها كما <code>?ticket=</code> على أي <code>/ws/v1/*</code> مصافحة. يحمل المتصل
+المطالبات حرفيا (بما في ذلك <code>game_scope</code> و <code>pk</code>)، تم رفضه في REST، ويتم إنفاقه عند الاستخدام الأول.
+قد يطلب أي متصل مصادق عليه، بما في ذلك رمز الإطلاق المميز على مستوى اللعبة. <code>?access_token=</code> لا يزال يعمل
+حتى ينتقل العملاء.</p>
+<p><strong>وينتهي المقبس المفتوح عند إبطال بيانات الاعتماد الخاصة به.</strong> ينتهي إلغاء المفتاح العام الذي فتحه
+ذلك على الفور؛ يؤدي التعليق أو تسجيل الخروج في كل مكان إلى إنهاء الأمر في غضون 30 ثانية تقريبًا. انتهاء صلاحية الرمز المميز
+لا ينتهي بمقبس مفتوح — قم بالتحديث قبل إعادة الاتصال.</p>
+<h2 id="embedded-onboarding-for-nativestorefront-games">إعداد مضمن للألعاب المحلية/ألعاب واجهة المتجر</h2>
+<p>يمكن للعميل Steam أو Epic أو GOG أو المستقل إنشاء مفتاح على جهاز اللاعب وتقديم الملف
+يتدفق تسجيل المفتاح العام داخل واجهة المستخدم الخاصة به، مع تجنب OAuth وزيارة StarHermit
+لوحة القيادة. التسجيل ليس صامتًا: يجب على اللاعب الموافقة وتقديم بريد إلكتروني ومتابعة
+رابط التحقق لمرة واحدة. لا يمكن لرمز خادم اللعبة إنشاء لاعبين أو انتحالهم. يرى
+<a href="/ar/docs/tutorials/public-key-onboarding.html">البرنامج التعليمي: لاعبين على متن الطائرة بمفتاح عام</a>، و
+<a href="/ar/docs/tutorials/dedicated-server-onboarding.html">البرنامج التعليمي للخادم المخصص</a> للعبة التي تشحن خادمًا أيضًا.</p>
+<p>يرى <a href="/ar/docs/credentials.html">التوافق الاعتماد</a> و <a href="/ar/docs/api/contracts.html">العقود المقروءة آليا</a>.</p>
+
+{% endraw %}

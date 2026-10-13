@@ -1,0 +1,369 @@
+---
+layout: "wiki"
+lang: "bn"
+title: "টিউটোরিয়াল: একটি পাবলিক কী সহ অনবোর্ড প্লেয়ার"
+source_url: "/docs/tutorials/public-key-onboarding.html"
+source_path: "docs/tutorials/public-key-onboarding.md"
+source_hash: "49ebc031a538076978eab193219b2c0fd3cce731ed6327ede6768bbbcbb310f3"
+translation: "machine"
+permalink: "/bn/docs/tutorials/public-key-onboarding.html"
+---
+{% raw %}
+<h1 id="tutorial-onboard-players-with-a-public-key">টিউটোরিয়াল: একটি পাবলিক কী সহ অনবোর্ড প্লেয়ার</h1>
+<p>একটি StarHermit অ্যাকাউন্টের জন্য Google, GitHub বা অন্য কোনো সাইন-ইন প্রদানকারীর প্রয়োজন নেই। এর প্রমানপত্র পারে
+আপনার গেমটি প্লেয়ারের ডিভাইসে উত্পন্ন একটি মূল জুটি হতে পারে, সাথে প্লেয়ারের একটি ইমেল ঠিকানা
+একবার নিশ্চিত করে। এর পরে, আপনার গেমের সাথে একটি চ্যালেঞ্জ স্বাক্ষর করে প্রতিটি লঞ্চে নীরবে সাইন ইন করে
+চাবি প্লেয়ার কখনই একটি পাসওয়ার্ড টাইপ করে না এবং কখনও একটি StarHermit পৃষ্ঠায় যেতে হয় না।</p>
+<p>এই টিউটোরিয়ালটি সেই প্রবাহটি শেষ থেকে শেষ পর্যন্ত তৈরি করে: কী তৈরি করুন, এটি নিবন্ধন করুন, প্লেয়ারের জন্য অপেক্ষা করুন
+নিশ্চিত করুন, সাইন ইন করুন, সেশন রাখুন এবং দ্বিতীয় ডিভাইস এবং হারানো কীগুলি পরিচালনা করুন।</p>
+<p><strong>এই জন্য ব্যবহার করুন</strong> নেটিভ এবং স্বতন্ত্র গেমস, লঞ্চার, স্টিম/এপিক/জিওজি বিল্ড এবং ডেস্কটপ টুলস —
+প্লেয়ারের মেশিনে যে কোনো কিছু চলে এবং সেখানে একটি ব্যক্তিগত কী রাখতে পারে।</p>
+<p><strong>জন্য অন্য কিছু ব্যবহার করুন</strong></p>
+<ul>
+<li><strong>StarHermit এ হোস্ট করা একটি ব্রাউজার গেম</strong>, যা থেকে খোলা হলে ইতিমধ্যেই একটি লঞ্চ টোকেন পায়৷
+ড্যাশবোর্ড, অথবা একটি প্রদর্শন করতে পারেন <a href="/bn/docs/api/auth.html#sign-in-from-a-directly-opened-browser-game">সাইন ইন বোতাম</a>.</li>
+<li><strong>একটি CI পাইপলাইন</strong>, যা একটি OAuth সেশন থেকে কোনো ইমেল পদক্ষেপ ছাড়াই একটি কী নথিভুক্ত করা উচিত:
+<a href="/bn/docs/tutorials/ci-cd-build-upload.html">টিউটোরিয়াল: CI/CD থেকে বিল্ড আপলোড করুন</a>.</li>
+<li><strong>একটি ডেডিকেটেড গেম সার্ভার</strong>, যার নিজস্ব স্থাপনার টোকেন রয়েছে এবং এটি তৈরি বা কাজ করতে পারে না
+খেলোয়াড়: <a href="/bn/docs/tutorials/dedicated-server-onboarding.html">টিউটোরিয়াল: একটি ডেডিকেটেড সার্ভার প্রকাশ করুন</a>.</li>
+</ul>
+<h2 id="what-the-player-sees">খেলোয়াড় যা দেখে</h2>
+<ol>
+<li>আপনার গেম একটি StarHermit অ্যাকাউন্ট তৈরি করার জন্য একটি ইমেল ঠিকানা এবং তাদের সম্মতি চায়।</li>
+<li>তারা নিশ্চিতকরণ ইমেল খুলবে, লিঙ্কে ক্লিক করুন এবং টিপুন <strong>নিশ্চিত করুন</strong> পৃষ্ঠায় এটি খোলে।</li>
+<li>আপনার গেমে ফিরে, তারা সাইন ইন করা হয়েছে৷ পরবর্তীতে লঞ্চে কিছুই জিজ্ঞাসা করা হয় না৷</li>
+</ol>
+<p>একটি ইমেল ঠিকানা প্রয়োজন, এবং প্লেয়ার একবার এটি নিশ্চিত করতে হবে. একটি তৈরি করার কোন উপায় নেই
+স্টীম, এপিক বা GOG পরিচয় থেকে নীরবে StarHermit অ্যাকাউন্ট।</p>
+<h2 id="before-you-start">আপনি শুরু করার আগে</h2>
+<p>এই পৃষ্ঠার কোড হল WebCrypto ব্যবহার করে প্লেইন জাভাস্ক্রিপ্ট এবং <code>fetch</code>, তাই এটি একটি ব্রাউজারে, ইন
+ইলেক্ট্রন এবং নোড 20 বা তার পরে। <strong>দ <code>js</code> নীচের ব্লকগুলি, ক্রমে, একটি ES মডিউল গঠন করে</strong> - তাদের বাঁচান
+একসাথে হিসাবে <code>starhermit-key-auth.js</code>. অন্য যেকোনো ভাষা একইভাবে কাজ করে: ধাপ 1 সঠিকভাবে দেয়
+বাইট বিন্যাস, এবং ধাপ 3 সাইন করার জন্য সঠিক বাইট।</p>
+<pre><code class="language-js">const API = 'https://api.starhermit.com';
+
+const b64 = (bytes) =&gt; btoa(String.fromCharCode(...new Uint8Array(bytes)));
+</code></pre>
+<h2 id="1-create-the-device-key">1. ডিভাইস কী তৈরি করুন</h2>
+<p>তৈরি করুন <strong>ইনস্টলেশন প্রতি এক কী জোড়া</strong>, প্রথমবার আপনার গেমের একটি অ্যাকাউন্ট প্রয়োজন। প্রাইভেট
+কী কখনই ডিভাইস ছেড়ে যায় না: আপনার সার্ভারে নয়, স্টারহার্মিটে নয়।</p>
+<table>
+<thead>
+<tr>
+<th><code>keyType</code></th>
+<th><code>keyData</code> (স্ট্যান্ডার্ড বেস64)</th>
+<th>স্বাক্ষর (স্ট্যান্ডার্ড বেস64)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Ed25519</code> - প্রস্তাবিত</td>
+<td>কাঁচা 32-বাইট পাবলিক কী</td>
+<td>কাঁচা 64-বাইট Ed25519 স্বাক্ষর</td>
+</tr>
+<tr>
+<td><code>ECDSA-P256</code></td>
+<td>পাবলিক পয়েন্ট: 65-বাইট আনকম্প্রেসড (<code>04‖X‖Y</code>) বা 33-বাইট সংকুচিত</td>
+<td>SHA-256 সহ ECDSA, <strong>ASN.1 DER-এনকোডেড</strong></td>
+</tr>
+<tr>
+<td><code>RSA-PSS</code></td>
+<td><code>SubjectPublicKeyInfo</code> DER, 2048–8192-বিট মডুলাস, সূচক ≤ 32 বিট</td>
+<td>RSASSA-PSS, SHA-256, MGF1-SHA-256, 32-বাইট লবণ</td>
+</tr>
+</tbody>
+</table>
+<p><code>keyData</code> সর্বাধিক 2,000 অক্ষর। একটি কী প্ল্যাটফর্ম জুড়ে একটি অ্যাকাউন্টের অন্তর্গত।</p>
+<p>বাছাই <strong>Ed25519</strong> যদি না আপনার প্ল্যাটফর্ম এটি তৈরি করতে না পারে। আপনি যদি ECDSA ব্যবহার করেন তবে মনে রাখবেন WebCrypto,
+উইন্ডোজ সিএনজি এবং বেশিরভাগ হার্ডওয়্যার কীস্টোরগুলি কাঁচা হিসাবে স্বাক্ষর ফেরত দেয় <code>r‖s</code> (64 বাইট)। স্টার হার্মিট
+DER আশা করে, তাই এটি রূপান্তর করুন - নীচের মডিউলটি করে।</p>
+<pre><code class="language-js">// One key per installation. The private key can sign but is never exported.
+export async function createDeviceKey(keyType = 'Ed25519') {
+  if (!['Ed25519', 'ECDSA-P256'].includes(keyType)) throw new Error('This helper supports Ed25519 or ECDSA-P256');
+  const algorithm = keyType === 'Ed25519'
+    ? { name: 'Ed25519' }
+    : { name: 'ECDSA', namedCurve: 'P-256' };
+  const pair = await crypto.subtle.generateKey(algorithm, false, ['sign', 'verify']);
+  return {
+    keyType: keyType === 'Ed25519' ? 'Ed25519' : 'ECDSA-P256',
+    keyData: b64(await crypto.subtle.exportKey('raw', pair.publicKey)),
+    privateKey: pair.privateKey,
+  };
+}
+</code></pre>
+<p><strong>ব্যক্তিগত কী সংরক্ষণ করুন যেখানে অপারেটিং সিস্টেম এটি রক্ষা করে।</strong> একটি ব্রাউজারে বা ইলেক্ট্রন রেন্ডারারে,
+একটি অ নিষ্কাশনযোগ্য <code>CryptoKey</code> IndexedDB-তে যেমন আছে তেমনি রাখা যেতে পারে। একটি দেশীয় খেলা ব্যবহার করা উচিত
+প্ল্যাটফর্ম কীস্টোর — Windows DPAPI বা CNG, macOS কীচেন, লিনাক্সে libsecret। দোকান <code>keyType</code> এবং
+<code>keyData</code> এর পাশে; আপনি প্রতিটি অনুরোধের সাথে তাদের পাঠান।</p>
+<h2 id="2-start-registration">2. নিবন্ধন শুরু করুন</h2>
+<p>প্লেয়ারের ইমেল ঠিকানা এবং সম্মতির জন্য জিজ্ঞাসা করুন, তারপর:</p>
+<pre><code class="language-js">async function post(path, body) {
+  const res = await fetch(API + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json().catch(() =&gt; ({})) };
+}
+
+function fail(step, { status, body }) {
+  return Object.assign(new Error(`${step}: ${body.error ?? status}`), { status, body });
+}
+
+export async function register(key, email) {
+  const res = await post('/api/v1/auth/public-key/register',
+    { email, keyType: key.keyType, keyData: key.keyData });
+  if (res.status !== 202) throw fail('register', res);
+  return res.body; // { registrationId, email, emailSent, deferralReason, message }
+}
+</code></pre>
+<p><code>202</code> মানে StarHermit রেজিস্ট্রেশন গ্রহণ করেছে। যদি <code>emailSent</code> হয় <code>false</code>, ইমেইল সারিবদ্ধ এবং
+এখনও পৌঁছাবে; <code>deferralReason</code> বলেন কেন এটা অপেক্ষা করছিল। এখনও কোনো অ্যাকাউন্টের সাথে কিছুই সংযুক্ত করা হয়নি।</p>
+<p>তিনটি নিয়ম আপনার UI গঠন করে:</p>
+<ul>
+<li><strong>প্রতি 24 ঘন্টায় প্রতি ইমেল ঠিকানায় একটি নিবন্ধন এবং IP ঠিকানা প্রতি একটি।</strong> একটি দ্বিতীয় প্রচেষ্টা
+হয় <code>429</code> সঙ্গে <code>Retry-After</code>. আপনি এটি পাঠানোর আগে প্লেয়ারকে ঠিকানাটি নিশ্চিত করতে বলুন, কারণ একটি টাইপো
+তাদের একটি দিনের খরচ। প্লেয়ারের ডিভাইস থেকে অনুরোধ পাঠান, আপনার নিজের সার্ভারের মাধ্যমে না: প্রতিটি
+প্লেয়ার আপনার সার্ভারের আইপি এবং তার একক দৈনিক নিবন্ধন শেয়ার করবে।</li>
+<li><strong>লিঙ্ক 4 ঘন্টা পরে মেয়াদ শেষ হয়.</strong> যদি এটি শেষ হয়ে যায়, প্লেয়ার 24 ঘন্টার মধ্যে একবার আবার নিবন্ধন করতে পারে
+আছে</li>
+<li><strong><code>400</code></strong> মানে ইমেল ঠিকানা বা মূল উপাদান প্রত্যাখ্যান করা হয়েছে; <code>error</code> যা বলে।</li>
+</ul>
+<h2 id="3-sign-in-with-the-key">3. কী দিয়ে সাইন ইন করুন</h2>
+<p>সাইন ইন করা একটি চ্যালেঞ্জ এবং একটি প্রতিক্রিয়া৷ <code>POST /api/v1/auth/public-key/challenge</code> ফেরত:</p>
+<pre><code class="language-json">{
+  "challengeId": "4fc4d72b-4c12-41ca-a500-dc13cccc3865",
+  "payload": {
+    "challengeId": "4fc4d72b-4c12-41ca-a500-dc13cccc3865",
+    "fingerprint": "9c0b7a…",
+    "issuer": "starhermit",
+    "audience": "starhermit",
+    "expiry": "2026-10-09T14:21:41.9264875+00:00",
+    "nonce": "NmL+tgMum6HXU/pa3T9xjQ==",
+    "clientTimestamp": "2026-10-09T14:16:41.9265739+00:00"
+  },
+  "expiresIn": 300
+}
+</code></pre>
+<p><strong>আপনি যা স্বাক্ষর করেছেন তা আপনার প্রাপ্ত JSON নয়।</strong> StarHermit তার নিজের স্বাক্ষর যাচাই করে
+এর ক্রমিকীকরণ <code>payload</code>:</p>
+<ul>
+<li>কমপ্যাক্ট JSON, কোন হোয়াইটস্পেস নেই;</li>
+<li><strong>PascalCase</strong> সদস্যদের নাম, ঠিক একই ক্রমে <code>ChallengeId</code>, <code>Fingerprint</code>, <code>Issuer</code>,
+<code>Audience</code>, <code>Expiry</code>, <code>Nonce</code>, <code>ClientTimestamp</code>;</li>
+<li>প্রতিটি মান অনুলিপি করা হয়েছে <strong>ঠিক যেমন পরিবেশন করা হয়</strong> — তারিখগুলি পার্স এবং রিফর্ম্যাট করবেন না;</li>
+<li>প্রতিটি <code>+</code> in the nonce হিসেবে লেখা <code>\u002B</code>. দ <code>+</code> তারিখের মধ্যে এটি হিসাবে থাকে.</li>
+</ul>
+<p>উপরের চ্যালেঞ্জের জন্য, স্বাক্ষরিত বাইট হল UTF-8 এর এনকোডিং:</p>
+<pre><code class="language-text">{"ChallengeId":"4fc4d72b-4c12-41ca-a500-dc13cccc3865","Fingerprint":"9c0b7a…","Issuer":"starhermit","Audience":"starhermit","Expiry":"2026-10-09T14:21:41.9264875+00:00","Nonce":"NmL\u002BtgMum6HXU/pa3T9xjQ==","ClientTimestamp":"2026-10-09T14:16:41.9265739+00:00"}
+</code></pre>
+<p>যে ভুল কোন পেতে এবং উত্তর হয় <code>401 "Invalid signature."</code>, যা কোন পুনঃপ্রচেষ্টা ঠিক করবে না।</p>
+<pre><code class="language-js">const FIELDS = ['challengeId', 'fingerprint', 'issuer', 'audience', 'expiry', 'nonce', 'clientTimestamp'];
+
+export function challengeSigningBytes(payload) {
+  const members = FIELDS.map((field) =&gt; {
+    let value = JSON.stringify(payload[field]);
+    if (field === 'nonce') value = value.replaceAll('+', '\\u002B');
+    return `"${field[0].toUpperCase()}${field.slice(1)}":${value}`;
+  });
+  return new TextEncoder().encode(`{${members.join(',')}}`);
+}
+
+export async function signChallenge(key, payload) {
+  const data = challengeSigningBytes(payload);
+  if (key.keyType === 'Ed25519')
+    return b64(await crypto.subtle.sign({ name: 'Ed25519' }, key.privateKey, data));
+  // WebCrypto returns an ECDSA signature as raw r||s; the server expects ASN.1 DER.
+  const rs = new Uint8Array(
+    await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key.privateKey, data));
+  return b64(derEcdsaSignature(rs));
+}
+
+function derEcdsaSignature(rs) {
+  const integer = (bytes) =&gt; {
+    let i = 0;
+    while (i &lt; bytes.length - 1 &amp;&amp; bytes[i] === 0) i++;
+    const value = [...bytes.slice(i)];
+    return value[0] &amp; 0x80 ? [0x02, value.length + 1, 0, ...value] : [0x02, value.length, ...value];
+  };
+  const body = [...integer(rs.slice(0, 32)), ...integer(rs.slice(32))];
+  return new Uint8Array([0x30, body.length, ...body]);
+}
+
+// Resolves to { userId, accessToken, refreshToken }, or null while the key is not attached to
+// an account yet — the player has not confirmed, the link expired, or the key was revoked.
+export async function signIn(key) {
+  const { keyType, keyData } = key;
+  const challenge = await post('/api/v1/auth/public-key/challenge', { keyType, keyData });
+  if (challenge.status !== 200) throw fail('challenge', challenge);
+  const signature = await signChallenge(key, challenge.body.payload);
+  const done = await post('/api/v1/auth/public-key/complete',
+    { challengeId: challenge.body.challengeId, signature, keyType, keyData });
+  if (done.status === 200) return done.body;
+  if (done.status === 401 &amp;&amp; done.body.error === 'Public key not registered or revoked.') return null;
+  throw fail('complete', done); // "Invalid signature." will never succeed: fix it, don't retry it
+}
+</code></pre>
+<p>একটি চ্যালেঞ্জ পাঁচ মিনিট স্থায়ী হয় এবং এটি এককভাবে ব্যবহার করা হয়, এমনকি যখন প্রচেষ্টা ব্যর্থ হয়, তাই নতুন একটি অনুরোধ করুন
+প্রতিটি প্রচেষ্টার জন্য। প্রতি আইপি ঠিকানায় প্রতি মিনিটে 60টি অনুরোধের সীমা চ্যালেঞ্জ করুন এবং ভাগ করুন।</p>
+<h2 id="4-wait-for-the-player-to-confirm">4. প্লেয়ার নিশ্চিত হওয়ার জন্য অপেক্ষা করুন</h2>
+<p>ইমেল করা লিঙ্কটি একটি StarHermit পৃষ্ঠা খোলে যা বলে যে নিশ্চিতকরণ কী করবে; এটি খোলার পরিবর্তন হয়
+কিছুই না, তাই একটি মেল স্ক্যানার লিঙ্কটির পূর্বরূপ দেখায় প্লেয়ারের পক্ষে নিশ্চিত করতে পারে না। যখন
+প্লেয়ার প্রেস <strong>নিশ্চিত করুন</strong>, StarHermit তাদের অ্যাকাউন্ট তৈরি করে, আপনার কী সংযুক্ত করে এবং ঠিকানা চিহ্নিত করে
+যাচাই করা হয়েছে। যদি একটি অ্যাকাউন্ট ইতিমধ্যেই সেই ঠিকানাটি ব্যবহার করে, তাহলে পৃষ্ঠাটি তাই বলে এবং এতে কী যোগ করা হয়
+পরিবর্তে, তাই একজন খেলোয়াড় যার ইতিমধ্যেই একটি StarHermit অ্যাকাউন্ট আছে সে এটি রাখে। starhermit.com-এ তারা তখন অবতরণ করে
+StarHermit ড্যাশবোর্ডে, ইতিমধ্যে সাইন ইন করা আছে।</p>
+<p><strong>আপনার গেমটি কখনই সেই পৃষ্ঠা থেকে টোকেন পায় না</strong>, এবং তাদের প্রয়োজন নেই. খেলোয়াড় হতে পারে
+একটি ফোনে বা অন্য ব্রাউজারে নিশ্চিত করুন। একবার কী সংযুক্ত হয়ে গেলে, আপনার গেমটি সহজভাবে সাইন ইন করতে পারে
+এটা দিয়ে তাই দেখান a "আপনার ইনবক্স চেক করুন" পর্দা এবং চেষ্টা চালিয়ে যান:</p>
+<pre><code class="language-js">// Poll until the player confirms the emailed link. Two requests per attempt, so every 5 s stays
+// well inside the 60-per-minute sign-in limit.
+export async function waitUntilConfirmed(key, { intervalMs = 5000, signal } = {}) {
+  for (;;) {
+    signal?.throwIfAborted();
+    const session = await signIn(key);
+    if (session) return session;
+    await new Promise((resolve) =&gt; setTimeout(resolve, intervalMs));
+  }
+}
+</code></pre>
+<p>ধাপ 1 থেকে 4 একসাথে রাখা:</p>
+<pre><code class="language-javascript">import { createDeviceKey, register, signIn, waitUntilConfirmed } from './starhermit-key-auth.js';
+
+const key = await loadStoredKey() ?? await saveKey(await createDeviceKey());
+let session = await signIn(key);                // a returning player is signed in here
+if (!session) {
+  const email = await askForEmailAndConsent();
+  await register(key, email);
+  showCheckYourInbox(email);
+  session = await waitUntilConfirmed(key, { signal: cancelButton.signal });
+}
+</code></pre>
+<p><code>loadStoredKey</code>, <code>saveKey</code>, <code>askForEmailAndConsent</code> এবং <code>showCheckYourInbox</code> লিখতে হবে আপনার।
+অফার ক <strong>বাতিল করুন</strong> যা অপেক্ষা বাতিল করে, এবং লিঙ্কের মেয়াদ শেষ হয়ে গেলে চার ঘন্টা পরে ভোটগ্রহণ বন্ধ করে।</p>
+<p>এমনকি আপনার প্ল্যাটফর্মের নিশ্চিত পৃষ্ঠাটি আপনার সাইটে পুনঃনির্দেশ করলেও পোলিং চালিয়ে যান। খেলোয়াড় প্রায়ই
+অপেক্ষমাণ ব্যক্তি থেকে একটি ভিন্ন ডিভাইসে ইমেলটি খোলে এবং তারপরে কোথাও পুনঃনির্দেশিত হয় না
+আপনার অপেক্ষার পর্দার কাছে; পোলিং হল ওয়েটিং ডিভাইসে সাইন ইন করে। যদি রিডাইরেক্ট আসে
+একটি দ্বিতীয় ট্যাবে, শুধুমাত্র একটি দিয়ে সাইন ইন করুন এবং অতিরিক্ত সেশন প্রত্যাহার করুন বা প্লেয়ার শেষ হয়ে যাবে
+দুই সঙ্গে</p>
+<h2 id="5-keep-the-session">5. অধিবেশন রাখুন</h2>
+<p><code>complete</code> একটি 15-মিনিটের অ্যাক্সেস টোকেন এবং একটি রিফ্রেশ টোকেন প্রদান করে যা সাত দিন স্থায়ী হয় এবং ঘোরে।
+হিসাবে অ্যাক্সেস টোকেন পাঠান <code>Authorization: Bearer …</code>, এবং মেয়াদ শেষ হওয়ার আগে রিফ্রেশ করুন:</p>
+<pre><code class="language-js">// Resolves to the new pair, or null when the session is over — sign in with the key again.
+export async function refresh(refreshToken) {
+  const res = await post('/api/v1/auth/refresh', { refreshToken });
+  return res.status === 200 ? res.body : null; // { accessToken, refreshToken }
+}
+</code></pre>
+<p>প্রতিস্থাপন করুন <strong>উভয়</strong> প্রতিবার টোকেন। একটি ব্যবহৃত রিফ্রেশ টোকেন উপস্থাপন করলে পুরো সেশন শেষ হয়, তাই তৈরি করুন
+নিশ্চিত দুই থ্রেড বা প্রক্রিয়া একবারে রিফ্রেশ না. কখন <code>refresh</code> রিটার্ন <code>null</code>, কল <code>signIn</code> -
+কোন ইমেইল জড়িত না. চাবিকাঠি দীর্ঘজীবী শংসাপত্র; টোকেনগুলি এটির একটি ক্যাশে মাত্র।</p>
+<h2 id="6-finish-setting-up-the-account">6. অ্যাকাউন্ট সেট আপ শেষ করুন</h2>
+<p><strong>শর্তাবলী</strong> একটি নতুন অ্যাকাউন্ট অন্য কিছু ব্যবহার করার আগে বর্তমান StarHermit শর্তাবলী মেনে নিতে হবে।
+কল <code>GET /api/v1/me</code>. যদি <code>termsAcceptanceRequired</code> হয় <code>true</code>, থেকে পাঠ্য দেখান
+<code>GET /api/v1/terms</code>, এবং প্লেয়ার এটি গ্রহণ করলে, এটির হ্যাশ পাঠান <code>POST /api/v1/me/terms/accept</code>.
+পরবর্তী লঞ্চে আবার চেক করুন, কারণ শর্তাবলী সংশোধিত হয়েছে। বিস্তারিত:
+<a href="/bn/docs/api/profile.html#terms-acceptance">শর্তাবলী গ্রহণ</a>.</p>
+<p><strong>নাম।</strong> হিসাব শুরু হয় a দিয়ে <code>pk-…</code> ব্যবহারকারীর নাম খেলোয়াড়কে একটি ডাকনাম বেছে নিতে দিন:</p>
+<pre><code class="language-http">PATCH /api/v1/me
+Authorization: Bearer &lt;access-token&gt;
+Content-Type: application/json
+
+{ "nickname": "RookPilot" }
+</code></pre>
+<p>এখান থেকে অ্যাকাউন্টটি অন্য যেকোনটির মতো: বন্ধু, চ্যাট, ম্যাচমেকিং, ক্লাউড সংরক্ষণ, অর্জন।</p>
+<h2 id="7-second-devices-lost-keys-and-limits">7. দ্বিতীয় ডিভাইস, হারিয়ে যাওয়া কী, এবং সীমা</h2>
+<p><strong>একটি দ্বিতীয় ডিভাইস</strong> তার নিজস্ব কী তৈরি করে এবং এটি নিবন্ধন করে <strong>একই ইমেল ঠিকানা</strong>. যখন
+প্লেয়ার নিশ্চিত করে, কী একটি নতুন তৈরি করার পরিবর্তে তাদের বিদ্যমান অ্যাকাউন্টে যোগ দেয়। ২৪ ঘণ্টা
+ঠিকানা প্রতি সীমা এখানেও প্রযোজ্য।</p>
+<p><strong>একটি হারিয়ে যাওয়া বা চুরি যাওয়া ডিভাইস।</strong> <code>POST /api/v1/auth/public-key/revoke-request</code> সঙ্গে <code>{ "email": "…" }</code>
+একটি পৃষ্ঠার একটি লিঙ্ক ইমেল; নিশ্চিত করা সেখানে প্রত্যাহার করে <strong>প্রতিটি</strong> অ্যাকাউন্টে কী এবং সেশন শেষ করে
+এই কীগুলি সাইন ইন করেছে৷ একা লিঙ্ক খুললে কিছুই পরিবর্তন হয় না৷ অনুরোধ সবসময় উত্তর দেয় <code>202</code> একই বার্তা সহ, কিনা বা না
+ঠিকানা একটি অ্যাকাউন্ট আছে. লিঙ্কটি চার ঘন্টা পরে মেয়াদ শেষ হয়ে যায় এবং একটি অ্যাকাউন্ট প্রতি 15 সালে একবার জিজ্ঞাসা করতে পারে
+মিনিট পরে, প্রতিটি অবশিষ্ট ডিভাইস আবার নিবন্ধন করে (ধাপ 2)।</p>
+<p><strong>একটি কী-অনলি অ্যাকাউন্ট কী করতে পারে না।</strong> কয়েকটি পরিবর্তন অ্যাকাউন্টের শংসাপত্র রক্ষা করে, তাই তারা
+Google বা GitHub-এর মতো একটি প্রদানকারীর মাধ্যমে সাইন ইন করা একটি সেশন প্রয়োজন:</p>
+<table>
+<thead>
+<tr>
+<th>অ্যাকশন</th>
+<th>কী-শুধু অ্যাকাউন্ট</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>একটি কী যোগ করুন বা অন্যান্য ডিভাইস প্রত্যাহার করুন (<code>POST /me/public-keys</code>, <code>DELETE /me/public-keys/{id}</code> বা <code>/all</code>)</td>
+<td><code>403</code> — ইমেল নিবন্ধনের মাধ্যমে নথিভুক্ত করুন, অথবা একটি OAuth-প্রমাণিত সেশন ব্যবহার করুন</td>
+</tr>
+<tr>
+<td>অ্যাকাউন্টের ইমেল ঠিকানা পরিবর্তন করুন</td>
+<td><code>403 oauth_session_required</code> - একটি প্রদানকারী লিঙ্ক না হওয়া পর্যন্ত সম্ভব নয়</td>
+</tr>
+<tr>
+<td>এই ইনস্টলেশনের নিজস্ব কী প্রত্যাহার করুন</td>
+<td><code>DELETE /api/v1/me/public-keys/current</code>, তার সম্পূর্ণ পাবলিক-কী অ্যাকাউন্ট সেশন ব্যবহার করে; সাফল্যের পরে স্থানীয় শংসাপত্র বাতিল করুন</td>
+</tr>
+</tbody>
+</table>
+<p>অন্যান্য শংসাপত্রগুলি পরিচালনা করতে বা ইমেল পরিবর্তন করতে, একটি প্রদানকারীকে লিঙ্ক করুন৷ যখন একটি শুধুমাত্র-কী অ্যাকাউন্ট একটি লিঙ্ক করে, লিঙ্কটি ধরে রাখা হয়
+যতক্ষণ না খেলোয়াড় তাদের ইমেল থেকে এটি নিশ্চিত করে। এর পরে, একজন প্রদানকারী সাইন-ইন উপরের সবকিছু করতে পারে।
+দেখুন <a href="/bn/docs/api/auth.html#get-apiv1authoauthproviderauthorizelinkclient"><code>authorize?link=true</code></a>.</p>
+<h2 id="troubleshooting">সমস্যা সমাধান</h2>
+<table>
+<thead>
+<tr>
+<th>প্রতিক্রিয়া</th>
+<th>অর্থ</th>
+<th>ঠিক করুন</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>register</code> → <code>400</code> "কী ডেটা একটি বৈধ নয় … কী"</td>
+<td><code>keyData</code> এর জন্য ভুল বিন্যাসে আছে <code>keyType</code></td>
+<td>ধাপ 1 এ টেবিল চেক করুন। Ed25519 এবং ECDSA কাঁচা কী বাইট নেয়, না <code>SubjectPublicKeyInfo</code></td>
+</tr>
+<tr>
+<td><code>register</code> → <code>429</code></td>
+<td>এই ঠিকানা বা IP গত 24 ঘন্টা নিবন্ধিত</td>
+<td>অপেক্ষা করুন <code>Retry-After</code>; লুপে আবার চেষ্টা করবেন না</td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "সর্বজনীন কী নিবন্ধিত বা প্রত্যাহার করা হয়নি।"</td>
+<td>প্লেয়ার এখনও নিশ্চিত করেনি, লিঙ্কটির মেয়াদ শেষ হয়েছে বা কীটি প্রত্যাহার করা হয়েছে</td>
+<td>অপেক্ষা করুন (ধাপ 4), অথবা আবার নিবন্ধন করুন</td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "অবৈধ স্বাক্ষর।"</td>
+<td>স্বাক্ষরিত বাইট বা স্বাক্ষর বিন্যাস মেলে না</td>
+<td>স্বাক্ষরিত স্ট্রিংটি ঠিক পুনর্নির্মাণ করুন (ধাপ 3)। ECDSA-এর জন্য, DER পাঠান, না <code>r‖s</code></td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "চ্যালেঞ্জ খুঁজে পাওয়া যায় নি বা মেয়াদ শেষ।"</td>
+<td>চ্যালেঞ্জটি পাঁচ মিনিটের বেশি পুরানো ছিল বা ইতিমধ্যে ব্যবহৃত হয়েছিল</td>
+<td>প্রতিটি প্রচেষ্টার জন্য একটি নতুন চ্যালেঞ্জ অনুরোধ করুন</td>
+</tr>
+<tr>
+<td><code>challenge</code> / <code>complete</code> → <code>429</code></td>
+<td>এই আইপি থেকে এক মিনিটে 60টির বেশি সাইন-ইন অনুরোধ</td>
+<td>কম প্রায়ই পোল</td>
+</tr>
+<tr>
+<td>পৃষ্ঠা নিশ্চিত করুন → "এই লিঙ্ক ব্যবহার করা যাবে না"</td>
+<td>ইতিমধ্যেই নিশ্চিত, মেয়াদ শেষ, অসম্পূর্ণভাবে অনুলিপি করা হয়েছে, অথবা পাঠানোর পর থেকে অ্যাকাউন্টের ঠিকানা পরিবর্তিত হয়েছে</td>
+<td>যদি আপনার গেমটি সাইন ইন করতে পারে তবে কীটি সংযুক্ত আছে এবং কিছুই ভুল নয়। যদি না হয়, আবার নিবন্ধন করুন</td>
+</tr>
+<tr>
+<td>কনফার্ম → টিপে "সেই সর্বজনীন কী ইতিমধ্যেই অন্য অ্যাকাউন্টে নিবন্ধিত হয়েছে৷"</td>
+<td>এই কী একটি ভিন্ন অ্যাকাউন্টের অন্তর্গত</td>
+<td>এই ডিভাইসে একটি নতুন কী তৈরি করুন৷</td>
+</tr>
+<tr>
+<td><code>403</code> "এই অ্যাকাউন্ট স্থগিত করা হয়েছে."</td>
+<td>অ্যাকাউন্টটি স্থগিত করা হয়েছে</td>
+<td>আপনার খেলা ঠিক করতে পারে না কিছুই</td>
+</tr>
+</tbody>
+</table>
+
+{% endraw %}

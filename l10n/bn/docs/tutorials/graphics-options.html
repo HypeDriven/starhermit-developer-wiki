@@ -1,0 +1,373 @@
+---
+layout: "wiki"
+lang: "bn"
+title: "টিউটোরিয়াল: স্বয়ংক্রিয়ভাবে সনাক্ত করা গুণমান সহ গ্রাফিক্স বিকল্প"
+source_url: "/docs/tutorials/graphics-options.html"
+source_path: "docs/tutorials/graphics-options.md"
+source_hash: "cd4437482fbf097933897dbbeaf9e978a67574c0fe1ff696ace01bf8e9239bf5"
+translation: "machine"
+permalink: "/bn/docs/tutorials/graphics-options.html"
+---
+{% raw %}
+<h1 id="tutorial-graphics-options-with-auto-detected-quality">টিউটোরিয়াল: স্বয়ংক্রিয়ভাবে সনাক্ত করা গুণমান সহ গ্রাফিক্স বিকল্প</h1>
+<p>আপনার ব্রাউজার গেম দিন a <strong>গ্রাফিক্স</strong> মেনু যা প্লেয়ারের মেশিনের জন্য একটি বুদ্ধিমান মানের স্তর বেছে নেয়
+প্রথম লঞ্চে, তাদের এটিকে ওভাররাইড করতে দেয় এবং StarHermit এর মাধ্যমে ডিভাইস জুড়ে তাদের পছন্দ মনে রাখে।</p>
+<p>সংশ্লিষ্ট অডিও বিভাগের জন্য, দেখুন <a href="/bn/docs/tutorials/audio-options.html">একটি স্বয়ংক্রিয় সনাক্ত শব্দ সীমা সহ অডিও বিকল্প</a>.</p>
+<p><a href="/docs/sdk/graphics-options.js"><code>graphics-options.js</code></a> একটি একক ES মডিউল, কোন নির্ভরতা ছাড়াই, যে
+হিসাবরক্ষণ পরিচালনা করে:</p>
+<ul>
+<li><strong>অটো</strong> জিপিইউ, মেমরি, সিপিইউ কোর এবং থেকে চারটি প্রিসেট (নিম্ন, ভারসাম্যপূর্ণ, উচ্চ, আল্ট্রা) এর মধ্যে একটি বেছে নেয়
+ডিভাইসের ধরন, এবং ফ্রেমগুলি ধীর থাকলে সেশনের জন্য ধাপে ধাপে নেমে যায়।</li>
+<li>খেলোয়াড়রা প্রতিটি প্রভাবকে ওভাররাইড করতে পারে (ছায়া, অ্যাম্বিয়েন্ট অক্লুশন, ব্লুম, অ্যান্টি-আলিয়াসিং বা আপনার নিজস্ব),
+একটি 50-200% রেন্ডার স্কেল সেট করুন, স্বয়ংক্রিয় প্রদর্শন রিফ্রেশের পরিবর্তে একটি ম্যানুয়াল সর্বাধিক FPS চয়ন করুন,
+এবং অভিযোজিত রেজোলিউশন এবং একটি ফ্রেম-রেট রিডআউট টগল করুন।</li>
+<li>সেটিংস সংরক্ষণ করা হয় <code>localStorage</code> তাই তারা প্রথম ফ্রেমের আগে এবং প্লেয়ারের জন্য প্রয়োগ করে
+<a href="/bn/docs/api/games.html#per-player-game-settings">প্রতি-গেম সেটিংস</a> তাই তারা তাদের খেলোয়াড়কে অনুসরণ করে
+অন্যান্য মেশিন।</li>
+<li>এটিতে একই মানের টেবিল থেকে তৈরি একটি তৈরি বিকল্প প্যানেল রয়েছে।</li>
+</ul>
+<p>এটি কোনো ইঞ্জিন আমদানি করে না। আপনার রেন্ডারার পরিবর্তনগুলি শোনে এবং স্তরগুলি প্রয়োগ করে৷ এই পাতা এটি তারের
+three.js অন্যান্য ইঞ্জিন একই হুক ব্যবহার করে (দেখুন <a href="#other-engines">অন্যান্য ইঞ্জিন</a>).</p>
+<ol>
+<li><a href="#1-add-the-files">ফাইল যোগ করুন</a></li>
+<li><a href="#2-create-the-store-and-the-panel">দোকান এবং প্যানেল তৈরি করুন</a></li>
+<li><a href="#3-apply-the-settings-to-your-renderer">আপনার রেন্ডারারে সেটিংস প্রয়োগ করুন</a></li>
+<li><a href="#4-fit-it-to-your-game">এটি আপনার খেলার সাথে মানানসই</a></li>
+<li><a href="#5-test-it">এটি পরীক্ষা করুন</a></li>
+</ol>
+<h2 id="1-add-the-files">1. ফাইল যোগ করুন</h2>
+<p>কপি <a href="/docs/sdk/starhermit-sdk.js"><code>starhermit-sdk.js</code></a> এবং
+<a href="/docs/sdk/graphics-options.js"><code>graphics-options.js</code></a> আপনার গেমের স্ক্রিপ্টের পাশে, অপরিবর্তিত। কল
+<code>StarHermit.init()</code> <strong>আগে</strong> আপনার মডিউল রান, তাই লঞ্চ টোকেন সময় দ্বারা পড়া হয়েছে
+গ্রাফিক্স স্টোর চেক করে যে একজন প্লেয়ার সাইন ইন করেছে কিনা:</p>
+<pre><code class="language-html">&lt;script src="starhermit-sdk.js"&gt;&lt;/script&gt;
+&lt;script&gt;StarHermit.init();&lt;/script&gt;
+&lt;script type="module" src="main.js"&gt;&lt;/script&gt;
+</code></pre>
+<p>একটি লঞ্চ টোকেন ছাড়া (স্থানীয় উন্নয়ন, অন্য কোনো হোস্ট), দোকান সবকিছু রাখে
+<code>localStorage</code> এবং কোন অনুরোধ করে না।</p>
+<h2 id="2-create-the-store-and-the-panel">2. স্টোর এবং প্যানেল তৈরি করুন</h2>
+<pre><code class="language-js">import { createGraphics, mountGraphicsPanel } from './graphics-options.js';
+
+const gfx = createGraphics({ storageKey: 'mygame.graphics' });
+mountGraphicsPanel(document.getElementById('graphics-options'), gfx);
+</code></pre>
+<p><code>mountGraphicsPanel</code> নিয়ন্ত্রণের সাথে উপাদান পূরণ করে। আপনার সেটিংস ডায়ালগ ফ্রেম সরবরাহ করে,
+শিরোনাম এবং বন্ধ বোতাম। প্রতিটি পরিবর্তন অবিলম্বে প্রযোজ্য এবং সংরক্ষিত হয়.</p>
+<h3 id="how-auto-picks-a-preset">অটো কিভাবে একটি প্রিসেট বাছাই করে</h3>
+<p>তৈরি করার সময় স্টোরটি একবার একটি থ্রোওয়ে ওয়েবজিএল প্রসঙ্গ অনুসন্ধান করে (<code>gfx.system</code>) এবং এটি একটি প্রিসেটের সাথে মানচিত্র করে
+(<code>gfx.detected</code>):</p>
+<table>
+<thead>
+<tr>
+<th>সংকেত</th>
+<th>প্রিসেট</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>কোন WebGL, বা একটি সফ্টওয়্যার রেন্ডারার নেই (SwiftShader, llvmpipe, Microsoft Basic Render)</td>
+<td>কম</td>
+</tr>
+<tr>
+<td>কোন WebGL2, 2 বা তার কম CPU কোর, বা 2 GB বা তার কম মেমরি নেই</td>
+<td>কম</td>
+</tr>
+<tr>
+<td>বিচ্ছিন্ন GPU (NVIDIA, AMD Radeon RX/Pro, Apple M-series)</td>
+<td>উচ্চ</td>
+</tr>
+<tr>
+<td>অন্য কিছু (ইন্টিগ্রেটেড ইন্টেল/এএমডি, মোবাইল জিপিইউ, সাফারির মুখোশযুক্ত "অ্যাপল জিপিইউ")</td>
+<td>সুষম</td>
+</tr>
+<tr>
+<td>ফোন বা ট্যাবলেট (মোটা পয়েন্টার), বা 4 GB মেমরি বা তার কম</td>
+<td>সর্বাধিক ভারসাম্যপূর্ণ</td>
+</tr>
+</tbody>
+</table>
+<p>অটো কখনই আল্ট্রা নির্বাচন করে না; খেলোয়াড়রা এটি বেছে নেয়। GPU নাম থেকে এসেছে <code>RENDERER</code>, এবং
+<code>WEBGL_debug_renderer_info</code> যখন Chromium নামটি মাস্ক করে তখনই এক্সটেনশনের অনুরোধ করা হয়৷ ফায়ারফক্স লগ a
+কনসোল সতর্কতা যখন সেই এক্সটেনশনের অনুরোধ করা হয়, এবং এটি ইতিমধ্যেই আসল নাম রিপোর্ট করে।</p>
+<p>গেমটি চলার সময়, অটো ফ্রেমের সময়ও দেখে। যদি অভিযোজিত রেজোলিউশন ইতিমধ্যে এটিতে নেমে গেছে
+আরও তিনটি 90-ফ্রেম উইন্ডোর জন্য মেঝে এবং ফ্রেমের গড় এখনও 26 ms-এর বেশি, স্বয়ংক্রিয়ভাবে একটি প্রিসেট নিচে নেমে যায়
+সেশনের বাকি জন্য। নির্বাচন করছে <strong>অটো</strong> প্যানেলে আবার পুনরায় সনাক্ত করা হয়। একটি প্রিসেট প্লেয়ার
+হাতে বাছাই করা নিজে থেকে কখনই পরিবর্তন হয় না।</p>
+<h3 id="maximum-frame-rate">সর্বোচ্চ ফ্রেম রেট</h3>
+<p><strong>সর্বোচ্চ ফ্রেম রেট</strong> থেকে ডিফল্ট <strong>স্বয়ংক্রিয় (রিফ্রেশ হার)</strong>: ব্রাউজার সময়সূচী রেন্ডারিং
+ডিসপ্লের রিফ্রেশ রেট সহ। বেছে নিন <strong>কাস্টম</strong> এবং থেকে একটি পূর্ণসংখ্যা লিখুন <strong>1 থেকে 1000 FPS</strong> থেকে
+এটা ওভাররাইড সীমা অবিলম্বে প্রযোজ্য, স্থানীয়ভাবে এবং একই ক্লাউড প্রোফাইলে সংরক্ষিত হয়
+অন্যান্য গ্রাফিক্স সেটিংস, এবং মান-প্রিসেট পরিবর্তনগুলি বেঁচে থাকে। এ ফিরে যান <strong>অটো</strong> সীমা অপসারণ করতে।
+এই পছন্দ স্বাধীন <strong>অটো</strong> মান প্রিসেট।</p>
+<p>রেন্ডারারকে অবশ্যই কল করতে হবে <code>gfx.shouldRender(now)</code> এর অ্যানিমেশন লুপে, যেমনটি নীচে দেখানো হয়েছে। একটি সীমা a
+সিলিং, প্রতিশ্রুত ফ্রেম রেট নয়: রেন্ডারিং এখনও ব্রাউজারের অ্যানিমেশন কলব্যাকগুলি অতিক্রম করতে পারে না
+বা মেশিনের কর্মক্ষমতা। একটি 60 Hz ডিসপ্লেতে 144 FPS সেট করা তাই এখনও সর্বাধিক 60 FPS রেন্ডার করে৷</p>
+<p>একটি কাস্টম মেনু জন্য, ব্যবহার করুন <code>gfx.set({ maxFps: 45 })</code> এবং <code>gfx.set({ maxFps: null })</code> অটো পুনরুদ্ধার করতে।
+সমাধান করা হয়েছে <code>gfx.settings.maxFps</code> হয় <code>0</code> অটোর জন্য। অবৈধ সংরক্ষিত মান অটোতে ফিরে আসে; ইতিবাচক
+সংখ্যাগুলি বৃত্তাকার এবং 1-1000 তে আটকানো হয়।</p>
+<h3 id="where-the-settings-live">যেখানে সেটিংস থাকে</h3>
+<table>
+<thead>
+<tr>
+<th>দোকান</th>
+<th>চাবি</th>
+<th>কেন</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>localStorage</code></td>
+<td><code>&lt;storageKey&gt;.gpu.&lt;GPU profile&gt;</code></td>
+<td>সিঙ্ক্রোনাসভাবে পড়ুন, তাই প্রথম ফ্রেমটি ইতিমধ্যেই এই GPU এর সেটিংস ব্যবহার করে৷</td>
+</tr>
+<tr>
+<td><a href="/bn/docs/api/games.html#per-player-game-settings">প্রতি-প্লেয়ার সেটিংস</a></td>
+<td><code>graphics.gpu.&lt;GPU profile&gt;</code></td>
+<td>একই GPU রিপোর্টিং অন্য মেশিনে প্লেয়ার অনুসরণ করে</td>
+</tr>
+</tbody>
+</table>
+<p>প্রতিটি জিপিইউ একটি স্বাধীন প্রোফাইল পায়, যার মধ্যে সর্বাধিক FPS সহ প্রতিটি গ্রাফিক্স পছন্দ রয়েছে।
+উদাহরণস্বরূপ, GPU A-তে Ultra এবং 90 FPS সেট করুন, তারপর GPU B-তে লঞ্চ করুন: B হার্ডওয়্যার-সনাক্ত করা দিয়ে শুরু হয়
+ডিফল্ট যদি না আপনি পূর্বে B-এর জন্য পছন্দগুলি সংরক্ষণ করেন। A-তে ফিরে আসা আল্ট্রা এবং 90 FPS পুনরুদ্ধার করে।
+দুটি জিপিইউ যা উভয়ই উচ্চ হিসাবে সনাক্ত করে তাদের এখনও পৃথক প্রোফাইল রয়েছে। শনাক্ত মানের একটি পরিবর্তন
+একই GPU-তে স্তর তার সংরক্ষিত পছন্দগুলি বাতিল করে না।</p>
+<p>প্রোফাইলটি ব্রাউজার-প্রতিবেদিত GPU নামের একটি স্থিতিশীল 16-অক্ষরের হ্যাশ, কেসের জন্য স্বাভাবিক করা হয়েছে
+এবং সাদা স্থান। <code>storageKey</code> এবং <code>cloudKey</code> সরবরাহ উপসর্গ; <code>gfx.storageKey</code>, <code>gfx.cloudSlot</code>, এবং
+<code>gfx.gpuProfile</code> সক্রিয় কী এবং প্রোফাইল প্রকাশ করুন। স্টোর তৈরি হলে GPU সনাক্তকরণ ঘটে;
+অন্য GPU এর প্রোফাইল নির্বাচন করতে পরবর্তী গেম লঞ্চে একটি নতুন দোকান তৈরি করুন৷</p>
+<p>যদি কোন GPU নাম উপলব্ধ না হয়, পছন্দ স্থানীয় বা ক্লাউড অধ্যবসায় ছাড়াই সেশনের জন্য প্রযোজ্য।
+যদি ব্রাউজার একই নামের একাধিক GPU মাস্ক করে, তাহলে তারা একটি প্রোফাইল শেয়ার করে কারণ এটি করতে পারে না
+তাদের আলাদা করা। পুরানো আনস্কোপড লোকাল সেটিংস এবং ডিভাইস-শ্রেণির ক্লাউড সেটিংস অস্পর্শিত রাখা হয়েছে
+এবং আমদানি করা হয় না, যেহেতু তারা শনাক্ত করে না যে পছন্দগুলি কোন GPU-এর।</p>
+<p>প্রতিটি মান হয় <code>{ "saved": {…}, "at": &lt;ms timestamp&gt; }</code>. দুটি অনুলিপি একইভাবে মিলিত হয়
+<a href="/bn/docs/sdk/javascript.html#cloud-saves">মেঘ সংরক্ষণ করে</a>:</p>
+<ul>
+<li><strong>লেখার আগে পড়ুন।</strong> স্টার্ট-আপে (এবং যখন একজন ভিন্ন প্লেয়ার সাইন ইন করে), স্টোরটি পড়ে
+<code>GET /api/v1/games/{slug}/settings</code>. নতুনের সাথে কপি <code>at</code> জয় ক্লাউড কপি জয়ী হলে,
+দোকান এটি গ্রহণ করে এবং অগ্নিসংযোগ করে <code>change</code> কারণ সহ <code>'cloud'</code>. স্থানীয় কপি নতুন হলে, দোকান
+এটা push করে</li>
+<li><strong>একটি ব্যর্থ পড়া ব্লক লিখছে.</strong> স্থানীয় অনুলিপি কাজ করতে থাকে। পরবর্তী পরিবর্তন প্লেয়ার করে
+কিছু লেখার আগে পড়া পুনরায় চেষ্টা করে, তাই একটি পুরানো ডিভাইস নতুন পছন্দ এটিকে ওভাররাইট করতে পারে না
+দেখতে পারেনি।</li>
+<li>পরিবর্তন সঙ্গে ধাক্কা হয় <code>setSetting</code> 800 ms পরে আর কোন পরিবর্তন ছাড়াই। টোকেন পুনর্নবীকরণ (যা
+এছাড়াও SDK এর আগুন <code>auth</code> ঘটনা) অন্য পড়ার ট্রিগার করবেন না।</li>
+</ul>
+<h2 id="3-apply-the-settings-to-your-renderer">3. আপনার রেন্ডারারে সেটিংস প্রয়োগ করুন৷</h2>
+<p>চারটি হুক স্টোরটিকে একটি three.js রেন্ডারারের সাথে সংযুক্ত করে:</p>
+<ul>
+<li><code>gfx.on('change', fn)</code> ছায়া এবং প্রভাব টগলের জন্য।</li>
+<li>একটি পোস্ট-প্রসেসিং চেইন বর্তমান স্তর থেকে পুনর্নির্মিত।</li>
+<li><code>gfx.frame(ms)</code> এবং <code>gfx.pixelRatio()</code> রেন্ডার লুপে, যা অভিযোজিত রেজোলিউশন চালায়।</li>
+<li><code>gfx.shouldRender(now)</code> অঙ্কন করার আগে, যা ম্যানুয়াল FPS সীমা প্রয়োগ করে।</li>
+</ul>
+<p>এর সাথে রেন্ডারার তৈরি করুন <code>antialias: false</code>. MSAA তারপর পোস্ট চেইন এর রেন্ডার লক্ষ্য থেকে আসে, তাই
+WebGL প্রসঙ্গ পুনঃনির্মাণ না করেই প্রতিটি অ্যান্টি-আলিয়াসিং স্তর পরিবর্তন করা যেতে পারে।</p>
+<pre><code class="language-js">import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+
+// canvas, scene, camera and a shadow-casting DirectionalLight `sun` are your game's own.
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
+const SHADOW_MAP = { off: 0, low: 1024, medium: 2048, high: 4096 };
+let composer = null;
+let size = {};
+
+gfx.on('change', (s) =&gt; {
+  const mapSize = SHADOW_MAP[s.shadows];
+  renderer.shadowMap.enabled = mapSize &gt; 0;
+  sun.castShadow = mapSize &gt; 0;
+  if (mapSize &amp;&amp; sun.shadow.mapSize.x !== mapSize) {
+    sun.shadow.mapSize.set(mapSize, mapSize);
+    sun.shadow.map?.dispose();
+    sun.shadow.map = null;
+  }
+  scene.traverse((o) =&gt; [].concat(o.material || []).forEach((m) =&gt; { m.needsUpdate = true; })); // shadow on/off recompiles
+  size = {}; // resize and rebuild the post chain on the next frame
+});
+
+function buildPost(s, w, h, ratio) {
+  composer?.dispose();
+  composer = null;
+  if (gfx.info.postFailed || (s.ao === 'off' &amp;&amp; s.bloom === 'off' &amp;&amp; s.antialias === 'off')) return;
+  try {
+    const pw = Math.round(w * ratio), ph = Math.round(h * ratio);
+    const target = new THREE.WebGLRenderTarget(pw, ph, { type: THREE.HalfFloatType, samples: s.antialias === 'msaa' ? 4 : 0 });
+    const c = new EffectComposer(renderer, target);
+    c.setPixelRatio(ratio);
+    c.setSize(w, h);
+    c.addPass(new RenderPass(scene, camera));
+    if (s.ao !== 'off') {
+      const ao = new GTAOPass(scene, camera, pw, ph);
+      ao.updateGtaoMaterial({ samples: s.ao === 'high' ? 16 : 8 });
+      c.addPass(ao);
+    }
+    if (s.bloom === 'on') c.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.5, 0.4, 0.9));
+    c.addPass(new OutputPass());
+    if (s.antialias === 'smaa') c.addPass(new SMAAPass());
+    if (s.antialias === 'fxaa') {
+      const fxaa = new ShaderPass(FXAAShader);
+      fxaa.material.uniforms.resolution.value.set(1 / pw, 1 / ph);
+      c.addPass(fxaa);
+    }
+    composer = c;
+  } catch {
+    gfx.report({ postFailed: true }); // the panel shows a note; don't console.warn
+  }
+}
+
+let last = performance.now();
+renderer.setAnimationLoop((now) =&gt; {
+  // Update your simulation here using its own elapsed time or fixed timestep.
+  // Keep simulation/input independent of skipped render ticks.
+  if (!gfx.shouldRender(now)) return;
+  gfx.frame(now - last); // elapsed time between rendered frames, including the FPS limit
+  last = now;
+  const w = canvas.clientWidth, h = canvas.clientHeight, ratio = gfx.pixelRatio();
+  if (w !== size.w || h !== size.h || ratio !== size.ratio) {
+    size = { w, h, ratio };
+    renderer.setPixelRatio(ratio);
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    buildPost(gfx.settings, w, h, ratio);
+    gfx.report({ pixels: [Math.round(w * ratio), Math.round(h * ratio)] });
+  }
+  try {
+    if (composer) composer.render();
+    else renderer.render(scene, camera);
+  } catch {
+    composer = null;
+    gfx.report({ postFailed: true });
+  }
+});
+</code></pre>
+<p>নোট:</p>
+<ul>
+<li>দ <code>three/addons/</code> ফাইল থেকে আসা আবশ্যক <strong>একই three.js রিলিজ</strong> হিসাবে <code>three</code> নিজেই মেশানো
+রিলিজ পোস্ট চেইন ভেঙ্গে. উপরের কোডটি বর্তমান রিলিজকে লক্ষ্য করে। বয়স্কদের উপর, <code>SMAAPass</code>
+লাগে <code>(width, height)</code>.</li>
+<li>নিম্ন প্রতিটি পোস্ট-প্রসেসিং প্রভাবকে বন্ধ করে দেয়, তাই গেমটি সরাসরি ক্যানভাসে রেন্ডার করে
+ডিভাইসের পিক্সেল অনুপাত সর্বাধিক 1। যা এর যেকোনও আগে গেমটির মতোই কম দামে রাখে।</li>
+<li><code>gfx.pixelRatio()</code> রিটার্ন <code>min(devicePixelRatio, preset cap) × preset scale × render scale × adaptive scale</code>, 0.25-3 এ আটকানো হয়েছে। ক্যাপগুলি নিম্নের জন্য 1, ব্যালেন্সডের জন্য 1.5 এবং উচ্চ এবং 2টির জন্য
+আল্ট্রা</li>
+<li>অভিযোজিত রেজোলিউশন গড় 90 ফ্রেম। 26 ms এর উপরে এটি স্কেলটিকে 0.1 দ্বারা কম করে (0.6 পর্যন্ত)। নিচে
+14 ms এটি 0.05 দ্বারা স্কেল বাড়ায় (1 পর্যন্ত)। ফ্রেমগুলি 1 সেকেন্ডের বেশি (পজ করা বা পটভূমি ট্যাব)
+উপেক্ষা করা হয়েছে, এবং একটি একক ধীরগতির ফ্রেম অভিযোজনের জন্য সর্বাধিক 250 ms হিসাবে গণনা করে যাতে একটি বাধা কমতে পারে না
+স্কেল FPS রিডআউট প্রকৃত অতিবাহিত সময় ব্যবহার করে।
+একটি ম্যানুয়াল সীমা সহ, ধীর থ্রেশহোল্ড লক্ষ্য ফ্রেমের ব্যবধানের কমপক্ষে 115% এবং
+দ্রুত থ্রেশহোল্ড কমপক্ষে 85%, তাই একটি ইচ্ছাকৃত 30 FPS সীমা তার নিজের গুণমানকে কম করে না।
+খুব কম সীমার জন্য, বিরতি কাটঅফ এবং হিচ কাটঅফ উভয়ই কমপক্ষে দুটি লক্ষ্য ব্যবধান।
+খাওয়ান <code>gfx.frame</code> শুধুমাত্র রেন্ডার করা ফ্রেম; একটি টিক এড়িয়ে গেলে শেষ রেন্ডার করা টাইমস্ট্যাম্প ধরে রাখুন।</li>
+</ul>
+<h3 id="other-engines">অন্যান্য ইঞ্জিন</h3>
+<p>আপনার ফ্রেমগুলি যাই আঁকে না কেন, ইন্টিগ্রেশন একই হুক ব্যবহার করে:</p>
+<table>
+<thead>
+<tr>
+<th>কল</th>
+<th>ব্যবহার করুন</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gfx.on('change', (settings, reason) =&gt; …)</code></td>
+<td>স্তর প্রয়োগ করুন। অবিলম্বে একবার রান (<code>'init'</code>), তারপরে <code>'settings'</code>, <code>'cloud'</code> এবং <code>'auto'</code>. একটি আনসাবস্ক্রাইব ফাংশন প্রদান করে।</td>
+</tr>
+<tr>
+<td><code>gfx.settings</code></td>
+<td><code>{ preset, auto, scale, dprCap, adaptive, showFps, maxFps, &lt;category&gt;: &lt;tier&gt; }</code>; <code>maxFps: 0</code> স্বয়ংক্রিয় প্রদর্শন রিফ্রেশ মানে.</td>
+</tr>
+<tr>
+<td><code>gfx.shouldRender(now)</code></td>
+<td>প্রতিটি অ্যানিমেশন কলব্যাক, তার টাইমস্ট্যাম্প মিলিসেকেন্ডে। অঙ্কন এড়িয়ে যান যদি এটি ফিরে আসে <code>false</code>. সিমুলেশন/ইনপুট আপডেট স্বাধীন রাখুন।</td>
+</tr>
+<tr>
+<td><code>gfx.frame(ms)</code></td>
+<td>প্রতিটি রেন্ডার করা ফ্রেম, আগের রেন্ডার করা ফ্রেম থেকে সময়ের সাথে। রিটার্নস <code>true</code> যখন পিক্সেল অনুপাত বা অটো প্রিসেট পরিবর্তিত হয়।</td>
+</tr>
+<tr>
+<td><code>gfx.pixelRatio()</code></td>
+<td>রেন্ডার করার অনুপাত</td>
+</tr>
+<tr>
+<td><code>gfx.report({ pixels, postFailed })</code></td>
+<td>প্যানেলকে আউটপুট আকার বলে, বা প্রভাবগুলি অনুপলব্ধ৷</td>
+</tr>
+</tbody>
+</table>
+<p>একটি 2D ক্যানভাস গেমের জন্য, ক্যানভাস ব্যাকিং সাইজ দ্বারা গুণ করুন <code>gfx.pixelRatio()</code>, এবং আপনার নিজস্ব মানচিত্র
+নীচে বর্ণিত হিসাবে বিভাগগুলিতে প্রভাব (কণা, আভা, প্যারালাক্স স্তর)।</p>
+<h2 id="4-fit-it-to-your-game">4. এটি আপনার খেলার সাথে মানানসই</h2>
+<p><strong>আপনার নিজস্ব প্রভাব.</strong> একটি মানের সারণী পাস করুন যা শুধুমাত্র আপনার গেমটি আসলে কী আঁকে তা তালিকাভুক্ত করে। প্রতিটি প্রিসেট
+সারি প্রতিটি বিভাগের জন্য একটি স্তর প্রয়োজন, প্লাস <code>scale</code> এবং <code>dprCap</code>:</p>
+<pre><code class="language-js">import { createGraphics, CATEGORIES, TABLE } from './graphics-options.js';
+
+const gfx = createGraphics({
+  storageKey: 'mygame.graphics',
+  categories: { ...CATEGORIES, particles: ['off', 'low', 'high'] },
+  table: {
+    low: { ...TABLE.low, particles: 'off' },
+    balanced: { ...TABLE.balanced, particles: 'low' },
+    high: { ...TABLE.high, particles: 'high' },
+    ultra: { ...TABLE.ultra, particles: 'high' },
+  },
+});
+</code></pre>
+<p>প্যানেল প্রতি বিভাগে একটি নির্বাচন করে, তাই একটি নতুন বিভাগ স্বয়ংক্রিয়ভাবে প্রদর্শিত হয়। দিয়ে নাম দিন
+<code>strings.categories.particles</code>.</p>
+<p><strong>অনুবাদ।</strong> প্যানেলের ইংরেজি স্ট্রিংগুলি হিসাবে রপ্তানি করা হয়৷ <code>STRINGS</code>. একই সঙ্গে আপনার নিজের পাস
+আকৃতি শুধুমাত্র আপনার দেওয়া কীগুলি প্রতিস্থাপন করা হয়েছে:</p>
+<pre><code class="language-js">mountGraphicsPanel(el, gfx, {
+  strings: {
+    quality: 'Qualität', auto: 'Automatisch ({tier})', fromPreset: 'Laut Voreinstellung ({tier})',
+    renderScale: 'Renderskalierung', adaptive: 'Adaptive Auflösung', showFps: 'Bildrate anzeigen',
+    maxFps: 'Maximale Bildrate', autoFps: 'Automatisch (Bildschirmfrequenz)',
+    customFps: 'Benutzerdefiniert', fpsLimit: 'Maximale FPS (1–1000)',
+    categories: { shadows: 'Schatten', ao: 'Umgebungsverdeckung', particles: 'Partikel' },
+    tiers: { low: 'Niedrig', balanced: 'Ausgewogen', high: 'Hoch', off: 'Aus', on: 'An' },
+  },
+});
+</code></pre>
+<p><strong>স্টাইলিং।</strong> প্যানেল ক্লাস ব্যবহার করে <code>.gfx-panel</code>, <code>.gfx-row</code>, <code>.gfx-summary</code> এবং <code>.gfx-note</code>. এর
+অন্তর্নির্মিত নিয়ম আবৃত করা হয় <code>:where()</code>, তাই আপনার নিজস্ব স্টাইলশীটের যেকোনো নিয়ম তাদের ওভাররাইড করে। সারি আছে
+স্পর্শের জন্য কমপক্ষে 44 px লম্বা। ফ্রেম-রেট রিডআউট (<code>#gfx-fps</code>) নীচে-বাম কোণায় বসে,
+নিরাপদ এলাকার ভিতরে, এবং ক্লিকগুলি ক্যাপচার করে না।</p>
+<p><strong>অন্যত্র ফলাফল পড়া.</strong> <code>&lt;html&gt;</code> বহন করে <code>data-gfx-preset</code> (সক্রিয় প্রিসেট) এবং
+<code>data-gfx-auto</code> (<code>1</code> বা <code>0</code>), যা CSS এবং পরীক্ষাগুলি বন্ধ করতে পারে।</p>
+<h2 id="5-test-it">5. এটি পরীক্ষা করুন</h2>
+<ul>
+<li>হেডলেস ব্রাউজারগুলি একটি সফ্টওয়্যার GPU দিয়ে রেন্ডার করে, তাই অটো সমাধান করে <strong>কম</strong> এবং পরীক্ষা দ্রুত থাকে।</li>
+<li>আসল প্যানেল চালান। প্রতিটি নিয়ন্ত্রণ একটি আছে <code>data-gfx</code> বৈশিষ্ট্য (<code>preset</code>, <code>renderScale</code>,
+<code>adaptive</code>, <code>frameRate</code>, <code>maxFps</code>, <code>showFps</code>, বা বিভাগের নাম):</li>
+</ul>
+<pre><code class="language-js">const preset = () =&gt; page.evaluate(() =&gt; document.documentElement.dataset.gfxPreset);
+await page.locator('select[data-gfx=preset]').selectOption('high');
+assert.equal(await preset(), 'high');
+await page.reload();
+assert.equal(await preset(), 'high'); // persisted
+await page.locator('select[data-gfx=frameRate]').selectOption('custom');
+await page.locator('input[data-gfx=maxFps]').fill('45');
+await page.locator('input[data-gfx=maxFps]').press('Tab');
+await page.reload();
+assert.equal(await page.locator('input[data-gfx=maxFps]').inputValue(), '45');
+await page.locator('select[data-gfx=frameRate]').selectOption('auto');
+</code></pre>
+<ul>
+<li>বিশুদ্ধ ফাংশন <code>detectPreset(system)</code>, <code>resolve(saved, detected)</code> এবং <code>withPreset(saved, preset)</code>
+ইউনিট পরীক্ষার জন্য নোডের অধীনে চালান। <code>createGraphics({ sdk, storage, system })</code> এছাড়াও সকলের জন্য জাল গ্রহণ করে
+তিন</li>
+<li><code>node --test tests/graphics-options.test.mjs</code> বৈধতা যাচাই করে, প্রতি-GPU অধ্যবসায় এবং পুনরুদ্ধার,
+বিভিন্ন ডিসপ্লে রিফ্রেশ রেট, লাইভ সুইচিং, এবং একটি FPS সীমা সহ অভিযোজিত মানের উপর ফ্রেম পেসিং।</li>
+</ul>
+
+{% endraw %}

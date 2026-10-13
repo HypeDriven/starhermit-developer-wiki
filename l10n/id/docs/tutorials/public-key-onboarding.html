@@ -1,0 +1,369 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Tutorial: Pemain Onboard dengan Kunci Publik"
+source_url: "/docs/tutorials/public-key-onboarding.html"
+source_path: "docs/tutorials/public-key-onboarding.md"
+source_hash: "49ebc031a538076978eab193219b2c0fd3cce731ed6327ede6768bbbcbb310f3"
+translation: "machine"
+permalink: "/id/docs/tutorials/public-key-onboarding.html"
+---
+{% raw %}
+<h1 id="tutorial-onboard-players-with-a-public-key">Tutorial: Pemain Onboard dengan Kunci Publik</h1>
+<p>Akun StarHermit tidak memerlukan Google, GitHub, atau penyedia masuk lainnya. Kredensialnya bisa
+berupa pasangan kunci yang dihasilkan game Anda di perangkat pemain, ditambah alamat email pemain
+mengkonfirmasi sekali. Setelah itu, game Anda masuk secara diam-diam pada setiap peluncuran dengan menandatangani tantangan
+kuncinya. Pemain tidak pernah mengetikkan kata sandi dan tidak perlu mengunjungi halaman StarHermit.</p>
+<p>Tutorial ini membangun alur tersebut dari ujung ke ujung: buat kunci, daftarkan, tunggu hingga pemain melakukannya
+konfirmasi, masuk, pertahankan sesi, dan tangani perangkat kedua dan kunci yang hilang.</p>
+<p><strong>Gunakan ini untuk</strong> game asli dan mandiri, peluncur, versi Steam/Epic/GOG, dan alat desktop —
+apa pun yang berjalan di mesin pemain dan dapat menyimpan kunci pribadi di sana.</p>
+<p><strong>Gunakan sesuatu yang lain untuk</strong></p>
+<ul>
+<li><strong>Game browser yang dihosting di StarHermit</strong>, yang sudah menerima token peluncuran saat dibuka
+dashboard, atau dapat menunjukkan a <a href="/id/docs/api/auth.html#sign-in-from-a-directly-opened-browser-game">Tombol masuk</a>.</li>
+<li><strong>Saluran pipa CI</strong>, yang seharusnya mendaftarkan kunci dari sesi OAuth tanpa langkah email:
+<a href="/id/docs/tutorials/ci-cd-build-upload.html">Tutorial: mengunggah build dari CI/CD</a>.</li>
+<li><strong>Server permainan khusus</strong>, yang memiliki token penerapannya sendiri dan tidak dapat membuat atau bertindak sebagai
+pemain: <a href="/id/docs/tutorials/dedicated-server-onboarding.html">Tutorial: mempublikasikan server khusus</a>.</li>
+</ul>
+<h2 id="what-the-player-sees">Apa yang dilihat pemain</h2>
+<ol>
+<li>Game Anda meminta alamat email dan persetujuan mereka untuk membuat akun StarHermit.</li>
+<li>Mereka membuka email konfirmasi, mengklik link, dan menekan <strong>Mengonfirmasi</strong> di halaman yang terbuka.</li>
+<li>Kembali ke permainan Anda, mereka sudah masuk. Pada peluncuran selanjutnya tidak ada yang ditanyakan sama sekali.</li>
+</ol>
+<p>Alamat email diperlukan, dan pemain harus mengonfirmasinya satu kali. Tidak ada cara untuk membuat a
+Akun StarHermit diam-diam dari identitas Steam, Epic, atau GOG saja.</p>
+<h2 id="before-you-start">Sebelum Anda mulai</h2>
+<p>Kode pada halaman ini adalah JavaScript biasa menggunakan WebCrypto dan <code>fetch</code>, jadi dijalankan di browser, di
+Elektron dan di Node 20 atau lebih baru. <strong>Itu <code>js</code> blok di bawahnya, secara berurutan, membentuk satu modul ES</strong> — selamatkan mereka
+bersama sebagai <code>starhermit-key-auth.js</code>. Bahasa lain bekerja dengan cara yang sama: langkah 1 memberikan hal yang persis sama
+format byte, dan langkah 3 byte yang tepat untuk ditandatangani.</p>
+<pre><code class="language-js">const API = 'https://api.starhermit.com';
+
+const b64 = (bytes) =&gt; btoa(String.fromCharCode(...new Uint8Array(bytes)));
+</code></pre>
+<h2 id="1-create-the-device-key">1. Buat kunci perangkat</h2>
+<p>Menghasilkan <strong>satu pasangan kunci per instalasi</strong>, pertama kali game Anda memerlukan akun. Pribadi
+kunci tidak pernah meninggalkan perangkat: tidak ke server Anda, tidak ke StarHermit.</p>
+<table>
+<thead>
+<tr>
+<th><code>keyType</code></th>
+<th><code>keyData</code> (standar Base64)</th>
+<th>Tanda tangan (standar Base64)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Ed25519</code> - direkomendasikan</td>
+<td>Kunci publik mentah 32 byte</td>
+<td>Tanda tangan Ed25519 64-byte mentah</td>
+</tr>
+<tr>
+<td><code>ECDSA-P256</code></td>
+<td>Poin publik: 65-byte tidak terkompresi (<code>04‖X‖Y</code>) atau terkompresi 33-byte</td>
+<td>ECDSA dengan SHA-256, <strong>ASN.1 berkode DER</strong></td>
+</tr>
+<tr>
+<td><code>RSA-PSS</code></td>
+<td><code>SubjectPublicKeyInfo</code> DER, modulus 2048–8192-bit, eksponen ≤ 32 bit</td>
+<td>RSASSA-PSS, SHA-256, MGF1-SHA-256, garam 32-byte</td>
+</tr>
+</tbody>
+</table>
+<p><code>keyData</code> maksimal 2.000 karakter. Satu kunci dimiliki oleh satu akun di seluruh platform.</p>
+<p>Memilih <strong>Ed25519</strong> kecuali platform Anda tidak dapat memproduksinya. Jika Anda menggunakan ECDSA, perhatikan bahwa WebCrypto,
+Windows CNG dan sebagian besar keystore perangkat keras mengembalikan tanda tangan sebagai mentah <code>r‖s</code> (64 byte). Pertapa Bintang
+mengharapkan DER, jadi konversikan — modul di bawah ini dapat melakukannya.</p>
+<pre><code class="language-js">// One key per installation. The private key can sign but is never exported.
+export async function createDeviceKey(keyType = 'Ed25519') {
+  if (!['Ed25519', 'ECDSA-P256'].includes(keyType)) throw new Error('This helper supports Ed25519 or ECDSA-P256');
+  const algorithm = keyType === 'Ed25519'
+    ? { name: 'Ed25519' }
+    : { name: 'ECDSA', namedCurve: 'P-256' };
+  const pair = await crypto.subtle.generateKey(algorithm, false, ['sign', 'verify']);
+  return {
+    keyType: keyType === 'Ed25519' ? 'Ed25519' : 'ECDSA-P256',
+    keyData: b64(await crypto.subtle.exportKey('raw', pair.publicKey)),
+    privateKey: pair.privateKey,
+  };
+}
+</code></pre>
+<p><strong>Simpan kunci pribadi di tempat yang dilindungi sistem operasi.</strong> Di browser atau penyaji Electron,
+yang tidak dapat diekstraksi <code>CryptoKey</code> dapat disimpan di IndexedDB apa adanya. Game asli harus menggunakan
+keystore platform — Windows DPAPI atau CNG, MacOS Keychain, libsecret di Linux. Toko <code>keyType</code> Dan
+<code>keyData</code> di sebelahnya; Anda mengirimkannya dengan setiap permintaan.</p>
+<h2 id="2-start-registration">2. Mulai registrasi</h2>
+<p>Minta alamat email pemain dan persetujuannya, lalu:</p>
+<pre><code class="language-js">async function post(path, body) {
+  const res = await fetch(API + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json().catch(() =&gt; ({})) };
+}
+
+function fail(step, { status, body }) {
+  return Object.assign(new Error(`${step}: ${body.error ?? status}`), { status, body });
+}
+
+export async function register(key, email) {
+  const res = await post('/api/v1/auth/public-key/register',
+    { email, keyType: key.keyType, keyData: key.keyData });
+  if (res.status !== 202) throw fail('register', res);
+  return res.body; // { registrationId, email, emailSent, deferralReason, message }
+}
+</code></pre>
+<p><code>202</code> berarti StarHermit menerima pendaftarannya. Jika <code>emailSent</code> adalah <code>false</code>, email dalam antrian dan
+akan tetap tiba; <code>deferralReason</code> mengatakan mengapa ia menunggu. Belum ada yang dilampirkan ke akun mana pun.</p>
+<p>Tiga aturan membentuk UI Anda:</p>
+<ul>
+<li><strong>Satu pendaftaran per alamat email, dan satu pendaftaran per alamat IP, setiap 24 jam.</strong> Upaya kedua
+adalah <code>429</code> dengan <code>Retry-After</code>. Minta pemain mengkonfirmasi alamat sebelum Anda mengirimkannya, karena salah ketik
+biayanya sehari. Kirim permintaan dari perangkat pemain, jangan pernah melalui server Anda sendiri: setiap
+pemain akan membagikan IP server Anda dan registrasi harian tunggalnya.</li>
+<li><strong>Tautan kedaluwarsa setelah 4 jam.</strong> Jika lewat dari itu, pemain dapat mendaftar kembali 1 kali dalam 24 jam
+sudah bangun.</li>
+<li><strong><code>400</code></strong> berarti alamat email atau materi kunci ditolak; <code>error</code> mengatakan yang mana.</li>
+</ul>
+<h2 id="3-sign-in-with-the-key">3. Masuk dengan kuncinya</h2>
+<p>Masuk adalah sebuah tantangan dan respons. <code>POST /api/v1/auth/public-key/challenge</code> kembali:</p>
+<pre><code class="language-json">{
+  "challengeId": "4fc4d72b-4c12-41ca-a500-dc13cccc3865",
+  "payload": {
+    "challengeId": "4fc4d72b-4c12-41ca-a500-dc13cccc3865",
+    "fingerprint": "9c0b7a…",
+    "issuer": "starhermit",
+    "audience": "starhermit",
+    "expiry": "2026-10-09T14:21:41.9264875+00:00",
+    "nonce": "NmL+tgMum6HXU/pa3T9xjQ==",
+    "clientTimestamp": "2026-10-09T14:16:41.9265739+00:00"
+  },
+  "expiresIn": 300
+}
+</code></pre>
+<p><strong>Apa yang Anda tandatangani bukanlah JSON yang Anda terima.</strong> StarHermit memverifikasi tanda tangannya sendiri
+serialisasi dari <code>payload</code>:</p>
+<ul>
+<li>JSON kompak, tanpa spasi;</li>
+<li><strong>Kasus Pascal</strong> nama anggota, sesuai urutannya <code>ChallengeId</code>, <code>Fingerprint</code>, <code>Issuer</code>,
+<code>Audience</code>, <code>Expiry</code>, <code>Nonce</code>, <code>ClientTimestamp</code>;</li>
+<li>setiap nilai disalin <strong>persis seperti yang disajikan</strong> — jangan menguraikan dan memformat ulang tanggal;</li>
+<li>setiap <code>+</code> di nonce ditulis sebagai <code>\u002B</code>. Itu <code>+</code> di tanggalnya tetap apa adanya.</li>
+</ul>
+<p>Untuk tantangan di atas, byte yang ditandatangani adalah pengkodean UTF-8 dari:</p>
+<pre><code class="language-text">{"ChallengeId":"4fc4d72b-4c12-41ca-a500-dc13cccc3865","Fingerprint":"9c0b7a…","Issuer":"starhermit","Audience":"starhermit","Expiry":"2026-10-09T14:21:41.9264875+00:00","Nonce":"NmL\u002BtgMum6HXU/pa3T9xjQ==","ClientTimestamp":"2026-10-09T14:16:41.9265739+00:00"}
+</code></pre>
+<p>Jika ada yang salah dan jawabannya adalah <code>401 "Invalid signature."</code>, yang tidak akan diperbaiki jika dicoba lagi.</p>
+<pre><code class="language-js">const FIELDS = ['challengeId', 'fingerprint', 'issuer', 'audience', 'expiry', 'nonce', 'clientTimestamp'];
+
+export function challengeSigningBytes(payload) {
+  const members = FIELDS.map((field) =&gt; {
+    let value = JSON.stringify(payload[field]);
+    if (field === 'nonce') value = value.replaceAll('+', '\\u002B');
+    return `"${field[0].toUpperCase()}${field.slice(1)}":${value}`;
+  });
+  return new TextEncoder().encode(`{${members.join(',')}}`);
+}
+
+export async function signChallenge(key, payload) {
+  const data = challengeSigningBytes(payload);
+  if (key.keyType === 'Ed25519')
+    return b64(await crypto.subtle.sign({ name: 'Ed25519' }, key.privateKey, data));
+  // WebCrypto returns an ECDSA signature as raw r||s; the server expects ASN.1 DER.
+  const rs = new Uint8Array(
+    await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key.privateKey, data));
+  return b64(derEcdsaSignature(rs));
+}
+
+function derEcdsaSignature(rs) {
+  const integer = (bytes) =&gt; {
+    let i = 0;
+    while (i &lt; bytes.length - 1 &amp;&amp; bytes[i] === 0) i++;
+    const value = [...bytes.slice(i)];
+    return value[0] &amp; 0x80 ? [0x02, value.length + 1, 0, ...value] : [0x02, value.length, ...value];
+  };
+  const body = [...integer(rs.slice(0, 32)), ...integer(rs.slice(32))];
+  return new Uint8Array([0x30, body.length, ...body]);
+}
+
+// Resolves to { userId, accessToken, refreshToken }, or null while the key is not attached to
+// an account yet — the player has not confirmed, the link expired, or the key was revoked.
+export async function signIn(key) {
+  const { keyType, keyData } = key;
+  const challenge = await post('/api/v1/auth/public-key/challenge', { keyType, keyData });
+  if (challenge.status !== 200) throw fail('challenge', challenge);
+  const signature = await signChallenge(key, challenge.body.payload);
+  const done = await post('/api/v1/auth/public-key/complete',
+    { challengeId: challenge.body.challengeId, signature, keyType, keyData });
+  if (done.status === 200) return done.body;
+  if (done.status === 401 &amp;&amp; done.body.error === 'Public key not registered or revoked.') return null;
+  throw fail('complete', done); // "Invalid signature." will never succeed: fix it, don't retry it
+}
+</code></pre>
+<p>Tantangan berlangsung selama lima menit dan hanya sekali pakai, meskipun upayanya gagal, jadi mintalah tantangan baru
+untuk setiap upaya. Tantang dan selesaikan batas berbagi 60 permintaan per menit per alamat IP.</p>
+<h2 id="4-wait-for-the-player-to-confirm">4. Tunggu hingga pemain mengonfirmasi</h2>
+<p>Tautan yang dikirim melalui email membuka halaman StarHermit yang menyatakan apa yang akan dilakukan konfirmasi; membukanya berubah
+tidak ada apa-apa, jadi pemindai email yang mempratinjau tautan tidak dapat mengonfirmasi atas nama pemain. Ketika
+pemain menekan <strong>Mengonfirmasi</strong>, StarHermit membuat akun mereka, melampirkan kunci Anda dan menandai alamatnya
+diverifikasi. Jika akun sudah menggunakan alamat itu, halaman akan menyatakan demikian dan kunci akan ditambahkan ke dalamnya
+sebagai gantinya, jadi pemain yang sudah memiliki akun StarHermit menyimpannya. Di starhermit.com mereka kemudian mendarat
+di dashboard StarHermit, sudah masuk.</p>
+<p><strong>Game Anda tidak pernah menerima token dari halaman itu</strong>, dan tidak membutuhkannya. Pemain mungkin
+konfirmasi di ponsel atau di browser lain. Setelah kunci terpasang, game Anda cukup masuk
+dengan itu. Jadi tunjukkan a "periksa kotak masuk Anda" layar dan terus mencoba:</p>
+<pre><code class="language-js">// Poll until the player confirms the emailed link. Two requests per attempt, so every 5 s stays
+// well inside the 60-per-minute sign-in limit.
+export async function waitUntilConfirmed(key, { intervalMs = 5000, signal } = {}) {
+  for (;;) {
+    signal?.throwIfAborted();
+    const session = await signIn(key);
+    if (session) return session;
+    await new Promise((resolve) =&gt; setTimeout(resolve, intervalMs));
+  }
+}
+</code></pre>
+<p>Menggabungkan langkah 1 hingga 4:</p>
+<pre><code class="language-javascript">import { createDeviceKey, register, signIn, waitUntilConfirmed } from './starhermit-key-auth.js';
+
+const key = await loadStoredKey() ?? await saveKey(await createDeviceKey());
+let session = await signIn(key);                // a returning player is signed in here
+if (!session) {
+  const email = await askForEmailAndConsent();
+  await register(key, email);
+  showCheckYourInbox(email);
+  session = await waitUntilConfirmed(key, { signal: cancelButton.signal });
+}
+</code></pre>
+<p><code>loadStoredKey</code>, <code>saveKey</code>, <code>askForEmailAndConsent</code> Dan <code>showCheckYourInbox</code> adalah milikmu untuk ditulis.
+Tawaran a <strong>Membatalkan</strong> yang membatalkan penantian, dan menghentikan pemungutan suara setelah empat jam, ketika tautannya kedaluwarsa.</p>
+<p>Tetap lakukan polling meskipun halaman konfirmasi platform Anda dialihkan kembali ke situs Anda. Pemain sering
+membuka email di perangkat yang berbeda dari perangkat yang menunggu, lalu pengalihan tidak mengarah ke mana pun
+dekat layar tunggu Anda; polling inilah yang menandatangani perangkat yang menunggu. Jika pengalihan tiba
+di tab kedua, masuk hanya dengan salah satu dari mereka dan cabut sesi tambahan, atau pemain akan berakhir
+dengan dua.</p>
+<h2 id="5-keep-the-session">5. Pertahankan sesinya</h2>
+<p><code>complete</code> mengembalikan token akses 15 menit dan token penyegaran yang bertahan tujuh hari dan berputar.
+Kirim token akses sebagai <code>Authorization: Bearer …</code>, dan segarkan sebelum masa berlakunya habis:</p>
+<pre><code class="language-js">// Resolves to the new pair, or null when the session is over — sign in with the key again.
+export async function refresh(refreshToken) {
+  const res = await post('/api/v1/auth/refresh', { refreshToken });
+  return res.status === 200 ? res.body : null; // { accessToken, refreshToken }
+}
+</code></pre>
+<p>Mengganti <strong>keduanya</strong> token setiap saat. Menyajikan token penyegaran bekas mengakhiri seluruh sesi, jadi buatlah
+tentu saja dua utas atau proses tidak pernah disegarkan sekaligus. Kapan <code>refresh</code> kembali <code>null</code>, panggilan <code>signIn</code> —
+tidak ada email yang terlibat. Kuncinya adalah kredensial yang berumur panjang; token hanyalah cache saja.</p>
+<h2 id="6-finish-setting-up-the-account">6. Selesaikan pengaturan akun</h2>
+<p><strong>Ketentuan.</strong> Akun baru harus menerima persyaratan StarHermit saat ini sebelum dapat menggunakan yang lain.
+Panggilan <code>GET /api/v1/me</code>. Jika <code>termsAcceptanceRequired</code> adalah <code>true</code>, tampilkan teks dari
+<code>GET /api/v1/terms</code>, dan ketika pemain menerimanya, kirimkan hashnya ke <code>POST /api/v1/me/terms/accept</code>.
+Periksa lagi pada peluncuran selanjutnya, karena persyaratannya telah direvisi. Detail:
+<a href="/id/docs/api/profile.html#terms-acceptance">Persyaratan penerimaan</a>.</p>
+<p><strong>Nama.</strong> Akun dimulai dengan a <code>pk-…</code> nama belakang. Biarkan pemain memilih nama panggilan:</p>
+<pre><code class="language-http">PATCH /api/v1/me
+Authorization: Bearer &lt;access-token&gt;
+Content-Type: application/json
+
+{ "nickname": "RookPilot" }
+</code></pre>
+<p>Dari sini akunnya seperti akun lainnya: teman, obrolan, perjodohan, penyimpanan cloud, pencapaian.</p>
+<h2 id="7-second-devices-lost-keys-and-limits">7. Perangkat kedua, kunci yang hilang, dan batasannya</h2>
+<p><strong>Perangkat kedua</strong> menghasilkan kuncinya sendiri dan mendaftarkannya <strong>alamat email yang sama</strong>. Ketika
+pemain mengonfirmasi, kuncinya bergabung dengan akun mereka yang sudah ada daripada membuat akun baru. 24 jam
+batas per alamat juga berlaku di sini.</p>
+<p><strong>Perangkat yang hilang atau dicuri.</strong> <code>POST /api/v1/auth/public-key/revoke-request</code> dengan <code>{ "email": "…" }</code>
+mengirimkan tautan ke halaman melalui email; mengkonfirmasi ada pencabutan <strong>setiap</strong> kunci akun dan akhiri sesi
+kunci-kunci itu masuk. Membuka tautan saja tidak mengubah apa pun. Permintaan itu selalu dijawab <code>202</code> dengan pesan yang sama, baik itu atau tidak
+alamat memiliki akun. Tautan akan kedaluwarsa setelah empat jam, dan akun dapat meminta setiap 15 jam sekali
+menit. Setelah itu, setiap perangkat yang tersisa mendaftar lagi (langkah 2).</p>
+<p><strong>Apa yang tidak dapat dilakukan oleh akun khusus kunci.</strong> Beberapa perubahan melindungi kredensial akun, demikian juga
+memerlukan sesi yang masuk melalui penyedia seperti Google atau GitHub:</p>
+<table>
+<thead>
+<tr>
+<th>Tindakan</th>
+<th>Akun khusus kunci</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tambahkan kunci atau cabut perangkat lain (<code>POST /me/public-keys</code>, <code>DELETE /me/public-keys/{id}</code> atau <code>/all</code>)</td>
+<td><code>403</code> — mendaftar melalui pendaftaran email, atau menggunakan sesi yang diautentikasi OAuth</td>
+</tr>
+<tr>
+<td>Ubah alamat email akun</td>
+<td><code>403 oauth_session_required</code> — tidak mungkin dilakukan sampai penyedia terhubung</td>
+</tr>
+<tr>
+<td>Cabut kunci instalasi ini sendiri</td>
+<td><code>DELETE /api/v1/me/public-keys/current</code>, menggunakan sesi akun kunci publik lengkapnya; buang kredensial lokal setelah sukses</td>
+</tr>
+</tbody>
+</table>
+<p>Untuk mengelola kredensial lain atau mengubah email, tautkan penyedia. Ketika akun khusus kunci menautkan satu akun, tautan tersebut akan ditahan
+sampai pemain mengonfirmasinya dari email mereka. Setelah itu, login penyedia dapat melakukan semua hal di atas.
+Melihat <a href="/id/docs/api/auth.html#get-apiv1authoauthproviderauthorizelinkclient"><code>authorize?link=true</code></a>.</p>
+<h2 id="troubleshooting">Pemecahan masalah</h2>
+<table>
+<thead>
+<tr>
+<th>Tanggapan</th>
+<th>Arti</th>
+<th>Memperbaiki</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>register</code> → <code>400</code> "Data kunci bukanlah… kunci yang valid"</td>
+<td><code>keyData</code> formatnya salah <code>keyType</code></td>
+<td>Periksa tabel di langkah 1. Ed25519 dan ECDSA mengambil byte kunci mentah, bukan <code>SubjectPublicKeyInfo</code></td>
+</tr>
+<tr>
+<td><code>register</code> → <code>429</code></td>
+<td>Alamat atau IP ini terdaftar dalam 24 jam terakhir</td>
+<td>Tunggu <code>Retry-After</code>; jangan mencoba lagi dalam satu lingkaran</td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "Kunci publik tidak didaftarkan atau dicabut."</td>
+<td>Pemain belum mengonfirmasi, tautan telah kedaluwarsa, atau kunci telah dicabut</td>
+<td>Tunggu terus (langkah 4), atau daftar lagi</td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "Tanda tangan tidak valid."</td>
+<td>Byte yang ditandatangani atau format tanda tangan tidak cocok</td>
+<td>Bangun kembali string yang ditandatangani dengan tepat (langkah 3). Untuk ECDSA, kirim DER, bukan <code>r‖s</code></td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "Tantangan tidak ditemukan atau kedaluwarsa."</td>
+<td>Tantangannya lebih lama dari lima menit atau sudah digunakan</td>
+<td>Minta tantangan baru untuk setiap upaya</td>
+</tr>
+<tr>
+<td><code>challenge</code> / <code>complete</code> → <code>429</code></td>
+<td>Lebih dari 60 permintaan masuk dalam satu menit dari IP ini</td>
+<td>Jajak pendapat lebih jarang</td>
+</tr>
+<tr>
+<td>Konfirmasi halaman → "Tautan ini tidak dapat digunakan"</td>
+<td>Sudah terkonfirmasi, kadaluwarsa, penyalinan tidak lengkap, atau alamat akun berubah sejak dikirimkan</td>
+<td>Jika game Anda bisa masuk, kuncinya terpasang dan tidak ada yang salah. Jika belum, daftar lagi</td>
+</tr>
+<tr>
+<td>Menekan Konfirmasi → "Kunci publik tersebut sudah didaftarkan ke akun lain."</td>
+<td>Kunci ini milik akun lain</td>
+<td>Hasilkan kunci baru di perangkat ini</td>
+</tr>
+<tr>
+<td><code>403</code> "Akun ini ditangguhkan."</td>
+<td>Akun tersebut ditangguhkan</td>
+<td>Tidak ada yang bisa diperbaiki oleh game Anda</td>
+</tr>
+</tbody>
+</table>
+
+{% endraw %}

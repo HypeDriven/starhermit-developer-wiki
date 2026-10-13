@@ -1,0 +1,250 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "المطالبة بلعبة أضافها شخص آخر"
+source_url: "/docs/tutorials/claim-existing-game.html"
+source_path: "docs/tutorials/claim-existing-game.md"
+source_hash: "fc2b52c67cda7e6fd24b0791208c1511aafea7d1f6e61e1cf9b61cc9d6eb1003"
+translation: "machine"
+permalink: "/ar/docs/tutorials/claim-existing-game.html"
+---
+{% raw %}
+<h1 id="claim-a-game-someone-else-added">المطالبة بلعبة أضافها شخص آخر</h1>
+<p>إذا قام شخص ما بالفعل بإضافة لعبة GitHub العامة الخاصة بك إلى StarHermit، فلن تحتاج إلى إنشاء ملف
+القائمة الثانية. المطالبة ببطاقة البيانات الحالية لتصبح المالك المعتمد لها وإدارة بياناتها الوصفية،
+الاستضافة والنشر والواجهة الخلفية للخادم وعمليات النقل المستقبلية.</p>
+<p>المطالبة محمية عن طريق التحكم في المستودع. إن معرفة معرف اللعبة أو عنوان URL للمستودع ليس كافيًا.
+يجب عليك إثبات السيطرة بإحدى طريقتين:</p>
+<ol>
+<li>ربط حساب GitHub الشخصي الذي يملك المستودع؛ أو</li>
+<li>قم بإيداع معرف مستخدم StarHermit الخاص بك كـ <code>owner=</code> في المستودع <code>starhermit.txt</code>.</li>
+</ol>
+<p>الطريقة الثانية مفيدة بشكل خاص للمستودعات المملوكة للمؤسسة، لأن الطريقة الحالية
+يتطابق فحص تسجيل الدخول إلى GitHub مع مالكي المستودعات الشخصية ولا يستنتج عضوية المؤسسة.</p>
+<h2 id="what-claiming-changes">ما يدعي التغييرات</h2>
+<p>مطالبة ناجحة:</p>
+<ul>
+<li>يحتفظ بمعرف اللعبة/القائمة الحالي وتاريخه المتراكم؛</li>
+<li>تغيير مستخدم StarHermit المُدير للقائمة إليك؛</li>
+<li>يضع علامة على القائمة كـ <code>isVerifiedOwner: true</code>;</li>
+<li>يقوم بتحديث البيانات التعريفية وعناصر التحكم الموثوقة من <code>starhermit.txt</code> حيثما ينطبق ذلك؛</li>
+<li>توفير أو تحديث الواجهة الخلفية للبرنامج النصي/الحاوية المعلن عنها؛</li>
+<li>تمكين استضافة النظام الأساسي حيثما كان ذلك متاحًا وقوائم الانتظار للنشر <code>pending</code>;</li>
+<li>يزيل حق الوصول إلى الإدارة من الشخص الذي قدم تلك القائمة في الأصل.</li>
+</ul>
+<p>المطالبة لا تمنح المرسل السابق حق الوصول إلى حساب GitHub الخاص بك، ولا يتم دمجها
+حسابات مستخدمي StarHermit. ينقل إدارة تلك القائمة المحددة.</p>
+<h2 id="before-you-begin">قبل أن تبدأ</h2>
+<p>أنت بحاجة إلى:</p>
+<ul>
+<li>حساب StarHermit ورمز الوصول الكامل للمستخدم، وليس رمز إطلاق على نطاق اللعبة.</li>
+<li>كتابة الوصول إلى المستودع في حالة استخدام <code>owner=</code> طريقة الإثبات.</li>
+<li>معرف قائمة StarHermit الحالي.</li>
+<li>بالنسبة للعبة المستودع المستنسخة، صالحة <code>starhermit.txt</code> في جذر المستودع.</li>
+</ul>
+<p>فقط <code>github.com/&lt;owner&gt;/&lt;repo&gt;</code> تشارك المستودعات ومواقع صفحات GitHub الخاصة بها في هذه المطالبة
+تدفق. لا يحتوي عنوان URL المستضاف التعسفي على ملكية مستودع GitHub لإثبات ذلك ولا يمكن المطالبة به
+الطريق.</p>
+<p>الأمثلة أدناه تستخدم:</p>
+<pre><code class="language-bash">API=https://api.starhermit.com
+ACCESS_TOKEN='your-full-user-access-token'
+OWNER='your-github-login'
+REPO='your-game-repository'
+</code></pre>
+<p>تستمر رموز الوصول لمدة 15 دقيقة. قم بتحديث بياناتك قبل البدء إذا كانت على وشك انتهاء الصلاحية.</p>
+<h2 id="step-1-find-the-existing-listing">الخطوة 1: ابحث عن القائمة الحالية</h2>
+<p>قائمة الألعاب المشتركة:</p>
+<pre><code class="language-bash">curl -sS "$API/api/v1/github-games" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>يتضمن كل عنصر القائمة غير القابلة للتغيير <code>id</code>، تطبيع <code>repoUrl</code>, <code>ownerLogin</code>, <code>repoName</code>، ال
+المقدم الحالي وحالة الملكية:</p>
+<pre><code class="language-json">{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "repoUrl": "https://github.com/octocat/orbit-league",
+  "ownerLogin": "octocat",
+  "repoName": "orbit-league",
+  "displayName": "Orbit League",
+  "isVerifiedOwner": false,
+  "submittedByUserId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "submittedByUsername": "someone-else"
+}
+</code></pre>
+<p>المباراة على حد سواء <code>ownerLogin</code> و <code>repoName</code>; لا تحدد لعبة فقط لأن اسم العرض الخاص بها هو
+مماثل. مع <code>jq</code>:</p>
+<pre><code class="language-bash">GAME_ID=$(
+  curl -sS "$API/api/v1/github-games" \
+    -H "Authorization: Bearer $ACCESS_TOKEN" |
+  jq -r --arg owner "$OWNER" --arg repo "$REPO" \
+    '.[] | select((.ownerLogin | ascii_downcase) == ($owner | ascii_downcase)
+               and (.repoName | ascii_downcase) == ($repo | ascii_downcase)) | .id' |
+  head -n1
+)
+
+printf 'Listing ID: %s\n' "$GAME_ID"
+</code></pre>
+<p>توقف إذا كانت النتيجة فارغة. لا تتصل بالمطالبة بمعرف منسوخ من قائمة غير ذات صلة.</p>
+<h2 id="step-2-choose-how-to-prove-ownership">الخطوة الثانية: اختيار كيفية إثبات الملكية</h2>
+<h3 id="option-a-link-the-repository-owners-github-account">الخيار أ: ربط حساب GitHub الخاص بمالك المستودع</h3>
+<p>استخدم هذا عندما يكون المستودع مملوكًا مباشرةً لتسجيل الدخول الشخصي الخاص بك إلى GitHub.</p>
+<p>من تدفق حساب/إعدادات StarHermit، ابدأ GitHub OAuth <strong>وصلة</strong> الوضع أثناء تسجيل الدخول
+حساب StarHermit الذي يجب أن يدير اللعبة. يختلف الارتباط عن إنشاء ملف عن طريق الخطأ
+حساب StarHermit الثاني مع تسجيل الدخول إلى GitHub.</p>
+<p>يبدأ تدفق واجهة برمجة التطبيقات عند:</p>
+<pre><code class="language-text">GET /api/v1/auth/oauth/github/authorize?link=true
+</code></pre>
+<p>إنه يعتمد على المستعرض ويستخدم ملف تعريف ارتباط قصير العمر. يتطلب الربط أحدث إصدار من StarHermit
+المصادقة. أكمل ترخيص GitHub في نفس جلسة المتصفح التي بدأته.</p>
+<p>التحقق من النتيجة:</p>
+<pre><code class="language-bash">curl -sS "$API/api/v1/me/github" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>مُتوقع:</p>
+<pre><code class="language-json">{ "linked": true, "login": "octocat" }
+</code></pre>
+<p>يجب أن يتطابق تسجيل الدخول الذي تم إرجاعه مع القائمة الموجودة <code>ownerLogin</code>، غير حساس لحالة الأحرف. شخصية
+لا يثبت تسجيل الدخول إلى GitHub عضوية المنظمة التي تمتلك المستودع. ل
+المستودع المملوك للمؤسسة، استخدم الخيار ب.</p>
+<h3 id="option-b-add-owner-to-starhermittxt">الخيار ب: إضافة <code>owner=</code> ل <code>starhermit.txt</code></h3>
+<p>وهذا يثبت السيطرة لأن الشخص الوحيد القادر على نشر محتوى المستودع يمكنه إضافة القيمة.
+تعيين <code>owner</code> إلى معرف مستخدم StarHermit غير القابل للتغيير (UUID)، <strong>لا</strong> اسم المستخدم أو اللقب الخاص بك.</p>
+<p>احصل على هويتك:</p>
+<pre><code class="language-bash">STARHERMIT_USER_ID=$(
+  curl -sS "$API/api/v1/me" \
+    -H "Authorization: Bearer $ACCESS_TOKEN" |
+  jq -r '.id'
+)
+</code></pre>
+<p>في جذر المستودع، قم بالإنشاء أو التحديث <code>starhermit.txt</code>:</p>
+<pre><code class="language-ini">name=Orbit League
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6
+</code></pre>
+<p>استبدل صاحب المثال بـ <code>STARHERMIT_USER_ID</code>. لا تضع اسم المستخدم أو اللقب الخاص بك هنا؛
+يمكن أن تتغير، في حين أن معرف المستخدم هو معرف الملكية الثابتة.</p>
+<p>للحصول على لعبة موثوقة، احتفظ بإعلان خلفي واحد فقط:</p>
+<pre><code class="language-ini"># JavaScript runtime:
+server=server.js
+
+# OR container runtime, never both:
+# container.image=ghcr.io/your-org/orbit-server@sha256:&lt;64-lowercase-hex&gt;
+</code></pre>
+<p>قم بتنفيذ البيان ودفعه إلى المستودع/الإصدار الذي يمكن لـ StarHermit قراءته:</p>
+<pre><code class="language-bash">git add starhermit.txt
+git commit -m "Declare StarHermit game ownership"
+git push
+</code></pre>
+<p>قبل المطالبة، افتح الملف الخام للمستودع <code>starhermit.txt</code> URL في متصفح لم تتم مصادقته و
+تأكد من أن القيمة الجديدة قابلة للقراءة بشكل عام. المطالبة بقراءة المستودع في وقت الطلب؛ ان
+فالتغيير المحلي غير المدفوع لا يمكن أن يثبت أي شيء.</p>
+<h2 id="step-3-validate-the-manifest">الخطوة 3: التحقق من صحة البيان</h2>
+<p>بالنسبة للعبة المستودع المستنسخة العادية، تتطلب المطالبة ما يلي:</p>
+<ul>
+<li><code>starhermit.txt</code> في جذر المستودع؛</li>
+<li>غير فارغة <code>name=</code>;</li>
+<li><code>launch=</code> مشيرا إلى قريب مستودع <code>.html</code> أو <code>.htm</code> ملف؛</li>
+<li>اختياري صالح <code>server=</code> المسار المنتهي في <code>.js</code>/<code>.mjs</code>، أو صالحة <code>container.image=</code> تصريح؛</li>
+<li>لا يتم تشغيل كلا الخادمين في وقت واحد.</li>
+</ul>
+<p>تحتفظ قائمة صفحات GitHub بعنوان URL المستضاف الخاص بها كهدف الإطلاق ولا تتطلب بيانًا
+عندما يتم إثبات ملكية GitHub الشخصية، على الرغم من أنه لا يزال من الممكن تحديث اسم البيان الصالح الخاص به
+اسم العرض.</p>
+<p>إذا أعلنت اللعبة عن حاوية، فيجب أن تتوافق صورتها مع السجل ومساحة اسم المالك والملخص
+القواعد في <a href="/ar/docs/api/container-games.html">خوادم الألعاب المستضافة بالحاويات</a>. يمكن أيضًا أن تكون استضافة الحاويات
+مقيدة من قبل مشغل المنصة.</p>
+<h2 id="step-4-claim-the-listing">الخطوة 4: المطالبة بالقائمة</h2>
+<p>طلب المطالبة ليس له نص:</p>
+<pre><code class="language-bash">curl -sS -X POST \
+  "$API/api/v1/me/github-games/$GAME_ID/claim" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>ناجحة <code>200</code> إرجاع اللعبة المحدثة:</p>
+<pre><code class="language-json">{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "repoUrl": "https://github.com/octocat/orbit-league",
+  "ownerLogin": "octocat",
+  "repoName": "orbit-league",
+  "displayName": "Orbit League",
+  "launchPath": "index.html",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "isVerifiedOwner": true,
+  "metadataSource": "starhermit.txt",
+  "hosting": {
+    "hostingEnabled": true,
+    "deployStatus": "pending"
+  }
+}
+</code></pre>
+<p>يجب أن يكون المعرف هو نفسه الموجود في الخطوة 1. لا تقم بإنشاء قائمة جديدة بعد المطالبة الناجحة.</p>
+<p>يُسمح بالمطالبة بقائمة تديرها بالفعل عمدًا. ويعيد قراءة البيان،
+يعيد توفير الواجهة الخلفية ويعيد الاستضافة، بحيث يمكن استخدام نفس الاستدعاء لإعادة مزامنة
+اللعبة التي يديرها المالك بعد تغييرات المستودع.</p>
+<h2 id="step-5-verify-takeover-and-deployment">الخطوة 5: التحقق من الاستلام والنشر</h2>
+<p>تأكد من ظهور اللعبة الآن في قائمتك المُدارة:</p>
+<pre><code class="language-bash">curl -sS "$API/api/v1/me/github-games" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" |
+jq --arg id "$GAME_ID" '.[] | select(.id == $id)'
+</code></pre>
+<p>التحقق من حالة النشر:</p>
+<pre><code class="language-bash">curl -sS \
+  "$API/api/v1/me/github-games/$GAME_ID/deployment" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>عادة ما يتم وضع المطالبة في قائمة انتظار النشر، لذلك <code>pending</code> مباشرة بعد المطالبة أمر طبيعي. استطلاع مع
+التراجع حتى يصل إلى الحالة المباشرة/النجاح للبيئة أو يتم الكشف عنها <code>deployError</code>.</p>
+<p>بعد الاستحواذ، تتضمن نقاط نهاية الإدارة المتاحة لك ما يلي:</p>
+<pre><code class="language-text">PUT    /api/v1/me/github-games/{id}/deployment  pin a commit/branch and redeploy
+POST   /api/v1/me/github-games/{id}/bundle      upload built client/container output
+PUT    /api/v1/me/github-games/{id}/hosting     requeue hosting where supported
+POST   /api/v1/me/github-games/{id}/transfer    transfer management deliberately
+DELETE /api/v1/me/github-games/{id}             remove the game
+</code></pre>
+<p>لم يعد المرسل الأصلي يرى هذه القائمة ضمنها <code>GET /api/v1/me/github-games</code> ولا يمكن
+استخدم نقاط نهاية الإدارة الخاصة بالمالك لذلك.</p>
+<h2 id="troubleshooting">استكشاف الأخطاء وإصلاحها</h2>
+<h3 id="403-link-the-repository-owner-or-add-owner"><code>403</code>: ربط مالك المستودع أو إضافته <code>owner=</code></h3>
+<p>معلومات تسجيل الدخول المرتبطة إلى GitHub غير متطابقة <code>ownerLogin</code>، أو البيان <code>owner</code> لا يتطابق تماما
+معرف مستخدم StarHermit الخاص بك.</p>
+<ul>
+<li>يفحص <code>GET /api/v1/me/github</code>.</li>
+<li>تحقق من الدقيق <code>ownerLogin</code> تم إرجاعها من خلال القائمة العامة.</li>
+<li>بالنسبة لمستودعات المؤسسة، استخدم <code>owner=&lt;your StarHermit user ID&gt;</code> في الريبو.</li>
+<li>تأكد من أنك دفعت البيان وأن عنوان URL الأولي الخاص به قابل للقراءة بشكل عام.</li>
+</ul>
+<h3 id="404-no-shared-game-with-that-id"><code>404</code>: لا توجد لعبة مشتركة بهذا المعرف</h3>
+<p>المعرف خاطئ، أو تمت إزالة القائمة. كرر الخطوة 1. لا يمكن المطالبة بالقوائم المحذوفة.</p>
+<h3 id="400-missing-or-invalid-starhermittxt"><code>400</code>: مفقود أو غير صالح <code>starhermit.txt</code></h3>
+<p>بالنسبة للمستودع المستنسخ، تأكد من صلاحية بيان الجذر <code>name</code> و HTML <code>launch</code> قيم. ايضا
+التحقق من صحة إعلانات البرنامج النصي/الحاوية الاختيارية. المطالبة لا تثق في بيانات التعريف في الأصل
+دخلها غير المالك؛ فهو يستبدلها ببيانات التعريف التي يتحكم فيها المستودع.</p>
+<h3 id="claim-fails-around-the-slugbackend">فشل المطالبة حول سبيكة/الواجهة الخلفية</h3>
+<p>قد يكون البرنامج النصي غير صالح أو قد تكون استضافة الحاوية غير متوفرة. تحقق من الخطأ الذي تم إرجاعه و
+إعلان الواجهة الخلفية، ثم استدعاء المطالبة مرة أخرى. تقوم المنصة بتعيين UUID الخاص باللعبة باعتباره سبيكة لها.
+لا يوجد سبيكة واضحة للاختيار أو الحل.</p>
+<h3 id="github-was-linked-but-the-wrong-starhermit-account-owns-the-link">تم ربط GitHub ولكن حساب StarHermit الخاطئ يمتلك الرابط</h3>
+<p>قم بتسجيل الدخول إلى حساب StarHermit المقصود وأكمل OAuth <strong>وصلة</strong> تتدفق هناك. لا تدعي
+من حساب StarHermit ثاني مؤقت ومن ثم الاعتماد على دمج الحسابات؛ لعبة نقل API
+الإدارة، وليس هويات المستخدم.</p>
+<h2 id="security-notes">ملاحظات أمنية</h2>
+<ul>
+<li>لا تقبل أبدًا رابط المطالبة أو معرف القائمة كدليل على ملكية المستودع.</li>
+<li>لا تضع رموز الوصول إلى GitHub أو بيانات اعتماد الحاوية أو الأسرار الأخرى <code>starhermit.txt</code>.</li>
+<li>استخدم دائمًا معرف مستخدم StarHermit غير القابل للتغيير في <code>owner=</code>; لا تستخدم اسم مستخدم أو لقب.</li>
+<li>قم بمراجعة عنوان URL الحالي للقائمة والمستودع قبل المطالبة؛ أسماء العرض ليست فريدة من نوعها.</li>
+<li>إذا قمت بنقل اللعبة لاحقًا، يصبح المستلم هو المدير ولكن حالة المالك المعتمد هي كذلك
+إعادة تعيين. ويجب عليهم تشغيل تدفق المطالبة بأنفسهم إذا كانوا يتحكمون في المستودع.</li>
+</ul>
+<h2 id="reference-pages">الصفحات المرجعية</h2>
+<ul>
+<li><a href="/ar/docs/api/github-games.html">واجهة برمجة تطبيقات ألعاب جيثب</a></li>
+<li><a href="/ar/docs/api/auth.html#oauth">المصادقة وGitHub OAuth</a></li>
+<li><a href="/ar/docs/api/game-scripts.html">مخطوطات اللعبة</a></li>
+<li><a href="/ar/docs/api/container-games.html">خوادم الألعاب المستضافة بالحاويات</a></li>
+<li><a href="/ar/docs/tutorials/dedicated-server-onboarding.html">نشر خادم مخصص</a></li>
+</ul>
+
+{% endraw %}

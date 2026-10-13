@@ -1,0 +1,523 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "O starhermit.txt Manifesto"
+source_url: "/docs/starhermit-txt.html"
+source_path: "docs/starhermit-txt.md"
+source_hash: "38da20ba901e3ed0e8f6bde30e7b48f3d55c06efc0c8800aa7bd175be7fc0788"
+translation: "machine"
+permalink: "/pt/docs/starhermit-txt.html"
+---
+{% raw %}
+<h1 id="the-starhermittxt-manifest">O <code>starhermit.txt</code> Manifesto</h1>
+<p><code>starhermit.txt</code> é um pequeno arquivo de texto simples que informa ao StarHermit como seu jogo é chamado, como
+iniciá-lo e que tipo de servidor (se houver) ele executa. É o único arquivo que a plataforma procura
+tudo que você publica.</p>
+<p><strong>Ele pertence à raiz do que você carrega</strong> — tanto para os arquivos do cliente de um jogo quanto para um arquivo dedicado
+servidor.</p>
+<p>Você não precisa estritamente criar o arquivo sozinho. O cliente Windows e o painel da web
+mostre o manifesto como <strong>campos editáveis</strong>: o que quer que sua construção já carregue, preenche-os previamente e
+tudo o que eles contêm quando você pressiona Upload é gravado no pacote como manifesto. Então uma construção com
+não <code>starhermit.txt</code> ainda é publicável, e um <code>.tar</code> - que você não pode editar no local - é tão
+editável como uma pasta. Ainda vale a pena enviar o arquivo dentro de sua compilação: ele viaja com o
+artefato, então os valores estarão corretos na próxima vez que alguém fizer o upload.</p>
+<h2 id="the-rule-that-surprises-people">A regra que surpreende as pessoas</h2>
+<blockquote>
+<p><strong>Tudo o que está próximo ao manifesto é carregado.</strong></p>
+</blockquote>
+<p>A pasta que você escolhe não é um diretório de projeto que a plataforma procura para uma construção - o diretório da pasta
+conteúdo <strong>são</strong> o jogo publicado, copiado como está. Cada arquivo e cada subpasta adjacente a
+<code>starhermit.txt</code>, em qualquer profundidade, sobe e é servido aos jogadores.</p>
+<p>Então escolha o seu <strong>saída de compilação distribuível</strong>, não sua árvore de origem. Fazendo upload de um diretório de trabalho
+significa enviar sua fonte, suas notas, seus ativos não minificados e seus experimentos incompletos para
+todos os jogadores e queimar o espaço de disco do seu jogo em arquivos que ninguém carrega.</p>
+<p>Alguns nomes são sempre ignorados porque nunca fazem parte de um jogo publicado:
+<code>.git</code>, <code>node_modules</code>, <code>.DS_Store</code>, <code>Thumbs.db</code>. Todo o resto é um jogo justo - incluindo
+<code>README.md</code>, <code>.env</code> arquivos, <code>*.psd</code> fontes e <code>*.map</code> arquivos. Se você não o entregasse a um jogador,
+não o deixe próximo ao manifesto.</p>
+<p><img src="/docs/images/pt/publish-build.svg" alt="Crie uma pasta de cliente distribuível com starhermit.txt em sua raiz, publique-a e sirva seu conteúdo no subdomínio do jogo."></p>
+<h2 id="where-it-goes">Para onde vai</h2>
+<h3 id="a-game-client">Um cliente de jogo</h3>
+<pre><code class="language-text">my-game-dist/
+  starhermit.txt        &lt;- belongs at this level
+  index.html            &lt;- your launch file
+  game.js
+  assets/
+    sprites.png
+    music.ogg
+</code></pre>
+<p>Escolha <code>my-game-dist/</code>. O conteúdo vira jogo, servido em
+<code>https://&lt;slug&gt;.starhermit.com/</code>, e <code>index.html</code> é o que um jogador carrega.</p>
+<p><strong>Ou escolha um único <code>.tar</code> exatamente desse layout</strong> — "Adicionar de .tar" no cliente de desktop, o
+<code>.tar</code> campo no painel. O cliente lê as entradas do arquivo e as realoja no pacote
+para você e preenche previamente os campos do manifesto a partir de um <code>starhermit.txt</code> dentro dele. Usar <code>--format=ustar</code>:</p>
+<pre><code class="language-bash">tar --format=ustar -cf my-game.tar -C my-game-dist .
+</code></pre>
+<p>Arquivos que usam nomes longos GNU ou cabeçalhos estendidos PAX são recusados. Esses formatos armazenam o valor real de uma entrada
+caminho em um <em>separar</em> bloco de metadados, então realocá-los significa reescrever os metadados - e obter isso
+sutilmente errado publicaria um jogo corrompido. Se a sua compilação atingir os limites do caminho ustar (100 bytes para um
+nome, 155 para seu prefixo de diretório), encurte os nomes de pasta mais profundos ou carregue a pasta.</p>
+<h3 id="a-dedicated-server">Um servidor dedicado</h3>
+<pre><code class="language-text">my-server-dist/
+  starhermit.txt        &lt;- belongs at this level
+  image.tar            &lt;- docker save output of your server image
+</code></pre>
+<p>Escolha <code>my-server-dist/</code> — <strong>ou escolha <code>image.tar</code> por conta própria</strong>, já que o manifesto pode vir do
+campos da caixa de diálogo. Ao contrário da pasta do cliente, uma distribuição de servidor possui exatamente dois
+arquivos: o manifesto e a imagem do contêiner produzida por</p>
+<pre><code class="language-bash">docker save my-server:latest &gt; image.tar
+</code></pre>
+<p>Qualquer outra coisa em uma pasta do servidor é deixada para trás em vez de carregada – a plataforma executa seu
+container, então a imagem já contém os arquivos do seu servidor. Manter o manifesto aqui de qualquer maneira significa
+uma construção de servidor é autodescritiva e pode ser recarregada por conta própria.</p>
+<h2 id="format">Formatar</h2>
+<p>Linhas de <code>key=value</code>. As linhas em branco são ignoradas, <code>#</code> inicia um comentário e espaços em branco ao redor das teclas e
+valores são cortados. Os nomes das chaves não diferenciam maiúsculas de minúsculas, exceto que os caminhos das pastas em <code>cache.&lt;folder&gt;</code> diferenciam maiúsculas de minúsculas; chaves desconhecidas são ignoradas, então um erro de digitação falha silenciosamente -
+verifique sua ortografia nas tabelas abaixo.</p>
+<pre><code class="language-text"># My Game - browser-only
+name=My Game
+launch=index.html
+</code></pre>
+<h3 id="keys-every-game-may-set">Chaves que todo jogo pode definir</h3>
+<table>
+<thead>
+<tr>
+<th>Chave</th>
+<th>Aliases</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>—</td>
+<td>O nome de exibição que os jogadores veem. Obrigatório, a menos que você passe um nome de exibição no formulário de upload.</td>
+</tr>
+<tr>
+<td><code>launch</code></td>
+<td><code>launch_path</code>, <code>html</code></td>
+<td>Caminho para a entrada <code>.html</code>, em relação ao manifesto. O padrão é <code>index.html</code> quando um arquivo com esse nome fica na raiz.</td>
+</tr>
+<tr>
+<td><code>cover</code></td>
+<td><code>cover_art</code>, <code>coverart</code></td>
+<td>Arte no bloco da biblioteca do jogo. Um caminho relativo ao arquivo de inicialização (<code>cover.png</code>, <code>art/box.jpg</code>) ou um absoluto <code>https://</code> URL. Opcional – sem ele, o bloco mostra o favicon. Um valor ruim é descartado em vez de recusar o jogo.</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>—</td>
+<td>O texto da página da loja que os jogadores leem sobre o seu jogo. Uma linha; escrever <code>\n</code> para uma quebra de linha. Ou use <code>description.file</code> para mantê-lo em um arquivo. Ver <a href="#description-and-release-notes">Descrição e notas de lançamento</a>.</td>
+</tr>
+<tr>
+<td><code>release_notes</code></td>
+<td><code>releasenotes</code></td>
+<td>O que mudou nesta compilação. Mesmas regras que <code>description</code>; <code>release_notes.file</code> aponta para um arquivo.</td>
+</tr>
+<tr>
+<td><code>owner</code></td>
+<td><code>username</code>, <code>user</code></td>
+<td><strong>Apenas fluxo de repositório.</strong> O proprietário StarHermit <strong>ID do usuário (UUID)</strong> de <code>GET /api/v1/me</code>, não um nome de usuário. Permite que você <a href="/pt/docs/tutorials/claim-existing-game.html">reivindicar uma listagem que outra pessoa adicionou</a> provando que você controla o repositório. Ignorado em um upload — consulte <a href="#who-owns-an-uploaded-game">Quem possui um jogo enviado</a>.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="description-and-release-notes">Descrição e notas de lançamento</h3>
+<p>Dois pedaços de texto opcionais mostrados ao lado do jogo: um <strong>descrição</strong> (qual é o jogo) e
+<strong>notas de lançamento</strong> (o que mudou na compilação que você está publicando). Cada um pode ser escrito no
+manifestar-se ou ser mantido em arquivo próprio.</p>
+<p><strong>Em linha</strong>, para texto curto. O manifesto tem uma linha por chave, então escreva <code>\n</code> onde você quiser um
+quebra de linha (e <code>\\</code> para uma barra invertida literal):</p>
+<pre><code class="language-text">name=Asteroid Garden
+launch=index.html
+description=Tend a garden on a drifting asteroid.\nPlant, water, and dodge the meteor showers.
+release_notes=- New: night cycle\n- Fixed: seeds vanishing after a reload
+</code></pre>
+<p><strong>De um arquivo</strong>, por mais tempo — este é o formulário a ser usado para notas de versão reais:</p>
+<pre><code class="language-text">name=Asteroid Garden
+launch=index.html
+description.file=DESCRIPTION.md
+release_notes.file=CHANGELOG.md
+</code></pre>
+<pre><code class="language-text">my-game-dist/
+  starhermit.txt
+  DESCRIPTION.md
+  CHANGELOG.md
+  index.html
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Chave</th>
+<th>Aliases</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>description</code></td>
+<td>—</td>
+<td>Texto de descrição, embutido.</td>
+</tr>
+<tr>
+<td><code>description.file</code></td>
+<td>—</td>
+<td>Caminho para um <code>.md</code>, <code>.markdown</code> ou <code>.txt</code> arquivo contendo a descrição.</td>
+</tr>
+<tr>
+<td><code>release_notes</code></td>
+<td><code>releasenotes</code></td>
+<td>Texto das notas de versão, embutido.</td>
+</tr>
+<tr>
+<td><code>release_notes.file</code></td>
+<td><code>releasenotes.file</code></td>
+<td>Caminho para um <code>.md</code>, <code>.markdown</code> ou <code>.txt</code> arquivo contendo as notas de lançamento.</td>
+</tr>
+</tbody>
+</table>
+<p>As regras:</p>
+<ul>
+<li><strong>Os caminhos dos arquivos são relativos a <code>starhermit.txt</code></strong> (a raiz do repositório de um jogo de repositório), não
+para o arquivo de lançamento. Não <code>..</code>, sem liderança <code>/</code>, e apenas <code>.md</code>, <code>.markdown</code> ou <code>.txt</code>; qualquer outro caminho
+é ignorado em vez de recusar o jogo. O arquivo deve ser <em>dentro</em> o que você publica, então é
+servido aos jogadores como qualquer outro arquivo próximo ao manifesto. Não coloque nada nele você
+não lhes mostraria.</li>
+<li><strong>Um arquivo vence a linha embutida.</strong> Declare ambos e o texto embutido será apenas um substituto, usado
+quando o arquivo não pode ser encontrado.</li>
+<li><strong>O texto é relido toda vez que o manifesto é</strong>: todo upload ou push que carrega um
+manifesto e cada implantação de repositório (a partir do commit que está sendo implantado). Exclua ambas as linhas e o
+o texto é limpo. Um arquivo declarado, mas ausente, sem substituto embutido, deixa o texto como
+jogo já tinha.</li>
+<li><strong>Por que um arquivo e não um texto com várias linhas no manifesto?</strong> Todas as outras chaves são lidas linha por linha. Se um
+parágrafo das notas de lançamento poderia estar dentro do manifesto, uma nota que dizia
+<code>owner=someone</code> seria lido como um <code>owner=</code> linha.</li>
+<li><strong>Tamanho</strong>: uma descrição é reduzida em 4.000 caracteres e as notas de lançamento em 20.000. Texto mais longo é
+encurtado, não recusado. Os finais de linha são normalizados e as linhas em branco iniciais e finais são aparadas.</li>
+<li><strong>Formatação</strong>: o texto é armazenado exatamente como foi escrito. Markdown é uma escolha sensata, mas se
+ele é renderizado ou mostrado como texto simples, cabe ao cliente exibi-lo.</li>
+<li><strong>As notas de versão substituem, não acumulam.</strong> Cada publicação traz as notas para <em>que</em> construir. Mantenha
+seu histórico completo em seu próprio changelog e publique a parte que os jogadores precisam.</li>
+</ul>
+<p>Os clientes leem a descrição da lista do jogo e as notas de lançamento do
+<a href="/pt/docs/api/github-games.html#description-and-release-notes"><code>GET /api/v1/github-games/{id}/release-notes</code></a>.</p>
+<h3 id="browser-asset-caching">Cache de ativos do navegador</h3>
+<p>Usar <code>cache.&lt;folder&gt;=&lt;seconds&gt;</code> definir <code>Cache-Control: public, max-age=&lt;seconds&gt;</code> em estática hospedada
+arquivos. As durações são números inteiros <strong>0–31536000</strong> (um ano):</p>
+<pre><code class="language-ini">cache..=0
+cache.audio=31536000
+cache.audio/live=0
+cache.assets/textures=604800
+</code></pre>
+<p>Aqui <code>cache..</code> define o padrão de todo o site como zero (revalidar na reutilização), <code>audio/</code> caches por um ano,
+<code>audio/live/</code> revalida, e <code>assets/textures/</code> caches por uma semana. Use nomes de arquivos com hash de conteúdo para
+ativos de longa duração: a reimplantação não invalida as cópias já armazenadas em cache nos navegadores dos jogadores.</p>
+<p>Os caminhos diferenciam maiúsculas de minúsculas em relação à raiz hospedada (raiz do repositório ou do pacote <code>client/</code>
+diretório) e combine pastas inteiras, incluindo descendentes. <code>audio</code> não corresponde <code>audiobooks</code>.
+Uma barra final é opcional; a pasta mais específica vence e a última duplicata vence. Usar <code>.</code>
+apenas para o padrão raiz; caminhos absolutos, segmentos vazios, <code>.</code>/<code>..</code> segmentos, barras invertidas, <code>%</code>, <code>?</code>,
+<code>#</code>, <code>:</code> e caracteres de controle são recusados. Sem uma regra de correspondência não há estática explícita
+<code>Cache-Control</code> cabeçalho. Chamadas de API, WebSockets e fallbacks de ativos ausentes transmitidos externamente são
+não afetado.</p>
+<h3 id="allowing-another-website-to-access-your-hosted-game">Permitir que outro site acesse seu jogo hospedado</h3>
+<p>Para um cliente de navegador em outra origem, declare até <strong>cinco</strong> origens HTTP/HTTPS exatas:</p>
+<pre><code class="language-ini">cors.origins=https://example.com,https://play.example.org,http://localhost:5173
+</code></pre>
+<p>Por exemplo, após a publicação deste manifesto, uma página de desenvolvimento em <code>http://localhost:5173</code> pode buscar
+um ativo do seu jogo hospedado:</p>
+<pre><code class="language-js">const response = await fetch('https://YOUR_GAME_UID.starhermit.com/assets/levels.json');
+if (!response.ok) throw new Error(`Asset request failed: ${response.status}`);
+const levels = await response.json();
+</code></pre>
+<p>Cada origem é um esquema, nome de host exato e porta opcional. Curingas, domínios simples, credenciais,
+caminhos (mesmo um caminho <code>/</code>), consultas e fragmentos são recusados. O esquema e a porta devem corresponder;
+subdomínios não são incluídos implicitamente. Repetido <code>cors.origins</code> linhas se combinam, com no máximo cinco
+entradas no manifesto (duplicatas também contam). Omita a chave para não permitir origens adicionais;
+um valor vazio é inválido.</p>
+<p>Isso se aplica a ativos estáticos, substitutos de ativos ausentes e <code>/api/</code> solicitações em <strong>host do seu jogo</strong>.
+As origens permitidas recebem cabeçalhos CORS credenciados; Os pré-voos OPTIONS permitem GET, HEAD, POST, PUT,
+PATCH, DELETE e OPTIONS com os cabeçalhos solicitados. Autenticação e autorização de API ainda
+aplicar. Isso não configura o CORS em <code>api.starhermit.com</code>, altere as regras de origem do WebSocket ou amplie
+os URLs de retorno permitidos pelo login no jogo do navegador. Um jogo rodando em sua própria origem hospedada não precisa
+declaração CORS extra.</p>
+<h3 id="publishing-cache-and-cors-settings">Publicando configurações de cache e CORS</h3>
+<p>Ambas as políticas são publicadas com os arquivos do cliente. As implantações de repositório leem o commit fixado.
+Em pacotes, raiz <code>starhermit.txt</code> tem precedência sobre <code>client/starhermit.txt</code>.
+Um upload de mesclagem sem manifesto mantém as políticas existentes; um manifesto fornecido os substitui
+(omitir uma configuração a limpa). Uma substituição completa sem manifesto limpa ambas as políticas.
+Configurações inválidas rejeitam a publicação antes de substituir os arquivos ativos (<code>422</code> para carregamentos; uma falha
+implantação do repositório). Ver <a href="/pt/docs/api/github-games.html#partial-updates-modemerge">atualizações de pacote</a>.</p>
+<h3 id="controls">Controles</h3>
+<p>Declare as ações do teclado que seu jogo usa, com teclas padrão que os jogadores podem religar:</p>
+<pre><code class="language-text">control.left=KeyA+ArrowLeft | Move left
+control.jump=Space+KeyW | Jump
+</code></pre>
+<p><code>control.&lt;action&gt;=&lt;code&gt;[+&lt;code&gt;...][ | &lt;label&gt;]</code>: os IDs de ação são letras minúsculas, dígitos e
+<code>_</code>; códigos são <code>KeyboardEvent.code</code> valores (<code>KeyA</code>, <code>Space</code>, <code>ArrowLeft</code>), até 4 por ação associada
+com <code>+</code>; no máximo 32 ações e nenhuma chave em duas ações. Linhas inválidas são ignoradas silenciosamente e um
+jogo sem linha válida não tem controles - suas respostas da API de controles
+<code>404 "This game declares no controls."</code>. Eles entram em vigor quando você publica uma compilação que os contém.
+Ver <a href="/pt/docs/tutorials/game-controls.html">Tutorial: adicione controles ao seu jogo</a>.</p>
+<h3 id="keys-for-a-game-with-server-logic">Chaves para um jogo com lógica de servidor</h3>
+<p>Escolha <strong>um</strong> estilo do servidor. Declarando ambos <code>server=</code> e <code>container.image=</code> é recusado.</p>
+<p>Estes funcionam em um <strong>pasta enviada</strong> bem como um repositório. UM <code>server=</code> roteiro viaja dentro do
+pasta que você carrega e sua fonte é lida diretamente do arquivo, então um jogo com autoridade
+regras não precisa de nenhum repositório. Se a declaração não puder ser honrada — falta o script,
+aponta para fora da pasta ou solicita um contêiner que você não está aprovado para executar - todo o upload é
+recusado em vez de um jogo meio configurado sendo criado.</p>
+<table>
+<thead>
+<tr>
+<th>Chave</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server</code> (alias <code>server_script</code>)</td>
+<td>Caminho para um arquivo JavaScript que é executado como servidor autoritativo na sandbox do StarHermit. Ver <a href="/pt/docs/api/game-scripts.html">Scripts de jogos</a>.</td>
+</tr>
+<tr>
+<td><code>container.image</code></td>
+<td>A <strong>resumo fixado</strong> imagem (<code>name@sha256:&lt;64 hex&gt;</code>) para ser executado como servidor. As tags são recusadas. Ver <a href="/pt/docs/api/container-games.html">Servidores de jogos em contêiner</a>.</td>
+</tr>
+<tr>
+<td><code>container.port</code></td>
+<td>Port seu contêiner escuta.</td>
+</tr>
+<tr>
+<td><code>container.memory_mb</code></td>
+<td>Memória solicitada em MiB, limitada aos limites do operador.</td>
+</tr>
+<tr>
+<td><code>container.cpu</code></td>
+<td>Limite de CPU para o contêiner.</td>
+</tr>
+<tr>
+<td><code>container.health</code></td>
+<td>Acompanhe as sondagens da plataforma quanto à prontidão.</td>
+</tr>
+<tr>
+<td><code>container.env.&lt;NAME&gt;</code></td>
+<td>Uma variável de ambiente passada para o seu contêiner.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="starting-matchmaking-before-every-human-seat-is-filled">Começando o matchmaking antes que cada assento humano seja preenchido</h3>
+<p>Essas configurações se aplicam a um jogo oficial usando matchmaking StarHermit, com um
+JavaScript ou servidor de contêiner:</p>
+<pre><code class="language-ini">matchmaking.max_wait_seconds=30
+matchmaking.ai_players=2
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Chave</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>matchmaking.max_wait_seconds</code></td>
+<td>Inteiro <strong>0–86400</strong>. Inicie uma partida com preenchimento insuficiente quando o ticket selecionado mais antigo tiver esperado tantos segundos. <code>0</code> começa imediatamente. Omita para manter o comportamento padrão de correspondência ou expiração humana completa.</td>
+</tr>
+<tr>
+<td><code>matchmaking.ai_players</code></td>
+<td>Inteiro <strong>0–31</strong>, padrão <strong>0</strong>. No prazo, preencha até esse número de vagas com IA; deixar quaisquer outros lugares vagos vazios. Requer <code>matchmaking.max_wait_seconds</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>A capacidade da fila vem de um script <code>game.queues</code>; sem declaração é 1v1.
+O contêiner atual <code>/describe</code> leitor não importa <code>queues</code>, então a combinação de contêineres usa
+a forma 1v1 implícita. Por exemplo, em uma fila de oito lugares declarada pelo script com três humanos esperando,
+as configurações acima começam com três humanos, dois jogadores de IA e três assentos vazios. Um humano completo
+a partida pode começar antes do prazo e não recebe IA. Configurando IA para <code>0</code> permite uma correspondência apenas humana
+com assentos vazios, incluindo um único humano, se o jogo permitir isso.</p>
+<p>A plataforma verifica no enfileiramento e durante verificações periódicas de matchmaking (padrão a cada <strong>5 segundos</strong>),
+portanto, uma partida pode seguir o prazo em até um intervalo de varredura sob carga normal. Compatibilidade Elo
+e o subconjunto de fila permitido de cada ticket ainda se aplica. As partes ficam juntas em uma equipe; no
+prazo, um partido menor ou jogador solo pode ocupar uma equipe maior, com os assentos restantes
+disponível para IA ou deixado em branco. Os ingressos não são combinados em uma equipe.</p>
+<p><strong>Seu servidor de jogo deve aceitar partidas com preenchimento insuficiente e implementar comportamento de IA.</strong> Marcas StarHermit
+os jogadores de IA; não gera seus movimentos. Uma sessão rejeitada cancela os tickets selecionados.
+O layout do assento congelado é fornecido como <code>ctx.matchmaking</code>, e os assentos ocupados aparecem em <code>ctx.players</code>;
+ver <a href="/pt/docs/api/game-scripts.html#matchmaking-seat-layout">o contexto do servidor</a>. Assentos vazios não são automaticamente
+preenchido por junções tardias.</p>
+<p>As reimplantações e uploads do repositório aplicam essas configurações. Um manifesto fornecido sem as redefinições de chaves
+eles; um patch sem manifesto os preserva. Valores inválidos são recusados ​​(upload <code>422</code>, ou uma falha
+implantação do repositório). Essas configurações não afetam jogos de treino explícitos ou jogos de sala em tempo real.
+junção rápida/preenchimento.</p>
+<h2 id="how-to-create-one">Como criar um</h2>
+<ol>
+<li>Abra um editor de texto simples – Notepad, TextEdit, VS Code, qualquer coisa. Não a Palavra.</li>
+<li>Digite as teclas que seu jogo precisa, uma por linha (comece com o exemplo abaixo).</li>
+<li>Salve como <code>starhermit.txt</code> na pasta que você fará upload, codificada como UTF-8.</li>
+</ol>
+<p>No Windows, o Bloco de Notas "Documentos de texto" salvar tipo acrescenta <code>.txt</code> para tudo o que você digita, então nomear o
+arquivo <code>starhermit.txt</code> rendimentos <code>starhermit.txt.txt</code>. Ou escolha <strong>Todos os arquivos</strong> na caixa de diálogo salvar ou
+ligue o Explorador de Arquivos <strong>Extensões de nome de arquivo</strong> visualizar e renomeá-lo depois. Um arquivo chamado
+<code>starhermit.txt.txt</code> não foi encontrado e o upload foi recusado.</p>
+<p>O nome é exato: tudo em letras minúsculas, sem espaços. <code>Starhermit.txt</code> e <code>starhermit.TXT</code> trabalhar porque o
+a pesquisa não diferencia maiúsculas de minúsculas, mas <code>starhermit.text</code>, <code>starhermit.cfg</code> e <code>manifest.txt</code> não.</p>
+<h2 id="examples">Exemplos</h2>
+<h3 id="browser-only-game">Jogo somente para navegador</h3>
+<pre><code class="language-text">name=Asteroid Garden
+launch=index.html
+</code></pre>
+<h3 id="game-with-cover-art">Jogo com capa</h3>
+<pre><code class="language-text">name=Asteroid Garden
+launch=index.html
+cover=art/cover.png
+</code></pre>
+<p>Um caminho relativo é resolvido em relação ao arquivo de inicialização (sem <code>..</code>, sem liderança <code>/</code>, sem string de consulta) e
+deve terminar em <code>.png</code>, <code>.jpg</code>/<code>.jpeg</code>, <code>.gif</code>, <code>.webp</code> ou <code>.svg</code>. Um URL absoluto deve ser <code>https://</code> —
+<code>http://</code> é eliminado - e os bytes são detectados, portanto, o URL em si não precisa de extensão de imagem.</p>
+<p>A linha é relida a cada implantação, portanto, alterá-la altera a tampa e removê-la remove o
+capa. Um conjunto de imagens de <strong>Gerenciar → Capa</strong> no painel da web (ou por um operador StarHermit)
+a substitui: essa escolha reside fora da construção, portanto, uma reimplantação nunca a desfaz. Removendo o
+upload volta para esta linha novamente.</p>
+<h4 id="library-tiles">Blocos de biblioteca</h4>
+<p>A arte da capa é uma arte de pôster: ambas as bibliotecas <strong>dimensione-o para preencher o bloco e corte central</strong> o que quer que faça
+não cabe. Os ladrilhos não têm o mesmo formato.</p>
+<table>
+<thead>
+<tr>
+<th>Superfície</th>
+<th>Telha</th>
+<th>Cortar</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cliente Windows</td>
+<td>Retrato 96×128 (3:4)</td>
+<td>Preenche o retrato; arte mais ampla perde os lados</td>
+</tr>
+<tr>
+<td>Painel da web</td>
+<td>Quadrado</td>
+<td>Preenche o quadrado; arte mais alta perde a parte superior e inferior</td>
+</tr>
+</tbody>
+</table>
+<p>Mantenha o assunto no <strong>centro</strong>. Um retrato 3:4 cujo quadrado central é a composição, ou um
+quadrado cuja faixa central é 3:4, sobrevive a ambas as culturas. Letterboxing nunca é aplicado - vazio
+as margens que você adiciona ao redor da arte são cortadas com todo o resto.</p>
+<p>Capas SVG são exibidas na biblioteca da web. O cliente Windows não possui decodificador SVG, portanto, o bloco retorna
+para o favicon enquanto o bloco da web ainda mostra a capa. Prefira PNG, JPEG ou WEBP quando quiser
+o mesmo ladrilho em ambos.</p>
+<h3 id="game-with-a-description-and-release-notes">Jogo com descrição e notas de lançamento</h3>
+<pre><code class="language-text">name=Asteroid Garden
+launch=index.html
+description=Tend a garden on a drifting asteroid.
+release_notes.file=CHANGELOG.md
+</code></pre>
+<h3 id="static-site-whose-entry-point-is-not-at-the-root">Site estático cujo ponto de entrada não está na raiz</h3>
+<pre><code class="language-text">name=Tower Rush
+launch=public/game.html
+</code></pre>
+<h3 id="game-with-a-sandboxed-javascript-server">Jogo com um servidor JavaScript em sandbox</h3>
+<pre><code class="language-text">name=Correspondence Chess
+launch=index.html
+server=server.js
+</code></pre>
+<h3 id="game-with-a-container-server">Jogo com um servidor contêiner</h3>
+<pre><code class="language-text">name=Voxel Skirmish
+launch=index.html
+container.image=ghcr.io/octocat/voxel-server@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+container.port=8080
+container.memory_mb=512
+container.health=/healthz
+container.env.LOG_LEVEL=info
+</code></pre>
+<h3 id="claiming-a-listing-you-own--repository-games-only">Reivindicando uma listagem que você possui – apenas jogos de repositório</h3>
+<p>Definir <code>owner</code> ao ID de usuário imutável do StarHermit retornado como <code>id</code> por <code>GET /api/v1/me</code>-não o
+nome de usuário ou apelido do perfil:</p>
+<pre><code class="language-text">name=My Game
+launch=index.html
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6
+</code></pre>
+<h2 id="who-owns-an-uploaded-game">Quem possui um jogo enviado</h2>
+<p><strong>A conta que faz o upload.</strong> Sempre, e não há nada para configurar.</p>
+<p>Um upload não tem repositório por trás dele, então não há nada para alguém provar o controle: o
+plataforma registra a conta de upload como remetente e deixa o campo proprietário do GitHub vazio, então
+nenhuma reivindicação pode corresponder à linha. Um <code>owner=</code> linha em uma compilação carregada é ignorada e os clientes fazem
+não oferecer um campo para isso - colocar um jogo em nome de outra pessoa atribuiria responsabilidade a ela
+para conteúdo que não publicaram, o que não é algo que um formulário de upload deveria ser capaz de fazer.</p>
+<p>Entregar um jogo que você já possui para outra pessoa é uma ação separada e deliberada do menu Gerenciar
+após o fato, não uma decisão tomada ao adicioná-lo.</p>
+<h2 id="publishing-from-a-github-repository-instead">Publicar a partir de um repositório GitHub</h2>
+<p>Se o seu jogo vive em um <code>github.com</code> repositório, coloque <code>starhermit.txt</code> no <strong>raiz do repositório</strong> e
+envie o URL do repositório – a plataforma lê o manifesto diretamente do repositório e nenhum upload é
+envolvido. Tudo acima se aplica inalterado, exceto que "tudo adjacente" significa tudo em
+o repositório, o que é um bom motivo para manter a saída e as fontes da compilação em repositórios separados (ou para usar
+o upload da pasta para sua saída construída).</p>
+<p>Ver <a href="/pt/docs/api/github-games.html">Jogos GitHub</a> para o fluxo do repositório, e
+<a href="/pt/docs/api/github-games.html#add-a-game-from-a-local-folder">Adicione um jogo de uma pasta local</a> para o upload
+terminais que os clientes chamam.</p>
+<h2 id="limits">Limites</h2>
+<p>Um jogo pode ocupar <strong>2GB</strong> em starhermit.com (o subsídio pode variar de acordo com a implantação), e isso é
+também o limite máximo para um único upload de substituição. UM <a href="/pt/docs/api/github-games.html#partial-updates-modemerge"><code>?mode=merge</code></a>
+patch é delimitado pela árvore resultante, portanto, um pequeno upload que faria o jogo ao vivo exceder o
+subsídio é recusado. Profundamente
+caminhos aninhados são recusados: o formato do arquivo limita um caminho a 100 caracteres para o nome do arquivo mais 155
+para seu prefixo de diretório, portanto, reduza cadeias de pastas muito longas.</p>
+<h2 id="troubleshooting">Solução de problemas</h2>
+<table>
+<thead>
+<tr>
+<th>O que você vê</th>
+<th>Por que</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>O cliente diz que sua compilação não tem manifesto</td>
+<td>Não <code>starhermit.txt</code> na raiz do que você escolheu (uma cópia mais profunda não conta). Isto é um aviso, não uma recusa – preencha os campos da caixa de diálogo e um será escrito para você.</td>
+</tr>
+<tr>
+<td>Seu <code>.tar</code> é recusado como "cabeçalhos estendidos"</td>
+<td>O <em>cliente</em> empacotador que realoja um único <code>.tar</code> em <code>client/</code> ainda recusa blocos GNU de nome longo e PAX (reescrever esses blocos de metadados é como a próxima entrada é nomeada). <code>git archive</code> e <code>tar -czf .</code> são aceitos pela própria plataforma. Recrie com <code>tar --format=ustar</code>ou carregue a pasta.</td>
+</tr>
+<tr>
+<td>Você editou um campo, mas o valor antigo está ativo</td>
+<td>O manifesto dentro da sua compilação permanece inalterado; apenas o pacote ganhou o novo. Atualize o arquivo em sua compilação para que o próximo upload comece com os valores corretos.</td>
+</tr>
+<tr>
+<td>"Um nome de exibição é obrigatório"</td>
+<td>Não <code>name=</code> linha e nenhum nome de exibição digitado no formulário.</td>
+</tr>
+<tr>
+<td>"É necessário um caminho de inicialização"</td>
+<td>Não <code>launch=</code> linha e não <code>index.html</code> na raiz da pasta.</td>
+</tr>
+<tr>
+<td>"Os arquivos do upload não contêm o arquivo de lançamento"</td>
+<td><code>launch=</code> nomeia um arquivo que não está na pasta. Verifique a ortografia e se ela é relativa ao manifesto, não absoluta.</td>
+</tr>
+<tr>
+<td>Seu jogo foi publicado, mas faltam arquivos</td>
+<td>Esses arquivos não eram adjacentes ao manifesto. O upload começa na pasta que contém <code>starhermit.txt</code>; nada acima dele está incluído.</td>
+</tr>
+<tr>
+<td>O bloco da biblioteca mostra o favicon, não sua capa</td>
+<td><code>cover=</code> está faltando, não é um caminho de imagem utilizável/<code>https://</code> URL ou o arquivo não está ao lado do arquivo de inicialização. Valores ruins são descartados silenciosamente – o jogo ainda é publicado. SVG aparece apenas na biblioteca da web; o bloco do Windows volta para o favicon. Uma imagem de <strong>Gerenciar → Capa</strong> substitui o manifesto até que você o remova.</td>
+</tr>
+<tr>
+<td>Sua descrição ou notas de lançamento não apareceram</td>
+<td>A chave está escrita incorretamente (chaves desconhecidas são ignoradas), o <code>*.file</code> caminho não é um <code>.md</code>/<code>.markdown</code>/<code>.txt</code> arquivo relativo a <code>starhermit.txt</code>ou o arquivo não estava no que você publicou. Um arquivo ausente mantém o texto anterior.</td>
+</tr>
+<tr>
+<td>Suas notas de versão mostram <code>\n</code> literalmente</td>
+<td>Somente o formulário inline fica <code>\n</code> em uma quebra de linha. Texto lido de um <code>*.file</code> é usado exatamente como está escrito.</td>
+</tr>
+<tr>
+<td><code>container.image</code> recusou</td>
+<td>Não é fixado por resumo. Usar <code>name@sha256:&lt;64 hex&gt;</code>, não uma etiqueta.</td>
+</tr>
+<tr>
+<td>A API de controles diz "Este jogo não declara controles."</td>
+<td>Não é válido <code>control.*</code> linha na compilação que está ativa. Verifique as linhas contra <a href="#controls">Controles</a> e publicar uma nova compilação — veja <a href="/pt/docs/tutorials/game-controls.html">Tutorial: adicione controles ao seu jogo</a>.</td>
+</tr>
+</tbody>
+</table>
+
+{% endraw %}

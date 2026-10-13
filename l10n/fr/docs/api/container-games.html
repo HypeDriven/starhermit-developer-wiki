@@ -1,0 +1,434 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "Serveurs de jeux hébergés par des conteneurs"
+source_url: "/docs/api/container-games.html"
+source_path: "docs/api/container-games.md"
+source_hash: "1236c6a7fd9205e65079aaa8684a472e45c363e0314f51528484e44c183f19c1"
+translation: "machine"
+permalink: "/fr/docs/api/container-games.html"
+---
+{% raw %}
+<h1 id="container-hosted-game-servers">Serveurs de jeux hébergés par des conteneurs</h1>
+<p>Un jeu StarHermit peut expédier sa logique de serveur faisant autorité sous forme d'image de conteneur au lieu d'un
+Fichier JavaScript en bac à sable. Cela permet au serveur d'utiliser Rust, Go, C++ ou tout autre environnement d'exécution pouvant
+servir HTTP et WebSockets. Le navigateur orienté <a href="/fr/docs/api/games.html">API de jeux</a> reste le même&#160;: toujours des clients
+utiliser des jetons de lancement à l'échelle du jeu, des sessions REST et <code>ws/v1/games</code> Cadres JSON.</p>
+<p>L'hébergement de conteneurs est ouvert à tout utilisateur connecté sur starhermit.com. Un déploiement auto-hébergé peut
+le restreindre à une liste d'autorisation d'opérateur&#160;; une liste blanche non définie n'y admet personne plutôt que tout le monde.
+Cela s'applique également à une image de registre et à un fichier téléchargé. <code>server/image.tar</code>, donc aucune des deux routes n'est
+tranquillement plus permissif que l’autre.</p>
+<p>Après l'enregistrement initial du jeu, les développeurs peuvent également proposer une version construite <code>.tar.gz</code> contenant
+<code>server/image.tar</code> (<code>docker save</code> sortie) via
+<code>POST /api/v1/me/github-games/{id}/bundle</code>. La plateforme charge et condense l'image et les files d'attente
+un redémarrage du déploiement. Voir <a href="/fr/docs/api/github-games.html#push-a-game-bundle">GitHub Games&#160;–&#160;Pousser un pack de jeux</a>
+et le <a href="/fr/docs/tutorials/dedicated-server-onboarding.html">tutoriel sur le serveur dédié</a>.</p>
+<p>Ces détails sur cette poussée valent la peine d'être connus avant de créer un pipeline de versions autour de celle-ci&#160;:</p>
+<ul>
+<li><strong>Un grand <code>docker save</code> peut dépasser la limite de corps de requête d'environ 100 Mo du CDN</strong>, qui répond par un <code>413</code>
+la plateforme ne voit jamais - non <code>limitBytes</code>, rien dans aucun journal que vous puissiez lire. Poussez l'archive
+<a href="/fr/docs/api/github-games.html#upload-over-a-websocket"><code>ws/v1/game-upload</code></a> plutôt; même archive, même
+allocation, mêmes réponses.</li>
+<li><strong>L'image que vous téléchargez est elle-même la déclaration.</strong> Un jeu sans backend pour l'instant — un ajouté à partir d'un
+dossier téléchargé qui n'en a déclaré aucun&#160;: obtient sa définition de conteneur fournie à partir du résumé
+vient de charger. Vous n'avez pas besoin d'un <code>container.image=</code> dans un manifeste d’abord.</li>
+<li><strong>Une nouvelle poussée applique les boutons déclarés par son manifeste et conserve ceux qu'il omet.</strong> Changement
+<code>container.port</code> et le nouveau téléchargement déplace maintenant le déploiement vers ce port&#160;; laisser le manifeste de côté
+du bundle ne change rien sauf l'image.</li>
+<li><strong>Une image téléchargée l'emporte sur le manifeste</strong>, y compris sur une <code>server=</code> ligne et un manifeste
+déclarant les deux <code>server=</code> et <code>container.image=</code> est refusé avant que quoi que ce soit ne soit chargé.</li>
+<li><strong>Votre balise d'image locale ne sélectionne pas la version déployée.</strong> Une image téléchargée est épinglée par son
+résumé du contenu. Vous pouvez le marquer localement comme bon vous semble&#160;; vérifier le résumé téléchargé et le déploiement
+statut après publication.</li>
+<li><strong><code>?mode=merge</code> corrige uniquement les fichiers clients.</strong> A <code>server/image.tar</code> dans une fusion est chargé exactement comme
+lors d'un remplacement&#160;: une image ne peut pas être mise à jour à moitié. Voir
+<a href="/fr/docs/api/github-games.html#partial-updates-modemerge">mises à jour partielles</a>.</li>
+</ul>
+<h2 id="manifest">Manifeste</h2>
+<p>Déclarez l'image dans le référentiel <code>starhermit.txt</code>:</p>
+<pre><code class="language-ini">name=Void Marshals
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+
+container.image=ghcr.io/octocat/vm-server@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+container.port=8080
+container.health=/health
+container.memory_mb=1024
+container.cpu=1.0
+container.env.LOG_LEVEL=info
+</code></pre>
+<p>Seulement <code>container.image</code> est requis. Le port et le chemin d'intégrité sont par défaut <code>8080</code> et <code>/health</code>.
+La mémoire et le processeur sont des demandes et non des garanties&#160;; la plate-forme les serre aux limites de l'opérateur.</p>
+<p>Votre image a un plafond de taille&#160;: 2&#160;Gio non compressés sauf si l'opérateur en a défini un autre pour votre jeu, et
+une extraction du registre dure cinq minutes. Une traction qui dépasse le plafond est abandonnée à mi-chemin, une image téléchargée
+<code>image.tar</code> il est refusé avec <code>413</code>, et une image qui s'avère plus grande une fois non compressée est
+retiré à nouveau.
+<code>container.env.*</code> est destiné uniquement à la configuration non secrète.</p>
+<p>Une soumission est rejetée sauf si&#160;:</p>
+<ul>
+<li>L'image est épinglée comme un résumé <code>name@sha256:&lt;64 lowercase hex&gt;</code>. Les balises mutables ne sont pas acceptées.</li>
+<li>Le registre est sur liste verte et l'image se trouve sous l'espace de noms du propriétaire du référentiel vérifié&#160;;
+actuellement, cela signifie <code>ghcr.io/&lt;github-owner&gt;/...</code>.</li>
+<li>Le manifeste déclare exactement un runtime de serveur. <code>server=</code> et <code>container.image=</code> sont mutuellement
+exclusif.</li>
+<li>Les noms d'environnement sont valides et ne commencent pas par le réservé <code>STARHERMIT_</code> préfixe.</li>
+</ul>
+<p>Ne mettez jamais d'informations d'identification <code>starhermit.txt</code>; c'est un fichier de référentiel public.</p>
+<h2 id="protocol-v1">Protocole v1</h2>
+<p>Le conteneur sert HTTP/1.1 sur <code>container.port</code>. Chaque requête HTTP de plateforme et mise à niveau WebSocket inclut <code>X-Starhermit-Invoke-Key</code>, dont la valeur
+correspond à l'injecté <code>STARHERMIT_INVOKE_KEY</code>; rejeter une demande lorsqu'elle est absente ou erronée.</p>
+<table>
+<thead>
+<tr>
+<th>Point de terminaison</th>
+<th>But</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET &lt;container.health&gt;</code></td>
+<td>Retour <code>200</code> quand le serveur est prêt</td>
+</tr>
+<tr>
+<td><code>GET /describe</code></td>
+<td>Déclarez la version du protocole, le taux de ticks, la capacité et les réalisations</td>
+</tr>
+<tr>
+<td><code>POST /sessions</code></td>
+<td>Démarrez une session ou restaurez-la lorsque <code>snapshot</code> est présent</td>
+</tr>
+<tr>
+<td><code>GET /sessions/{sessionId}/snapshot</code></td>
+<td>Renvoie l'état durable actuel</td>
+</tr>
+<tr>
+<td><code>DELETE /sessions/{sessionId}</code></td>
+<td>Détruire une session</td>
+</tr>
+<tr>
+<td><code>POST /sessions/{sessionId}/members</code></td>
+<td><em>Facultatif:</em> un joueur rejoint ou quitte une session en cours</td>
+</tr>
+<tr>
+<td><code>WS /control</code></td>
+<td>Canal de contrôle sortant à l’échelle du déploiement</td>
+</tr>
+<tr>
+<td><code>WS /stream</code></td>
+<td>Cadres de gameplay dans les deux sens</td>
+</tr>
+</tbody>
+</table>
+<p>Un conteneur héberge toutes les sessions en direct pour un jeu. Conserver l'état de la session saisi par <code>sessionId</code> et faire
+ne supposez pas que le processus survivra pendant toute la durée d’un match.</p>
+<h3 id="get-describe"><code>GET /describe</code></h3>
+<pre><code class="language-json">{
+  "protocol": 1,
+  "tickRateHz": 20,
+  "maxSessions": 48,
+  "replays": true,
+  "persistent": false,
+  "achievements": [
+    { "key": "first-blood", "name": "First Blood", "description": "Score first.", "points": 10 }
+  ]
+}
+</code></pre>
+<p><code>protocol</code> doit être <code>1</code>. <code>tickRateHz</code> et <code>maxSessions</code> sont des demandes et peuvent être bloquées. La plateforme
+ne parcourt jamais la boucle d'un conteneur, donc <code>tickRateHz</code> lui dit à quelle vitesse votre jeu <em>bouge</em> plutôt que comment
+rapide à exécuter&#160;: c'est ce qui empêche la plateforme de demander des instantanés plus rapidement que votre jeu n'en produit
+nouvel état. Déclarez la vitesse à laquelle votre boucle s'exécute réellement. Les tarifs fractionnés sont acceptés (<code>0.5</code> est un
+cocher toutes les deux secondes), et un taux plus lent allonge l'intervalle entre les demandes d'instantanés -
+c'est combien coûte un crash. Un conteneur qui ne déclare rien quitte le point de contrôle
+cadence au coût de l'instantané seul. Les entrées de réussite utilisent les mêmes champs et limites que
+<a href="/fr/docs/api/game-scripts.html#declare">réalisations déclarées par le script</a>. Les clés déclarées et créées par le propriétaire peuvent être accordées ultérieurement.</p>
+<p><code>replays</code> demande à la plateforme de conserver le dernier état de chaque session terminée comme <strong>rejouer</strong>, servi par
+<code>GET /api/v1/games/{slug}/replays/{sessionId}</code> (voir <a href="/fr/docs/api/games.html#replays">API de jeux&#160;–&#160;Replays</a>). Il faut
+être un littéral <code>true</code> ou <code>false</code>; un jeu qui ne déclare rien n'a pas de replays, et ses points de terminaison de replay
+réponse <code>404</code>. Comme le tick rate, il s'agit d'une demande : un opérateur peut répondre pour un jeu particulier.
+de toute façon - alors branchez votre client sur <code>replaysEnabled</code> depuis <code>GET /api/v1/games/{slug}</code> plutôt que sur
+ce que vous avez déclaré. Les instantanés ne sont pas affectés dans les deux cas&#160;: une session en direct nécessite un point de restauration, que ce soit
+ou non, son dernier est conservé.</p>
+<p><code>persistent</code> (littéral <code>true</code>/<code>false</code>) demande des séances qui <strong>faire une pause au lieu de terminer</strong> quand chaque
+le joueur est parti. Une pause gare la session : la plateforme prend un dernier instantané, le stocke et
+appels <code>DELETE /sessions/{id}</code>; le prochain joueur à le rejoindre le ramène <code>POST /sessions</code> avec
+que <code>snapshot</code>, exactement comme une restauration sur incident mais sans dépenser le budget de redémarrage ni envoyer
+<code>resumed</code>. Les sessions persistantes restaurées portent également <code>pausedMs</code>, le temps total passé en pause. Voir le
+<a href="/fr/docs/tutorials/persistent-sessions.html">tutoriel sur les sessions persistantes</a>.</p>
+<p><code>linkedAchievements</code> (un tableau allant jusqu'à 8 slugs d'autres jeux) place les déverrouillages des joueurs dans ces
+jeux dans le CTX de <code>POST /sessions</code>, lors de la création et de la restauration. Voir
+<a href="/fr/docs/api/achievements.html#achievements-from-other-games">Réalisations d'autres jeux</a>.</p>
+<p>Le courant <code>/describe</code> le lecteur n'importe pas de <code>queues</code> propriété. Les jeux de conteneurs utilisent donc
+l'implicite <code>default</code> File d'attente de mise en relation 1v1&#160;; l'ajout de formes ici ne permet pas de correspondances plus grandes.
+Vérifier <code>GET /api/v1/games/{slug}/queues</code> pour la forme efficace. Début de la date limite du manifeste et siège AI
+des limites s'appliquent toujours à l'intérieur de cette forme&#160;; voir <a href="/fr/docs/api/games.html#matchmaking">mise en relation</a>.</p>
+<h3 id="post-sessions"><code>POST /sessions</code></h3>
+<p>La requête est la même forme de contexte qu'un jeu JavaScript reçoit&#160;:</p>
+<pre><code class="language-json">{
+  "now": 1769500000000,
+  "random": 0.418,
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [
+    { "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "name": "alice" }
+  ],
+  "sessionState": null,
+  "playerStates": {
+    "7c9e6679-7425-40de-944b-e07fc1f90ae7": null
+  }
+}
+</code></pre>
+<p>La sémantique des champs correspond à celle <a href="/fr/docs/api/game-scripts.html#context-object">contexte du script</a>, y compris
+<a href="/fr/docs/api/game-scripts.html#matchmaking-seat-layout">sièges de matchmaking, drapeaux IA et sièges vides</a> pour les jeux
+qui configurent une date limite de début dans <code>starhermit.txt</code>. Répondez avec le
+enveloppe de résultat standard, par exemple&#160;:</p>
+<pre><code class="language-json">{ "ok": true, "sessionState": { "round": 1 } }
+</code></pre>
+<p>Lors de la récupération, la demande contient également <code>snapshot</code>, détenant le dernier état persisté par la plateforme,
+et <code>restoredFrom</code>, un horodatage Unix en millisecondes. Reconstruisez une session jouable à partir de l'instantané.
+Les parties persistantes sont restaurées de la même manière lorsqu'un joueur rejoint une session en pause, avec <code>pausedMs</code>
+dans le corps.</p>
+<h3 id="get-sessionssessionidsnapshot"><code>GET /sessions/{sessionId}/snapshot</code></h3>
+<p>Renvoyez l'enveloppe standard avec un formulaire complet <code>sessionState</code> point de restauration&#160;:</p>
+<pre><code class="language-json">{ "ok": true, "sessionState": { "round": 3, "scores": [2, 1] } }
+</code></pre>
+<p>La plateforme vérifie périodiquement les sessions actives. Une réponse instantanée peut également inclure
+<code>playerStates</code>, <code>eloUpdates</code>, <code>achievements</code>, <code>scores</code>, ou <code>result</code>; ils passent par la même validation et
+règles de persistance en tant que résultat de script. Pour un jeu avec <a href="#get-describe">rediffusions</a>, le dernier état a
+la session terminée atteinte est ce que la plate-forme conserve comme rediffusion - alors faites cet état
+reconstructible, pas seulement récupérable.</p>
+<h3 id="post-sessionssessionidmembers"><code>POST /sessions/{sessionId}/members</code></h3>
+<p>Facultatif. Les joueurs peuvent <strong>rejoindre une session en cours</strong>, à travers un <a href="/fr/docs/api/realtime.html">salle en temps réel</a> qui permet
+ou en acceptant celui d'un ami <a href="/fr/docs/api/games.html#inviting-a-friend-into-a-game-in-progress">inviter à la session à laquelle ils jouent</a>,
+et les salles permettent à un joueur de céder son siège sans qu'une IA ne le prenne. La plateforme demande à votre conteneur
+avant que le changement ne soit définitif. Le corps est le ctx ordinaire, avec <code>players</code> reflétant déjà le
+changement, plus <code>membership</code>:</p>
+<pre><code class="language-json">{
+  "now": 1769500000000,
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [
+    { "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "name": "alice" },
+    { "id": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol" }
+  ],
+  "membership": { "change": "joined", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol", "team": 0, "slot": 1 }
+}
+</code></pre>
+<p><code>change</code> est <code>joined</code> ou <code>left</code>. Répondez avec l'enveloppe standard :</p>
+<ul>
+<li><strong>Une adhésion peut être refusée.</strong> <code>{"ok": false, "error": "This world is full."}</code> détourne le joueur, le
+le siège est rendu et rien n'est enregistré ; une invitation accepter les réponses <code>409</code> et l'invitation reste
+en attente. Si vous n'implémentez pas le point de terminaison, chaque jointure est refusée&#160;: <code>404</code>, <code>405</code> et <code>501</code> signifier
+"ce jeu ne prend pas les joueurs en milieu de match", donc un jeu écrit pour une liste fixe n'a jamais de
+un étranger y est tombé.</li>
+<li><strong>Un congé est définitif</strong> quoi que vous répondiez.</li>
+<li>La réponse peut porter <code>achievements</code> et <code>scores</code>. A <code>sessionState</code> est ignoré&#160;: envoyez un <code>snapshot</code>
+sur <a href="#control-channel"><code>/control</code></a> si le changement vaut un point de contrôle.</li>
+</ul>
+<p>Après une jointure, les commandes du nouveau joueur commencent à arriver sur <code>/stream</code> et ils sont dans <code>players</code> sur chaque
+restaurer plus tard. Après un congé, leurs trames s'arrêtent et leur socket est fermée. Chaque client connecté
+reçoit un <a href="/fr/docs/api/games.html#server--client"><code>membership</code> cadre</a> de toute façon, et le chat de session gagne ou perd
+le membre.</p>
+<p>A <a href="/fr/docs/tutorials/persistent-sessions.html">session persistante suspendue</a> n'est pas demandé, car il ne fonctionne pas. La restauration qui
+reprend il porte le courant <code>players</code>, alors traitez un joueur que vous n'avez jamais vu auparavant dans une restauration comme
+rejoint.</p>
+<h2 id="gameplay-stream">Flux de jeu</h2>
+<p><code>WS /stream</code> utilise des messages binaires dans les deux sens&#160;:</p>
+<pre><code class="language-text">[1 byte type][16 byte sessionId][16 byte userId][payload...]
+</code></pre>
+<p>Les GUID utilisent leur représentation filaire .NET de 16 octets.</p>
+<ul>
+<li><strong>Type 1, plateforme → conteneur&#160;:</strong> commande du joueur. La plateforme tamponne l'identifiant de l'utilisateur authentifié&#160;;
+la charge utile est la valeur JSON du client <code>cmd.data</code>.</li>
+<li><strong>Type 2, conteneur → plateforme&#160;:</strong> charge utile du jeu. Adressez-vous à un participant avec son identifiant utilisateur, ou utilisez
+un identifiant utilisateur entièrement nul à diffuser. La charge utile doit être un JSON valide&#160;; les clients le reçoivent à l'intérieur
+<code>{"type":"game","data":...}</code>.</li>
+</ul>
+<p>Les sessions sont épinglées pour diffuser des connexions afin de préserver l'ordre. Ne jamais accepter ou dériver un joueur
+identité de la commande JSON&#160;: l'en-tête authentifié fait autorité.</p>
+<h2 id="control-channel">Canal de contrôle</h2>
+<p>Envoyer des messages texte JSON sur <code>WS /control</code> pour des effets durables :</p>
+<pre><code class="language-json">{ "type": "snapshot",     "sessionId": "...", "state": { "round": 3 } }
+{ "type": "achievements", "sessionId": "...", "unlocks": { "&lt;userId&gt;": ["first-blood"] } }
+{ "type": "elo",          "sessionId": "...", "updates": { "&lt;userId&gt;": 1312 } }   // absolute ratings, not deltas — see games.md#elo-per-match
+{ "type": "scores",       "sessionId": "...", "scores": { "&lt;boardKey&gt;": { "&lt;userId&gt;": 4200 } } }
+{ "type": "result",       "sessionId": "...", "result": { "kind": "win", "winner": "..." } }
+{ "type": "backpressure", "load": 0.75 }
+</code></pre>
+<p>La plateforme accepte les effets uniquement pour les sessions acheminées vers ce déploiement, filtre les destinataires pour
+participants à la session, limite les clés de réussite aux réalisations du jeu (déclarées ou créées par
+son propriétaire), limites <code>scores</code> au jeu propre
+<a href="/fr/docs/api/leaderboards.html#your-games-own-leaderboards">classements créés par le propriétaire</a> — chaque joueur garde son
+meilleur – et applique les budgets de l’État.
+<code>result</code> termine la séance&#160;; les effets ultérieurs de cette session sont ignorés. <code>backpressure.load</code> est
+serré à <code>0..1</code> et aide la plate-forme à prendre en compte la charge de déploiement actuelle.</p>
+<p>Poussez un instantané après des événements sémantiquement importants, tels qu'un objectif ou une transition de cycle, plutôt
+que de compter uniquement sur des points de contrôle périodiques.</p>
+<h2 id="container-environment-and-server-api">Environnement de conteneur et API de serveur</h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Signification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>STARHERMIT_PROTOCOL</code></td>
+<td>Version du protocole (<code>1</code>)</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_GAME_SLUG</code></td>
+<td>La limace de ce jeu</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_INVOKE_KEY</code></td>
+<td>Secret attendu dans <code>X-Starhermit-Invoke-Key</code>; authentifie la plateforme auprès de votre conteneur</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_REFRESH_KEY</code></td>
+<td>Secret distinct utilisé uniquement pour renouveler le jeton du serveur</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_API_BASE</code></td>
+<td>URL de base de l'API de la plateforme accessible depuis le réseau isolé</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_SERVER_TOKEN</code></td>
+<td>Jeton de support expirant pour l'API étroite de serveur à serveur</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_SERVER_TOKEN_EXPIRES_IN</code></td>
+<td>Durée de vie du jeton de serveur injecté, en secondes</td>
+</tr>
+<tr>
+<td><code>PORT</code></td>
+<td>Port sur lequel le conteneur doit écouter</td>
+</tr>
+</tbody>
+</table>
+<p>Un jeton de serveur n'a pas d'identité de joueur et ne peut pas utiliser les actions du compte ou du joueur. Il peut lire
+<code>GET /api/v1/time</code>, réconcilie ses propres sessions et appelle le serveur pris en charge
+<a href="/fr/docs/api/moderation.html#callers-and-routes">itinéraires de modération</a> pour son propre jeu. Les routes de génération sont
+<a href="/fr/docs/availability.html#reserved-generation-routes">réservé et indisponible</a>.</p>
+<h3 id="renew-the-server-token">Renouveler le jeton du serveur</h3>
+<p>Le token du serveur injecté expire (24 heures par défaut). Rafraîchissez-le bien avant
+<code>STARHERMIT_SERVER_TOKEN_EXPIRES_IN</code> s'écoule&#160;:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/server/token
+X-Starhermit-Refresh-Key: &lt;STARHERMIT_REFRESH_KEY&gt;
+</code></pre>
+<pre><code class="language-json">{ "token": "eyJhbGciOi...", "expiresInSeconds": 86400 }
+</code></pre>
+<p>Ce point de terminaison est intentionnellement appelé sans le jeton de support expiré. La clé de rafraîchissement dédiée
+est comparé au déploiement en direct et fonctionne même après l'expiration de l'ancien jeton. C'est distinct
+de <code>STARHERMIT_INVOKE_KEY</code>: la clé d'invocation authentifie les appels de la plateforme à votre processus, tandis que la clé
+La clé d'actualisation authentifie votre processus sur la plateforme. Les deux tournent à chaque démarrage du conteneur.
+Planifiez le renouvellement à environ la moitié de la durée de vie indiquée et remplacez le jeton de manière atomique.</p>
+<p>"Chaque fois que le conteneur démarre" comprend plus qu'un déploiement. Un déploiement inactif est arrêté après un
+période de calme sans sessions (15 minutes par défaut) et recommencée par le joueur suivant. Un conteneur écrasé est
+redémarré. Chaque démarrage est un nouveau conteneur avec de nouvelles clés et un nouveau jeton, alors lisez les trois dans le
+environnement du processus en cours. Ne les intégrez jamais dans l’image, un fichier de configuration ou un instantané.</p>
+<p>Si un démarrage échoue avec <code>The game container returned 401 for GET /describe</code>, la clé de la plateforme et
+la clé de votre processus n'est pas d'accord. Lire <code>STARHERMIT_INVOKE_KEY</code> au démarrage et comparez-le sans modification. Si la validation échoue toujours,
+signaler l'identifiant du jeu et les journaux de démarrage nettoyés&#160;; ne desserrez pas le chèque.</p>
+<h3 id="reconcile-a-session">Réconcilier une session</h3>
+<p><code>GET /api/v1/games/{slug}/server/sessions/{sessionId}</code> avec
+<code>Authorization: Bearer &lt;STARHERMIT_SERVER_TOKEN&gt;</code> renvoie la vue de la session actuelle de la plateforme&#160;:</p>
+<pre><code class="language-json">{
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "status": "active",
+  "players": [
+    { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" }
+  ],
+  "createdAt": "2026-07-27T16:00:00Z",
+  "finishedAt": null,
+  "chatConversationId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+  "result": null
+}
+</code></pre>
+<p>Utilisez-le après la restauration lorsque le conteneur doit confirmer si la plateforme considère toujours
+une session active. Un jeton pour une autre partie, ou un jeton de lancement de joueur, est interdit.</p>
+<h2 id="isolation">Isolement</h2>
+<p>Le conteneur de jeu n'a pas d'accès à Internet. Il ne peut accéder qu'à l'API StarHermit via
+<code>STARHERMIT_API_BASE</code>; il ne peut pas atteindre d'autres jeux, services de plateforme ou l'hôte. Vendeur tout
+dépendances d'exécution dans l'image.</p>
+<p>Le système de fichiers racine est en lecture seule, à l'exception d'un petit <code>/tmp</code>; le processus s'exécute en tant que non-root forcé
+utilisateur sans capacités Linux, sans volumes et sans limites de processeur, de mémoire et de processus. Ne pas installer
+les packages au démarrage ou conservent l'état de correspondance uniquement sur le disque local.</p>
+<h2 id="failure-and-recovery">Échec et récupération</h2>
+<p>Si le processus s'arrête, la plateforme redémarre le déploiement et recrée ses sessions en direct à partir de leur
+derniers instantanés. Les joueurs connectés reçoivent un cadre de plateforme :</p>
+<pre><code class="language-json">{ "type": "resumed", "sessionId": "...", "lostMs": 750 }
+</code></pre>
+<p>Les clients doivent ignorer la prédiction locale et attendre la charge utile complète normale du jeu. Une séance
+est abandonné au lieu d'être restauré lorsqu'aucun instantané utilisable n'existe, qu'il est trop ancien ou que la session a
+redémarré trop souvent. La plateforme le termine sans gagnant ni changement d'elo et envoie&#160;:</p>
+<pre><code class="language-json">{ "type": "abandoned", "sessionId": "...", "reason": "server_failure" }
+</code></pre>
+<p><code>reason</code> est <code>server_failure</code> lorsque la récupération est dangereuse ou que le remplacement ne démarre jamais, et
+<code>restore_failed</code> lors de la recréation de la session échoue. La publication d'une nouvelle image restaure les sessions en direct
+dans le remplacement (ou abandonne ceux qui sont trop obsolètes). Un démarrage qui échoue&#160;: le délai d'extraction a expiré, le
+le conteneur est sorti, ou il n'a jamais répondu à son contrôle de santé à temps - est réessayé avec une interruption, comme un
+crash. Trois tentatives infructueuses en dix minutes (réglables par l'opérateur) désactivent le déploiement (<code>failed</code>),
+et c'est <strong>pas</strong> réveillé par la demande du joueur. Les interruptions temporaires de l'hébergement peuvent être réessayées sans dépenser l'allocation d'échec du jeu.</p>
+<p>Un déploiement sans session live est arrêté après 15 minutes d'inactivité (l'opérateur peut définir une fenêtre différente pour votre jeu).
+En pause <a href="#get-describe">persistant</a> les sessions sont garées hors du conteneur et ne le maintiennent pas.
+La prochaine demande de session contre un <code>stopped</code> le déploiement le réveille (<code>pending</code> → porte de santé →
+<code>running</code>); perdre cette course est <code>503</code> disant que le jeu commence. Seulement <code>stopped</code> est réveillé ceci
+façon - jamais <code>failed</code>.</p>
+<p>Conception <code>POST /sessions</code> la cadence de restauration et d'instantané dans le cadre du protocole de jeu, et non comme un
+optimisation facultative.</p>
+<p>Le propriétaire du jeu peut répertorier et mettre fin aux sessions bloquées&#160;:
+<code>GET</code>/<code>DELETE /api/v1/me/github-games/{id}/sessions[/{sessionId}]</code>.</p>
+<h2 id="your-servers-output-and-crash-reports">Les rapports de sortie et de crash de votre serveur</h2>
+<p>En tant que propriétaire du jeu, vous pouvez lire ce que votre serveur a imprimé et ce qui s'est passé lorsqu'il est tombé en panne&#160;:</p>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Chemin</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/me/github-games/{id}/container/logs?tail=N</code></td>
+<td>Sortie récente&#160;: <code>{ source, deploymentStatus, capturedAt, truncated, logs }</code></td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/me/github-games/{id}/container/crashes?page=&amp;pageSize=</code></td>
+<td>Records de crash, le plus récent en premier</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/me/github-games/{id}/container/crashes/{crashId}</code></td>
+<td>Un enregistrement de crash, avec la sortie capturée</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Journaux</strong> venir en direct du serveur en cours d'exécution (<code>source: "live"</code>), les plus récentes conservées, jusqu'à 500 lignes et
+256 Ko par défaut. Lorsque rien ne fonctionne, vous obtenez la sortie capturée lors du dernier crash
+(<code>source: "last_crash"</code>). Un jeu dont le backend est un script, ou qui n'en a pas, obtient <code>409</code>.</li>
+<li><strong>Un record de crash</strong> est écrit chaque fois que votre serveur plante, cesse de répondre, expire pendant
+démarrage ou ne démarre pas – avant que le conteneur ne soit supprimé. Il porte le genre, code de sortie,
+résumé de l'image, nombre de redémarrages, sessions affectées et 64 Ko de sortie de votre serveur. Le
+Les 50 plus récentes sont conservées, pendant 30 jours.</li>
+<li><strong>Les secrets sont expurgés.</strong> La clé d'appel, la clé d'actualisation et tout jeton de serveur de votre serveur apparaissent comme
+<code>[redacted]</code>. Le vôtre <code>container.env.*</code> les valeurs apparaissent telles qu'imprimées - n'enregistrez pas ce que vous ne voudriez pas
+souhaitez être stocké.</li>
+</ul>
+<p>Les opérateurs peuvent modifier chacune de ces limites, par jeu.</p>
+<h2 id="see-also">Voir aussi</h2>
+<ul>
+<li><a href="/fr/docs/api/github-games.html">Jeux GitHub</a> — enregistrement et déploiement du référentiel</li>
+<li><a href="/fr/docs/api/games.html">API de jeux</a> — surface REST et WebSocket inchangée face au joueur</li>
+<li><a href="/fr/docs/api/game-scripts.html">Scripts de jeu</a> — le runtime JavaScript alternatif et les formes de contexte/résultat partagées</li>
+<li><a href="/fr/docs/api/achievements.html">Réalisations</a> - lectures et notifications de réussites face aux joueurs</li>
+</ul>
+<p>Commun <a href="/fr/docs/api/conventions.html">Conventions API</a> décrire l'analyse des réponses, les horodatages, la pagination et les tentatives.</p>
+<p>Voir <a href="/fr/docs/credentials.html">compatibilité des informations d'identification</a> et <a href="/fr/docs/api/contracts.html">contrats lisibles par machine</a>.</p>
+
+{% endraw %}

@@ -1,0 +1,158 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Tutorial: sesi persisten — permainan yang dijeda saat semua orang keluar"
+source_url: "/docs/tutorials/persistent-sessions.html"
+source_path: "docs/tutorials/persistent-sessions.md"
+source_hash: "35977b60ae64d913cbd390339f114d1c67a92c310166173d669571a677e377fa"
+translation: "machine"
+permalink: "/id/docs/tutorials/persistent-sessions.html"
+---
+{% raw %}
+<h1 id="tutorial-persistent-sessions--games-that-pause-when-everyone-leaves">Tutorial: sesi persisten — permainan yang dijeda saat semua orang keluar</h1>
+<p>Biasanya platform mengakhiri pertandingan yang tidak dimainkan oleh siapa pun: setelah setiap pemain terputus dan tidak ada seorang pun
+telah kembali dalam waktu lima menit, sesi berakhir sebagai <code>abandoned</code> dengan alasan <code>players_left</code>
+(melihat <a href="/id/docs/api/games.html#server--client">API Game — Gameplay WebSocket</a>). Itu tepat untuk catur
+permainan atau balapan, dan salah untuk sebuah peternakan, pembangun kota, penjara bawah tanah bersama, atau dunia mana pun yang menjadi tempat sekelompok orang
+pemain kembali ke beberapa hari.</p>
+<p>Sebuah permainan bisa diminta <strong>sesi yang persisten</strong> alih-alih. Sesi persisten dijeda ketika pemutarnya terputus:</p>
+<ol>
+<li>Pemain terakhir pergi.</li>
+<li>Setelah sekitar 15 detik tanpa ada yang terhubung, platform <strong>jeda</strong> sesi. Tidak ada yang berjalan:
+permainan skrip mendapat no <code>onTick</code> panggilan, dan sesi permainan kontainer dihapus dari
+wadah.</li>
+<li>Sesi ini tetap dijeda sesuai kebijakan retensi pemulihannya. Membaca <code>/sessions/{id}/recovery</code>
+untuk kadaluwarsa apa pun daripada berasumsi itu disimpan selamanya.</li>
+<li>Pemain pertama yang terhubung <code>ws/v1/games</code> <strong>melanjutkan</strong> itu, sebelum perintah pertama mereka adalah
+ditangani. Permainan berlanjut dari tempat berhentinya.</li>
+</ol>
+<p>Halaman ini menunjukkan cara menyalakannya, cara menjaga agar jam game Anda tidak melompati jeda, dan
+apa yang perlu dilakukan klien Anda.</p>
+<h2 id="1-opt-in">1. Ikut serta</h2>
+<p>Kegigihan adalah deklarasi per game, baca saat game Anda dipublikasikan atau diperbarui — publikasikan
+perbarui setelah mengubahnya. Itu harus secara literal <code>true</code> atau <code>false</code>; hal lain dianggap tidak
+deklarasi, dan permainan yang menyatakan tidak ada yang berperilaku seperti sebelumnya.</p>
+<p><strong>Permainan skrip</strong> — statis <code>persistent</code> di <code>game</code> objek (lihat
+<a href="/id/docs/api/game-scripts.html#persistent-sessions">Skrip Permainan</a>):</p>
+<pre><code class="language-js">globalThis.game = {
+  persistent: true,
+  tickRateHz: 1,
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<p><strong>Permainan kontainer</strong> — <code>persistent</code> di dalam kamu <code>GET /describe</code> jawabannya (lihat
+<a href="/id/docs/api/container-games.html#get-describe">Server Game Kontainer</a>):</p>
+<pre><code class="language-json">{ "protocol": 1, "tickRateHz": 20, "maxSessions": 48, "persistent": true }
+</code></pre>
+<p>Tidak ada yang berubah tentang cara sesi dibuat: perjodohan, undangan, titik akhir AI, dan waktu nyata
+semua ruangan menghasilkan sesi persisten untuk permainan persisten.</p>
+<h2 id="2-keep-game-time-still-while-paused">2. Pertahankan waktu permainan saat dijeda</h2>
+<p>Platform tidak menulis ulang <code>ctx.now</code> — jam ini tetap menjadi jam dinding asli, kapan pun Anda mau
+tampilkan pemain (tenggat waktu, a "panen siap pukul") tetap memaknai apa yang dikatakannya. Sebaliknya, gigih
+sesi mendapatkan satu bidang konteks tambahan:</p>
+<pre><code class="language-js">ctx.pausedMs   // total milliseconds this session has spent paused, so far
+</code></pre>
+<p>Itu hanya tumbuh, dan hanya pada sesi yang terus-menerus (permainan lain tidak pernah terlihat). Kurangi dan Anda
+memiliki <strong>jam permainan</strong> itu berhenti ketika tidak ada orang di sana:</p>
+<pre><code class="language-js">function gameTime(ctx) {
+  return ctx.now - (ctx.pausedMs || 0);
+}
+
+globalThis.game = {
+  persistent: true,
+  tickRateHz: 1,
+
+  createSession(ctx) {
+    return { ok: true, sessionState: { lastTick: gameTime(ctx), crops: [] } };
+  },
+
+  onTick(ctx) {
+    var state = ctx.sessionState;
+    var t = gameTime(ctx);
+    var dt = t - state.lastTick;      // never includes the time the world was paused
+    state.crops.forEach(function (crop) { crop.growth += dt; });
+    state.lastTick = t;
+    return { ok: true, sessionState: state };
+  },
+
+  onPlayerMessage(ctx) { /* ... */ }
+};
+</code></pre>
+<p>Simpan stempel waktu Anda sendiri di waktu permainan (<code>gameTime(ctx)</code>), tidak masuk <code>ctx.now</code>, dan bandingkan saja
+melawan waktu pertandingan. Jika kamu <em>ingin</em> dunia untuk bergerak maju tanpa ada yang melihat — tanaman yang tumbuh
+semalaman - gunakan <code>ctx.now</code> sebagai gantinya dan ikuti langkah pertama setelah resume. Apa pun itu, itu milikmu
+pilihan; platform hanya melaporkan apa yang terjadi.</p>
+<p>Dua detail waktunya:</p>
+<ul>
+<li>Selama ~15 detik antara pemain terakhir keluar dan jeda, sesi terhenti
+berdetak secara normal. Pemain yang koneksinya terputus dan langsung kembali tidak menyebabkan jeda.</li>
+<li>Setelah resume, berikutnya <code>onTick</code> datang satu interval centang kemudian. Waktu yang dijeda tidak diputar ulang
+sebagai tumpukan kutu yang terlewat.</li>
+</ul>
+<p>Sebuah wadah menerima <code>pausedMs</code> di tempat yang sama: di <code>POST /sessions</code> tubuh itu dikirim kapan
+sesi dipulihkan setelah jeda.</p>
+<h2 id="3-your-client">3. Klien Anda</h2>
+<p>Sesi yang dijeda masih merupakan sesi aktif, jadi alur klien adalah yang sudah Anda miliki:</p>
+<ul>
+<li><strong>Buat daftar dunia untuk bergabung kembali</strong> dengan <code>GET /api/v1/games/{slug}/sessions/mine</code>. Setiap entri memiliki
+<code>pausedAt</code> stempel waktu saat dijeda dan <code>null</code> sementara seseorang ada di dalamnya, sehingga Anda dapat menunjukkannya "dijeda
+sejak…" atau "2 teman bermain sekarang" (melihat <a href="/id/docs/api/games.html#get-apiv1gamesslugsessionsmine">API Game — Sesi</a>).</li>
+<li><strong>Bergabunglah kembali</strong> dengan membuka <code>ws/v1/games?sessionId=…</code> persis seperti sebelumnya. Resume terjadi selama
+menghubungkan. Tidak ada yang istimewa "dilanjutkan" bingkai untuk itu — permainan hanya berjalan saat Anda pertama kali
+perintah tiba — jadi minta atau tunggu pesan status lengkap normal game Anda, seperti yang biasa Anda lakukan
+ada sambungan ulang.</li>
+<li><strong>Tangani resume yang gagal.</strong> Jika platform tidak dapat melanjutkan sesi — kemungkinan besar sebuah container
+permainan yang servernya masih dimulai — Anda terima <code>{"type":"error","error":"…"}</code> dan soketnya
+ditutup dengan kode <code>1001</code>. Sesi tetap dijeda dan tidak ada yang hilang. Hubungkan kembali setelah beberapa saat
+mundur (beberapa detik, bertambah), dan tampilkan "memulai dunia…" daripada sebuah kesalahan.</li>
+<li><code>presence</code> frame berfungsi seperti biasa, sehingga pemain lain dapat melihat siapa yang ada di dunia saat ini.</li>
+</ul>
+<h2 id="4-ending-a-persistent-session">4. Mengakhiri sesi yang persisten</h2>
+<p>Sesi persisten berakhir ketika:</p>
+<ul>
+<li><strong>laporan permainan Anda a <code>result</code></strong> (nilai pengembalian skrip atau pesan kontrol kontainer), atau</li>
+<li>pemilik game mengakhirinya (<code>DELETE /api/v1/me/github-games/{id}/sessions/{sessionId}</code>),</li>
+<li>anggota terakhir secara eksplisit meninggalkan dunia tanpa ruangan <code>/sessions/{id}/leave</code>, atau</li>
+<li>data pemulihannya yang dijeda akan habis masa berlakunya berdasarkan kebijakan penyimpanan penerapan.</li>
+</ul>
+<p>Memutuskan hubungan akan membuat keanggotaan tetap utuh; secara eksplisit meninggalkan menyerah keanggotaan. Melihat
+<a href="/id/docs/session-lifecycle.html">Siklus hidup sesi dan pemulihan</a> untuk kedua aliran.</p>
+<p>Meminta permainan baru bisa <strong>bukan</strong> menghentikan sesi pemain yang dijeda, dan sesi yang dijeda tetap dihitung
+terhadap batas sesi bersamaan per pemain (20 secara default). <strong>Beri pemain cara untuk menyelesaikan atau
+meninggalkan dunia</strong> - sebuah "meninggalkan dunia" perintahkan jawaban skrip Anda dengan a <code>result</code>, Misalnya.
+Jika tidak, pemain yang telah memenuhi batasnya tidak dapat memulai sesuatu yang baru.</p>
+<pre><code class="language-js">onPlayerMessage(ctx) {
+  var msg = ctx.message.data;
+  if (msg.type === "close-world" &amp;&amp; ctx.message.from === ctx.sessionState.ownerId) {
+    return { ok: true, sessionState: ctx.sessionState, result: { kind: "closed" } };
+  }
+  /* ... */
+}
+</code></pre>
+<h2 id="5-container-games-parking">5. Permainan kontainer: parkir</h2>
+<p>Untuk permainan kontainer jeda adalah a <strong>taman</strong>:</p>
+<ol>
+<li>Platform meminta cuplikan akhir (<code>GET /sessions/{id}/snapshot</code>) dan menyimpannya dengan tahan lama.</li>
+<li>Ini meruntuhkan sesi (<code>DELETE /sessions/{id}</code>). Wadah Anda berhenti mensimulasikannya, dan jika
+tidak ada sesi lain yang penerapannya dapat dihentikan setelah periode tidak aktif.</li>
+<li>Pada penggabungan berikutnya, ia membuat ulang sesi dengan <code>POST /sessions</code>, membawa yang disimpan <code>snapshot</code>
+dan yang diperbarui <code>pausedMs</code> — permintaan yang sama seperti pemulihan kerusakan — membangunkan penerapan yang terhenti
+terlebih dahulu jika diperlukan.</li>
+</ol>
+<p>Jadi cuplikan yang Anda kembalikan harus cukup untuk membangun kembali seluruh dunia, bukan hanya untuk melanjutkan beberapa hal
+detik permainan. Jika snapshot terakhir gagal, sesi diparkir dari periodik terakhirnya
+pos pemeriksaan. Berbeda dengan kerusakan, parkir dan restorasi tidak diperhitungkan dalam anggaran mulai ulang Anda, dan
+pemain mendapat no <code>resumed</code> bingkai: tidak ada seorang pun di sana untuk melihat keadaan mundur.</p>
+<h2 id="checklist">Daftar periksa</h2>
+<ul>
+<li>[ ] <code>persistent: true</code> dideklarasikan (skrip) atau dikembalikan dari <code>/describe</code> (wadah), dan pembaruan diterbitkan.</li>
+<li>[ ] Pengatur waktu permainan digunakan <code>ctx.now - ctx.pausedMs</code>, atau sengaja digunakan <code>ctx.now</code> dan mengejar ketinggalan.</li>
+<li>[ ] Daftar klien <code>sessions/mine</code>, menunjukkan <code>pausedAt</code>, dan bergabung kembali <code>ws/v1/games</code>.</li>
+<li>[ ] Klien mencoba kembali dengan backoff setelah an <code>error</code> diikuti dengan kode tutup <code>1001</code> saat terhubung.</li>
+<li>[ ] Pemain mempunyai cara untuk mengakhiri dunia, sehingga mereka tidak pernah terjebak pada batas sesi.</li>
+<li>[ ] Snapshot (Container) membangun kembali seluruh dunia.</li>
+</ul>
+
+{% endraw %}

@@ -1,0 +1,387 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "出版商"
+source_url: "/docs/api/publisher.html"
+source_path: "docs/api/publisher.md"
+source_hash: "9e89984a9a4079848d8caad7471dca1a8215f68459ac2bf1078bd011cecfc2bf"
+translation: "machine"
+permalink: "/zh-CN/docs/api/publisher.html"
+---
+{% raw %}
+<h1 id="publisher">出版商</h1>
+<p>发布者界面：管理发布者组织和成员，创建和上传软件标题和版本，以及管理标题的成就、权利和排行榜定义。</p>
+<blockquote>
+<p><strong>发布游戏而不是目录标题？</strong> 你不需要这些。业主是一家
+具有脚本或容器后端的游戏是其发行商并管理其排行榜和
+下的成就 <code>/api/v1/me/github-games/{id}/…</code> - 看
+<a href="/zh-CN/docs/tutorials/game-leaderboards-achievements.html">教程：游戏的排行榜和成就</a>.</p>
+</blockquote>
+<p>基本网址： <code>https://api.starhermit.com</code>。所有路由都需要 JWT 以及列出的权限声明。角色： <code>PublisherMember</code>, <code>PublisherOwner</code>。权限声明通过角色分配；铸造的代币带有许可声明。</p>
+<h2 id="publishers-and-members">出版商和会员</h2>
+<p>路由前缀： <code>api/v1/publisher</code>.</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/publisher</code></td>
+<td>智威汤逊（<code>Permission-publisher.content.manage</code>)</td>
+<td>创建发布者；创建者成为具有角色的成员 <code>"Owner"</code> → <code>201</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/publisher</code></td>
+<td>智威汤逊（<code>Permission-publisher.content.manage</code>)</td>
+<td>列出出版商 → <code>Publisher[]</code></td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/publisher/{publisherId}/members</code></td>
+<td>智威汤逊（<code>Permission-publisher.members.manage</code>) + <strong>角色 <code>Owner</code></strong></td>
+<td>添加会员 → <code>204</code></td>
+</tr>
+<tr>
+<td>删除</td>
+<td><code>/api/v1/publisher/{publisherId}/members/{memberUserId}</code></td>
+<td>智威汤逊（<code>Permission-publisher.members.manage</code>) + <strong>角色 <code>Owner</code></strong></td>
+<td>删除成员 → <code>204</code> （所有者不能被删除）</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/publisher/{publisherId}/members/{memberUserId}</code></td>
+<td>智威汤逊（<code>Permission-publisher.members.manage</code>) + <strong>该出版商的会员资格</strong></td>
+<td>获取会员 → <code>PublisherMember</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="who-may-change-membership">谁可以更改会员资格</h3>
+<p>权限声明表示您可以在某处管理发布者成员；它没有说 <em>哪个</em>
+出版商。因此，这两项检查均适用：</p>
+<ul>
+<li><strong>添加和删​​除成员是 <code>Owner</code>-仅有的。</strong> 会员资格具有内容管理权限
+出版商的每一个标题，因此可以添加成员的普通成员可以授予该权利
+对任何人的权威。非所有者获得 <code>401</code>.</li>
+<li><strong>阅读会员资格需要属于该出版商。</strong> 外面的呼叫者得到同样的结果
+<code>404</code> 作为非成员的用户，因此端点不会透露任何关于您不是的发布者的信息
+的一部分。</li>
+</ul>
+<h3 id="create-a-publisher">创建发布者</h3>
+<p><code>POST /api/v1/publisher</code></p>
+<pre><code class="language-json">{
+  "name": "HypeDriven",
+  "description": "..."
+}
+</code></pre>
+<p>创建者成为具有角色的成员 <code>"Owner"</code>.</p>
+<h3 id="add-a-member">添加会员</h3>
+<p><code>POST /api/v1/publisher/{publisherId}/members</code></p>
+<pre><code class="language-json">{ "userId": "&lt;user id&gt;" }
+</code></pre>
+<h3 id="dtos">DTO</h3>
+<pre><code class="language-json">// Publisher
+{
+  "id": "...",
+  "name": "...",
+  "description": "...",
+  "ownerUserId": "...",
+  "createdAt": "...",
+  "updatedAt": "..."
+}
+</code></pre>
+<pre><code class="language-json">// PublisherMember
+{
+  "id": "...",
+  "publisherId": "...",
+  "userId": "...",
+  "role": "...",
+  "joinedAt": "..."
+}
+</code></pre>
+<h2 id="software-titles-and-builds">软件标题和版本</h2>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/publisher/software</code></td>
+<td>智威汤逊（<code>Permission-publisher.content.manage</code>)</td>
+<td>创建/更新软件标题（正文 = 标题元数据；强制执行标题实际发布者的成员身份）</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/publisher/software/upload</code></td>
+<td>智威汤逊（<code>Permission-publisher.content.manage</code> <strong>+</strong> <code>Permission-publisher.binary.publish</code>)</td>
+<td>获取标题的上传 URL → <code>UploadUrlInfo[]</code></td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/publisher/software/build/finalize</code></td>
+<td>智威汤逊（<code>Permission-publisher.content.manage</code> <strong>+</strong> <code>Permission-publisher.binary.publish</code>)</td>
+<td>根据上传的资源完成构建 → <code>204</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/publisher/analytics/downloads?publisherId=</code></td>
+<td>智威汤逊（<code>Permission-publisher.content.manage</code>)</td>
+<td>每个标题的下载次数</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/publisher/analytics/launches?publisherId=</code></td>
+<td>智威汤逊（<code>Permission-publisher.content.manage</code>)</td>
+<td>每个标题的启动次数</td>
+</tr>
+</tbody>
+</table>
+<h3 id="publishing-a-build-needs-the-binary-publish-grant">发布构建需要二进制发布授权</h3>
+<p>两个构建端点需要 <strong><code>publisher.binary.publish</code></strong> 在上面
+<code>publisher.content.manage</code> 以及图书出版商的会员资格。没有它两个都会回答 <code>403</code>,
+当此页面上的所有其他端点继续工作时 - 您可以创建和编辑标题、定义
+成就和排行榜，以及授予的权利；您只是无法发送可执行文件。</p>
+<p>原因在于构建是什么。构建的资产由桌面客户端下载并在
+具有玩家特权的玩家机器，位于 Starhermit 控制的任何沙箱之外 - 与
+浏览器游戏，在浏览器中运行。因此，发布权是由每个帐户授予的
+星隐管理员（ <code>BinaryPublisher</code> 角色），不是通过创建发布者获得的。否
+其他角色承载它。 <strong>在构建上传流程之前，请向管理员请求授权
+这些端点</strong>;当发布者帐户被暂停时，它也会被删除。</p>
+<p>浏览器游戏不需要这些： <code>/api/v1/me/github-games</code> 提交、文件夹上传和捆绑
+为任何已登录的帐户推送保持自助服务。</p>
+<h3 id="create-or-update-a-catalog-title">创建或更新目录标题</h3>
+<p><code>POST /api/v1/publisher/software</code> 接受 <code>id</code> （省略新标题）， <code>publisherId</code>, <code>name</code>,
+<code>description</code>, <code>category</code>, <code>platform</code>, <code>releaseStatus</code>, <code>tags</code>， 和 <code>priceCents</code>:</p>
+<pre><code class="language-json">{
+  "publisherId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "name": "Orbit League",
+  "description": "A space racing game.",
+  "category": "game",
+  "platform": "windows",
+  "releaseStatus": "released",
+  "tags": ["racing"],
+  "priceCents": 0
+}
+</code></pre>
+<p>成功是 <code>201</code> 与标题。仅接受标题元数据；不发送发布商会员资格
+或此处的资产对象。创建发布者退货 <code>201</code> 没有发布者对象；列表
+<code>GET /api/v1/publisher</code> 获取其 ID。</p>
+<h3 id="get-upload-urls">获取上传网址</h3>
+<p><code>POST /api/v1/publisher/software/upload</code></p>
+<pre><code class="language-json">{ "titleId": "&lt;title id&gt;" }
+</code></pre>
+<p>回复 - <code>UploadUrlInfo[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "type": "executable",
+    "uploadUrl": "...",
+    "fieldKey": "..."
+  }
+]
+</code></pre>
+<p><code>type</code> 是其中之一 <code>"executable"</code>, <code>"data"</code>, <code>"metadata"</code>.</p>
+<h3 id="finalize-a-build">完成构建</h3>
+<p><code>POST /api/v1/publisher/software/build/finalize</code> → <code>204</code></p>
+<pre><code class="language-json">{
+  "titleId": "&lt;title id&gt;",
+  "buildId": "&lt;optional build id&gt;",
+  "version": "1.0.0",
+  "releaseNotes": "...",
+  "assets": [
+    { "type": "executable", "checksum": "...", "fieldKey": "..." }
+  ]
+}
+</code></pre>
+<p>目录构建工作流程当前是预览版，不提供生产二进制交付
+或内容验证或恶意软件扫描的保证。不要对待已接受的构建或资产
+状态作为可执行文件安全的证据。看 <a href="/zh-CN/docs/availability.html">功能可用性</a>。
+托管游戏发布使用 <a href="/zh-CN/docs/api/github-games.html">游戏上传API</a>.</p>
+<h3 id="analytics">分析</h3>
+<p>两个端点都返回一个 JSON 对象，将标题 id 映射到计数：</p>
+<pre><code class="language-json">{ "&lt;titleId&gt;": 42 }
+</code></pre>
+<h2 id="achievements">成就</h2>
+<p>路线 <code>api/v1/publisher</code>;所有成就管理路线都需要 <code>Permission-publisher.content.manage</code>.</p>
+<p>这些端点管理 <strong>目录标题</strong> 仅成就。他们还要求呼叫者是
+拥有该书名的出版商的成员，并且他们 <strong>属于以下成就的失败关闭
+一个权威的游戏</strong> — 这些是由游戏的脚本或容器后端声明的，而不是
+出版商管理（参见 <a href="/zh-CN/docs/api/achievements.html">成就</a>, <a href="/zh-CN/docs/api/game-scripts.html#achievements">游戏脚本</a>，
+和 <a href="/zh-CN/docs/api/container-games.html#control-channel">容器游戏服务器</a>).</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/publisher/titles/{titleId}/achievements</code></td>
+<td>智威汤逊</td>
+<td>创造成就 → <code>AchievementDto</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/publisher/titles/{titleId}/achievements</code></td>
+<td>智威汤逊</td>
+<td>列出标题的成就 → <code>AchievementDto[]</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/publisher/achievements/{id}</code></td>
+<td>智威汤逊</td>
+<td>获得一项成就 → <code>AchievementDto</code></td>
+</tr>
+<tr>
+<td>放</td>
+<td><code>/api/v1/publisher/achievements/{id}</code></td>
+<td>智威汤逊</td>
+<td>更新（所有字段可为空）→ <code>AchievementDto</code></td>
+</tr>
+<tr>
+<td>删除</td>
+<td><code>/api/v1/publisher/achievements/{id}</code></td>
+<td>智威汤逊</td>
+<td>删除 → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-an-achievement">创造成就</h3>
+<p><code>POST /api/v1/publisher/titles/{titleId}/achievements</code></p>
+<pre><code class="language-json">{
+  "key": "first_win",
+  "name": "First Win",
+  "description": "Win your first game.",
+  "icon": "...",
+  "secret": false,
+  "points": 10,
+  "visibility": "...",
+  "criteria": "..."
+}
+</code></pre>
+<p><code>icon</code>, <code>visibility</code>， 和 <code>criteria</code> 是可选的。在 <code>PUT</code>，所有字段都可为空。看 <a href="/zh-CN/docs/api/achievements.html">achievements.md</a> 面向玩家的表面。</p>
+<h2 id="entitlements">权利</h2>
+<p>路线 <code>api/v1/publisher/entitlements</code>;两条路线都需要 <code>Permission-publisher.content.manage</code>.</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/publisher/entitlements/grant</code></td>
+<td>智威汤逊</td>
+<td>授予用户头衔 → <code>204</code></td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/publisher/entitlements/revoke</code></td>
+<td>智威汤逊</td>
+<td>撤销用户的头衔 → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<p>两者的身体：</p>
+<pre><code class="language-json">{
+  "userId": "&lt;user id&gt;",
+  "softwareTitleId": "&lt;title id&gt;"
+}
+</code></pre>
+<h2 id="leaderboards">排行榜</h2>
+<p>路线 <code>api/v1/publisher/leaderboards</code>;所有路线都需要 <code>Permission-publisher.content.manage</code>.</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/publisher/leaderboards/</code></td>
+<td>智威汤逊</td>
+<td>创建排行榜定义 → <code>LeaderboardDefinitionDto</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/publisher/leaderboards/{id}</code></td>
+<td>智威汤逊</td>
+<td>获取定义 → <code>LeaderboardDefinitionDto</code></td>
+</tr>
+<tr>
+<td>放</td>
+<td><code>/api/v1/publisher/leaderboards/{id}</code></td>
+<td>智威汤逊</td>
+<td>更新（所有字段可为空）→ <code>LeaderboardDefinitionDto</code></td>
+</tr>
+<tr>
+<td>删除</td>
+<td><code>/api/v1/publisher/leaderboards/{id}</code></td>
+<td>智威汤逊</td>
+<td>删除 → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-leaderboard">创建排行榜</h3>
+<p><code>POST /api/v1/publisher/leaderboards/</code></p>
+<pre><code class="language-json">{
+  "name": "Global Elo",
+  "scoreType": "...",
+  "sortDirection": "...",
+  "resetSchedule": "...",
+  "minScore": 0,
+  "maxScore": 4000,
+  "scope": "...",
+  "region": "...",
+  "isActive": true,
+  "softwareTitleId": "&lt;optional title id&gt;"
+}
+</code></pre>
+<p><code>resetSchedule</code>, <code>minScore</code>, <code>maxScore</code>, <code>region</code>， 和 <code>softwareTitleId</code> 是可选的。在 <code>PUT</code>，所有字段都可为空。 <code>resetSchedule</code> 是 <code>daily</code>, <code>weekly</code>, <code>monthly</code> 或者 <code>never</code>;其他任何东西都是 <code>400</code> - 看 <a href="/zh-CN/docs/api/leaderboards.html#reset-schedules">重置时间表</a>。看 <a href="/zh-CN/docs/api/leaderboards.html">leaderboards.md</a> 面向玩家的表面。</p>
+<h2 id="publish-a-build-flow">发布构建：流程</h2>
+<ol start="0">
+<li><strong>持有二进制发布授权</strong>：步骤 3 和 5 需要 <code>publisher.binary.publish</code>，其中一个
+Starhermit 管理员为每个帐户授予权限。看
+<a href="#publishing-a-build-needs-the-binary-publish-grant">发布构建需要二进制发布授权</a>.</li>
+<li><strong>创建发布者</strong>: <code>POST /api/v1/publisher</code> 和 <code>{ name, description }</code>.</li>
+<li><strong>创建标题</strong>: <code>POST /api/v1/publisher/software</code> 标题元数据如下。</li>
+<li><strong>获取上传网址</strong>: <code>POST /api/v1/publisher/software/upload</code> 和 <code>{ titleId }</code>.</li>
+<li><strong>上传文件</strong> 给返回的 <code>uploadUrl</code>s.</li>
+<li><strong>完成构建</strong>: <code>POST /api/v1/publisher/software/build/finalize</code> 与上传的资产' <code>{ type, checksum, fieldKey }</code> 条目。</li>
+<li><strong>检查分发可用性</strong>：当前目录预览不保证经过验证的生产下载或恶意软件扫描；看 <a href="/zh-CN/docs/availability.html">可用性</a>.</li>
+<li><strong>用户认领并下载</strong> 目录中的标题 — 请参阅 <a href="/zh-CN/docs/api/catalog.html">catalog.md</a>.</li>
+</ol>
+<p>错误体各不相同；看 <a href="/zh-CN/docs/api/conventions.html#requests-and-responses">API约定</a>.</p>
+<h2 id="see-also">参见</h2>
+<ul>
+<li><a href="/zh-CN/docs/api/catalog.html">catalog.md</a> — 玩家如何浏览、领取和下载游戏</li>
+<li><a href="/zh-CN/docs/api/achievements.html">achievements.md</a> — 面向玩家的成就</li>
+<li><a href="/zh-CN/docs/api/leaderboards.html">leaderboards.md</a> — 面向玩家的排行榜</li>
+<li><a href="/zh-CN/docs/api/auth.html">auth.md</a> — JWT、角色和权限声明</li>
+</ul>
+<p>看 <a href="/zh-CN/docs/credentials.html">凭证兼容性</a> 和 <a href="/zh-CN/docs/api/contracts.html">机器可读的合同</a>.</p>
+
+{% endraw %}

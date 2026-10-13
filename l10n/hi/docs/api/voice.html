@@ -1,0 +1,194 @@
+---
+layout: "wiki"
+lang: "hi"
+title: "आवाज़"
+source_url: "/docs/api/voice.html"
+source_path: "docs/api/voice.md"
+source_hash: "b854ce844a33279125a6c44c43b800b3efef80cbcf31d1f74a9f17192fab0aef"
+translation: "machine"
+permalink: "/hi/docs/api/voice.html"
+---
+{% raw %}
+<h1 id="voice">आवाज़</h1>
+<p>StarHermit वॉयस REST API पर प्रति-बातचीत वॉयस रूम प्रदान करता है (<code>api/v1/voice</code>) प्लस एक मिश्रित बाइनरी/टेक्स्ट वेबसॉकेट (<code>ws/v1/voice</code>) ऑडियो और वेबआरटीसी सिग्नलिंग के लिए। सभी REST समापन बिंदुओं को प्रमाणीकरण की आवश्यकता होती है। आवाज की उपलब्धता भिन्न हो सकती है। त्रुटि निकाय अलग-अलग होते हैं; देखना <a href="/hi/docs/api/conventions.html#requests-and-responses">एपीआई कन्वेंशन</a>.</p>
+<p>कमरे एक से लंगर डालते हैं <a href="/hi/docs/api/chat.html">चैट वार्तालाप</a>; बातचीत में सदस्यता हर चीज़ को प्रवेश देती है, इसलिए चैट मैत्री नियम आवाज को भी नियंत्रित करते हैं (गेम-सत्र वार्तालाप मित्रता को दरकिनार कर देते हैं)। सीमाएँ: प्रति वार्तालाप 3 सक्रिय कमरे, प्रति कमरा अधिकतम 10 प्रतिभागी, कोडेक <code>"opus"</code>.</p>
+<h2 id="rest-endpoints">बाकी समापनबिंदु</h2>
+<p>आधार: <code>https://api.starhermit.com/api/v1/voice</code>.</p>
+<table>
+<thead>
+<tr>
+<th>तरीका</th>
+<th>पथ</th>
+<th>प्रमाणीकरण</th>
+<th>विवरण</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>डाक</td>
+<td><code>/rooms</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>बातचीत के लिए एक ध्वनि कक्ष बनाएं</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/rooms?conversationId=</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>बातचीत के लिए कमरों की सूची बनाएं</td>
+</tr>
+<tr>
+<td>पाना</td>
+<td><code>/rooms/{roomId}</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>एक कमरा मिला</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/rooms/{roomId}/join</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>एक कमरे में शामिल हों (WS से पहले आवश्यक)</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/rooms/{roomId}/leave</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>एक कमरा छोड़ दो</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/rooms/{roomId}/mute</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>अपनी स्वयं की मूक स्थिति सेट करें</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/rooms/{roomId}/participants/{userId}/server-mute</code></td>
+<td>जेडब्ल्यूटी (निर्माता)</td>
+<td>मेज़बान म्यूट प्रतिभागी नहीं उठा सकता</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/rooms/{roomId}/close</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>एक कमरा बंद करें (केवल निर्माता)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-room">एक कमरा बनाएं</h3>
+<p><code>POST /rooms</code></p>
+<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 10 }
+</code></pre>
+<p>रिटर्न ए <code>VoiceRoomDto</code>.</p>
+<h3 id="room-shape">कमरे का आकार</h3>
+<p><code>GET /rooms?conversationId=&lt;guid&gt;</code> → <code>VoiceRoomDto[]</code>; <code>GET /rooms/{roomId}</code> → <code>VoiceRoomDto</code>:</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "conversationId": "&lt;guid&gt;",
+  "creatorUserId": "&lt;guid&gt;",
+  "codec": "opus",
+  "status": "Active",
+  "maxParticipants": 10,
+  "createdAt": "2026-07-22T07:00:00Z",
+  "participants": [
+    {
+      "userId": "&lt;guid&gt;",
+      "username": "alice",
+      "isMuted": false,
+      "isConnected": true,
+      "joinedAt": "2026-07-22T07:01:00Z"
+    }
+  ]
+}
+</code></pre>
+<h3 id="join-leave-mute-close">शामिल हों, छोड़ें, म्यूट करें, बंद करें</h3>
+<p><code>POST /rooms/{roomId}/join</code> → <code>VoiceRoomDto</code>. यह REST जॉइन है <strong>आवश्यक</strong> वेबसॉकेट खोलने से पहले; इसके बिना कनेक्ट करना वापस आ जाता है <code>403</code>. पुनः शामिल होने से प्रतिभागी का नाम साफ़ हो जाता है <strong>अपना</strong> आवाज़ बंद करना (<code>isMuted</code>); एक मेज़बान का <code>isServerMuted</code> बचता है छोड़ो और पुनः कनेक्ट करो।</p>
+<p><code>POST /rooms/{roomId}/leave</code> → <code>204</code>.</p>
+<p><code>POST /rooms/{roomId}/mute</code> साथ <code>{ "muted": true }</code> → <code>204</code>. यह प्रतिभागी का स्वयं का म्यूट है और होस्ट म्यूट को साफ़ नहीं कर सकता।</p>
+<p><code>POST /rooms/{roomId}/participants/{userId}/server-mute</code> साथ <code>{ "muted": true }</code> → <code>204</code> (केवल निर्माता). यदि म्यूट सेट किया गया है तो ऑडियो हटा दिया जाता है।</p>
+<p><code>POST /rooms/{roomId}/close</code> → <code>204</code> (केवल निर्माता).</p>
+<p>पंक्ति जो कुछ भी याद रखती है उसे इनहेरिट करने के बजाय कनेक्ट पर अपना म्यूट बताएं।</p>
+<h2 id="websocket-wsv1voice">वेबसॉकेट: <code>ws/v1/voice</code></h2>
+<p>से कनेक्ट <code>wss://api.starhermit.com/ws/v1/voice?roomId=&lt;guid&gt;</code> के माध्यम से एक JWT के साथ <code>Authorization</code> शीर्षलेख, <code>?ticket=</code>, या <code>?access_token=</code>. एक पूर्व विश्राम <code>join</code> आवश्यक है।</p>
+<p>प्रोटोकॉल मिश्रित है:</p>
+<h3 id="binary-frames--audio">बाइनरी फ़्रेम - ऑडियो</h3>
+<p>बाइनरी फ़्रेम ऑडियो ले जाते हैं (जैसे ओपस)। सर्वर प्रत्येक फ़्रेम को अन्य प्रतिभागियों को इस प्रकार रिले करता है:</p>
+<pre><code>[16-byte senderUserId][audio…]
+</code></pre>
+<p>सर्वर उपसर्ग लगाता है <strong>प्रमाणीकृत</strong> प्रेषक आईडी और ग्राहक द्वारा प्रदत्त प्रेषक पर कभी भरोसा नहीं करता। म्यूट किए गए उपयोगकर्ताओं का ऑडियो हटा दिया गया है. सीमाएँ: प्रति उपयोगकर्ता 100 पैकेट/सेकंड, अधिकतम फ्रेम 4000 बाइट्स।</p>
+<h3 id="text-frames--client--server-control">टेक्स्ट फ़्रेम - क्लाइंट → सर्वर नियंत्रण</h3>
+<pre><code class="language-json">{ "type": "mute", "muted": true }
+</code></pre>
+<pre><code class="language-json">{ "type": "speaking", "speaking": true }
+</code></pre>
+<pre><code class="language-json">{ "type": "rtc", "to": "&lt;guid&gt;", "payload": { } }
+</code></pre>
+<pre><code class="language-json">{ "type": "deafen", "deafened": true }
+</code></pre>
+<p><code>rtc</code> पेलोड अपारदर्शी WebRTC सिग्नलिंग हैं, जिन्हें संबोधित प्रतिभागी को भेजा जाता है।
+<code>deafen</code> इस सॉकेट के लिए आने वाले रिलेड बाइनरी ऑडियो को दबा देता है; यह स्वचालित रूप से म्यूट नहीं होता है
+आउटगोइंग ऑडियो या एक अलग सहकर्मी कनेक्शन। जब खिलाड़ी डेफेन चुनता है तो उन्हें स्थानीय रूप से लागू करें।</p>
+<p>REST प्रतिभागी का आकार स्वयं के म्यूट को उजागर करता है, होस्ट म्यूट को नहीं। प्रारंभिक वॉयस रोस्टर और इवेंट में शामिल हों
+सम्मिलित करें <code>serverMuted</code>; कोई अलग होस्ट-म्यूट-परिवर्तित पुश इवेंट नहीं है। यदि आपका गेम P2P का उपयोग करता है
+ऑडियो, इसका होस्ट-म्यूट सिग्नलिंग और प्रवर्तन आपके अपने मीडिया एकीकरण का हिस्सा होना चाहिए।</p>
+<p>जब आखिरी वॉयस सॉकेट डिस्कनेक्ट हो जाता है, तो वॉयस-रूम सदस्यता समाप्त हो जाती है। रेस्ट को कॉल करें <code>join</code> फिर से पहले
+ऑडियो भेजने से पहले इच्छित म्यूट को पुनः कनेक्ट करना और पुनर्स्थापित करना।</p>
+<h3 id="server--client-events">सर्वर → क्लाइंट इवेंट</h3>
+<p>लिफ़ाफ़ा: <code>{ "event": "&lt;name&gt;", "data": { } }</code>.</p>
+<table>
+<thead>
+<tr>
+<th>आयोजन</th>
+<th><code>data</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>voice.roster</code></td>
+<td><code>{ "roomId", "participants": [{ "userId", "muted", "serverMuted" }] }</code> - नवागंतुक को भेजा गया</td>
+</tr>
+<tr>
+<td><code>voice.participant_joined</code></td>
+<td><code>{ "roomId", "userId", "muted", "serverMuted" }</code></td>
+</tr>
+<tr>
+<td><code>voice.participant_left</code></td>
+<td><code>{ "roomId", "userId" }</code></td>
+</tr>
+<tr>
+<td><code>voice.mute_changed</code></td>
+<td><code>{ "roomId", "userId", "muted" }</code></td>
+</tr>
+<tr>
+<td><code>voice.deafened</code></td>
+<td>`{ "कक्षआईडी", "उपयोगकर्ता पहचान", "बहरा कर दिया" }</td>
+</tr>
+<tr>
+<td><code>voice.speaking</code></td>
+<td><code>{ "roomId", "userId", "speaking" }</code></td>
+</tr>
+<tr>
+<td><code>voice.rtc</code></td>
+<td><code>{ "roomId", "from", "payload" }</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="example-integration-pattern-from-the-chess-reference-implementation">उदाहरण एकीकरण पैटर्न (शतरंज संदर्भ कार्यान्वयन से)</h2>
+<p>वॉयस प्रति गेम सत्र में ऑप्ट-इन है। एक विशिष्ट ग्राहक <code>enable()</code> प्रवाह:</p>
+<ol>
+<li><code>GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;</code> एक मौजूदा कमरा ढूंढने के लिए, अन्यथा <code>POST /api/v1/voice/rooms</code> एक बनाने के लिए.</li>
+<li><code>POST /api/v1/voice/rooms/{roomId}/join</code>.</li>
+<li>खुला <code>ws/v1/voice?roomId=&lt;guid&gt;</code>.</li>
+</ol>
+<p>में <a href="/hi/docs/tutorials/chess-walkthrough.html">शतरंज संदर्भ कार्यान्वयन</a>, ऑडियो सही बातचीत के साथ WebRTC P2P पर चलता है; के माध्यम से सिग्नलिंग का आदान-प्रदान किया जाता है <code>rtc</code> संदेशों को नियंत्रित करें (<code>{ "sdp": … }</code> / <code>{ "ice": … }</code> पेलोड), फ़ॉलबैक के रूप में सर्वर-रिले ओपस बाइनरी पथ के साथ।</p>
+<p>गेम-स्कोप्ड लॉन्च टोकन <strong>मई</strong> अपने गेम सत्र से जुड़े कमरों के लिए वॉयस REST और WebSocket का उपयोग करें।</p>
+<h2 id="see-also">यह भी देखें</h2>
+<ul>
+<li><a href="/hi/docs/tutorials/audio-options.html">ऑडियो विकल्प</a> - बेसलाइन वॉल्यूम, माइक्रोफ़ोन और पुश-टू-टॉक नियंत्रण,
+स्वतः-पहचानित प्लेबैक कैप के साथ</li>
+<li><a href="/hi/docs/api/chat.html">बात करना</a> - कमरे बातचीत के लिए लंगर डालते हैं; खेल सत्र उजागर <code>chatConversationId</code></li>
+<li><a href="/hi/docs/api/games.html">खेल</a> - गेम सत्र और लॉन्च टोकन</li>
+<li><a href="/hi/docs/api/relay.html">रिले</a> - गेम नेटकोड के लिए बाइट फैन-आउट</li>
+</ul>
+<p>देखना <a href="/hi/docs/credentials.html">क्रेडेंशियल अनुकूलता</a> और <a href="/hi/docs/api/contracts.html">मशीन-पठनीय अनुबंध</a>.</p>
+
+{% endraw %}

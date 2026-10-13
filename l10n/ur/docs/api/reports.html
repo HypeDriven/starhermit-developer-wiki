@@ -1,0 +1,185 @@
+---
+layout: "wiki"
+lang: "ur"
+title: "کریش اور بگ رپورٹس"
+source_url: "/docs/api/reports.html"
+source_path: "docs/api/reports.md"
+source_hash: "6d28d99eae2ec0d57e0611ea1d1db48136d4f38dacbb270fd4242dbfd0f0e97a"
+translation: "machine"
+permalink: "/ur/docs/api/reports.html"
+---
+{% raw %}
+<h1 id="crash-and-bug-reports">کریش اور بگ رپورٹس</h1>
+<p>کھلاڑی کسی بھی گیم کے اندر سے کریش یا بگ کی اطلاع دے سکتے ہیں جس میں سلگ ہے — صرف براؤزر گیمز
+شامل - گیم کے لانچ ٹوکن یا مکمل صارف ٹوکن کا استعمال کرتے ہوئے۔ گیم کا مالک پڑھتا ہے، ٹرائیز اور
+ان کے ذریعے حذف کرتا ہے۔ <code>/api/v1/me/github-games/{id}/reports</code>.</p>
+<p>کنٹینر گیم کے اپنے سرور آؤٹ پٹ اور کریش ریکارڈز کے لیے، دیکھیں
+<a href="/ur/docs/api/container-games.html#your-servers-output-and-crash-reports">کنٹینر کی میزبانی والے گیم سرورز - آپ کے سرور کی آؤٹ پٹ اور کریش رپورٹس</a>.</p>
+<h2 id="endpoints">اینڈ پوائنٹس</h2>
+<table>
+<thead>
+<tr>
+<th>طریقہ</th>
+<th>راستہ</th>
+<th>تصنیف</th>
+<th>تفصیل</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>پوسٹ</td>
+<td><code>/api/v1/games/{slug}/reports</code></td>
+<td>اس گیم، یا JWT کے لیے ٹوکن لانچ کریں۔</td>
+<td>کریش یا بگ رپورٹ درج کریں۔</td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/api/v1/games/{slug}/reports/mine</code></td>
+<td>اس گیم، یا JWT کے لیے ٹوکن لانچ کریں۔</td>
+<td>اس گیم کے لیے آپ کی 50 تازہ ترین رپورٹس، ان کی حیثیت کے ساتھ</td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/api/v1/me/github-games/{id}/reports</code></td>
+<td>JWT (مالک)</td>
+<td>رپورٹس کی فہرست: <code>?kind=crash|bug&amp;status=open|acknowledged|resolved&amp;page=&amp;pageSize=</code> (≤100)</td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (مالک)</td>
+<td>ایک رپورٹ، اس کی منسلکہ فہرست کے ساتھ</td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}/attachments/{attachmentId}</code></td>
+<td>JWT (مالک)</td>
+<td>ایک منسلکہ، ہمیشہ ڈاؤن لوڈ کے طور پر</td>
+</tr>
+<tr>
+<td>پیچ</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (مالک)</td>
+<td>سیٹ <code>status</code></td>
+</tr>
+<tr>
+<td>حذف کریں۔</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (مالک)</td>
+<td>رپورٹ حذف کریں → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="file-a-report">رپورٹ درج کروائیں۔</h2>
+<pre><code class="language-http">POST /api/v1/games/{slug}/reports
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  "kind": "crash",
+  "title": "Crash entering the second level",
+  "description": "TypeError: cannot read properties of undefined (reading 'tiles')\n    at loadLevel (game.js:812)",
+  "clientVersion": "1.4.2",
+  "platform": "web",
+  "buildId": "a1b2c3d",
+  "sessionId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "attachments": [
+    { "fileName": "console.log", "contentType": "text/plain", "dataBase64": "…" }
+  ]
+}
+</code></pre>
+<ul>
+<li><code>kind</code> ہے <code>crash</code> یا <code>bug</code>; <code>title</code> درکار ہے (≤200 حروف)۔</li>
+<li>باقی سب کچھ اختیاری ہے۔ <code>userAgent</code> درخواست کی ڈیفالٹس <code>User-Agent</code> ہیڈر</li>
+<li>جواب: <code>201 { "id", "kind", "status": "open", "createdAt" }</code>.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>حیثیت</th>
+<th>مطلب</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td>ناقص: نامعلوم <code>kind</code>، لاپتہ <code>title</code>، غلط base64، یا JSON نہیں۔</td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>نامعلوم یا ہٹا دیا گیا گیم</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>تفصیل، اٹیچمنٹ کی گنتی یا اٹیچمنٹ بائٹس گیم کی حدود سے زیادہ</td>
+</tr>
+<tr>
+<td><code>429</code></td>
+<td>اس گیم کے لیے روزانہ کی رپورٹ کی حد سے زیادہ؛ دیکھیں <code>Retry-After</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="limits">حدود</h2>
+<p>آپریٹرز ان میں سے ہر ایک کو پورے پلیٹ فارم اور انفرادی گیمز کے لیے تبدیل کر سکتے ہیں۔ روزانہ کی حد
+ایک کھلاڑی کے لیے بھی سیٹ کیا جا سکتا ہے۔</p>
+<table>
+<thead>
+<tr>
+<th>حد</th>
+<th>طے شدہ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>رپورٹس فی کھلاڑی فی گیم فی دن</td>
+<td>20</td>
+</tr>
+<tr>
+<td>تفصیل کی لمبائی</td>
+<td>20,000 حروف</td>
+</tr>
+<tr>
+<td>منسلکات فی رپورٹ</td>
+<td>4</td>
+</tr>
+<tr>
+<td>اٹیچمنٹ بائٹس فی رپورٹ</td>
+<td>2 ایم آئی بی</td>
+</tr>
+<tr>
+<td>رپورٹس فی گیم رکھی جاتی ہیں۔</td>
+<td>2,000</td>
+</tr>
+<tr>
+<td>بائٹس فی گیم رکھی جاتی ہیں۔</td>
+<td>256 ایم بی</td>
+</tr>
+<tr>
+<td>برقرار رکھنا</td>
+<td>90 دن</td>
+</tr>
+</tbody>
+</table>
+<p>جب کوئی گیم اپنی اسٹوریج کی حد تک پہنچ جاتی ہے، تو سب سے پرانی رپورٹس — جو پہلے حل ہو جاتی ہیں — کو ہٹا دیا جاتا ہے۔
+جگہ بنائیں پوری فی گیم بائٹ کی حد سے بڑی ایک رپورٹ کے ساتھ انکار کر دیا گیا ہے۔ <code>413</code>.</p>
+<h2 id="triage-reports-game-owner">ٹرائیج رپورٹس (گیم مالک)</h2>
+<p>فہرست واپس آتی ہے۔ <code>{ "items", "total", "page", "pageSize" }</code>; ہر شے پر رپورٹر کا نام ہوتا ہے،
+<code>kind</code>, <code>status</code>, <code>title</code>، کلائنٹ کی تفصیلات اور اس کے منسلکہ شمار۔ ایک رپورٹ کے ذریعے منتقل کریں
+<code>open</code> → <code>acknowledged</code> → <code>resolved</code> کے ساتھ:</p>
+<pre><code class="language-http">PATCH /api/v1/me/github-games/{id}/reports/{reportId}
+Content-Type: application/json
+
+{ "status": "resolved" }
+</code></pre>
+<p>منسلکات کو ڈاؤن لوڈ کے طور پر پیش کیا جاتا ہے (<code>Content-Disposition: attachment</code>, <code>nosniff</code>، ایک سینڈ باکسنگ
+CSP)۔ صرف inert قسمیں اپنے اعلان کردہ مواد کی قسم کو رکھتی ہیں — ٹیکسٹ، JSON، PNG، JPEG، WebP، GIF، zip اور
+gzip کچھ اور، مارک اپ شامل، کے طور پر پیش کیا جاتا ہے۔ <code>application/octet-stream</code>.</p>
+<h2 id="from-the-javascript-sdk">JavaScript SDK سے</h2>
+<pre><code class="language-js">StarHermit.reportBug('Score did not save', 'Finished level 3, score shows 0', { clientVersion: '1.4.2' });
+StarHermit.captureCrashes({ clientVersion: '1.4.2' });   // opt-in: uncaught errors become crash reports
+</code></pre>
+<p>دیکھیں <a href="/ur/docs/sdk/javascript.html#crash-and-bug-reports">JavaScript SDK</a>.</p>
+<p>مشترکہ <a href="/ur/docs/api/conventions.html">API کنونشنز</a> جوابی تجزیہ، ٹائم اسٹیمپ، صفحہ بندی، اور دوبارہ کوششوں کی وضاحت کریں۔</p>
+<p>دیکھیں <a href="/ur/docs/credentials.html">اسناد کی مطابقت</a> اور <a href="/ur/docs/api/contracts.html">مشین پڑھنے کے قابل معاہدے</a>.</p>
+
+{% endraw %}

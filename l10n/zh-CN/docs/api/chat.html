@@ -1,0 +1,361 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "聊天"
+source_url: "/docs/api/chat.html"
+source_path: "docs/api/chat.md"
+source_hash: "9c505584849a0722b12e5a1beb5ca636c08fbd95af2294c71ff7c49eddef36ad"
+translation: "machine"
+permalink: "/zh-CN/docs/api/chat.html"
+---
+{% raw %}
+<h1 id="chat">聊天</h1>
+<p>StarHermit 聊天涵盖直接消息、群组房间和游戏会话对话，通过 REST API (<code>api/v1/chat</code>）加上服务器到客户端的 WebSocket 推送通道（<code>ws/v1/chat</code>）。所有 REST 端点都需要身份验证。错误体各不相同；看 <a href="/zh-CN/docs/api/conventions.html#requests-and-responses">API约定</a>.</p>
+<h2 id="rest-endpoints">REST 端点</h2>
+<p>根据： <code>https://api.starhermit.com/api/v1/chat</code>.</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>邮政</td>
+<td><code>/conversations</code></td>
+<td>智威汤逊</td>
+<td>创建对话（1 个朋友 = 直接，≥2 = 群组）</td>
+</tr>
+<tr>
+<td>修补</td>
+<td><code>/conversations/{id}</code></td>
+<td>智威汤逊</td>
+<td>重命名对话（任何成员）</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/conversations/{id}/invites</code></td>
+<td>智威汤逊</td>
+<td>邀请用户加入群组</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/invites</code></td>
+<td>智威汤逊</td>
+<td>列出您待处理的聊天邀请</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/invites/{id}/accept</code></td>
+<td>智威汤逊</td>
+<td>接受聊天邀请</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/invites/{id}/decline</code></td>
+<td>智威汤逊</td>
+<td>拒绝聊天邀请</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/rooms/joinable</code></td>
+<td>智威汤逊</td>
+<td>列出内部有 ≥1 位好友的开放房间</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/conversations/{id}/join</code></td>
+<td>智威汤逊</td>
+<td>加入开放房间（必须是会员的朋友）</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/conversations/{id}/participants</code></td>
+<td>智威汤逊</td>
+<td>将参与者添加到对话中</td>
+</tr>
+<tr>
+<td>删除</td>
+<td><code>/conversations/{id}/participants/{userId}</code></td>
+<td>智威汤逊</td>
+<td>删除参与者（自己：任何成员；其他：仅限群组创建者）</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/conversations/{id}/leave</code></td>
+<td>智威汤逊</td>
+<td>留下对话</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/conversations</code></td>
+<td>智威汤逊</td>
+<td>列出对话，包括每个未读计数</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/conversations/{id}</code></td>
+<td>智威汤逊</td>
+<td>获取对话，包括其未读计数</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/unread</code></td>
+<td>智威汤逊</td>
+<td>获取未读消息总数</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/conversations/{id}/read</code></td>
+<td>智威汤逊</td>
+<td>将对话标记为已读</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/conversations/{id}/messages?page=&amp;pageSize=</code></td>
+<td>智威汤逊</td>
+<td>获取分页消息历史记录</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/conversations/{id}/messages</code></td>
+<td>智威汤逊</td>
+<td>发送消息（限速）</td>
+</tr>
+<tr>
+<td>放</td>
+<td><code>/conversations/{conversationId}/messages/{messageId}</code></td>
+<td>智威汤逊</td>
+<td>编辑消息</td>
+</tr>
+<tr>
+<td>删除</td>
+<td><code>/conversations/{conversationId}/messages/{messageId}</code></td>
+<td>智威汤逊</td>
+<td>删除消息（墓碑）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-conversation">创建对话</h3>
+<p><code>POST /conversations</code></p>
+<pre><code class="language-json">{
+  "participantIds": ["&lt;guid&gt;"],
+  "name": "Friday night lobby",
+  "friendUserId": "&lt;guid&gt;",
+  "joinPolicy": "closed"
+}
+</code></pre>
+<p>所有字段都是可选的。一位朋友参与者创建了一个 <strong>直接的</strong> 对话;两个或多个创建一个 <strong>团体</strong>. <code>joinPolicy</code> 是 <code>"open"</code> 或者 <code>"closed"</code> （默认 <code>"closed"</code>）。返回一个 <code>ConversationDto</code>.</p>
+<h3 id="rename-a-conversation">重命名对话</h3>
+<p><code>PATCH /conversations/{id}</code> 和 <code>{ "name": "New name" }</code> → <code>ConversationDto</code>。任何会员均可更名；系统注释 <code>kind: "system_rename"</code> 正在广播。</p>
+<h3 id="invites">邀请</h3>
+<p><code>POST /conversations/{id}/invites</code> 和 <code>{ "toUserId": "&lt;guid&gt;" }</code> → <code>ChatInviteDto</code>。邀请是进入封闭房间的唯一途径。</p>
+<p><code>GET /invites</code> → <code>ChatInviteDto[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "id": "&lt;guid&gt;",
+    "conversationId": "&lt;guid&gt;",
+    "conversationName": "Friday night lobby",
+    "fromUserId": "&lt;guid&gt;",
+    "fromUsername": "alice",
+    "toUserId": "&lt;guid&gt;",
+    "status": "pending",
+    "createdAt": "2026-07-22T07:00:00Z"
+  }
+]
+</code></pre>
+<p><code>POST /invites/{id}/accept</code> 和 <code>POST /invites/{id}/decline</code> → <code>ChatInviteDto</code>.</p>
+<h3 id="joining-rooms">加入房间</h3>
+<p><code>GET /rooms/joinable</code> → <code>JoinableRoomDto[]</code> — 打开至少有一位朋友在里面的房间：</p>
+<pre><code class="language-json">[
+  {
+    "id": "&lt;guid&gt;",
+    "name": "Friday night lobby",
+    "joinPolicy": "open",
+    "createdAt": "2026-07-22T07:00:00Z",
+    "participants": [{ "userId": "&lt;guid&gt;", "username": "alice" }]
+  }
+]
+</code></pre>
+<p><code>POST /conversations/{id}/join</code> → <code>ConversationDto</code>。加入一个开放的房间；您必须与会员成为朋友。</p>
+<h3 id="participants">参加者</h3>
+<p><code>POST /conversations/{id}/participants</code> 和 <code>{ "participantIds": ["&lt;guid&gt;"] }</code> → <code>ConversationDto</code>.</p>
+<p><code>DELETE /conversations/{id}/participants/{userId}</code> → <code>204</code>。任何成员都可以自行解职；删除其他人需要成为群组创建者。</p>
+<p><code>POST /conversations/{id}/leave</code> → <code>204</code>.</p>
+<h3 id="reading-conversations">阅读对话</h3>
+<p><code>GET /conversations</code> → <code>ConversationDto[]</code>.</p>
+<p><code>GET /conversations/{id}</code> → <code>ConversationDto</code>:</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "type": "group",
+  "name": "Friday night lobby",
+  "createdByUserId": "&lt;guid&gt;",
+  "joinPolicy": "closed",
+  "createdAt": "2026-07-22T07:00:00Z",
+  "participants": [{ "userId": "&lt;guid&gt;", "username": "alice" }],
+  "otherParticipant": { "userId": "&lt;guid&gt;", "username": "bob" },
+  "unreadCount": 3
+}
+</code></pre>
+<p><code>type</code> 是其中之一 <code>direct</code>, <code>group</code>, <code>game</code>. <code>name</code>, <code>createdByUserId</code>， 和 <code>otherParticipant</code> 可能缺席。 <code>unreadCount</code> 在呼叫者的每次对话阅读范围之后计算其他成员发送的未读短信。</p>
+<h3 id="unread-state">未读状态</h3>
+<p><code>GET /unread</code> 返回所有呼叫者对话的未读计数：</p>
+<pre><code class="language-json">{ "total": 7 }
+</code></pre>
+<p><code>POST /conversations/{id}/read</code> 提高呼叫者对该对话的阅读视野。
+显示当前成绩单后使用它。服务器发出一个 <code>conversation_read</code> 事件至
+属于调用者的所有套接字，允许多个登录客户端清除其徽章。
+新的和删除的消息可能会改变总数，因此客户端应该从 WebSocket 事件或
+定期重新获取 <code>/unread</code>.</p>
+<h3 id="messages">留言</h3>
+<p><code>GET /conversations/{id}/messages?page=1&amp;pageSize=50</code> → <code>PagedMessagesDto</code>:</p>
+<pre><code class="language-json">{
+  "conversationId": "&lt;guid&gt;",
+  "page": 1,
+  "pageSize": 50,
+  "totalCount": 123,
+  "items": []
+}
+</code></pre>
+<p><code>POST /conversations/{id}/messages</code> 和 <code>{ "content": "hello" }</code> → <code>MessageDto</code>。每个用户的速率限制为 10 条消息/分钟；超过它返回 <code>429</code>.</p>
+<p><code>PUT /conversations/{conversationId}/messages/{messageId}</code> 和 <code>{ "content": "edited" }</code> → <code>MessageDto</code>.</p>
+<p><code>DELETE /conversations/{conversationId}/messages/{messageId}</code> → <code>204</code>。删除是一个墓碑：消息仍然存在 <code>isDeleted: true</code>.</p>
+<p><code>MessageDto</code>:</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "conversationId": "&lt;guid&gt;",
+  "senderId": "&lt;guid&gt;",
+  "senderUsername": "alice",
+  "content": "hello",
+  "kind": "text",
+  "metadata": { "key": "value" },
+  "sentAt": "2026-07-22T07:00:00Z",
+  "editedAt": null,
+  "isDeleted": false
+}
+</code></pre>
+<p><code>kind</code> 是 <code>"text"</code> 或者 <code>"system_rename"</code>; <code>content</code>, <code>metadata</code> (a <code>Dictionary&lt;string,string&gt;</code>）， 和 <code>editedAt</code> 可能不存在/为空。</p>
+<h2 id="websocket-wsv1chat">网络套接字： <code>ws/v1/chat</code></h2>
+<p>连接到 <code>wss://api.starhermit.com/ws/v1/chat</code> 通过 JWT <code>Authorization</code> 标头， <code>?ticket=</code>， 或者 <code>?access_token=</code>.</p>
+<p>这是一个 <strong>纯服务器→客户端推送通道</strong>：忽略客户端框架（仅 <code>Close</code> 很荣幸）。每帧都是一个信封：</p>
+<pre><code class="language-json">{ "type": "&lt;event&gt;", "payload": { } }
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>事件 <code>type</code></th>
+<th>有效载荷</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>conversation_created</code></td>
+<td><code>ConversationDto</code></td>
+</tr>
+<tr>
+<td><code>conversation_renamed</code></td>
+<td><code>ConversationDto</code></td>
+</tr>
+<tr>
+<td><code>participants_added</code></td>
+<td><code>ConversationDto</code></td>
+</tr>
+<tr>
+<td><code>participant_removed</code></td>
+<td><code>ConversationDto</code></td>
+</tr>
+<tr>
+<td><code>chat_invite</code></td>
+<td><code>ChatInviteDto</code></td>
+</tr>
+<tr>
+<td><code>chat_invite_responded</code></td>
+<td><code>ChatInviteDto</code></td>
+</tr>
+<tr>
+<td><code>new_message</code></td>
+<td><code>MessageDto</code></td>
+</tr>
+<tr>
+<td><code>message_updated</code></td>
+<td><code>MessageDto</code></td>
+</tr>
+<tr>
+<td><code>message_deleted</code></td>
+<td><code>MessageDto</code></td>
+</tr>
+<tr>
+<td><code>conversation_read</code></td>
+<td>登录用户的读取状态更改；重新获取未读计数</td>
+</tr>
+<tr>
+<td><code>game_invite</code></td>
+<td><code>{ "inviteId", "kind", "gameSlug", "gameName", "roomId", "from": { "userId", "username" }, "createdAt", "acceptPath", "declinePath", "inProgress", "sessionId" }</code> - 见下文</td>
+</tr>
+</tbody>
+</table>
+<h3 id="game_invite-one-event-for-both-invite-systems"><code>game_invite</code>：两个邀请系统的一场活动</h3>
+<p>任何人都可以通过两种方式被邀请来玩，而这个单一的事件同时包含这两种方式——客户端实现一次祝酒，而不是两次：</p>
+<table>
+<thead>
+<tr>
+<th><code>kind</code></th>
+<th>由...发出</th>
+<th>接受它</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>"session"</code></td>
+<td><a href="/zh-CN/docs/api/games.html#invites"><code>POST /games/{slug}/invites</code></a></td>
+<td>为你们两个创建一个新的游戏会话</td>
+</tr>
+<tr>
+<td><code>"room"</code></td>
+<td><a href="/zh-CN/docs/api/realtime.html#invites"><code>POST /realtime/rooms/{id}/invites</code></a></td>
+<td>在邀请者已经坐过的房间里坐下； <code>roomId</code> 是那个房间吗</td>
+</tr>
+</tbody>
+</table>
+<p><code>acceptPath</code> 和 <code>declinePath</code> 是回答的端点 <strong>这</strong> 邀请——使用它们，区别并不重要。在其他系统的端点应答是 <code>404</code>：两者保留不同的邀请 ID。</p>
+<p><code>inProgress</code> 是 <code>true</code> 当接受加入已经在玩的游戏时 - 命名正在运行的会话的会话邀请，或允许加入的已启动房间的房间邀请 - 以及 <code>sessionId</code> 是该游戏的会话。用它来表达 "加入他们的游戏" 而不是 "玩".</p>
+<pre><code class="language-json">{
+  "type": "game_invite",
+  "payload": {
+    "inviteId": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+    "kind": "room",
+    "gameSlug": "poker",
+    "gameName": "StarHermit Poker",
+    "roomId": "b1d2c3e4-5f60-4a71-8b92-c3d4e5f60718",
+    "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "alice" },
+    "createdAt": "2026-07-26T14:10:00Z",
+    "acceptPath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/accept",
+    "declinePath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/decline"
+  }
+}
+</code></pre>
+<p><code>roomId</code> 是 <code>null</code> 为了 <code>"session"</code> 邀请。游戏范围的启动令牌无法打开此套接字或读取帐户范围的内容 <code>/me/game-invites</code> 收件箱。游戏客户投票 <code>GET /api/v1/games/{slug}/invites</code> 会议邀请和 <code>GET /api/v1/realtime/rooms/invites</code> 获得他们的游戏房间邀请。帐户客户可以通过以下方式阅读这两种类型 <code>GET /api/v1/me/game-invites</code>.</p>
+<h2 id="chat-inside-a-game-session">在游戏会话中聊天</h2>
+<p>游戏范围内的启动令牌 <strong>不能</strong> 打开 <code>ws/v1/chat</code> — 它被阻止，因为套接字流式传输用户的所有对话。启动代币 <strong>可能</strong> 在附加到自己的游戏会话的对话上使用聊天 REST API：会话详细信息返回 <code>chatConversationId</code>，对话有类型 <code>"game"</code>，其参与者是会话的玩家，并且绕过了友谊规则。</p>
+<p>因此，游戏客户端通常通过 REST 加载历史记录并轮询新消息，而不是使用套接字。例如， <a href="/zh-CN/docs/tutorials/chess-walkthrough.html">国际象棋参考实现</a> 每 5 秒轮询一次：</p>
+<pre><code class="language-http">GET /api/v1/chat/conversations/{chatConversationId}/messages?page=1&amp;pageSize=50
+Authorization: Bearer &lt;launch-token&gt;
+</code></pre>
+<pre><code class="language-http">POST /api/v1/chat/conversations/{chatConversationId}/messages
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+
+{ "content": "good game" }
+</code></pre>
+<h2 id="see-also">参见</h2>
+<ul>
+<li><a href="/zh-CN/docs/api/voice.html">嗓音</a> — 语音室锚定聊天对话</li>
+<li><a href="/zh-CN/docs/api/friends.html">朋友们</a> — 友谊之门直接聊天和房间加入</li>
+<li><a href="/zh-CN/docs/api/games.html">游戏</a> — 游戏环节及其 <code>chatConversationId</code></li>
+</ul>
+<p>看 <a href="/zh-CN/docs/credentials.html">凭证兼容性</a> 和 <a href="/zh-CN/docs/api/contracts.html">机器可读的合同</a>.</p>
+
+{% endraw %}

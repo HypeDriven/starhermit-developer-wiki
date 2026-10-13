@@ -1,0 +1,125 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Carregue e salve o progresso com segurança"
+source_url: "/docs/tutorials/cloud-save-sync.html"
+source_path: "docs/tutorials/cloud-save-sync.md"
+source_hash: "3d1bef0f13bb54f639d96ca6ff1c5607c172a4d25d7707062b404cba46d5de83"
+translation: "machine"
+permalink: "/pt/docs/tutorials/cloud-save-sync.html"
+---
+{% raw %}
+<h1 id="load-and-save-progress-safely">Carregue e salve o progresso com segurança</h1>
+<p>Use salvamentos na nuvem para o progresso de propriedade do cliente de um jogador conectado. A opção single-player não assinada
+mantém o progresso na memória e não lê ou grava salvamentos de contas. As preferências pertencem a
+<a href="/pt/docs/api/games.html#per-player-game-settings">configurações do jogo</a>, não o documento de progresso.</p>
+<p>Um token de lançamento pode acessar exatamente <code>game:&lt;gameId&gt;</code>, onde <code>gameId</code> é o seu <code>game_scope</code>. A plataforma
+armazena bytes opacos, com um salvamento por slot. Valide o formato que seu jogo espera. Ver
+<a href="/pt/docs/api/catalog.html#cloud-saves">Salvamentos na nuvem</a> para cotas e cabeçalhos condicionais.</p>
+<p><img src="/docs/images/pt/cloud-save-flow.svg" alt="Carregue e valide antes de escrever. Falha na leitura do bloco de uploads; gravações condicionais preservam salvamentos mais recentes e conflitos de superfície."></p>
+<h2 id="a-small-complete-json-recipe">Uma pequena receita JSON completa</h2>
+<p>Cópia <a href="/docs/sdk/cloud-save-store.js"><code>cloud-save-store.js</code></a> em sua construção. Este exemplo armazena dados brutos
+Bytes JSON UTF-8; a plataforma os atende com <code>application/zip</code> mas não requer um formato ZIP.
+Use um leitor diferente para salvar ZIP, incluindo o <a href="/pt/docs/sdk/javascript.html#cloud-saves">ZIP do SDK do navegador salva</a>.
+Não altere os formatos sem um plano de migração para os players existentes.</p>
+<pre><code class="language-js">import { CloudSaveStore } from './cloud-save-store.js';
+
+const store = new CloudSaveStore({
+  gameId: StarHermit.slug,
+  token: () =&gt; StarHermit.token, // Always obtain the current renewed token.
+});
+const valid = value =&gt; value?.version === 1 &amp;&amp; Number.isSafeInteger(value.points) &amp;&amp; value.points &gt;= 0;
+let progress = { version: 1, points: 0 };
+let saving = false;
+
+async function startAccountGame() {
+  // Keep gameplay/saving disabled until this resolves.
+  const remote = await store.load(valid);
+  progress = remote ?? { version: 1, points: 0 };
+  render(progress);
+}
+
+async function saveCheckpoint() {
+  if (saving) return; // Coalesce checkpoints; do not issue overlapping writes.
+  saving = true;
+  showSync('Saving…');
+  try {
+    await store.save(progress);
+    showSync('Saved');
+  } catch (error) {
+    if (error.status === 412) {
+      // Keep local progress in memory. Offer Reload cloud or an explicit merge.
+      showConflict(() =&gt; startAccountGame());
+    } else showSync('Save failed; retry after resolving the error');
+  } finally {
+    saving = false;
+  }
+}
+</code></pre>
+<p><code>render</code>, <code>showSync</code>, e <code>showConflict</code> são sua IU. Aguarde <code>startAccountGame()</code> antes de ativar
+jogar ou salvar. Em caso de falha de carregamento, retém o estado local atual do player, exibe a falha,
+e mantenha os uploads bloqueados. UM <code>404</code> é o caso do slot vazio; <code>401</code>, <code>403</code>, <code>5xx</code>, JSON malformado,
+ou uma versão salva não suportada não são slots vazios.</p>
+<p>A receita não renova credenciais. O SDK do navegador renova os tokens de inicialização enquanto eles permanecem
+válido. Resolva os termos pendentes ou reautentique-se através do fluxo de entrada do jogo antes de tentar novamente uma leitura.</p>
+<h2 id="conditions-and-conflicts">Condições e conflitos</h2>
+<table>
+<thead>
+<tr>
+<th>O que foi carregado</th>
+<th>Cabeçalho na próxima gravação</th>
+<th>Se outro dispositivo gravar</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Salvar existente com ETag</td>
+<td><code>If-Match: &lt;etag&gt;</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>Não salvar (<code>404</code>)</td>
+<td><code>If-None-Match: *</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>Nada carregado com sucesso</td>
+<td>Não escrever</td>
+<td>Continue tentando a leitura novamente ou deixe o player permanecer em reprodução não rastreada</td>
+</tr>
+</tbody>
+</table>
+<p>Use a versão do <strong>dados que você carregou</strong>, não uma verificação posterior de metadados. Reter a nova ETag retornada
+por cada gravação bem-sucedida. UM <code>412</code> bloqueia salvamentos adicionais até que o jogo carregue a versão atual e
+o jogador o adota ou funde. Não remova silenciosamente a condição e substitua outro dispositivo.
+A API não oferece histórico de salvamento para desfazer essa substituição.</p>
+<p>Se dois dispositivos precisarem atualizar contadores ou inventário de forma independente, um único documento de última gravação vence
+pode não caber no jogo. Use o estado autoritativo do servidor e defina comandos de jogo validados.</p>
+<h2 id="save-format-and-migration">Salvar formato e migração</h2>
+<p>Inclua uma versão de formato e valide tipos, intervalos e campos obrigatórios antes de adotar
+progresso. Escreva uma migração para versões mais antigas suportadas. Mantenha intacta uma versão desconhecida mais recente;
+não redefina-o para os padrões e faça upload sobre ele. Os dados na nuvem são controlados pelo cliente, portanto, nunca os trate
+como prova de pontuação competitiva ou direito pago.</p>
+<p>O limite padrão de salvamento decodificado é 10 MiB. Base64 adiciona cerca de um terço ao corpo da solicitação.
+<code>413 cloud_save_too_large</code>, <code>409 cloud_save_slots_exhausted</code>, e <code>507 cloud_save_quota_exceeded</code>
+são diferentes falhas de capacidade; inspecionar <code>code</code> e <code>limit</code>. Honra <code>Retry-After</code> sobre <code>429</code>.</p>
+<h2 id="checkpoints-and-page-exit">Pontos de verificação e saída de página</h2>
+<p>Salve em pontos de verificação significativos e ofereça uma ação de Salvar visível. Debounce mudanças rápidas e serializar
+escreve para que cada um use a última versão reconhecida. Mantenha um indicador sujo até ser reconhecido.
+Uma solicitação com falha não é um salvamento confirmado; após uma gravação ambígua, recarregue antes de outra gravação.</p>
+<p>Um upload de saída de página é o melhor esforço. Navegador <code>fetch(..., { keepalive: true })</code> compartilha um pequeno voo
+subsídio corporal, geralmente 64 KiB; um salvamento de 10 MiB não pode contar com isso. Uma guia pode fechar antes de qualquer solicitação
+termina. Use salvamentos comuns em primeiro plano para maior durabilidade e não rotule o progresso não reconhecido como
+salvo. O início rápido salva seu pequeno documento em cada coleta de ponto.</p>
+<h2 id="verify-in-your-game">Verifique no seu jogo</h2>
+<ol>
+<li>Comece com um slot vazio; colete o progresso, salve, recarregue e confirme que ele retorna.</li>
+<li>Recusar leituras com erro de rede, <code>403</code>ou dados inválidos; confirme que nenhum upload segue.</li>
+<li>Abra duas guias em uma versão. Salvo em A, então B: B deve trazer à tona um conflito e preservar seu estado local.</li>
+<li>Teste um formato mais antigo/mais recente e uma confirmação ausente sem substituir dados desconhecidos.</li>
+<li>Entre no modo single-player não rastreado e verifique se o jogo não faz solicitações de salvamento na nuvem.</li>
+</ol>
+<p>Ver <a href="/pt/docs/tutorials/browser-quickstart.html">o início rápido executável</a>, <a href="/pt/docs/api/conventions.html">Convenções de API</a>, e
+<a href="/pt/docs/troubleshooting.html#game-setup-and-storage">solução de problemas</a>.</p>
+
+{% endraw %}

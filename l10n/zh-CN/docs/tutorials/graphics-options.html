@@ -1,0 +1,373 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "教程：具有自动检测质量的图形选项"
+source_url: "/docs/tutorials/graphics-options.html"
+source_path: "docs/tutorials/graphics-options.md"
+source_hash: "cd4437482fbf097933897dbbeaf9e978a67574c0fe1ff696ace01bf8e9239bf5"
+translation: "machine"
+permalink: "/zh-CN/docs/tutorials/graphics-options.html"
+---
+{% raw %}
+<h1 id="tutorial-graphics-options-with-auto-detected-quality">教程：具有自动检测质量的图形选项</h1>
+<p>给你的浏览器游戏一个 <strong>图形</strong> 为玩家的机器选择合理的质量级别的菜单
+首次启动时，让他们覆盖它，并通过 StarHermit 跨设备记住他们的选择。</p>
+<p>对于相应的音频部分，请参见 <a href="/zh-CN/docs/tutorials/audio-options.html">具有自动检测声音限制的音频选项</a>.</p>
+<p><a href="/docs/sdk/graphics-options.js"><code>graphics-options.js</code></a> 是一个单一的 ES 模块，没有依赖关系，即
+处理簿记：</p>
+<ul>
+<li><strong>汽车</strong> 从 GPU、内存、CPU 核心和 CPU 中选择四种预设之一（低、平衡、高、超高）
+设备类型，如果帧保持缓慢，则降低会话速度。</li>
+<li>玩家可以覆盖每个效果（阴影、环境光遮挡、光晕、抗锯齿或您自己的效果），
+设置 50–200% 渲染比例，选择手动最大 FPS 而不是自动显示刷新，
+并切换自适应分辨率和帧速率读数。</li>
+<li>设置保存到 <code>localStorage</code> 所以它们在第一帧之前应用，并应用于玩家的
+<a href="/zh-CN/docs/api/games.html#per-player-game-settings">每个游戏的设置</a> 所以他们会跟随玩家到他们的
+其他机器。</li>
+<li>它包括一个由相同质量的表格构建的现成选项面板。</li>
+</ul>
+<p>它不进口发动机。您的渲染器侦听更改并应用层。该页面将其连接到
+三.js。其他引擎使用相同的钩子（参见 <a href="#other-engines">其他发动机</a>).</p>
+<ol>
+<li><a href="#1-add-the-files">添加文件</a></li>
+<li><a href="#2-create-the-store-and-the-panel">创建商店和面板</a></li>
+<li><a href="#3-apply-the-settings-to-your-renderer">将设置应用到您的渲染器</a></li>
+<li><a href="#4-fit-it-to-your-game">适合您的游戏</a></li>
+<li><a href="#5-test-it">测试一下</a></li>
+</ol>
+<h2 id="1-add-the-files">1.添加文件</h2>
+<p>复制 <a href="/docs/sdk/starhermit-sdk.js"><code>starhermit-sdk.js</code></a> 和
+<a href="/docs/sdk/graphics-options.js"><code>graphics-options.js</code></a> 位于游戏脚本旁边，未更改。称呼
+<code>StarHermit.init()</code> <strong>前</strong> 您的模块运行，因此启动令牌已被读取
+图形存储检查玩家是否已登录：</p>
+<pre><code class="language-html">&lt;script src="starhermit-sdk.js"&gt;&lt;/script&gt;
+&lt;script&gt;StarHermit.init();&lt;/script&gt;
+&lt;script type="module" src="main.js"&gt;&lt;/script&gt;
+</code></pre>
+<p>如果没有启动令牌（本地开发、任何其他主机），商店会将所有内容保留在其中
+<code>localStorage</code> 并且不提出任何要求。</p>
+<h2 id="2-create-the-store-and-the-panel">2. 创建商店和面板</h2>
+<pre><code class="language-js">import { createGraphics, mountGraphicsPanel } from './graphics-options.js';
+
+const gfx = createGraphics({ storageKey: 'mygame.graphics' });
+mountGraphicsPanel(document.getElementById('graphics-options'), gfx);
+</code></pre>
+<p><code>mountGraphicsPanel</code> 用控件填充元素。您的设置对话框提供框架、
+标题和关闭按钮。每项更改都会立即应用并保存。</p>
+<h3 id="how-auto-picks-a-preset">如何自动选择预设</h3>
+<p>创建时，存储会探测一次性 WebGL 上下文一次（<code>gfx.system</code>）并将其映射到预设
+（<code>gfx.detected</code>):</p>
+<table>
+<thead>
+<tr>
+<th>信号</th>
+<th>预设</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>没有 WebGL 或软件渲染器（SwiftShader、llvmpipe、Microsoft Basic Render）</td>
+<td>低的</td>
+</tr>
+<tr>
+<td>无 WebGL2、2 个或更少的 CPU 核心、或 2 GB 或更少的内存</td>
+<td>低的</td>
+</tr>
+<tr>
+<td>独立 GPU（NVIDIA、AMD Radeon RX/Pro、Apple M 系列）</td>
+<td>高的</td>
+</tr>
+<tr>
+<td>其他任何东西（集成 Intel/AMD、移动 GPU、Safari 的屏蔽 "苹果GPU")</td>
+<td>均衡</td>
+</tr>
+<tr>
+<td>手机或平板电脑（粗指针），或 4 GB 或更少内存</td>
+<td>至多平衡</td>
+</tr>
+</tbody>
+</table>
+<p>Auto从不选择Ultra；玩家选择加入。 GPU名称来自 <code>RENDERER</code>，以及
+<code>WEBGL_debug_renderer_info</code> 仅当 Chromium 屏蔽名称时才请求扩展名。 Firefox 记录一个
+当请求该扩展时，控制台发出警告，并且它已经报告了真实姓名。</p>
+<p>游戏运行时，Auto 还会监视帧时间。如果自适应分辨率已经下降到其
+对于另外三个 90 帧窗口，地板和帧的平均时间仍超过 26 毫秒，自动降低一个预设
+会议剩余时间。选择 <strong>汽车</strong> 在面板中再次重新检测。预设播放器
+手工采摘不会自行改变。</p>
+<h3 id="maximum-frame-rate">最大帧率</h3>
+<p><strong>最大帧率</strong> 默认为 <strong>自动（刷新率）</strong>：浏览器安排渲染
+与显示器的刷新率。选择 <strong>风俗</strong> 并输入一个整数 <strong>1 至 1000 FPS</strong> 到
+覆盖它。该限制立即应用，保存在本地并保存到与
+其他图形设置，并在质量预设更改中保留。返回 <strong>汽车</strong> 删除限制。
+这个选择独立于 <strong>汽车</strong> 质量预设。</p>
+<p>渲染器必须调用 <code>gfx.shouldRender(now)</code> 在其动画循环中，如下所示。极限是一个
+上限，不是承诺的帧速率：渲染仍然不能超过浏览器的动画回调
+或机器的性能。因此，在 60 Hz 显示器上设置 144 FPS 仍最多渲染 60 FPS。</p>
+<p>对于自定义菜单，请使用 <code>gfx.set({ maxFps: 45 })</code> 和 <code>gfx.set({ maxFps: null })</code> 恢复自动。
+已解决 <code>gfx.settings.maxFps</code> 是 <code>0</code> 对于汽车。无效的保存值将回退为“自动”；积极的
+数字四舍五入并限制为 1-1000。</p>
+<h3 id="where-the-settings-live">设置所在的位置</h3>
+<table>
+<thead>
+<tr>
+<th>店铺</th>
+<th>钥匙</th>
+<th>为什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>localStorage</code></td>
+<td><code>&lt;storageKey&gt;.gpu.&lt;GPU profile&gt;</code></td>
+<td>同步读取，因此第一帧已经使用该 GPU 的设置</td>
+</tr>
+<tr>
+<td><a href="/zh-CN/docs/api/games.html#per-player-game-settings">每个玩家的设置</a></td>
+<td><code>graphics.gpu.&lt;GPU profile&gt;</code></td>
+<td>跟随玩家到另一台报告相同 GPU 的机器</td>
+</tr>
+</tbody>
+</table>
+<p>每个 GPU 都有一个独立的配置文件，涵盖每个图形选择，包括最大 FPS。
+例如，在 GPU A 上设置 Ultra 和 90 FPS，然后在 GPU B 上启动：B 以硬件检测到的方式启动
+除非您之前保存了 B 的选择，否则将使用默认值。返回 A 将恢复 Ultra 和 90 FPS。
+两个均检测为“高”的 GPU 仍具有单独的配置文件。检测到的质量发生变化
+同一 GPU 上的层不会丢弃其保存的选择。</p>
+<p>该配置文件是浏览器报告的 GPU 名称的稳定的 16 个字符的哈希值，针对大小写进行了规范化
+和空白。 <code>storageKey</code> 和 <code>cloudKey</code> 提供前缀； <code>gfx.storageKey</code>, <code>gfx.cloudSlot</code>， 和
+<code>gfx.gpuProfile</code> 公开活动密钥和配置文件。 GPU 检测在创建存储时发生；
+在下一次游戏启动时创建一个新商店以选择另一个 GPU 的配置文件。</p>
+<p>如果没有可用的 GPU 名称，则选择适用于没有本地或云持久性的会话。
+如果浏览器屏蔽多个具有相同名称的 GPU，它们会共享一个配置文件，因为它无法
+区分它们。旧的无范围本地设置和设备级云设置保持不变
+且不会被导入，因为它们无法识别选项属于哪个 GPU。</p>
+<p>每个值是 <code>{ "saved": {…}, "at": &lt;ms timestamp&gt; }</code>。两个副本的核对方式与
+<a href="/zh-CN/docs/sdk/javascript.html#cloud-saves">云保存</a>:</p>
+<ul>
+<li><strong>先读再写。</strong> 在启动时（以及当不同的玩家登录时），商店会读取
+<code>GET /api/v1/games/{slug}/settings</code>。较新的副本 <code>at</code> 获胜。如果云副本获胜，
+商店采用它并触发 <code>change</code> 合理 <code>'cloud'</code>。如果本地副本较新，则商店
+推动它。</li>
+<li><strong>读取失败会阻止写入。</strong> 本地副本继续工作。玩家做出的下一个改变
+在写入任何内容之前重试读取，因此过时的设备无法覆盖较新的选择
+看不到。</li>
+<li>更改是通过 <code>setSetting</code> 800 毫秒后没有进一步的变化。令牌更新（其中
+也触发 SDK 的 <code>auth</code> 事件）不会触发另一次读取。</li>
+</ul>
+<h2 id="3-apply-the-settings-to-your-renderer">3. 将设置应用到渲染器</h2>
+<p>四个钩子将商店连接到 Three.js 渲染器：</p>
+<ul>
+<li><code>gfx.on('change', fn)</code> 用于阴影和效果切换。</li>
+<li>从当前层重建的后处理链。</li>
+<li><code>gfx.frame(ms)</code> 和 <code>gfx.pixelRatio()</code> 在渲染循环中，驱动自适应分辨率。</li>
+<li><code>gfx.shouldRender(now)</code> 在绘制之前，这会强制执行手动 FPS 限制。</li>
+</ul>
+<p>创建渲染器 <code>antialias: false</code>。然后 MSAA 来自后期链的渲染目标，因此
+每个抗锯齿层都可以切换，而无需重新创建 WebGL 上下文。</p>
+<pre><code class="language-js">import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+
+// canvas, scene, camera and a shadow-casting DirectionalLight `sun` are your game's own.
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
+const SHADOW_MAP = { off: 0, low: 1024, medium: 2048, high: 4096 };
+let composer = null;
+let size = {};
+
+gfx.on('change', (s) =&gt; {
+  const mapSize = SHADOW_MAP[s.shadows];
+  renderer.shadowMap.enabled = mapSize &gt; 0;
+  sun.castShadow = mapSize &gt; 0;
+  if (mapSize &amp;&amp; sun.shadow.mapSize.x !== mapSize) {
+    sun.shadow.mapSize.set(mapSize, mapSize);
+    sun.shadow.map?.dispose();
+    sun.shadow.map = null;
+  }
+  scene.traverse((o) =&gt; [].concat(o.material || []).forEach((m) =&gt; { m.needsUpdate = true; })); // shadow on/off recompiles
+  size = {}; // resize and rebuild the post chain on the next frame
+});
+
+function buildPost(s, w, h, ratio) {
+  composer?.dispose();
+  composer = null;
+  if (gfx.info.postFailed || (s.ao === 'off' &amp;&amp; s.bloom === 'off' &amp;&amp; s.antialias === 'off')) return;
+  try {
+    const pw = Math.round(w * ratio), ph = Math.round(h * ratio);
+    const target = new THREE.WebGLRenderTarget(pw, ph, { type: THREE.HalfFloatType, samples: s.antialias === 'msaa' ? 4 : 0 });
+    const c = new EffectComposer(renderer, target);
+    c.setPixelRatio(ratio);
+    c.setSize(w, h);
+    c.addPass(new RenderPass(scene, camera));
+    if (s.ao !== 'off') {
+      const ao = new GTAOPass(scene, camera, pw, ph);
+      ao.updateGtaoMaterial({ samples: s.ao === 'high' ? 16 : 8 });
+      c.addPass(ao);
+    }
+    if (s.bloom === 'on') c.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.5, 0.4, 0.9));
+    c.addPass(new OutputPass());
+    if (s.antialias === 'smaa') c.addPass(new SMAAPass());
+    if (s.antialias === 'fxaa') {
+      const fxaa = new ShaderPass(FXAAShader);
+      fxaa.material.uniforms.resolution.value.set(1 / pw, 1 / ph);
+      c.addPass(fxaa);
+    }
+    composer = c;
+  } catch {
+    gfx.report({ postFailed: true }); // the panel shows a note; don't console.warn
+  }
+}
+
+let last = performance.now();
+renderer.setAnimationLoop((now) =&gt; {
+  // Update your simulation here using its own elapsed time or fixed timestep.
+  // Keep simulation/input independent of skipped render ticks.
+  if (!gfx.shouldRender(now)) return;
+  gfx.frame(now - last); // elapsed time between rendered frames, including the FPS limit
+  last = now;
+  const w = canvas.clientWidth, h = canvas.clientHeight, ratio = gfx.pixelRatio();
+  if (w !== size.w || h !== size.h || ratio !== size.ratio) {
+    size = { w, h, ratio };
+    renderer.setPixelRatio(ratio);
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    buildPost(gfx.settings, w, h, ratio);
+    gfx.report({ pixels: [Math.round(w * ratio), Math.round(h * ratio)] });
+  }
+  try {
+    if (composer) composer.render();
+    else renderer.render(scene, camera);
+  } catch {
+    composer = null;
+    gfx.report({ postFailed: true });
+  }
+});
+</code></pre>
+<p>笔记：</p>
+<ul>
+<li>这 <code>three/addons/</code> 文件必须来自 <strong>相同的 Three.js 版本</strong> 作为 <code>three</code> 本身。混合
+发布打破了帖子链。上面的代码针对当前版本。对于年纪较大的人来说， <code>SMAAPass</code>
+需要 <code>(width, height)</code>.</li>
+<li>低会关闭所有后处理效果，因此游戏会以一定的速度直接渲染到画布上
+设备像素比最多为 1。这使得 Low 与之前的游戏一样便宜。</li>
+<li><code>gfx.pixelRatio()</code> 回报 <code>min(devicePixelRatio, preset cap) × preset scale × render scale × adaptive scale</code>，钳位至 0.25–3。上限为 1 表示低，1.5 表示平衡，2 表示高和
+超。</li>
+<li>自适应分辨率平均为 90 帧。超过 26 毫秒，它将比例降低 0.1（降至 0.6）。下面
+14 毫秒，它将比例提高 0.05（最多 1）。超过 1 秒的帧（暂停或背景选项卡）
+被忽略，单个慢帧最多算作 250 毫秒的适应时间，因此一个故障无法降低
+规模。 FPS 读数使用实际经过的时间。
+通过手动限制，慢速阈值至少为目标帧间隔的 115%，并且
+快速阈值至少为 85%，因此故意设置 30 FPS 限制本身并不会降低质量。
+对于非常低的限制，暂停截止和挂钩截止都至少是两个目标间隔。
+喂养 <code>gfx.frame</code> 仅渲染帧；当跳过一个刻度时保留最后渲染的时间戳。</li>
+</ul>
+<h3 id="other-engines">其他发动机</h3>
+<p>无论绘制您的框架，集成都使用相同的钩子：</p>
+<table>
+<thead>
+<tr>
+<th>称呼</th>
+<th>使用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gfx.on('change', (settings, reason) =&gt; …)</code></td>
+<td>应用等级。立即运行一次（<code>'init'</code>），然后 <code>'settings'</code>, <code>'cloud'</code> 和 <code>'auto'</code>。返回取消订阅函数。</td>
+</tr>
+<tr>
+<td><code>gfx.settings</code></td>
+<td><code>{ preset, auto, scale, dprCap, adaptive, showFps, maxFps, &lt;category&gt;: &lt;tier&gt; }</code>; <code>maxFps: 0</code> 表示自动显示刷新。</td>
+</tr>
+<tr>
+<td><code>gfx.shouldRender(now)</code></td>
+<td>每个动画回调，其时间戳以毫秒为单位。如果返回则跳过绘制 <code>false</code>。保持模拟/输入更新独立。</td>
+</tr>
+<tr>
+<td><code>gfx.frame(ms)</code></td>
+<td>每个渲染帧，以及自上一个渲染帧以来的时间。退货 <code>true</code> 当像素比或自动预设更改时。</td>
+</tr>
+<tr>
+<td><code>gfx.pixelRatio()</code></td>
+<td>渲染比例</td>
+</tr>
+<tr>
+<td><code>gfx.report({ pixels, postFailed })</code></td>
+<td>告诉面板输出大小，或者效果不可用</td>
+</tr>
+</tbody>
+</table>
+<p>对于 2D 画布游戏，请将画布背景尺寸乘以 <code>gfx.pixelRatio()</code>，并映射您自己的
+效果（粒子、发光、视差层）按如下所述分类。</p>
+<h2 id="4-fit-it-to-your-game">4. 使其适合您的游戏</h2>
+<p><strong>你自己的效果。</strong> 通过一个质量表，其中仅列出您的游戏实际绘制的内容。每个预设
+row 需要每个类别都有一个层级，另外 <code>scale</code> 和 <code>dprCap</code>:</p>
+<pre><code class="language-js">import { createGraphics, CATEGORIES, TABLE } from './graphics-options.js';
+
+const gfx = createGraphics({
+  storageKey: 'mygame.graphics',
+  categories: { ...CATEGORIES, particles: ['off', 'low', 'high'] },
+  table: {
+    low: { ...TABLE.low, particles: 'off' },
+    balanced: { ...TABLE.balanced, particles: 'low' },
+    high: { ...TABLE.high, particles: 'high' },
+    ultra: { ...TABLE.ultra, particles: 'high' },
+  },
+});
+</code></pre>
+<p>该面板为每个类别构建一个选择，因此会自动出现一个新类别。将其命名为
+<code>strings.categories.particles</code>.</p>
+<p><strong>翻译。</strong> 面板的英文字符串导出为 <code>STRINGS</code>。用同样的方式传递你自己的
+形状。仅替换您提供的密钥：</p>
+<pre><code class="language-js">mountGraphicsPanel(el, gfx, {
+  strings: {
+    quality: 'Qualität', auto: 'Automatisch ({tier})', fromPreset: 'Laut Voreinstellung ({tier})',
+    renderScale: 'Renderskalierung', adaptive: 'Adaptive Auflösung', showFps: 'Bildrate anzeigen',
+    maxFps: 'Maximale Bildrate', autoFps: 'Automatisch (Bildschirmfrequenz)',
+    customFps: 'Benutzerdefiniert', fpsLimit: 'Maximale FPS (1–1000)',
+    categories: { shadows: 'Schatten', ao: 'Umgebungsverdeckung', particles: 'Partikel' },
+    tiers: { low: 'Niedrig', balanced: 'Ausgewogen', high: 'Hoch', off: 'Aus', on: 'An' },
+  },
+});
+</code></pre>
+<p><strong>造型。</strong> 面板使用类 <code>.gfx-panel</code>, <code>.gfx-row</code>, <code>.gfx-summary</code> 和 <code>.gfx-note</code>。其
+内置规则包含在 <code>:where()</code>，因此您自己的样式表中的任何规则都会覆盖它们。行是
+触摸高度至少为 44 像素。帧速率读数（<code>#gfx-fps</code>）位于左下角，
+在安全区域内，并且不捕获点击。</p>
+<p><strong>在别处阅读结果。</strong> <code>&lt;html&gt;</code> 携带 <code>data-gfx-preset</code> （活动预设）和
+<code>data-gfx-auto</code> (<code>1</code> 或者 <code>0</code>），CSS 和测试可以关闭。</p>
+<h2 id="5-test-it">5. 测试一下</h2>
+<ul>
+<li>无头浏览器使用软件 GPU 进行渲染，因此 Auto 解析为 <strong>低的</strong> 并且测试保持快速。</li>
+<li>驱动真正的面板。每个控件都有一个 <code>data-gfx</code> 属性 （<code>preset</code>, <code>renderScale</code>,
+<code>adaptive</code>, <code>frameRate</code>, <code>maxFps</code>, <code>showFps</code>，或类别名称）：</li>
+</ul>
+<pre><code class="language-js">const preset = () =&gt; page.evaluate(() =&gt; document.documentElement.dataset.gfxPreset);
+await page.locator('select[data-gfx=preset]').selectOption('high');
+assert.equal(await preset(), 'high');
+await page.reload();
+assert.equal(await preset(), 'high'); // persisted
+await page.locator('select[data-gfx=frameRate]').selectOption('custom');
+await page.locator('input[data-gfx=maxFps]').fill('45');
+await page.locator('input[data-gfx=maxFps]').press('Tab');
+await page.reload();
+assert.equal(await page.locator('input[data-gfx=maxFps]').inputValue(), '45');
+await page.locator('select[data-gfx=frameRate]').selectOption('auto');
+</code></pre>
+<ul>
+<li>纯函数 <code>detectPreset(system)</code>, <code>resolve(saved, detected)</code> 和 <code>withPreset(saved, preset)</code>
+在 Node 下运行进行单元测试。 <code>createGraphics({ sdk, storage, system })</code> 也接受所有假货
+三.</li>
+<li><code>node --test tests/graphics-options.test.mjs</code> 验证验证、每个 GPU 的持久性和恢复，
+不同显示刷新率下的帧节奏、实时切换以及具有 FPS 限制的自适应质量。</li>
+</ul>
+
+{% endraw %}

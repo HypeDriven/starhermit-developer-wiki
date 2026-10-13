@@ -1,0 +1,434 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Server Game yang dihosting oleh kontainer"
+source_url: "/docs/api/container-games.html"
+source_path: "docs/api/container-games.md"
+source_hash: "1236c6a7fd9205e65079aaa8684a472e45c363e0314f51528484e44c183f19c1"
+translation: "machine"
+permalink: "/id/docs/api/container-games.html"
+---
+{% raw %}
+<h1 id="container-hosted-game-servers">Server Game yang dihosting oleh kontainer</h1>
+<p>Game StarHermit dapat mengirimkan logika server otoritatifnya sebagai gambar kontainer, bukan a
+file JavaScript kotak pasir. Ini memungkinkan server menggunakan Rust, Go, C++, atau runtime lain yang bisa
+melayani HTTP dan WebSockets. Menghadapi browser <a href="/id/docs/api/games.html">API Permainan</a> tetap sama: klien masih
+menggunakan token peluncuran cakupan game, sesi REST, dan <code>ws/v1/games</code> bingkai JSON.</p>
+<p>Hosting kontainer terbuka untuk semua pengguna yang masuk di starhermit.com. Penerapan yang dihosting sendiri bisa
+membatasinya pada daftar yang diizinkan oleh operator; daftar izin yang tidak ditetapkan di sana tidak menerima siapa pun selain semua orang.
+Hal ini berlaku sama untuk gambar registri dan gambar yang diunggah <code>server/image.tar</code>, jadi tidak ada rute yang ada
+diam-diam lebih permisif dari yang lain.</p>
+<p>Setelah pendaftaran game awal, pengembang juga dapat meluncurkan game bawaan <code>.tar.gz</code> mengandung
+<code>server/image.tar</code> (<code>docker save</code> keluaran) melalui
+<code>POST /api/v1/me/github-games/{id}/bundle</code>. Platform memuat dan mencerna pin gambar dan antrean
+penerapan ulang. Melihat <a href="/id/docs/api/github-games.html#push-a-game-bundle">GitHub Games — Mendorong bundel game</a>
+dan itu <a href="/id/docs/tutorials/dedicated-server-onboarding.html">tutorial server khusus</a>.</p>
+<p>Detail tentang push ini perlu diketahui sebelum Anda membuat pipeline rilis di sekitarnya:</p>
+<ul>
+<li><strong>Besar <code>docker save</code> dapat melebihi batas isi permintaan CDN ~100 MB</strong>, yang dijawab dengan a <code>413</code>
+platform tidak pernah melihat — tidak <code>limitBytes</code>, tidak ada apa pun di log mana pun yang dapat Anda baca. Dorong arsipnya
+<a href="/id/docs/api/github-games.html#upload-over-a-websocket"><code>ws/v1/game-upload</code></a> alih-alih; arsip yang sama, sama
+tunjangan, jawaban yang sama.</li>
+<li><strong>Gambar yang Anda unggah adalah deklarasi itu sendiri.</strong> Sebuah game yang belum memiliki backend — satu ditambahkan dari
+folder yang diunggah yang menyatakan tidak ada — mendapatkan definisi wadahnya yang disediakan dari intisari
+baru saja dimuat. Anda tidak memerlukan a <code>container.image=</code> dalam manifes terlebih dahulu.</li>
+<li><strong>Pendorongan ulang akan menerapkan kenop yang dinyatakan dalam manifesnya dan mempertahankan kenop yang dihilangkan.</strong> Berubah
+<code>container.port</code> dan mengunggah ulang sekarang memindahkan penerapan ke port tersebut; meninggalkan manifesnya
+bundel tidak mengubah apa pun kecuali gambar.</li>
+<li><strong>Gambar yang diunggah menang atas manifes</strong>, termasuk lebih dari a <code>server=</code> garis, dan manifes
+mendeklarasikan keduanya <code>server=</code> Dan <code>container.image=</code> ditolak sebelum apa pun dimuat.</li>
+<li><strong>Tag gambar lokal Anda tidak memilih versi yang diterapkan.</strong> Gambar yang diunggah disematkan olehnya
+intisari konten. Anda dapat menandainya secara lokal sesuka Anda; verifikasi intisari dan penerapan yang diunggah
+status setelah publikasi.</li>
+<li><strong><code>?mode=merge</code> hanya menambal file klien.</strong> A <code>server/image.tar</code> dalam gabungan dimuat persis seperti
+saat diganti — gambar tidak dapat diperbarui setengahnya. Melihat
+<a href="/id/docs/api/github-games.html#partial-updates-modemerge">pembaruan parsial</a>.</li>
+</ul>
+<h2 id="manifest">Tampak</h2>
+<p>Deklarasikan gambar di repositori <code>starhermit.txt</code>:</p>
+<pre><code class="language-ini">name=Void Marshals
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+
+container.image=ghcr.io/octocat/vm-server@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+container.port=8080
+container.health=/health
+container.memory_mb=1024
+container.cpu=1.0
+container.env.LOG_LEVEL=info
+</code></pre>
+<p>Hanya <code>container.image</code> diperlukan. Port dan jalur kesehatan defaultnya adalah <code>8080</code> Dan <code>/health</code>.
+Memori dan CPU adalah permintaan, bukan jaminan; platform menjepitnya hingga batas operator.</p>
+<p>Gambar Anda memiliki batas ukuran: 2 GiB tidak terkompresi kecuali operator telah menyetel game Anda yang lain, dan
+penarikan registri memiliki waktu lima menit. Tarikan yang melampaui langit-langit ditinggalkan di tengah jalan, dan diunggah
+<code>image.tar</code> atasnya ditolak dengan <code>413</code>, dan gambar yang menjadi lebih besar setelah tidak dikompresi adalah
+dihapus lagi.
+<code>container.env.*</code> hanya untuk konfigurasi non-rahasia.</p>
+<p>Pengajuan ditolak kecuali:</p>
+<ul>
+<li>Gambar tersebut disematkan sebagai intisari <code>name@sha256:&lt;64 lowercase hex&gt;</code>. Tag yang dapat diubah tidak diterima.</li>
+<li>Registri ini diizinkan dan gambar berada di bawah namespace pemilik repositori terverifikasi;
+saat ini artinya <code>ghcr.io/&lt;github-owner&gt;/...</code>.</li>
+<li>Manifes mendeklarasikan tepat satu waktu proses server. <code>server=</code> Dan <code>container.image=</code> saling
+eksklusif.</li>
+<li>Nama lingkungan valid dan tidak dimulai dengan nama yang dicadangkan <code>STARHERMIT_</code> awalan.</li>
+</ul>
+<p>Jangan pernah memasukkan kredensial <code>starhermit.txt</code>; itu adalah file repositori publik.</p>
+<h2 id="protocol-v1">Protokol v1</h2>
+<p>Kontainer menyajikan HTTP/1.1 aktif <code>container.port</code>. Setiap permintaan HTTP platform dan peningkatan WebSocket disertakan <code>X-Starhermit-Invoke-Key</code>, yang nilainya
+cocok dengan yang disuntikkan <code>STARHERMIT_INVOKE_KEY</code>; menolak permintaan jika tidak ada atau salah.</p>
+<table>
+<thead>
+<tr>
+<th>Titik akhir</th>
+<th>Tujuan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET &lt;container.health&gt;</code></td>
+<td>Kembali <code>200</code> ketika server sudah siap</td>
+</tr>
+<tr>
+<td><code>GET /describe</code></td>
+<td>Deklarasikan versi protokol, tick rate, kapasitas, dan pencapaian</td>
+</tr>
+<tr>
+<td><code>POST /sessions</code></td>
+<td>Mulai sesi, atau pulihkan kapan <code>snapshot</code> hadir</td>
+</tr>
+<tr>
+<td><code>GET /sessions/{sessionId}/snapshot</code></td>
+<td>Kembalikan kondisi tahan lama saat ini</td>
+</tr>
+<tr>
+<td><code>DELETE /sessions/{sessionId}</code></td>
+<td>Hancurkan sebuah sesi</td>
+</tr>
+<tr>
+<td><code>POST /sessions/{sessionId}/members</code></td>
+<td><em>Opsional:</em> seorang pemain bergabung atau meninggalkan sesi lari</td>
+</tr>
+<tr>
+<td><code>WS /control</code></td>
+<td>Saluran kontrol keluar seluruh penerapan</td>
+</tr>
+<tr>
+<td><code>WS /stream</code></td>
+<td>Bingkai gameplay di kedua arah</td>
+</tr>
+</tbody>
+</table>
+<p>Satu wadah menampung semua sesi langsung untuk satu pertandingan. Jaga agar status sesi tetap dikunci <code>sessionId</code> dan lakukan
+tidak berasumsi proses tersebut akan bertahan seumur hidup.</p>
+<h3 id="get-describe"><code>GET /describe</code></h3>
+<pre><code class="language-json">{
+  "protocol": 1,
+  "tickRateHz": 20,
+  "maxSessions": 48,
+  "replays": true,
+  "persistent": false,
+  "achievements": [
+    { "key": "first-blood", "name": "First Blood", "description": "Score first.", "points": 10 }
+  ]
+}
+</code></pre>
+<p><code>protocol</code> harus <code>1</code>. <code>tickRateHz</code> Dan <code>maxSessions</code> adalah permintaan dan dapat dijepit. Platformnya
+tidak pernah melangkahi lingkaran wadah, jadi <code>tickRateHz</code> memberitahukannya seberapa cepat permainan Anda <em>bergerak</em> daripada bagaimana
+cepat untuk menjalankannya: inilah yang menghentikan platform meminta snapshot lebih cepat daripada yang dihasilkan game Anda
+negara bagian baru. Nyatakan laju sebenarnya putaran Anda berjalan. Tarif pecahan diterima (<code>0.5</code> adalah satu
+centang setiap dua detik), dan kecepatan yang lambat akan memperpanjang interval antara permintaan snapshot —
+itulah berapa biaya permainan crash. Sebuah wadah yang menyatakan tidak ada yang meninggalkan pos pemeriksaan
+irama untuk biaya snapshot saja. Entri pencapaian menggunakan bidang dan batasan yang sama seperti
+<a href="/id/docs/api/game-scripts.html#declare">pencapaian yang dinyatakan dalam naskah</a>. Kunci yang dideklarasikan dan dibuat oleh pemilik nantinya dapat diberikan.</p>
+<p><code>replays</code> meminta platform untuk menjaga status terakhir setiap sesi yang selesai sebagai a <strong>memutar ulang</strong>, dilayani oleh
+<code>GET /api/v1/games/{slug}/replays/{sessionId}</code> (melihat <a href="/id/docs/api/games.html#replays">API Game — Pemutaran ulang</a>). Itu harus
+menjadi literal <code>true</code> atau <code>false</code>; permainan yang menyatakan tidak ada pemutaran ulang, dan titik akhir pemutaran ulangnya
+jawaban <code>404</code>. Seperti halnya tick rate, ini adalah permintaan — operator dapat menjawab untuk permainan tertentu
+apa pun pilihannya — jadi cabangkan klien Anda <code>replaysEnabled</code> dari <code>GET /api/v1/games/{slug}</code> daripada aktif
+apa yang kamu nyatakan. Snapshot tidak terpengaruh: sesi langsung memerlukan titik pemulihan
+atau tidak, yang terakhir disimpan.</p>
+<p><code>persistent</code> (harfiah <code>true</code>/<code>false</code>) meminta sesi itu <strong>jeda alih-alih mengakhiri</strong> kapan setiap
+pemain telah pergi. Jeda menghentikan sesi: platform mengambil cuplikan terakhir, menyimpannya, dan
+panggilan <code>DELETE /sessions/{id}</code>; pemain berikutnya yang bergabung akan membawanya kembali <code>POST /sessions</code> dengan
+itu <code>snapshot</code>, persis seperti pemulihan kerusakan tetapi tanpa menghabiskan anggaran restart atau pengiriman
+<code>resumed</code>. Sesi persisten yang dipulihkan juga berlaku <code>pausedMs</code>, total waktu yang dihabiskan dijeda. Lihat
+<a href="/id/docs/tutorials/persistent-sessions.html">tutorial sesi persisten</a>.</p>
+<p><code>linkedAchievements</code> (rangkaian hingga 8 siput game lainnya) menempatkan pembukaan kunci pemain di dalamnya
+game ke dalam ctx <code>POST /sessions</code>, saat membuat dan memulihkan. Melihat
+<a href="/id/docs/api/achievements.html#achievements-from-other-games">Prestasi dari game lain</a>.</p>
+<p>Saat ini <code>/describe</code> pembaca tidak mengimpor a <code>queues</code> milik. Oleh karena itu, permainan kontainer digunakan
+yang implisit <code>default</code> Antrean perjodohan 1v1; menambahkan bentuk di sini tidak memungkinkan kecocokan yang lebih besar.
+Memeriksa <code>GET /api/v1/games/{slug}/queues</code> untuk bentuk yang efektif. Batas waktu nyata dimulai dan kursi AI
+batasan masih berlaku dalam bentuk itu; melihat <a href="/id/docs/api/games.html#matchmaking">penjaruman</a>.</p>
+<h3 id="post-sessions"><code>POST /sessions</code></h3>
+<p>Permintaannya memiliki bentuk konteks yang sama dengan yang diterima game JavaScript:</p>
+<pre><code class="language-json">{
+  "now": 1769500000000,
+  "random": 0.418,
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [
+    { "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "name": "alice" }
+  ],
+  "sessionState": null,
+  "playerStates": {
+    "7c9e6679-7425-40de-944b-e07fc1f90ae7": null
+  }
+}
+</code></pre>
+<p>Semantik lapangan cocok dengan <a href="/id/docs/api/game-scripts.html#context-object">konteks naskah</a>, termasuk
+<a href="/id/docs/api/game-scripts.html#matchmaking-seat-layout">kursi perjodohan, bendera AI, dan kursi kosong</a> untuk permainan
+yang mengonfigurasi tenggat waktu mulai <code>starhermit.txt</code>. Tanggapi dengan
+amplop hasil standar, misalnya:</p>
+<pre><code class="language-json">{ "ok": true, "sessionState": { "round": 1 } }
+</code></pre>
+<p>Tentang pemulihan, permintaan itu juga berisi <code>snapshot</code>, memegang keadaan terakhir yang dipertahankan oleh platform,
+dan <code>restoredFrom</code>, stempel waktu Unix-milidetik. Rekonstruksi sesi yang dapat diputar dari snapshot.
+Permainan persisten dipulihkan dengan cara yang sama ketika pemain bergabung kembali dengan sesi yang dijeda, dengan <code>pausedMs</code>
+di dalam tubuh.</p>
+<h3 id="get-sessionssessionidsnapshot"><code>GET /sessions/{sessionId}/snapshot</code></h3>
+<p>Kembalikan amplop standar dengan lengkap <code>sessionState</code> titik pemulihan:</p>
+<pre><code class="language-json">{ "ok": true, "sessionState": { "round": 3, "scores": [2, 1] } }
+</code></pre>
+<p>Platform memeriksa sesi aktif secara berkala. Respons snapshot mungkin juga mencakup
+<code>playerStates</code>, <code>eloUpdates</code>, <code>achievements</code>, <code>scores</code>, atau <code>result</code>; mereka melewati validasi yang sama dan
+aturan persistensi sebagai hasil skrip. Untuk permainan dengan <a href="#get-describe">memutar ulang</a>, keadaan terakhir a
+sesi selesai yang dicapai adalah apa yang disimpan platform sebagai pemutaran ulangnya — jadi buatlah keadaan itu
+dapat direkonstruksi, tidak hanya dapat dilanjutkan.</p>
+<h3 id="post-sessionssessionidmembers"><code>POST /sessions/{sessionId}/members</code></h3>
+<p>Opsional. Pemain bisa <strong>bergabung dengan sesi yang sedang berlangsung</strong>, melalui a <a href="/id/docs/api/realtime.html">ruang waktu nyata</a> itu memungkinkan
+itu atau dengan menerima milik teman <a href="/id/docs/api/games.html#inviting-a-friend-into-a-game-in-progress">undang ke sesi yang mereka mainkan</a>,
+dan ruangan memungkinkan pemain menyerahkan kursinya tanpa AI mengambilnya. Platform menanyakan wadah Anda
+sebelum perubahan bersifat final. Bodinya ctx biasa, dengan <code>players</code> sudah mencerminkan
+perubahan, ditambah <code>membership</code>:</p>
+<pre><code class="language-json">{
+  "now": 1769500000000,
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [
+    { "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "name": "alice" },
+    { "id": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol" }
+  ],
+  "membership": { "change": "joined", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol", "team": 0, "slot": 1 }
+}
+</code></pre>
+<p><code>change</code> adalah <code>joined</code> atau <code>left</code>. Jawab dengan amplop standar:</p>
+<ul>
+<li><strong>Bergabung dapat ditolak.</strong> <code>{"ok": false, "error": "This world is full."}</code> memalingkan pemain, itu
+kursi dikembalikan dan tidak ada yang dicatat; undangan menerima jawaban <code>409</code> dan undangannya tetap ada
+tertunda. Jika Anda tidak menerapkan titik akhir, setiap penggabungan akan ditolak: <code>404</code>, <code>405</code> Dan <code>501</code> berarti
+"game ini tidak mengambil pemain ditengah pertandingan", jadi game yang ditulis untuk daftar tetap tidak pernah memiliki
+orang asing terjatuh ke dalamnya.</li>
+<li><strong>Cuti sudah final</strong> apapun jawabanmu.</li>
+<li>Jawabannya mungkin ada <code>achievements</code> Dan <code>scores</code>. A <code>sessionState</code> diabaikan: kirim a <code>snapshot</code>
+lebih <a href="#control-channel"><code>/control</code></a> jika perubahan itu layak untuk dijadikan pos pemeriksaan.</li>
+</ul>
+<p>Setelah bergabung, perintah pemain baru mulai berdatangan <code>/stream</code> dan mereka masuk <code>players</code> pada setiap
+nanti pulihkan. Setelah keluar, rangkanya berhenti dan soketnya ditutup. Setiap klien yang terhubung
+menerima a <a href="/id/docs/api/games.html#server--client"><code>membership</code> bingkai</a> bagaimanapun juga, dan sesi obrolan untung atau rugi
+anggota.</p>
+<p>A <a href="/id/docs/tutorials/persistent-sessions.html">menjeda sesi persisten</a> tidak ditanyakan, karena tidak berjalan. Pemulihan itu
+melanjutkan itu membawa arus <code>players</code>, jadi perlakukan pemain yang belum pernah Anda lihat sebelumnya dalam pemulihan sebagai
+bergabung.</p>
+<h2 id="gameplay-stream">Aliran gameplay</h2>
+<p><code>WS /stream</code> menggunakan pesan biner di kedua arah:</p>
+<pre><code class="language-text">[1 byte type][16 byte sessionId][16 byte userId][payload...]
+</code></pre>
+<p>GUID menggunakan representasi kabel .NET 16-byte.</p>
+<ul>
+<li><strong>Tipe 1, platform → wadah:</strong> perintah pemain. Platform mencap id pengguna yang diautentikasi;
+payload adalah nilai JSON dari klien <code>cmd.data</code>.</li>
+<li><strong>Tipe 2, wadah → platform:</strong> muatan permainan. Alamat satu peserta dengan id pengguna mereka, atau gunakan
+id pengguna yang semuanya nol untuk disiarkan. Payloadnya harus berupa JSON yang valid; klien menerimanya di dalam
+<code>{"type":"game","data":...}</code>.</li>
+</ul>
+<p>Sesi disematkan ke koneksi streaming untuk menjaga ketertiban. Jangan pernah menerima atau menurunkan pemain
+identitas dari perintah JSON—header yang diautentikasi bersifat otoritatif.</p>
+<h2 id="control-channel">Saluran kontrol</h2>
+<p>Kirim pesan teks JSON aktif <code>WS /control</code> untuk efek tahan lama:</p>
+<pre><code class="language-json">{ "type": "snapshot",     "sessionId": "...", "state": { "round": 3 } }
+{ "type": "achievements", "sessionId": "...", "unlocks": { "&lt;userId&gt;": ["first-blood"] } }
+{ "type": "elo",          "sessionId": "...", "updates": { "&lt;userId&gt;": 1312 } }   // absolute ratings, not deltas — see games.md#elo-per-match
+{ "type": "scores",       "sessionId": "...", "scores": { "&lt;boardKey&gt;": { "&lt;userId&gt;": 4200 } } }
+{ "type": "result",       "sessionId": "...", "result": { "kind": "win", "winner": "..." } }
+{ "type": "backpressure", "load": 0.75 }
+</code></pre>
+<p>Platform menerima efek hanya untuk sesi yang diarahkan ke penerapan ini, memfilter penerimanya
+peserta sesi, membatasi kunci pencapaian pencapaian game (dideklarasikan, atau dibuat oleh
+pemiliknya), batas <code>scores</code> ke permainan itu sendiri
+<a href="/id/docs/api/leaderboards.html#your-games-own-leaderboards">papan peringkat yang dibuat pemilik</a> — setiap pemain menyimpannya
+terbaik — dan menerapkan anggaran negara.
+<code>result</code> mengakhiri sesi; efek selanjutnya untuk sesi itu diabaikan. <code>backpressure.load</code> adalah
+dijepit ke <code>0..1</code> dan membantu akun platform untuk beban penerapan saat ini.</p>
+<p>Dorong cuplikan setelah peristiwa penting secara semantik, seperti transisi sasaran atau putaran
+daripada hanya mengandalkan pos pemeriksaan berkala.</p>
+<h2 id="container-environment-and-server-api">Lingkungan kontainer dan API server</h2>
+<table>
+<thead>
+<tr>
+<th>Variabel</th>
+<th>Arti</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>STARHERMIT_PROTOCOL</code></td>
+<td>Versi protokol (<code>1</code>)</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_GAME_SLUG</code></td>
+<td>Siput game ini</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_INVOKE_KEY</code></td>
+<td>Rahasia diharapkan masuk <code>X-Starhermit-Invoke-Key</code>; mengautentikasi platform ke penampung Anda</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_REFRESH_KEY</code></td>
+<td>Rahasia terpisah hanya digunakan untuk memperbarui token server</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_API_BASE</code></td>
+<td>URL dasar API platform dapat dijangkau dari jaringan terisolasi</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_SERVER_TOKEN</code></td>
+<td>Token pembawa yang kedaluwarsa untuk API server-ke-server yang sempit</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_SERVER_TOKEN_EXPIRES_IN</code></td>
+<td>Masa pakai token server yang disuntikkan, dalam hitungan detik</td>
+</tr>
+<tr>
+<td><code>PORT</code></td>
+<td>Port tempat container harus mendengarkan</td>
+</tr>
+</tbody>
+</table>
+<p>Token server tidak memiliki identitas pemain dan tidak dapat menggunakan tindakan akun atau pemain. Itu bisa membaca
+<code>GET /api/v1/time</code>, rekonsiliasi sesinya sendiri, dan hubungi server yang didukung
+<a href="/id/docs/api/moderation.html#callers-and-routes">rute moderasi</a> untuk permainannya sendiri. Rute generasi adalah
+<a href="/id/docs/availability.html#reserved-generation-routes">dipesan dan tidak tersedia</a>.</p>
+<h3 id="renew-the-server-token">Perbarui token server</h3>
+<p>Token server yang disuntikkan akan kedaluwarsa (24 jam secara default). Segarkan dengan baik sebelumnya
+<code>STARHERMIT_SERVER_TOKEN_EXPIRES_IN</code> berlalu:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/server/token
+X-Starhermit-Refresh-Key: &lt;STARHERMIT_REFRESH_KEY&gt;
+</code></pre>
+<pre><code class="language-json">{ "token": "eyJhbGciOi...", "expiresInSeconds": 86400 }
+</code></pre>
+<p>Titik akhir ini sengaja dipanggil tanpa token pembawa yang sudah habis masa berlakunya. Kunci penyegaran khusus
+dibandingkan dengan penerapan langsung dan berfungsi bahkan setelah token lama kedaluwarsa. Hal ini berbeda
+dari <code>STARHERMIT_INVOKE_KEY</code>: kunci pemanggilan mengautentikasi panggilan platform ke proses Anda, sedangkan
+kunci penyegaran mengautentikasi proses Anda ke platform. Keduanya berputar setiap kali wadah dimulai.
+Jadwalkan pembaruan kira-kira setengah dari masa pakai yang dilaporkan dan ganti token secara atom.</p>
+<p>"Kapan pun wadah dimulai" mencakup lebih dari sekedar penerapan. Penerapan yang menganggur dihentikan setelah a
+mantra tenang tanpa sesi (15 menit secara default) dan dimulai lagi oleh pemain berikutnya. Kontainer yang rusak adalah
+dimulai ulang. Setiap awal adalah wadah baru dengan kunci baru dan token baru, jadi bacalah ketiganya dari
+lingkungan proses yang sedang berjalan. Jangan pernah memasukkannya ke dalam gambar, file konfigurasi, atau snapshot.</p>
+<p>Jika permulaan gagal dengan <code>The game container returned 401 for GET /describe</code>, kunci platform dan
+kunci proses Anda tidak setuju. Membaca <code>STARHERMIT_INVOKE_KEY</code> saat startup dan bandingkan tanpa dimodifikasi. Jika validasi masih gagal,
+laporkan id game dan log startup yang sudah dibersihkan; jangan melonggarkan ceknya.</p>
+<h3 id="reconcile-a-session">Rekonsiliasi suatu sesi</h3>
+<p><code>GET /api/v1/games/{slug}/server/sessions/{sessionId}</code> dengan
+<code>Authorization: Bearer &lt;STARHERMIT_SERVER_TOKEN&gt;</code> mengembalikan tampilan sesi platform saat ini:</p>
+<pre><code class="language-json">{
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "status": "active",
+  "players": [
+    { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" }
+  ],
+  "createdAt": "2026-07-27T16:00:00Z",
+  "finishedAt": null,
+  "chatConversationId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+  "result": null
+}
+</code></pre>
+<p>Gunakan ini setelah restorasi ketika penampung perlu mengonfirmasi apakah platform masih mempertimbangkan
+sesi aktif. Token untuk game lain, atau token peluncuran pemain, dilarang.</p>
+<h2 id="isolation">Isolasi</h2>
+<p>Wadah permainan tidak memiliki akses internet. Itu hanya dapat menjangkau API StarHermit melalui
+<code>STARHERMIT_API_BASE</code>; itu tidak dapat menjangkau game lain, layanan platform, atau host. Penjual semuanya
+ketergantungan runtime ke dalam gambar.</p>
+<p>Sistem file root bersifat read-only, kecuali yang kecil <code>/tmp</code>; prosesnya berjalan sebagai non-root yang dipaksakan
+pengguna tanpa kemampuan Linux, tanpa volume, dan CPU, memori, dan batasan proses. Jangan instal
+paket saat startup atau tetap cocok dengan status hanya ke disk lokal.</p>
+<h2 id="failure-and-recovery">Kegagalan dan pemulihan</h2>
+<p>Jika proses terhenti, platform akan memulai ulang penerapan dan membuat ulang sesi langsung dari proses tersebut
+cuplikan terakhir. Pemain yang terhubung menerima bingkai platform:</p>
+<pre><code class="language-json">{ "type": "resumed", "sessionId": "...", "lostMs": 750 }
+</code></pre>
+<p>Klien harus membuang prediksi lokal dan menunggu muatan keadaan penuh normal dari game tersebut. Sebuah sesi
+ditinggalkan alih-alih dipulihkan ketika tidak ada snapshot yang dapat digunakan, terlalu lama, atau sesi sudah habis
+terlalu sering dimulai ulang. Platform menyelesaikannya tanpa pemenang atau perubahan elo dan mengirimkan:</p>
+<pre><code class="language-json">{ "type": "abandoned", "sessionId": "...", "reason": "server_failure" }
+</code></pre>
+<p><code>reason</code> adalah <code>server_failure</code> ketika pemulihan tidak aman atau penggantian tidak pernah dimulai, dan
+<code>restore_failed</code> ketika membuat ulang sesi gagal. Menerbitkan gambar baru akan memulihkan sesi langsung
+menjadi penggantinya (atau meninggalkan yang terlalu basi). Permulaan yang gagal - waktu penarikan habis, itu
+kontainer keluar, atau tidak pernah menjawab waktu pemeriksaan kesehatannya — dicoba ulang dengan backoff, seperti a
+kecelakaan. Tiga upaya gagal dalam waktu sepuluh menit (dapat disesuaikan oleh operator) menonaktifkan penerapan (<code>failed</code>),
+dan itu benar <strong>bukan</strong> dibangunkan oleh permintaan pemain. Gangguan hosting sementara dapat dicoba ulang tanpa menghabiskan tunjangan kegagalan game.</p>
+<p>Penerapan tanpa sesi langsung dihentikan setelah 15 menit tidak aktif (operator dapat mengatur permainan Anda di jendela yang berbeda).
+Dijeda <a href="#get-describe">gigih</a> sesi diparkir di luar wadah dan tidak dilanjutkan.
+Permintaan sesi berikutnya terhadap a <code>stopped</code> penerapan membangunkannya (<code>pending</code> → gerbang kesehatan →
+<code>running</code>); kalah dalam perlombaan itu <code>503</code> mengatakan permainan dimulai. Hanya <code>stopped</code> terbangun ini
+cara - tidak pernah <code>failed</code>.</p>
+<p>Desain <code>POST /sessions</code> restorasi dan irama snapshot sebagai bagian dari protokol permainan, bukan sebagai
+pengoptimalan opsional.</p>
+<p>Pemilik game dapat membuat daftar dan mengakhiri sesi terdampar:
+<code>GET</code>/<code>DELETE /api/v1/me/github-games/{id}/sessions[/{sessionId}]</code>.</p>
+<h2 id="your-servers-output-and-crash-reports">Output server Anda dan laporan kerusakan</h2>
+<p>Sebagai pemilik game, Anda dapat membaca apa yang dicetak server Anda, dan apa yang terjadi ketika server down:</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/github-games/{id}/container/logs?tail=N</code></td>
+<td>Keluaran terbaru: <code>{ source, deploymentStatus, capturedAt, truncated, logs }</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/github-games/{id}/container/crashes?page=&amp;pageSize=</code></td>
+<td>Catatan kerusakan, yang terbaru terlebih dahulu</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/github-games/{id}/container/crashes/{crashId}</code></td>
+<td>Satu catatan kerusakan, dengan keluaran yang diambil</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Log</strong> ditayangkan langsung dari server yang sedang berjalan (<code>source: "live"</code>), yang terbaru disimpan, hingga 500 baris dan
+256 KiB secara default. Ketika tidak ada yang berjalan, Anda mendapatkan output yang ditangkap pada crash terakhir
+(<code>source: "last_crash"</code>). Game yang backendnya berupa skrip, atau tidak memiliki skrip apa pun, akan mendapatkannya <code>409</code>.</li>
+<li><strong>Rekor kecelakaan</strong> ditulis setiap kali server Anda mogok, berhenti menjawab, waktu habis
+memulai atau gagal memulai — sebelum penampung dihapus. Itu membawa jenis, kode keluar,
+intisari gambar, jumlah restart, sesi yang terpengaruh, dan output 64 KiB terakhir server Anda. Itu
+50 yang terbaru disimpan, selama 30 hari.</li>
+<li><strong>Rahasia disunting.</strong> Kunci pemanggilan server Anda, kunci penyegaran, dan token server apa pun muncul sebagai
+<code>[redacted]</code>. Milikmu sendiri <code>container.env.*</code> nilai muncul seperti yang dicetak — jangan mencatat apa yang tidak Anda inginkan
+ingin disimpan.</li>
+</ul>
+<p>Operator dapat mengubah setiap batasan tersebut, per game.</p>
+<h2 id="see-also">Lihat juga</h2>
+<ul>
+<li><a href="/id/docs/api/github-games.html">Permainan GitHub</a> — pendaftaran dan penerapan repositori</li>
+<li><a href="/id/docs/api/games.html">API Permainan</a> — Permukaan REST dan WebSocket yang menghadap pemain tidak berubah</li>
+<li><a href="/id/docs/api/game-scripts.html">Skrip Permainan</a> — runtime JavaScript alternatif dan bentuk konteks/hasil bersama</li>
+<li><a href="/id/docs/api/achievements.html">Prestasi</a> — pembacaan dan pemberitahuan pencapaian yang dihadapi pemain</li>
+</ul>
+<p>Dibagikan <a href="/id/docs/api/conventions.html">konvensi API</a> menjelaskan penguraian respons, stempel waktu, penomoran halaman, dan percobaan ulang.</p>
+<p>Melihat <a href="/id/docs/credentials.html">kompatibilitas kredensial</a> Dan <a href="/id/docs/api/contracts.html">kontrak yang dapat dibaca mesin</a>.</p>
+
+{% endraw %}

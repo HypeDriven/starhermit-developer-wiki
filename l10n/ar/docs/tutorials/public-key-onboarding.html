@@ -1,0 +1,369 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "البرنامج التعليمي: اللاعبون الموجودون على متن الطائرة باستخدام المفتاح العام"
+source_url: "/docs/tutorials/public-key-onboarding.html"
+source_path: "docs/tutorials/public-key-onboarding.md"
+source_hash: "49ebc031a538076978eab193219b2c0fd3cce731ed6327ede6768bbbcbb310f3"
+translation: "machine"
+permalink: "/ar/docs/tutorials/public-key-onboarding.html"
+---
+{% raw %}
+<h1 id="tutorial-onboard-players-with-a-public-key">البرنامج التعليمي: اللاعبون الموجودون على متن الطائرة باستخدام المفتاح العام</h1>
+<p>لا يحتاج حساب StarHermit إلى Google أو GitHub أو أي مزود تسجيل دخول آخر. يمكن لأوراق اعتمادها
+يكون زوج المفاتيح الذي تنشئه لعبتك على جهاز اللاعب، بالإضافة إلى عنوان البريد الإلكتروني للاعب
+يؤكد مرة واحدة. بعد ذلك، تقوم لعبتك بتسجيل الدخول بصمت عند كل عملية إطلاق من خلال التوقيع على تحدي مع
+المفتاح. لا يقوم اللاعب أبدًا بكتابة كلمة مرور ولا يتعين عليه مطلقًا زيارة صفحة StarHermit.</p>
+<p>يبني هذا البرنامج التعليمي هذا التدفق من البداية إلى النهاية: قم بإنشاء المفتاح، وتسجيله، وانتظر حتى يقوم اللاعب بذلك
+قم بالتأكيد وتسجيل الدخول والاحتفاظ بالجلسة والتعامل مع الأجهزة الثانية والمفاتيح المفقودة.</p>
+<p><strong>استخدم هذا ل</strong> ألعاب أصلية ومستقلة، وقاذفات، وإصدارات Steam/Epic/GOG وأدوات سطح المكتب -
+أي شيء يتم تشغيله على جهاز اللاعب ويمكنه الاحتفاظ بمفتاح خاص هناك.</p>
+<p><strong>استخدام شيء آخر ل</strong></p>
+<ul>
+<li><strong>لعبة متصفح مستضافة على StarHermit</strong>، والذي يتلقى بالفعل رمز الإطلاق المميز عند فتحه منه
+لوحة القيادة، أو يمكن أن تظهر أ <a href="/ar/docs/api/auth.html#sign-in-from-a-directly-opened-browser-game">زر تسجيل الدخول</a>.</li>
+<li><strong>خط أنابيب CI</strong>، والتي يجب أن تسجل مفتاحًا من جلسة OAuth بدون خطوة البريد الإلكتروني:
+<a href="/ar/docs/tutorials/ci-cd-build-upload.html">البرنامج التعليمي: يتم إنشاء التحميل من CI/CD</a>.</li>
+<li><strong>خادم ألعاب مخصص</strong>، الذي له رمز نشر مميز خاص به ولا يمكنه إنشاءه أو التصرف به
+اللاعبين: <a href="/ar/docs/tutorials/dedicated-server-onboarding.html">البرنامج التعليمي: نشر خادم مخصص</a>.</li>
+</ul>
+<h2 id="what-the-player-sees">ما يراه اللاعب</h2>
+<ol>
+<li>تطلب لعبتك عنوان بريد إلكتروني وموافقتهم على إنشاء حساب StarHermit.</li>
+<li>يفتحون رسالة التأكيد الإلكترونية، وينقرون على الرابط، ثم يضغطون <strong>يتأكد</strong> على الصفحة التي يفتحها.</li>
+<li>بالعودة إلى لعبتك، تم تسجيل دخولهم. وفي عمليات الإطلاق اللاحقة، لا يتم طلب أي شيء على الإطلاق.</li>
+</ol>
+<p>مطلوب عنوان بريد إلكتروني، ويجب على اللاعب تأكيده مرة واحدة. لا توجد طريقة لإنشاء
+حساب StarHermit بصمت من هوية Steam أو Epic أو GOG وحدها.</p>
+<h2 id="before-you-start">قبل أن تبدأ</h2>
+<p>الكود الموجود في هذه الصفحة هو JavaScript عادي باستخدام WebCrypto و <code>fetch</code>، لذلك يتم تشغيله في المتصفح، في
+الإلكترون وفي العقدة 20 أو الأحدث. <strong>ال <code>js</code> الكتل أدناه، بالترتيب، تشكل وحدة ES واحدة</strong> - احفظهم
+معا كما <code>starhermit-key-auth.js</code>. أي لغة أخرى تعمل بنفس الطريقة: الخطوة 1 تعطي بالضبط
+تنسيقات البايت، والخطوة 3 البايتات الدقيقة للتوقيع.</p>
+<pre><code class="language-js">const API = 'https://api.starhermit.com';
+
+const b64 = (bytes) =&gt; btoa(String.fromCharCode(...new Uint8Array(bytes)));
+</code></pre>
+<h2 id="1-create-the-device-key">1. قم بإنشاء مفتاح الجهاز</h2>
+<p>يولد <strong>زوج مفاتيح واحد لكل عملية تثبيت</strong>، في المرة الأولى التي تحتاج فيها لعبتك إلى حساب. الخاص
+المفتاح لا يغادر الجهاز أبدًا: لا إلى خوادمك، ولا إلى StarHermit.</p>
+<table>
+<thead>
+<tr>
+<th><code>keyType</code></th>
+<th><code>keyData</code> (قاعدة 64 القياسية)</th>
+<th>التوقيع (قاعدة 64 القياسية)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Ed25519</code> - مُستَحسَن</td>
+<td>المفتاح العمومي الخام 32 بايت</td>
+<td>التوقيع الخام Ed25519 بحجم 64 بايت</td>
+</tr>
+<tr>
+<td><code>ECDSA-P256</code></td>
+<td>النقطة العامة: 65 بايت غير مضغوطة (<code>04‖X‖Y</code>) أو مضغوطة بحجم 33 بايت</td>
+<td>ECDSA مع SHA-256، <strong>مشفر بـ ASN.1 DER</strong></td>
+</tr>
+<tr>
+<td><code>RSA-PSS</code></td>
+<td><code>SubjectPublicKeyInfo</code> DER، معامل 2048–8192 بت، الأس ≥ 32 بت</td>
+<td>RSASSA-PSS، SHA-256، MGF1-SHA-256، ملح 32 بايت</td>
+</tr>
+</tbody>
+</table>
+<p><code>keyData</code> هو على الأكثر 2000 حرف. ينتمي مفتاح واحد إلى حساب واحد عبر النظام الأساسي.</p>
+<p>يختار <strong>إد25519</strong> إلا إذا كان النظام الأساسي الخاص بك لا يستطيع إنتاجه. إذا كنت تستخدم ECDSA، فلاحظ أن WebCrypto،
+يقوم Windows CNG ومعظم مخازن مفاتيح الأجهزة بإرجاع التوقيع كأول <code>r‖s</code> (64 بايت). ستارهيرميت
+يتوقع DER، لذا قم بتحويله — الوحدة أدناه تفعل ذلك.</p>
+<pre><code class="language-js">// One key per installation. The private key can sign but is never exported.
+export async function createDeviceKey(keyType = 'Ed25519') {
+  if (!['Ed25519', 'ECDSA-P256'].includes(keyType)) throw new Error('This helper supports Ed25519 or ECDSA-P256');
+  const algorithm = keyType === 'Ed25519'
+    ? { name: 'Ed25519' }
+    : { name: 'ECDSA', namedCurve: 'P-256' };
+  const pair = await crypto.subtle.generateKey(algorithm, false, ['sign', 'verify']);
+  return {
+    keyType: keyType === 'Ed25519' ? 'Ed25519' : 'ECDSA-P256',
+    keyData: b64(await crypto.subtle.exportKey('raw', pair.publicKey)),
+    privateKey: pair.privateKey,
+  };
+}
+</code></pre>
+<p><strong>قم بتخزين المفتاح الخاص حيث يحميه نظام التشغيل.</strong> في المتصفح أو العارض الإلكتروني،
+غير قابلة للاستخراج <code>CryptoKey</code> يمكن الاحتفاظ بها في IndexedDB كما هي. يجب أن تستخدم اللعبة الأصلية ملف
+مخزن مفاتيح النظام الأساسي — Windows DPAPI أو CNG، وmacOS Keychain، وlibsecret على Linux. محل <code>keyType</code> و
+<code>keyData</code> بجانبه؛ ترسلهم مع كل طلب.</p>
+<h2 id="2-start-registration">2. ابدأ التسجيل</h2>
+<p>اطلب عنوان البريد الإلكتروني للاعب وموافقته، ثم:</p>
+<pre><code class="language-js">async function post(path, body) {
+  const res = await fetch(API + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json().catch(() =&gt; ({})) };
+}
+
+function fail(step, { status, body }) {
+  return Object.assign(new Error(`${step}: ${body.error ?? status}`), { status, body });
+}
+
+export async function register(key, email) {
+  const res = await post('/api/v1/auth/public-key/register',
+    { email, keyType: key.keyType, keyData: key.keyData });
+  if (res.status !== 202) throw fail('register', res);
+  return res.body; // { registrationId, email, emailSent, deferralReason, message }
+}
+</code></pre>
+<p><code>202</code> يعني أن StarHermit قبلت التسجيل. لو <code>emailSent</code> يكون <code>false</code>، البريد الإلكتروني في قائمة الانتظار و
+سوف لا يزال يصل؛ <code>deferralReason</code> يقول لماذا انتظرت. لم يتم ربط أي شيء بأي حساب حتى الآن.</p>
+<p>ثلاث قواعد تشكل واجهة المستخدم الخاصة بك:</p>
+<ul>
+<li><strong>تسجيل واحد لكل عنوان بريد إلكتروني، وتسجيل واحد لكل عنوان IP، كل 24 ساعة.</strong> محاولة ثانية
+هو <code>429</code> مع <code>Retry-After</code>. اطلب من اللاعب تأكيد العنوان قبل إرساله، بسبب خطأ مطبعي
+يكلفهم يوما. أرسل الطلب من جهاز اللاعب، وليس من خلال الخادم الخاص بك أبدًا: كل
+سيشارك اللاعب عنوان IP الخاص بخادمك وتسجيله اليومي الفردي.</li>
+<li><strong>تنتهي صلاحية الرابط بعد 4 ساعات.</strong> إذا انقضت المدة، يمكن للاعب التسجيل مرة أخرى بعد مرور 24 ساعة
+متروك.</li>
+<li><strong><code>400</code></strong> يعني أنه تم رفض عنوان البريد الإلكتروني أو المادة الرئيسية؛ <code>error</code> يقول الذي.</li>
+</ul>
+<h2 id="3-sign-in-with-the-key">3. قم بتسجيل الدخول بالمفتاح</h2>
+<p>تسجيل الدخول هو التحدي والاستجابة. <code>POST /api/v1/auth/public-key/challenge</code> العوائد:</p>
+<pre><code class="language-json">{
+  "challengeId": "4fc4d72b-4c12-41ca-a500-dc13cccc3865",
+  "payload": {
+    "challengeId": "4fc4d72b-4c12-41ca-a500-dc13cccc3865",
+    "fingerprint": "9c0b7a…",
+    "issuer": "starhermit",
+    "audience": "starhermit",
+    "expiry": "2026-10-09T14:21:41.9264875+00:00",
+    "nonce": "NmL+tgMum6HXU/pa3T9xjQ==",
+    "clientTimestamp": "2026-10-09T14:16:41.9265739+00:00"
+  },
+  "expiresIn": 300
+}
+</code></pre>
+<p><strong>ما قمت بالتوقيع عليه ليس JSON الذي تلقيته.</strong> يقوم StarHermit بالتحقق من التوقيع من تلقاء نفسه
+تسلسل <code>payload</code>:</p>
+<ul>
+<li>JSON مضغوط، بدون مسافة بيضاء؛</li>
+<li><strong>باسكال كيس</strong> أسماء الأعضاء بالترتيب بالضبط <code>ChallengeId</code>, <code>Fingerprint</code>, <code>Issuer</code>,
+<code>Audience</code>, <code>Expiry</code>, <code>Nonce</code>, <code>ClientTimestamp</code>;</li>
+<li>كل قيمة منسوخة <strong>بالضبط كما خدم</strong> — لا تقم بتحليل التواريخ وإعادة تنسيقها؛</li>
+<li>كل <code>+</code> في nonce مكتوبة باسم <code>\u002B</code>. ال <code>+</code> في التواريخ يبقى كما هو.</li>
+</ul>
+<p>بالنسبة للتحدي أعلاه، فإن البايتات الموقعة هي ترميز UTF-8 لما يلي:</p>
+<pre><code class="language-text">{"ChallengeId":"4fc4d72b-4c12-41ca-a500-dc13cccc3865","Fingerprint":"9c0b7a…","Issuer":"starhermit","Audience":"starhermit","Expiry":"2026-10-09T14:21:41.9264875+00:00","Nonce":"NmL\u002BtgMum6HXU/pa3T9xjQ==","ClientTimestamp":"2026-10-09T14:16:41.9265739+00:00"}
+</code></pre>
+<p>احصل على أي من هذا الخطأ والجواب هو <code>401 "Invalid signature."</code>، والتي لن يتم إصلاحها بعد إعادة المحاولة.</p>
+<pre><code class="language-js">const FIELDS = ['challengeId', 'fingerprint', 'issuer', 'audience', 'expiry', 'nonce', 'clientTimestamp'];
+
+export function challengeSigningBytes(payload) {
+  const members = FIELDS.map((field) =&gt; {
+    let value = JSON.stringify(payload[field]);
+    if (field === 'nonce') value = value.replaceAll('+', '\\u002B');
+    return `"${field[0].toUpperCase()}${field.slice(1)}":${value}`;
+  });
+  return new TextEncoder().encode(`{${members.join(',')}}`);
+}
+
+export async function signChallenge(key, payload) {
+  const data = challengeSigningBytes(payload);
+  if (key.keyType === 'Ed25519')
+    return b64(await crypto.subtle.sign({ name: 'Ed25519' }, key.privateKey, data));
+  // WebCrypto returns an ECDSA signature as raw r||s; the server expects ASN.1 DER.
+  const rs = new Uint8Array(
+    await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key.privateKey, data));
+  return b64(derEcdsaSignature(rs));
+}
+
+function derEcdsaSignature(rs) {
+  const integer = (bytes) =&gt; {
+    let i = 0;
+    while (i &lt; bytes.length - 1 &amp;&amp; bytes[i] === 0) i++;
+    const value = [...bytes.slice(i)];
+    return value[0] &amp; 0x80 ? [0x02, value.length + 1, 0, ...value] : [0x02, value.length, ...value];
+  };
+  const body = [...integer(rs.slice(0, 32)), ...integer(rs.slice(32))];
+  return new Uint8Array([0x30, body.length, ...body]);
+}
+
+// Resolves to { userId, accessToken, refreshToken }, or null while the key is not attached to
+// an account yet — the player has not confirmed, the link expired, or the key was revoked.
+export async function signIn(key) {
+  const { keyType, keyData } = key;
+  const challenge = await post('/api/v1/auth/public-key/challenge', { keyType, keyData });
+  if (challenge.status !== 200) throw fail('challenge', challenge);
+  const signature = await signChallenge(key, challenge.body.payload);
+  const done = await post('/api/v1/auth/public-key/complete',
+    { challengeId: challenge.body.challengeId, signature, keyType, keyData });
+  if (done.status === 200) return done.body;
+  if (done.status === 401 &amp;&amp; done.body.error === 'Public key not registered or revoked.') return null;
+  throw fail('complete', done); // "Invalid signature." will never succeed: fix it, don't retry it
+}
+</code></pre>
+<p>يستمر التحدي لمدة خمس دقائق ويتم استخدامه لمرة واحدة، حتى في حالة فشل المحاولة، لذا اطلب تحديًا جديدًا
+لكل محاولة. تحدي وإكمال المشاركة بحد أقصى 60 طلبًا في الدقيقة لكل عنوان IP.</p>
+<h2 id="4-wait-for-the-player-to-confirm">4. انتظر حتى يؤكد اللاعب</h2>
+<p>يفتح الرابط المرسل عبر البريد الإلكتروني صفحة StarHermit توضح ما سيفعله التأكيد؛ فتحه يتغير
+لا شيء، لذلك لا يستطيع ماسح البريد الذي يقوم بمعاينة الرابط التأكيد نيابة عن اللاعب. عندما
+ضغطات اللاعب <strong>يتأكد</strong>يقوم StarHermit بإنشاء حسابه وإرفاق المفتاح الخاص بك ووضع علامة على العنوان
+تم التحقق منها. إذا كان الحساب يستخدم هذا العنوان بالفعل، فستشير الصفحة إلى ذلك ويتم إضافة المفتاح إليه
+بدلاً من ذلك، يحتفظ به اللاعب الذي لديه حساب StarHermit بالفعل. ثم هبطوا على موقع starhermit.com
+على لوحة معلومات StarHermit، تم تسجيل الدخول بالفعل.</p>
+<p><strong>لا تتلقى لعبتك الرموز المميزة من تلك الصفحة أبدًا</strong>، ولا يحتاج إليها. يجوز للاعب
+التأكيد على الهاتف أو في متصفح آخر. بمجرد إرفاق المفتاح، يمكن للعبتك تسجيل الدخول ببساطة
+معها. لذا أظهر أ "تحقق من البريد الوارد الخاص بك" الشاشة واستمر في المحاولة:</p>
+<pre><code class="language-js">// Poll until the player confirms the emailed link. Two requests per attempt, so every 5 s stays
+// well inside the 60-per-minute sign-in limit.
+export async function waitUntilConfirmed(key, { intervalMs = 5000, signal } = {}) {
+  for (;;) {
+    signal?.throwIfAborted();
+    const session = await signIn(key);
+    if (session) return session;
+    await new Promise((resolve) =&gt; setTimeout(resolve, intervalMs));
+  }
+}
+</code></pre>
+<p>تجميع الخطوات من 1 إلى 4 معًا:</p>
+<pre><code class="language-javascript">import { createDeviceKey, register, signIn, waitUntilConfirmed } from './starhermit-key-auth.js';
+
+const key = await loadStoredKey() ?? await saveKey(await createDeviceKey());
+let session = await signIn(key);                // a returning player is signed in here
+if (!session) {
+  const email = await askForEmailAndConsent();
+  await register(key, email);
+  showCheckYourInbox(email);
+  session = await waitUntilConfirmed(key, { signal: cancelButton.signal });
+}
+</code></pre>
+<p><code>loadStoredKey</code>, <code>saveKey</code>, <code>askForEmailAndConsent</code> و <code>showCheckYourInbox</code> هي لك أن تكتب.
+عرض أ <strong>يلغي</strong> يؤدي إلى إحباط الانتظار، وإيقاف الاستقصاء بعد أربع ساعات، عند انتهاء صلاحية الارتباط.</p>
+<p>استمر في الاقتراع حتى إذا كانت صفحة التأكيد الخاصة بنظامك الأساسي تعيد التوجيه مرة أخرى إلى موقعك. اللاعب في كثير من الأحيان
+يفتح البريد الإلكتروني على جهاز مختلف عن الجهاز الذي ينتظره، ومن ثم لا تصل عملية إعادة التوجيه إلى أي مكان
+بالقرب من شاشة الانتظار الخاصة بك؛ الاستقصاء هو ما يشير إلى دخول جهاز الانتظار. في حالة وصول إعادة التوجيه
+في علامة التبويب الثانية، قم بتسجيل الدخول باستخدام واحد منهم فقط وقم بإلغاء الجلسة الإضافية، وإلا سينتهي الأمر باللاعب
+مع اثنين.</p>
+<h2 id="5-keep-the-session">5. حافظ على الجلسة</h2>
+<p><code>complete</code> تقوم بإرجاع رمز وصول مدته 15 دقيقة ورمز تحديث يستمر لمدة سبعة أيام ويدور.
+أرسل رمز الوصول كـ <code>Authorization: Bearer …</code>، وقم بالتحديث قبل انتهاء صلاحيته:</p>
+<pre><code class="language-js">// Resolves to the new pair, or null when the session is over — sign in with the key again.
+export async function refresh(refreshToken) {
+  const res = await post('/api/v1/auth/refresh', { refreshToken });
+  return res.status === 200 ? res.body : null; // { accessToken, refreshToken }
+}
+</code></pre>
+<p>يستبدل <strong>كلاهما</strong> الرموز في كل مرة. يؤدي تقديم رمز التحديث المستخدم إلى إنهاء الجلسة بأكملها، لذا قم بذلك
+تأكد من عدم تحديث خيطين أو عمليتين مرة واحدة. متى <code>refresh</code> يعود <code>null</code>، يتصل <code>signIn</code> —
+لا يوجد بريد إلكتروني متضمن. المفتاح هو أوراق الاعتماد طويلة الأمد؛ الرموز هي مجرد ذاكرة تخزين مؤقت لها.</p>
+<h2 id="6-finish-setting-up-the-account">6. قم بإنهاء إعداد الحساب</h2>
+<p><strong>شروط.</strong> يجب أن يقبل الحساب الجديد شروط StarHermit الحالية قبل أن يتمكن من استخدام أي شيء آخر.
+يتصل <code>GET /api/v1/me</code>. لو <code>termsAcceptanceRequired</code> يكون <code>true</code>، أظهر النص من
+<code>GET /api/v1/terms</code>وعندما يقبلها اللاعب، أرسل التجزئة إلى <code>POST /api/v1/me/terms/accept</code>.
+تحقق مرة أخرى عند الإطلاقات اللاحقة، لأنه تمت مراجعة الشروط. تفاصيل:
+<a href="/ar/docs/api/profile.html#terms-acceptance">قبول الشروط</a>.</p>
+<p><strong>اسم.</strong> الحساب يبدأ ب <code>pk-…</code> اسم المستخدم. السماح للاعب باختيار لقب:</p>
+<pre><code class="language-http">PATCH /api/v1/me
+Authorization: Bearer &lt;access-token&gt;
+Content-Type: application/json
+
+{ "nickname": "RookPilot" }
+</code></pre>
+<p>من هنا الحساب مثل أي حساب آخر: الأصدقاء، الدردشة، التوفيق، الحفظ السحابي، الإنجازات.</p>
+<h2 id="7-second-devices-lost-keys-and-limits">7. الأجهزة الثانية والمفاتيح المفقودة والحدود</h2>
+<p><strong>جهاز ثاني</strong> يولد المفتاح الخاص به ويسجله <strong>نفس عنوان البريد الإلكتروني</strong>. عندما
+بعد تأكيد اللاعب، ينضم المفتاح إلى حسابه الحالي بدلاً من إنشاء حساب جديد. الـ 24 ساعة
+ينطبق الحد الأقصى لكل عنوان هنا أيضًا.</p>
+<p><strong>جهاز مفقود أو مسروق.</strong> <code>POST /api/v1/auth/public-key/revoke-request</code> مع <code>{ "email": "…" }</code>
+إرسال رابط إلى صفحة بالبريد الإلكتروني؛ تأكيد هناك يلغي <strong>كل</strong> المفتاح على الحساب وينهي الجلسات
+تم تسجيل الدخول إلى هذه المفاتيح. فتح الرابط وحده لا يغير شيئًا. الطلب يجيب دائما <code>202</code> مع نفس الرسالة، أم لا
+العنوان لديه حساب. تنتهي صلاحية الرابط بعد أربع ساعات، ويمكن للحساب أن يطلب مرة واحدة كل 15
+دقائق. بعد ذلك، يتم تسجيل كل جهاز متبقي مرة أخرى (الخطوة 2).</p>
+<p><strong>ما لا يمكن للحساب الرئيسي فقط فعله</strong> تعمل بعض التغييرات على حماية بيانات اعتماد الحساب، لذلك فهي
+تتطلب جلسة تم تسجيل الدخول إليها من خلال موفر مثل Google أو GitHub:</p>
+<table>
+<thead>
+<tr>
+<th>فعل</th>
+<th>حساب مفتاح فقط</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>إضافة مفتاح أو إلغاء الأجهزة الأخرى (<code>POST /me/public-keys</code>, <code>DELETE /me/public-keys/{id}</code> أو <code>/all</code>)</td>
+<td><code>403</code> — قم بالتسجيل من خلال التسجيل عبر البريد الإلكتروني، أو استخدم جلسة مصادقة OAuth</td>
+</tr>
+<tr>
+<td>تغيير عنوان البريد الإلكتروني للحساب</td>
+<td><code>403 oauth_session_required</code> - غير ممكن حتى يتم ربط المزود</td>
+</tr>
+<tr>
+<td>إبطال المفتاح الخاص بهذا التثبيت</td>
+<td><code>DELETE /api/v1/me/public-keys/current</code>باستخدام جلسة حساب المفتاح العام الكاملة الخاصة به؛ تجاهل أوراق الاعتماد المحلية بعد النجاح</td>
+</tr>
+</tbody>
+</table>
+<p>لإدارة بيانات الاعتماد الأخرى أو تغيير البريد الإلكتروني، قم بربط موفر الخدمة. عندما يرتبط حساب مفتاح فقط بحساب واحد، يتم تعليق الارتباط
+حتى يؤكد اللاعب ذلك من بريده الإلكتروني. بعد ذلك، يمكن لموفر الخدمة القيام بكل شيء أعلاه.
+يرى <a href="/ar/docs/api/auth.html#get-apiv1authoauthproviderauthorizelinkclient"><code>authorize?link=true</code></a>.</p>
+<h2 id="troubleshooting">استكشاف الأخطاء وإصلاحها</h2>
+<table>
+<thead>
+<tr>
+<th>إجابة</th>
+<th>معنى</th>
+<th>يصلح</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>register</code> → <code>400</code> "البيانات الأساسية ليست مفتاحًا صالحًا"</td>
+<td><code>keyData</code> في تنسيق خاطئ لها <code>keyType</code></td>
+<td>تحقق من الجدول في الخطوة 1. يأخذ Ed25519 وECDSA بايتات المفاتيح الأولية، وليس <code>SubjectPublicKeyInfo</code></td>
+</tr>
+<tr>
+<td><code>register</code> → <code>429</code></td>
+<td>تم تسجيل هذا العنوان أو IP خلال الـ 24 ساعة الماضية</td>
+<td>انتظر <code>Retry-After</code>; لا تحاول مرة أخرى في حلقة</td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "المفتاح العام غير مسجل أو تم إبطاله."</td>
+<td>لم يؤكد اللاعب بعد، أو انتهت صلاحية الرابط، أو تم إبطال المفتاح</td>
+<td>استمر في الانتظار (الخطوة 4)، أو قم بالتسجيل مرة أخرى</td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "توقيع غير صالح."</td>
+<td>وحدات البايت الموقعة أو تنسيق التوقيع غير متطابقين</td>
+<td>أعد بناء السلسلة الموقعة تمامًا (الخطوة 3). بالنسبة لـ ECDSA، أرسل DER، وليس <code>r‖s</code></td>
+</tr>
+<tr>
+<td><code>complete</code> → <code>401</code> "لم يتم العثور على التحدي أو انتهت صلاحيته."</td>
+<td>كان التحدي أقدم من خمس دقائق أو تم استخدامه بالفعل</td>
+<td>اطلب تحديًا جديدًا لكل محاولة</td>
+</tr>
+<tr>
+<td><code>challenge</code> / <code>complete</code> → <code>429</code></td>
+<td>أكثر من 60 طلب تسجيل دخول في الدقيقة من عنوان IP هذا</td>
+<td>استطلاع أقل في كثير من الأحيان</td>
+</tr>
+<tr>
+<td>تأكيد الصفحة → "لا يمكن استخدام هذا الرابط"</td>
+<td>تم تأكيدها بالفعل، أو انتهت صلاحيتها، أو تم نسخها بشكل غير كامل، أو تم تغيير عنوان الحساب منذ إرسالها</td>
+<td>إذا تمكنت لعبتك من تسجيل الدخول، فسيتم إرفاق المفتاح ولا يوجد أي خطأ. إذا لم يكن الأمر كذلك، قم بالتسجيل مرة أخرى</td>
+</tr>
+<tr>
+<td>الضغط على تأكيد → "هذا المفتاح العام مسجل بالفعل في حساب آخر."</td>
+<td>ينتمي هذا المفتاح إلى حساب مختلف</td>
+<td>قم بإنشاء مفتاح جديد على هذا الجهاز</td>
+</tr>
+<tr>
+<td><code>403</code> "هذا الحساب معطل."</td>
+<td>الحساب معلق</td>
+<td>لا شيء يمكن لعبتك إصلاحه</td>
+</tr>
+</tbody>
+</table>
+
+{% endraw %}

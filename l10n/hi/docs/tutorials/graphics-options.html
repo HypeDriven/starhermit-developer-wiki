@@ -1,0 +1,373 @@
+---
+layout: "wiki"
+lang: "hi"
+title: "ट्यूटोरियल: स्वचालित रूप से पहचानी गई गुणवत्ता के साथ ग्राफ़िक्स विकल्प"
+source_url: "/docs/tutorials/graphics-options.html"
+source_path: "docs/tutorials/graphics-options.md"
+source_hash: "cd4437482fbf097933897dbbeaf9e978a67574c0fe1ff696ace01bf8e9239bf5"
+translation: "machine"
+permalink: "/hi/docs/tutorials/graphics-options.html"
+---
+{% raw %}
+<h1 id="tutorial-graphics-options-with-auto-detected-quality">ट्यूटोरियल: स्वचालित रूप से पहचानी गई गुणवत्ता के साथ ग्राफ़िक्स विकल्प</h1>
+<p>अपने ब्राउज़र गेम को एक दें <strong>GRAPHICS</strong> मेनू जो प्लेयर की मशीन के लिए एक समझदार गुणवत्ता स्तर चुनता है
+पहले लॉन्च पर, उन्हें इसे ओवरराइड करने देता है, और StarHermit के माध्यम से सभी डिवाइसों में उनकी पसंद को याद रखता है।</p>
+<p>संबंधित ऑडियो अनुभाग के लिए, देखें <a href="/hi/docs/tutorials/audio-options.html">स्वचालित रूप से पहचानी गई ध्वनि सीमा के साथ ऑडियो विकल्प</a>.</p>
+<p><a href="/docs/sdk/graphics-options.js"><code>graphics-options.js</code></a> एक एकल ईएस मॉड्यूल है, जिसमें कोई निर्भरता नहीं है
+बहीखाता संभालता है:</p>
+<ul>
+<li><strong>ऑटो</strong> GPU, मेमोरी, CPU कोर और से चार प्रीसेट (लो, बैलेंस्ड, हाई, अल्ट्रा) में से एक को चुनता है
+डिवाइस का प्रकार, और यदि फ़्रेम धीमा रहता है तो सत्र के लिए कदम नीचे कर दिए जाते हैं।</li>
+<li>खिलाड़ी प्रत्येक प्रभाव को ओवरराइड कर सकते हैं (छाया, परिवेश रोड़ा, ब्लूम, एंटी-अलियासिंग, या आपका अपना),
+50-200% रेंडर स्केल सेट करें, स्वचालित डिस्प्ले रिफ्रेश के बजाय मैन्युअल अधिकतम एफपीएस चुनें,
+और अनुकूली रिज़ॉल्यूशन और फ़्रेम-रेट रीडआउट को टॉगल करें।</li>
+<li>सेटिंग्स को सहेजा जाता है <code>localStorage</code> इसलिए वे पहले फ्रेम से पहले और खिलाड़ी के फ्रेम पर लागू होते हैं
+<a href="/hi/docs/api/games.html#per-player-game-settings">प्रति-गेम सेटिंग्स</a> इसलिए वे खिलाड़ी का अनुसरण करते हैं
+अन्य मशीनें.</li>
+<li>इसमें समान गुणवत्ता तालिका से निर्मित एक तैयार विकल्प पैनल शामिल है।</li>
+</ul>
+<p>यह कोई इंजन आयात नहीं करता. आपका रेंडरर परिवर्तनों को सुनता है और स्तरों को लागू करता है। यह पृष्ठ इसे तारित करता है
+तीन.जे.एस. अन्य इंजन समान हुक का उपयोग करते हैं (देखें)। <a href="#other-engines">अन्य इंजन</a>).</p>
+<ol>
+<li><a href="#1-add-the-files">फ़ाइलें जोड़ें</a></li>
+<li><a href="#2-create-the-store-and-the-panel">स्टोर और पैनल बनाएं</a></li>
+<li><a href="#3-apply-the-settings-to-your-renderer">अपने रेंडरर पर सेटिंग्स लागू करें</a></li>
+<li><a href="#4-fit-it-to-your-game">इसे अपने खेल में फिट करें</a></li>
+<li><a href="#5-test-it">इसका परीक्षण करें</a></li>
+</ol>
+<h2 id="1-add-the-files">1. फ़ाइलें जोड़ें</h2>
+<p>प्रतिलिपि <a href="/docs/sdk/starhermit-sdk.js"><code>starhermit-sdk.js</code></a> और
+<a href="/docs/sdk/graphics-options.js"><code>graphics-options.js</code></a> आपके गेम की स्क्रिप्ट के आगे, अपरिवर्तित। पुकारना
+<code>StarHermit.init()</code> <strong>पहले</strong> आपका मॉड्यूल चलता है, इसलिए लॉन्च टोकन उस समय तक पढ़ा जा चुका है
+ग्राफ़िक्स स्टोर जाँचता है कि कोई खिलाड़ी साइन इन है या नहीं:</p>
+<pre><code class="language-html">&lt;script src="starhermit-sdk.js"&gt;&lt;/script&gt;
+&lt;script&gt;StarHermit.init();&lt;/script&gt;
+&lt;script type="module" src="main.js"&gt;&lt;/script&gt;
+</code></pre>
+<p>लॉन्च टोकन (स्थानीय विकास, कोई अन्य होस्ट) के बिना, स्टोर सब कुछ रखता है
+<code>localStorage</code> और कोई अनुरोध नहीं करता.</p>
+<h2 id="2-create-the-store-and-the-panel">2. स्टोर और पैनल बनाएं</h2>
+<pre><code class="language-js">import { createGraphics, mountGraphicsPanel } from './graphics-options.js';
+
+const gfx = createGraphics({ storageKey: 'mygame.graphics' });
+mountGraphicsPanel(document.getElementById('graphics-options'), gfx);
+</code></pre>
+<p><code>mountGraphicsPanel</code> तत्व को नियंत्रणों से भरता है। आपका सेटिंग संवाद फ़्रेम की आपूर्ति करता है
+शीर्षक और बंद करें बटन. प्रत्येक परिवर्तन तुरंत लागू होता है और सहेजा जाता है।</p>
+<h3 id="how-auto-picks-a-preset">ऑटो प्रीसेट कैसे चुनता है</h3>
+<p>निर्माण पर स्टोर एक बार एक बेकार वेबजीएल संदर्भ की जांच करता है (<code>gfx.system</code>) और इसे प्रीसेट पर मैप करता है
+(<code>gfx.detected</code>):</p>
+<table>
+<thead>
+<tr>
+<th>संकेत</th>
+<th>प्रीसेट</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>कोई WebGL, या कोई सॉफ़्टवेयर रेंडरर नहीं (स्विफ्टशेडर, llvmpipe, Microsoft Basic Render)</td>
+<td>कम</td>
+</tr>
+<tr>
+<td>कोई WebGL2 नहीं, 2 या उससे कम CPU कोर, या 2 GB मेमोरी या उससे कम</td>
+<td>कम</td>
+</tr>
+<tr>
+<td>असतत GPU (NVIDIA, AMD Radeon RX/Pro, Apple M-सीरीज़)</td>
+<td>उच्च</td>
+</tr>
+<tr>
+<td>और कुछ भी (एकीकृत इंटेल/एएमडी, मोबाइल जीपीयू, सफारी का मुखौटा "एप्पल जीपीयू")</td>
+<td>संतुलित</td>
+</tr>
+<tr>
+<td>फ़ोन या टैबलेट (मोटा पॉइंटर), या 4 जीबी मेमोरी या उससे कम</td>
+<td>अधिकतम संतुलित</td>
+</tr>
+</tbody>
+</table>
+<p>ऑटो कभी भी अल्ट्रा का चयन नहीं करता; खिलाड़ी इसे चुनते हैं। GPU नाम से आता है <code>RENDERER</code>, और यह
+<code>WEBGL_debug_renderer_info</code> एक्सटेंशन का अनुरोध तभी किया जाता है जब क्रोमियम नाम को छुपा देता है। फ़ायरफ़ॉक्स लॉग करता है a
+जब उस एक्सटेंशन का अनुरोध किया जाता है तो कंसोल चेतावनी देता है, और यह पहले से ही वास्तविक नाम की रिपोर्ट करता है।</p>
+<p>जब गेम चलता है, ऑटो फ़्रेम समय भी देखता है। यदि अनुकूली संकल्प पहले से ही इसके लिए गिरा दिया गया है
+तीन और 90-फ़्रेम विंडो के लिए फ़्लोर और फ़्रेम का औसत अभी भी 26 एमएस से अधिक है, ऑटो एक प्रीसेट को नीचे ले जाता है
+शेष सत्र के लिए. का चयन <strong>ऑटो</strong> पैनल में फिर से पता चलता है। एक पूर्व निर्धारित खिलाड़ी
+हाथ से उठाया गया सामान कभी भी अपने आप नहीं बदलता।</p>
+<h3 id="maximum-frame-rate">अधिकतम फ़्रेम दर</h3>
+<p><strong>अधिकतम फ़्रेम दर</strong> के लिए डिफ़ॉल्ट <strong>ऑटो (ताज़ा दर)</strong>: ब्राउज़र रेंडरिंग शेड्यूल करता है
+डिस्प्ले की ताज़ा दर के साथ। चुनना <strong>रिवाज़</strong> और से एक पूर्णांक दर्ज करें <strong>1 से 1000 एफपीएस</strong> को
+इसे ओवरराइड करें। सीमा तुरंत लागू होती है, स्थानीय रूप से और उसी क्लाउड प्रोफ़ाइल में सहेजी जाती है
+अन्य ग्राफ़िक्स सेटिंग्स, और गुणवत्ता-पूर्व निर्धारित परिवर्तनों से बचे रहते हैं। को वापस <strong>ऑटो</strong> सीमा हटाने के लिए.
+यह विकल्प इससे स्वतंत्र है <strong>ऑटो</strong> गुणवत्ता पूर्व निर्धारित.</p>
+<p>रेंडरर को कॉल करना होगा <code>gfx.shouldRender(now)</code> इसके एनीमेशन लूप में, जैसा कि नीचे दिखाया गया है। एक सीमा है एक
+सीलिंग, वादा किया गया फ़्रेम दर नहीं: रेंडरिंग अभी भी ब्राउज़र के एनीमेशन कॉलबैक से अधिक नहीं हो सकती है
+या मशीन का प्रदर्शन। इसलिए 60 हर्ट्ज़ डिस्प्ले पर 144 एफपीएस सेट करना अभी भी अधिकतम 60 एफपीएस प्रदान करता है।</p>
+<p>कस्टम मेनू के लिए, उपयोग करें <code>gfx.set({ maxFps: 45 })</code> और <code>gfx.set({ maxFps: null })</code> ऑटो पुनर्स्थापित करने के लिए.
+हल किया <code>gfx.settings.maxFps</code> है <code>0</code> ऑटो के लिए. अमान्य सहेजे गए मान स्वचालित रूप से वापस आ जाते हैं; सकारात्मक
+संख्याओं को पूर्णांकित किया जाता है और 1-1000 तक सीमित कर दिया जाता है।</p>
+<h3 id="where-the-settings-live">जहां सेटिंग्स रहती हैं</h3>
+<table>
+<thead>
+<tr>
+<th>इकट्ठा करना</th>
+<th>चाबी</th>
+<th>क्यों</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>localStorage</code></td>
+<td><code>&lt;storageKey&gt;.gpu.&lt;GPU profile&gt;</code></td>
+<td>समकालिक रूप से पढ़ें, इसलिए पहला फ़्रेम पहले से ही इस GPU की सेटिंग्स का उपयोग करता है</td>
+</tr>
+<tr>
+<td><a href="/hi/docs/api/games.html#per-player-game-settings">प्रति-खिलाड़ी सेटिंग</a></td>
+<td><code>graphics.gpu.&lt;GPU profile&gt;</code></td>
+<td>समान GPU की रिपोर्ट करने वाली किसी अन्य मशीन पर प्लेयर का अनुसरण करता है</td>
+</tr>
+</tbody>
+</table>
+<p>प्रत्येक जीपीयू को एक स्वतंत्र प्रोफ़ाइल मिलती है, जो अधिकतम एफपीएस सहित प्रत्येक ग्राफिक्स विकल्प को कवर करती है।
+उदाहरण के लिए, GPU A पर अल्ट्रा और 90 FPS सेट करें, फिर GPU B पर लॉन्च करें: B हार्डवेयर-डिटेक्टेड के साथ शुरू होता है
+डिफ़ॉल्ट तब तक जब तक आपने पहले बी के लिए विकल्प सहेजे नहीं थे। ए पर लौटने से अल्ट्रा और 90 एफपीएस बहाल हो जाता है।
+दो जीपीयू जिन्हें हाई के रूप में पहचाना जाता है, उनकी अभी भी अलग-अलग प्रोफ़ाइल हैं। पता लगाई गई गुणवत्ता में परिवर्तन
+समान GPU पर टियर अपने सहेजे गए विकल्पों को नहीं छोड़ता है।</p>
+<p>प्रोफ़ाइल ब्राउज़र-रिपोर्ट किए गए GPU नाम का एक स्थिर 16-वर्ण हैश है, जो मामले के लिए सामान्यीकृत है
+और रिक्त स्थान. <code>storageKey</code> और <code>cloudKey</code> आपूर्ति उपसर्ग; <code>gfx.storageKey</code>, <code>gfx.cloudSlot</code>, और
+<code>gfx.gpuProfile</code> सक्रिय कुंजी और प्रोफ़ाइल को उजागर करें। जीपीयू का पता तब चलता है जब स्टोर बनाया जाता है;
+किसी अन्य GPU की प्रोफ़ाइल का चयन करने के लिए अगले गेम लॉन्च पर एक नया स्टोर बनाएं।</p>
+<p>यदि कोई GPU नाम उपलब्ध नहीं है, तो स्थानीय या क्लाउड दृढ़ता के बिना सत्र के लिए विकल्प लागू होते हैं।
+यदि ब्राउज़र एक ही नाम से एकाधिक जीपीयू को मास्क करता है, तो वे एक प्रोफ़ाइल साझा करते हैं क्योंकि ऐसा नहीं हो सकता
+उन्हें अलग करें. पुरानी अनस्कोप्ड स्थानीय सेटिंग्स और डिवाइस-क्लास क्लाउड सेटिंग्स को अछूता छोड़ दिया गया है
+और आयातित नहीं हैं, क्योंकि वे यह नहीं पहचानते कि विकल्प किस जीपीयू से संबंधित हैं।</p>
+<p>प्रत्येक मान है <code>{ "saved": {…}, "at": &lt;ms timestamp&gt; }</code>. दोनों प्रतियों का मिलान उसी प्रकार किया जाता है
+<a href="/hi/docs/sdk/javascript.html#cloud-saves">बादल बचाता है</a>:</p>
+<ul>
+<li><strong>लिखने से पहले पढ़ें.</strong> स्टार्ट-अप पर (और जब कोई अलग खिलाड़ी साइन इन करता है), स्टोर पढ़ता है
+<code>GET /api/v1/games/{slug}/settings</code>. नये के साथ प्रतिलिपि <code>at</code> जीतता है. यदि क्लाउड कॉपी जीत जाती है, तो
+स्टोर इसे अपनाता है और निकाल देता है <code>change</code> कारण सहित <code>'cloud'</code>. यदि स्थानीय प्रतिलिपि नई है, तो स्टोर
+इसे धकेलता है.</li>
+<li><strong>एक असफल पठन लेखन को अवरुद्ध करता है।</strong> स्थानीय प्रतिलिपि काम करती रहती है. अगला परिवर्तन खिलाड़ी करता है
+कुछ भी लिखने से पहले पढ़ने का पुनः प्रयास करता है, इसलिए एक पुराना उपकरण किसी नए विकल्प को अधिलेखित नहीं कर सकता है
+नहीं देख सका.</li>
+<li>बदलावों को आगे बढ़ाया जाता है <code>setSetting</code> 800 एमएस के बाद बिना किसी बदलाव के। टोकन नवीनीकरण (जो
+SDK को भी सक्रिय करें <code>auth</code> ईवेंट) किसी अन्य रीड को ट्रिगर न करें।</li>
+</ul>
+<h2 id="3-apply-the-settings-to-your-renderer">3. अपने रेंडरर पर सेटिंग्स लागू करें</h2>
+<p>चार हुक स्टोर को तीन.जेएस रेंडरर से जोड़ते हैं:</p>
+<ul>
+<li><code>gfx.on('change', fn)</code> छाया और प्रभाव टॉगल के लिए।</li>
+<li>वर्तमान स्तरों से एक पोस्ट-प्रोसेसिंग श्रृंखला का पुनर्निर्माण किया गया।</li>
+<li><code>gfx.frame(ms)</code> और <code>gfx.pixelRatio()</code> रेंडर लूप में, जो अनुकूली रिज़ॉल्यूशन चलाता है।</li>
+<li><code>gfx.shouldRender(now)</code> ड्राइंग से पहले, जो मैन्युअल एफपीएस सीमा लागू करता है।</li>
+</ul>
+<p>के साथ रेंडरर बनाएं <code>antialias: false</code>. MSAA तब पोस्ट चेन के रेंडर लक्ष्य से आता है, इसलिए
+प्रत्येक एंटी-अलियासिंग स्तर को WebGL संदर्भ को दोबारा बनाए बिना स्विच किया जा सकता है।</p>
+<pre><code class="language-js">import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+
+// canvas, scene, camera and a shadow-casting DirectionalLight `sun` are your game's own.
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
+const SHADOW_MAP = { off: 0, low: 1024, medium: 2048, high: 4096 };
+let composer = null;
+let size = {};
+
+gfx.on('change', (s) =&gt; {
+  const mapSize = SHADOW_MAP[s.shadows];
+  renderer.shadowMap.enabled = mapSize &gt; 0;
+  sun.castShadow = mapSize &gt; 0;
+  if (mapSize &amp;&amp; sun.shadow.mapSize.x !== mapSize) {
+    sun.shadow.mapSize.set(mapSize, mapSize);
+    sun.shadow.map?.dispose();
+    sun.shadow.map = null;
+  }
+  scene.traverse((o) =&gt; [].concat(o.material || []).forEach((m) =&gt; { m.needsUpdate = true; })); // shadow on/off recompiles
+  size = {}; // resize and rebuild the post chain on the next frame
+});
+
+function buildPost(s, w, h, ratio) {
+  composer?.dispose();
+  composer = null;
+  if (gfx.info.postFailed || (s.ao === 'off' &amp;&amp; s.bloom === 'off' &amp;&amp; s.antialias === 'off')) return;
+  try {
+    const pw = Math.round(w * ratio), ph = Math.round(h * ratio);
+    const target = new THREE.WebGLRenderTarget(pw, ph, { type: THREE.HalfFloatType, samples: s.antialias === 'msaa' ? 4 : 0 });
+    const c = new EffectComposer(renderer, target);
+    c.setPixelRatio(ratio);
+    c.setSize(w, h);
+    c.addPass(new RenderPass(scene, camera));
+    if (s.ao !== 'off') {
+      const ao = new GTAOPass(scene, camera, pw, ph);
+      ao.updateGtaoMaterial({ samples: s.ao === 'high' ? 16 : 8 });
+      c.addPass(ao);
+    }
+    if (s.bloom === 'on') c.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.5, 0.4, 0.9));
+    c.addPass(new OutputPass());
+    if (s.antialias === 'smaa') c.addPass(new SMAAPass());
+    if (s.antialias === 'fxaa') {
+      const fxaa = new ShaderPass(FXAAShader);
+      fxaa.material.uniforms.resolution.value.set(1 / pw, 1 / ph);
+      c.addPass(fxaa);
+    }
+    composer = c;
+  } catch {
+    gfx.report({ postFailed: true }); // the panel shows a note; don't console.warn
+  }
+}
+
+let last = performance.now();
+renderer.setAnimationLoop((now) =&gt; {
+  // Update your simulation here using its own elapsed time or fixed timestep.
+  // Keep simulation/input independent of skipped render ticks.
+  if (!gfx.shouldRender(now)) return;
+  gfx.frame(now - last); // elapsed time between rendered frames, including the FPS limit
+  last = now;
+  const w = canvas.clientWidth, h = canvas.clientHeight, ratio = gfx.pixelRatio();
+  if (w !== size.w || h !== size.h || ratio !== size.ratio) {
+    size = { w, h, ratio };
+    renderer.setPixelRatio(ratio);
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    buildPost(gfx.settings, w, h, ratio);
+    gfx.report({ pixels: [Math.round(w * ratio), Math.round(h * ratio)] });
+  }
+  try {
+    if (composer) composer.render();
+    else renderer.render(scene, camera);
+  } catch {
+    composer = null;
+    gfx.report({ postFailed: true });
+  }
+});
+</code></pre>
+<p>टिप्पणियाँ:</p>
+<ul>
+<li> <code>three/addons/</code> फ़ाइलें से आनी चाहिए <strong>वही तीन.जेएस रिलीज़</strong> जैसा <code>three</code> स्वयं. मिश्रण
+रिलीज़ पोस्ट श्रृंखला को तोड़ता है। उपरोक्त कोड वर्तमान रिलीज़ को लक्षित करता है। बूढ़ों पर, <code>SMAAPass</code>
+लेता है <code>(width, height)</code>.</li>
+<li>लो प्रत्येक पोस्ट-प्रोसेसिंग प्रभाव को बंद कर देता है, इसलिए गेम सीधे कैनवास पर प्रस्तुत होता है
+डिवाइस का पिक्सेल अनुपात अधिकतम 1 है। यह उतना ही सस्ता है जितना इससे पहले गेम था।</li>
+<li><code>gfx.pixelRatio()</code> रिटर्न <code>min(devicePixelRatio, preset cap) × preset scale × render scale × adaptive scale</code>, 0.25-3 पर क्लैंप किया गया। कैप निम्न के लिए 1, बैलेंस्ड के लिए 1.5 और उच्च और के लिए 2 हैं
+अल्ट्रा.</li>
+<li>अनुकूली रिज़ॉल्यूशन औसत 90 फ्रेम है। 26 एमएस से ऊपर यह स्केल को 0.1 (0.6 से नीचे) तक कम कर देता है। नीचे
+14 एमएस यह स्केल को 0.05 (1 तक) बढ़ा देता है। 1 सेकंड से अधिक लंबे फ़्रेम (रोके गए या पृष्ठभूमि टैब) हैं
+नजरअंदाज कर दिया गया, और एक धीमा फ्रेम अनुकूलन के लिए अधिकतम 250 एमएस के रूप में गिना जाता है, इसलिए एक अड़चन कम नहीं हो सकती
+पैमाना. एफपीएस रीडआउट वास्तविक बीते हुए समय का उपयोग करता है।
+मैन्युअल सीमा के साथ, धीमी सीमा लक्ष्य फ़्रेम अंतराल का कम से कम 115% है और
+तेज़ सीमा कम से कम 85% है, इसलिए जानबूझकर 30 एफपीएस सीमा अपने आप में गुणवत्ता को कम नहीं करती है।
+बहुत कम सीमा के लिए, ठहराव कटऑफ़ और अड़चन कटऑफ़ दोनों कम से कम दो लक्ष्य अंतराल हैं।
+खिलाना <code>gfx.frame</code> केवल प्रस्तुत फ़्रेम; जब कोई टिक छोड़ दिया जाए तो अंतिम प्रदान किए गए टाइमस्टैम्प को बनाए रखें।</li>
+</ul>
+<h3 id="other-engines">अन्य इंजन</h3>
+<p>जो कुछ भी आपके फ़्रेम को खींचता है, एकीकरण उसी हुक का उपयोग करता है:</p>
+<table>
+<thead>
+<tr>
+<th>पुकारना</th>
+<th>उपयोग</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gfx.on('change', (settings, reason) =&gt; …)</code></td>
+<td>टियर लागू करें. तुरंत एक बार चलता है (<code>'init'</code>), फिर आगे <code>'settings'</code>, <code>'cloud'</code> और <code>'auto'</code>. एक सदस्यता समाप्त फ़ंक्शन लौटाता है।</td>
+</tr>
+<tr>
+<td><code>gfx.settings</code></td>
+<td><code>{ preset, auto, scale, dprCap, adaptive, showFps, maxFps, &lt;category&gt;: &lt;tier&gt; }</code>; <code>maxFps: 0</code> मतलब ऑटोमैटिक डिस्प्ले रिफ्रेश.</td>
+</tr>
+<tr>
+<td><code>gfx.shouldRender(now)</code></td>
+<td>प्रत्येक एनीमेशन कॉलबैक, मिलीसेकेंड में टाइमस्टैम्प के साथ। यदि यह वापस आता है तो चित्र बनाना छोड़ दें <code>false</code>. सिमुलेशन/इनपुट अपडेट को स्वतंत्र रखें।</td>
+</tr>
+<tr>
+<td><code>gfx.frame(ms)</code></td>
+<td>प्रत्येक रेंडर फ़्रेम, पिछले रेंडर किए गए फ़्रेम के समय के साथ। रिटर्न <code>true</code> जब पिक्सेल अनुपात या ऑटो प्रीसेट बदल गया।</td>
+</tr>
+<tr>
+<td><code>gfx.pixelRatio()</code></td>
+<td>प्रस्तुत करने के लिए अनुपात</td>
+</tr>
+<tr>
+<td><code>gfx.report({ pixels, postFailed })</code></td>
+<td>पैनल को आउटपुट आकार बताता है, या प्रभाव अनुपलब्ध हैं</td>
+</tr>
+</tbody>
+</table>
+<p>2डी कैनवास गेम के लिए, कैनवास बैकिंग आकार को इससे गुणा करें <code>gfx.pixelRatio()</code>, और अपना खुद का नक्शा बनाएं
+नीचे वर्णित अनुसार श्रेणियों में प्रभाव (कण, चमक, लंबन परतें)।</p>
+<h2 id="4-fit-it-to-your-game">4. इसे अपने गेम में फिट करें</h2>
+<p><strong>आपके अपने प्रभाव.</strong> एक गुणवत्ता तालिका पास करें जिसमें केवल वही सूचीबद्ध हो जो आपका गेम वास्तव में आकर्षित करता है। प्रत्येक पूर्व निर्धारित
+साथ ही, प्रत्येक श्रेणी के लिए पंक्ति को एक स्तर की आवश्यकता होती है <code>scale</code> और <code>dprCap</code>:</p>
+<pre><code class="language-js">import { createGraphics, CATEGORIES, TABLE } from './graphics-options.js';
+
+const gfx = createGraphics({
+  storageKey: 'mygame.graphics',
+  categories: { ...CATEGORIES, particles: ['off', 'low', 'high'] },
+  table: {
+    low: { ...TABLE.low, particles: 'off' },
+    balanced: { ...TABLE.balanced, particles: 'low' },
+    high: { ...TABLE.high, particles: 'high' },
+    ultra: { ...TABLE.ultra, particles: 'high' },
+  },
+});
+</code></pre>
+<p>पैनल प्रति श्रेणी एक चयन बनाता है, इसलिए एक नई श्रेणी स्वचालित रूप से दिखाई देती है। इसे नाम दें
+<code>strings.categories.particles</code>.</p>
+<p><strong>अनुवाद.</strong> पैनल की अंग्रेजी स्ट्रिंग्स को इस प्रकार निर्यात किया जाता है <code>STRINGS</code>. उसी के साथ अपना पास करें
+आकार. केवल आपके द्वारा दी गई कुंजियाँ बदली जाती हैं:</p>
+<pre><code class="language-js">mountGraphicsPanel(el, gfx, {
+  strings: {
+    quality: 'Qualität', auto: 'Automatisch ({tier})', fromPreset: 'Laut Voreinstellung ({tier})',
+    renderScale: 'Renderskalierung', adaptive: 'Adaptive Auflösung', showFps: 'Bildrate anzeigen',
+    maxFps: 'Maximale Bildrate', autoFps: 'Automatisch (Bildschirmfrequenz)',
+    customFps: 'Benutzerdefiniert', fpsLimit: 'Maximale FPS (1–1000)',
+    categories: { shadows: 'Schatten', ao: 'Umgebungsverdeckung', particles: 'Partikel' },
+    tiers: { low: 'Niedrig', balanced: 'Ausgewogen', high: 'Hoch', off: 'Aus', on: 'An' },
+  },
+});
+</code></pre>
+<p><strong>स्टाइलिंग.</strong> पैनल कक्षाओं का उपयोग करता है <code>.gfx-panel</code>, <code>.gfx-row</code>, <code>.gfx-summary</code> और <code>.gfx-note</code>. यह
+अंतर्निहित नियम लपेटे गए हैं <code>:where()</code>, इसलिए आपकी अपनी स्टाइलशीट में कोई भी नियम उन्हें ओवरराइड कर देता है। पंक्तियाँ हैं
+स्पर्श के लिए कम से कम 44 पिक्सेल लंबा। फ्रेम दर रीडआउट (<code>#gfx-fps</code>) निचले-बाएँ कोने में बैठता है,
+सुरक्षित क्षेत्र के अंदर, और क्लिक कैप्चर नहीं करता है।</p>
+<p><strong>परिणाम कहीं और पढ़ रहा हूँ।</strong> <code>&lt;html&gt;</code> किया जाता है <code>data-gfx-preset</code> (सक्रिय प्रीसेट) और
+<code>data-gfx-auto</code> (<code>1</code> या <code>0</code>), जो सीएसएस और परीक्षण बंद कर सकते हैं।</p>
+<h2 id="5-test-it">5. इसका परीक्षण करें</h2>
+<ul>
+<li>हेडलेस ब्राउज़र एक सॉफ़्टवेयर GPU के साथ प्रस्तुत करते हैं, इसलिए ऑटो इसका समाधान करता है <strong>कम</strong> और परीक्षण तेज रहते हैं।</li>
+<li>असली पैनल चलाओ. प्रत्येक नियंत्रण में एक होता है <code>data-gfx</code> गुण (<code>preset</code>, <code>renderScale</code>,
+<code>adaptive</code>, <code>frameRate</code>, <code>maxFps</code>, <code>showFps</code>, या श्रेणी का नाम):</li>
+</ul>
+<pre><code class="language-js">const preset = () =&gt; page.evaluate(() =&gt; document.documentElement.dataset.gfxPreset);
+await page.locator('select[data-gfx=preset]').selectOption('high');
+assert.equal(await preset(), 'high');
+await page.reload();
+assert.equal(await preset(), 'high'); // persisted
+await page.locator('select[data-gfx=frameRate]').selectOption('custom');
+await page.locator('input[data-gfx=maxFps]').fill('45');
+await page.locator('input[data-gfx=maxFps]').press('Tab');
+await page.reload();
+assert.equal(await page.locator('input[data-gfx=maxFps]').inputValue(), '45');
+await page.locator('select[data-gfx=frameRate]').selectOption('auto');
+</code></pre>
+<ul>
+<li>शुद्ध कार्य करता है <code>detectPreset(system)</code>, <code>resolve(saved, detected)</code> और <code>withPreset(saved, preset)</code>
+इकाई परीक्षणों के लिए नोड के अंतर्गत चलाएँ। <code>createGraphics({ sdk, storage, system })</code> सभी के लिए नकली भी स्वीकार करता है
+तीन.</li>
+<li><code>node --test tests/graphics-options.test.mjs</code> सत्यापन, प्रति-जीपीयू दृढ़ता और बहाली की पुष्टि करता है,
+एफपीएस सीमा के साथ विभिन्न डिस्प्ले रिफ्रेश दरों, लाइव स्विचिंग और अनुकूली गुणवत्ता पर फ्रेम पेसिंग।</li>
+</ul>
+
+{% endraw %}

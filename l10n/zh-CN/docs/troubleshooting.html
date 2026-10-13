@@ -1,0 +1,245 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "解决集成问题"
+source_url: "/docs/troubleshooting.html"
+source_path: "docs/troubleshooting.md"
+source_hash: "90e68e1757a4a8c75ac94bd580f2ff54e378593f19cbd554a1bba1ba70d4ebc2"
+translation: "machine"
+permalink: "/zh-CN/docs/troubleshooting.html"
+---
+{% raw %}
+<h1 id="troubleshoot-an-integration">解决集成问题</h1>
+<p>从 HTTP 状态、端点和凭证系列开始。使用重现最小请求
+相同的游戏ID和凭证，然后检查资源的当前状态。保留代币和玩家
+从日志和支持报告中保存数据。</p>
+<h2 id="sign-in-and-access">登录和访问</h2>
+<table>
+<thead>
+<tr>
+<th>症状</th>
+<th>查看</th>
+<th>下一步行动</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>401</code> 休息时</td>
+<td>令牌过期以及它是帐户还是启动令牌</td>
+<td>刷新一次账户会话；续订仍然有效的启动令牌或登录以进行新启动</td>
+</tr>
+<tr>
+<td><code>403 terms_acceptance_required</code></td>
+<td>当前文档来自 <code>/api/v1/terms</code></td>
+<td>仅在玩家操作时显示它并接受其哈希值；帐户和玩家启动代币有效</td>
+</tr>
+<tr>
+<td><code>403</code> 范围到另一个游戏</td>
+<td><code>game_scope</code> 与游戏/房间/保存请求相比</td>
+<td>使用您自己的游戏 UUID 和准确的 <code>game:&lt;gameId&gt;</code> 云保存密钥</td>
+</tr>
+<tr>
+<td><code>403</code> 在 <code>/me/game-invites</code> 从一场比赛</td>
+<td>启动令牌无法读取帐户范围的收件箱</td>
+<td>轮询 <code>/games/{slug}/invites</code> 和 <code>/realtime/rooms/invites</code></td>
+</tr>
+<tr>
+<td><code>403 oauth_session_required</code></td>
+<td>该操作更改帐户凭据</td>
+<td>通过实时提供商登录；公钥会话只能撤销自己的密钥</td>
+</tr>
+<tr>
+<td><code>403</code> 对于被暂停的帐户</td>
+<td>已返回消息</td>
+<td>停止自动登录/刷新重试；引导玩家联系帐户支持</td>
+</tr>
+<tr>
+<td>直接登录返回 <code>400</code></td>
+<td><code>returnUrl</code> 必须是游戏托管源上的 HTTPS</td>
+<td>使用托管游戏 URL；本地开发 URL 不是允许的返回目的地</td>
+</tr>
+<tr>
+<td>登录间歇性失败 <code>Invalid signature.</code></td>
+<td>挑战连载，尤其是 <code>+</code> 暂时</td>
+<td>使用准确的 <a href="/zh-CN/docs/tutorials/public-key-onboarding.html#3-sign-in-with-the-key">公钥签名字节</a></td>
+</tr>
+<tr>
+<td>登记申报表 <code>429</code></td>
+<td>电子邮件/IP 注册津贴</td>
+<td>荣誉 <code>Retry-After</code>;在发送另一个注册之前确认电子邮件</td>
+</tr>
+</tbody>
+</table>
+<h2 id="game-setup-and-storage">游戏设置和存储</h2>
+<table>
+<thead>
+<tr>
+<th>症状</th>
+<th>查看</th>
+<th>下一步行动</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/games/{slug}</code> 回报 <code>404</code>，但设置有效</td>
+<td>游戏有脚本或容器后端吗？</td>
+<td>仅浏览器游戏具有设置和启动令牌，但没有权威的游戏信息/会话界面</td>
+</tr>
+<tr>
+<td>控制返回 <code>404</code></td>
+<td>有效的 <code>control.*</code> 已发布清单中的行</td>
+<td>公布声明；写入不能创建未声明的操作</td>
+</tr>
+<tr>
+<td>重新绑定一个键会重置其他键</td>
+<td>控制 <code>PUT</code> 替换所有覆盖</td>
+<td>发送完整的覆盖图，或者使用SDK <code>setControl()</code> 保留有效地图</td>
+</tr>
+<tr>
+<td>设置消失后 <code>PUT</code></td>
+<td>收藏 <code>PUT</code> 替换整个地图</td>
+<td>使用 <code>PATCH</code> 对于更改的顶级键；嵌套对象被替换为一个值</td>
+</tr>
+<tr>
+<td>新玩家云存档回归 <code>404</code></td>
+<td>该插槽尚不存在任何保存</td>
+<td>重新开始只是为了这个结果；其他故障必须阻止上传</td>
+</tr>
+<tr>
+<td>保存写入返回 <code>412</code></td>
+<td>另一台设备编写了新版本</td>
+<td>在另一个条件写入之前重新加载、验证和合并/采用</td>
+</tr>
+<tr>
+<td>保存退货 <code>413</code>, <code>409</code>， 或者 <code>507</code></td>
+<td>保存大小、槽数或帐户配额</td>
+<td>检查退回的 <code>code</code> 和 <code>limit</code>;减小尺寸或解决容量</td>
+</tr>
+<tr>
+<td>会话列表中缺少截止日期</td>
+<td><code>summary.deadline</code> 类型</td>
+<td>返回以毫秒为单位的整数 Unix 时间戳，而不是 ISO 字符串</td>
+</tr>
+<tr>
+<td>分数/成就未出现</td>
+<td>键、主动定义、参与者、值界限</td>
+<td>验证定义和服务器输出；无效写入被忽略；客户报告并不能作为证据</td>
+</tr>
+<tr>
+<td>对接会回报 <code>404</code> 一场比赛后</td>
+<td>匹配的会话可能已结束</td>
+<td>返回大厅并开始新的搜索，而不是重新打开旧的票证</td>
+</tr>
+</tbody>
+</table>
+<h2 id="websockets">WebSockets</h2>
+<p>浏览器升级失败通常显示为关闭代码 <code>1006</code>，隐藏 HTTP 响应。
+在重试之前，对同一游戏/会话/房间进行 REST 调用以区分身份验证，
+条款、成员资格、已完成的会话和临时服务器启动故障。检查构建兼容性
+当您提供游戏信息时 <code>?build=</code>。每次升级都会获得一张新的转接票。</p>
+<table>
+<thead>
+<tr>
+<th>关闭/结果</th>
+<th>意义</th>
+<th>行动</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>1000</code></td>
+<td>常闭</td>
+<td>除非玩家明确启动另一个连接，否则停止</td>
+</tr>
+<tr>
+<td><code>1001</code> 加上恢复错误</td>
+<td>世界还无法恢复</td>
+<td>检查会话状态后通过退避重新连接</td>
+</tr>
+<tr>
+<td><code>1006</code></td>
+<td>网络丢失或升级被拒绝</td>
+<td>检查 REST 状态和当前凭据；绑定重试</td>
+</tr>
+<tr>
+<td><code>1008</code></td>
+<td>违反政策或被取代的连接</td>
+<td>停止自动重连；修复原因后主动重新连接</td>
+</tr>
+<tr>
+<td><code>1009</code></td>
+<td>消息太大</td>
+<td>再次连接之前减小帧大小</td>
+</tr>
+<tr>
+<td>HTTP协议 <code>409 build_mismatch</code></td>
+<td>客户端/服务器构建不匹配</td>
+<td>重新加载兼容的版本；不要发明匹配的构建值</td>
+</tr>
+<tr>
+<td>HTTP协议 <code>410 session_not_active</code></td>
+<td>结束会议</td>
+<td>返回大厅或重播；停止重新连接</td>
+</tr>
+<tr>
+<td><code>error: "Too many commands; slow down."</code></td>
+<td>脚本持久命令津贴</td>
+<td>步调离散命令；将连续输入放入其中 <code>data</code> 和 <code>type: "input", realtime: true</code></td>
+</tr>
+</tbody>
+</table>
+<p>重新连接后请求完整的游戏状态；不要盲目地重放动作或其他非幂等的动作
+命令。 <code>resumed</code> 意味着放弃预测并重新同步。 <code>abandoned</code> 是终端。
+看 <a href="/zh-CN/docs/api/contracts.html#websocket-contracts">WebSocket 合约</a>.</p>
+<h2 id="publishing-and-container-startup">发布和容器启动</h2>
+<table>
+<thead>
+<tr>
+<th>症状</th>
+<th>查看</th>
+<th>下一步行动</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>上传 <code>413</code> 和 <code>limitBytes</code></td>
+<td>有效上传/托管津贴</td>
+<td>减少束或生成的合并树</td>
+</tr>
+<tr>
+<td>大量 HTTP 上传 <code>413</code> 没有平台错误字段</td>
+<td>API 之前的请求正文限制</td>
+<td>使用 <code>ws/v1/game-upload</code>;发送 <code>complete</code> 毕竟字节</td>
+</tr>
+<tr>
+<td>上传 <code>422</code></td>
+<td>存档布局、启动文件、路径安全、清单</td>
+<td>修复命名错误； API 需要原始数据 <code>.tar.gz</code>，不是多部分的</td>
+</tr>
+<tr>
+<td>上传成功但服务器不可用</td>
+<td>部署准备情况</td>
+<td>民意调查部署；接受的字节并不意味着容器已准备好</td>
+</tr>
+<tr>
+<td>集装箱房启动暂时恢复 <code>503</code></td>
+<td>服务器可能正在唤醒</td>
+<td>保留大厅并通过退避重试；不要退回到客户端模拟</td>
+</tr>
+<tr>
+<td>容器请求未通过调用键验证</td>
+<td>启动环境和确切的标头比较</td>
+<td>读取当前注入的invoke key；使用游戏 ID 和清理日志报告持续失败</td>
+</tr>
+<tr>
+<td>持续部署失败</td>
+<td>部署状态和所有者可见的日志/崩溃</td>
+<td>修复构建或配置并发布新的工作版本</td>
+</tr>
+</tbody>
+</table>
+<p>有用的支持报告包括游戏 ID、客户端/构建版本、端点和方法、状态/代码、
+大约 UTC 时间、复制步骤和相关的清理日志。会话/房间 ID 有助于定位
+资源。未经玩家同意，请勿附加凭据、私钥或玩家的完整保存。</p>
+
+{% endraw %}

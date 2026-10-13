@@ -1,0 +1,345 @@
+---
+layout: "wiki"
+lang: "es"
+title: "SDK de JavaScript (juegos de navegador)"
+source_url: "/docs/sdk/javascript.html"
+source_path: "docs/sdk/javascript.md"
+source_hash: "4d041431633ef4a5afd148d1259d70f562c53aa7ae80afaf101ba1b9e35320a5"
+translation: "machine"
+permalink: "/es/docs/sdk/javascript.html"
+---
+{% raw %}
+<h1 id="javascript-sdk-browser-games">SDK de JavaScript (juegos de navegador)</h1>
+<p><a href="/docs/sdk/starhermit-sdk.js"><code>starhermit-sdk.js</code></a> es un cliente de archivo único y libre de dependencias para juegos de navegador
+publicado en StarHermit. Lee el token de lanzamiento, lo mantiene actualizado y proporciona ayuda para el común
+API de token de lanzamiento con ámbito de juego: identidad, guardado en la nube, configuración y controles por jugador,
+invitaciones, emparejamiento, sesiones y juego, logros, tablas de clasificación, repeticiones, chat,
+Salas de voz y tiempo real.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Archivo</td>
+<td><a href="/docs/sdk/starhermit-sdk.js"><code>docs/sdk/starhermit-sdk.js</code></a> — cópialo en tu juego sin cambios</td>
+</tr>
+<tr>
+<td>Global</td>
+<td><code>window.StarHermit</code> (también <code>module.exports</code> en Nodo, para pruebas)</td>
+</tr>
+<tr>
+<td>Dependencias</td>
+<td>none: utiliza el propio navegador <code>fetch</code>, <code>WebSocket</code> y (para leer guardados comprimidos) <code>DecompressionStream</code></td>
+</tr>
+<tr>
+<td>Línea base de API</td>
+<td>REST v1 y WebSocket v1, solo superficie de token de lanzamiento</td>
+</tr>
+</tbody>
+</table>
+<p>El SDK es un cliente, no una segunda implementación de la plataforma. Desbloqueos de puntuaciones y logros
+son escritos únicamente por el servidor del juego (un resultado de script o un mensaje de control de contenedor): un cliente
+nunca puede publicarlos y el SDK solo los lee. Todo lo demás sigue teniendo autoridad del servidor
+exactamente como está documentado en el <a href="/es/#api-reference">páginas API</a>.</p>
+<p><strong>Los ayudantes autenticados no realizan solicitudes de API sin un token de lanzamiento.</strong> Las lecturas generalmente se resuelven
+a <code>null</code>, <code>[]</code>, o un mapa vacío; escribe puede resolver <code>null</code>/<code>false</code> y las salvadas rebotadas no tienen efecto inmediato.
+valor de retorno. Un enchufe permanece desconectado. Mantener el progreso independiente en la memoria si el jugador así lo desea.
+reproducción sin seguimiento. Llamar <code>signOut()</code> antes de cambiar del juego con cuenta a ese modo para que se detenga la renovación.</p>
+<h2 id="install">Instalar</h2>
+<p>Copie el archivo junto a los otros scripts estáticos de su juego (dondequiera que los envíe su compilación) y cárguelo.
+antes de tu propio código:</p>
+<pre><code class="language-html">&lt;script src="starhermit-sdk.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  StarHermit.init();          // as early as possible: it reads and strips the token from the URL fragment
+&lt;/script&gt;
+</code></pre>
+<p>Llamar <code>init()</code> una vez, antes de que cualquier enrutador toque <code>location.hash</code>. Opciones:
+<code>init({ base, gameId, autoRefresh, launcherUrl })</code> — <code>base</code> puntos llamadas REST en un origen autorizado
+durante el desarrollo local (los juegos alojados en plataformas utilizan el mismo origen). <code>gameId</code>, si se suministra, debe coincidir
+el UUID alojado para iniciar sesión; Las páginas locales/externas no son orígenes válidos de devolución de inicio de sesión del juego. <code>autoRefresh: false</code> deja la renovación de fichas a un juego que
+dirige su propia cadena y <code>launcherUrl</code> anula donde <code>relaunch()</code> envía el reproductor (predeterminado
+<code>https://dashboard.starhermit.com/</code>).</p>
+<h2 id="sign-in-and-identity">Inicio de sesión e identidad</h2>
+<table>
+<thead>
+<tr>
+<th>Necesidad</th>
+<th>Llamar</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>¿Un jugador ha iniciado sesión?</td>
+<td><code>StarHermit.signedIn</code>, <code>StarHermit.userId</code>, <code>StarHermit.slug</code></td>
+</tr>
+<tr>
+<td>Reaccionar al inicio de sesión/cierre de sesión/caducidad</td>
+<td><code>StarHermit.on('auth', ({ signedIn, reason }) =&gt; …)</code></td>
+</tr>
+<tr>
+<td>mostrar un <strong>Iniciar sesión</strong> botón</td>
+<td>solo cuando <code>StarHermit.canSignIn()</code> (verdadero en un subdominio UUID de juego sin token); al hacer clic <code>StarHermit.signIn()</code></td>
+</tr>
+<tr>
+<td>Nombre del jugador/avatar</td>
+<td><code>await StarHermit.profile()</code> → <code>{ userId, username, nickname, displayName }</code>; <code>StarHermit.avatarUrl()</code></td>
+</tr>
+<tr>
+<td>Amigos</td>
+<td><code>await StarHermit.friends()</code></td>
+</tr>
+</tbody>
+</table>
+<p>El SDK maneja ambas formas de lanzamiento: <code>#game_token=&lt;jwt&gt;[&amp;session_id=…]</code> de la biblioteca o de un
+invitar, y <code>#access_token=&lt;jwt&gt;</code> regresando del inicio de sesión directo y renueva el token a través de
+<code>POST /api/v1/games/{slug}/launch-token</code> antes de que expire (ver
+<a href="/es/docs/api/auth.html">fichas de lanzamiento</a>). El nombre para mostrar es el perfil. <code>nickname</code>; <code>/api/v1/me</code> no es
+accesible con un token de lanzamiento.</p>
+<h2 id="cloud-saves">Guardados en la nube</h2>
+<p>La ranura del juego es <code>game:&lt;slug&gt;</code> (<a href="/es/docs/api/catalog.html">catálogo: guardar desde dentro de un juego</a>); el SDK
+construye el camino, comprime la carga útil y maneja el <code>/info</code> controlar.</p>
+<pre><code class="language-js">const remote = await StarHermit.loadJSON();          // null: empty slot, signed out — or a failed read
+if (StarHermit.saveLoadFailed()) showSyncError();    // tell those apart when it matters
+else if (remote &amp;&amp; isNewer(remote, local)) adopt(remote);
+
+StarHermit.saveJSON(state);                          // debounced (2 s) checkpoint upload
+addEventListener('pagehide', () =&gt; StarHermit.flushSave(true));   // keepalive flush
+StarHermit.on('saved', ok =&gt; setSyncIndicator(ok));
+</code></pre>
+<p><strong>Cargar antes de guardar.</strong> Compare y adopte la copia en la nube antes de cualquier escritura que pueda llegar
+<code>saveJSON</code> (incluidas configuraciones, apodos o escrituras de puntos de control en el arranque) o una copia local obsoleta puede
+sobrescribir un guardado más reciente realizado en otro dispositivo. Mantenga los guardados anticipados hasta que se estabilice la carga inicial.</p>
+<p>El SDK protege la otra mitad de esa carrera: cuando falla una lectura (error de red o de servidor, como
+opuesto a una ranura vacía) establece <code>saveLoadFailed()</code>, emite <code>saveerror</code>, y se niega a escribir hasta
+<code>/info</code> confirma que la ranura está vacía o más tarde <code>loadSave()</code> tiene éxito. Una escritura rechazada resuelve
+<code>false</code> y emite <code>saved</code> con <code>false</code>.</p>
+<p><strong>Las escrituras después de una carga son condicionales.</strong> El SDK recuerda la versión (<code>ETag</code>) de guardarlo al final
+leído o escrito y lo envía de vuelta, por lo que una escritura llega solo al guardado en el que se basó o, para un espacio
+que estuvo vacío, sólo mientras todavía lo está. Cuando se guarda otro dispositivo en el medio, se rechaza la escritura.
+(<code>412</code>): el SDK emite <code>saveconflict</code>, conjuntos <code>saveConflicted()</code>, y se niega a escribir más hasta que un
+<code>loadSave()</code> permite que el juego se fusione o adopte el guardado más reciente. Un juego que nunca carga escribe.
+incondicionalmente, como antes.</p>
+<pre><code class="language-js">StarHermit.on('saveconflict', async () =&gt; {
+  const remote = await StarHermit.loadJSON();       // lifts the block
+  StarHermit.saveJSON(merge(remote, local));        // conditional on the version just loaded
+});
+</code></pre>
+<p>Nivel inferior: <code>loadSave()</code> / <code>writeSave(text)</code> para cuerdas crudas, <code>saveInfo()</code> para
+<code>{ exists, sizeBytes, updatedAt, etag }</code>.</p>
+<h2 id="crash-and-bug-reports">Informes de fallos y errores</h2>
+<p>Los jugadores pueden informar problemas desde dentro del juego; el propietario los clasifica a través del
+<a href="/es/docs/api/reports.html">API de informes</a>.</p>
+<pre><code class="language-js">await StarHermit.reportBug('Score did not save', 'Finished level 3, score shows 0', {
+  clientVersion: '1.4.2',
+  attachments: [{ fileName: 'state.json', contentType: 'application/json', data: JSON.stringify(state) }],
+});
+StarHermit.captureCrashes({ clientVersion: '1.4.2' });   // opt-in: uncaught errors become crash reports
+const mine = await StarHermit.myReports();               // [{ id, kind, status, title, ... }]
+</code></pre>
+<p><code>report(kind, title, description, opts)</code> es la forma general (<code>reportBug</code> y <code>reportCrash</code> arreglar el
+tipo). <code>captureCrashes</code> archiva como máximo un informe por mensaje distinto y tres por carga de página, por lo que un
+Crash Loop no puede consumir la asignación diaria del jugador (20 por juego de forma predeterminada). Pregúntale al jugador antes
+adjuntar cualquier cosa personal.</p>
+<h2 id="settings-and-controls">Configuraciones y controles</h2>
+<table>
+<thead>
+<tr>
+<th>Necesidad</th>
+<th>Llamar</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Preferencias por jugador (volumen, gráficos preestablecidos, idioma, accesibilidad…)</td>
+<td><code>getSettings()</code>, <code>getSetting(key)</code>, <code>setSetting(key, value)</code>, <code>patchSettings({…})</code> (a <code>null</code> el valor elimina la clave), <code>deleteSetting(key)</code>, <code>clearSettings()</code></td>
+</tr>
+<tr>
+<td>Enlaces de teclado declarados en <code>starhermit.txt</code> como <code>control.&lt;action&gt;=…</code></td>
+<td><code>await loadBindings(defaults)</code> → <code>{ action: codes[] }</code> con las anulaciones del jugador aplicadas</td>
+</tr>
+<tr>
+<td>Una pantalla de reencuadernación</td>
+<td><code>getControls()</code>, <code>setControl(action, codes)</code>, <code>setControls(bindings)</code>, <code>resetControls()</code></td>
+</tr>
+</tbody>
+</table>
+<p>Ruta <code>keydown</code> a través de <code>event.code</code> y las fijaciones de <code>loadBindings</code>. Ver
+<a href="/es/docs/tutorials/game-controls.html">agrega controles a tu juego</a> y el
+<a href="/es/docs/starhermit-txt.html"><code>starhermit.txt</code> manifiesto</a>.</p>
+<p>Para un menú de gráficos, <a href="/docs/sdk/graphics-options.js"><code>graphics-options.js</code></a> se encuentra encima de las llamadas de configuración:
+detecta automáticamente un ajuste preestablecido de calidad, mantiene la elección del jugador en <code>localStorage</code> y su por juego
+configuraciones y envía un panel listo para usar. Ver
+<a href="/es/docs/tutorials/graphics-options.html">Opciones de gráficos con calidad detectada automáticamente.</a>.</p>
+<p>Para una sección de audio, consulte <a href="/es/docs/tutorials/audio-options.html">Opciones de audio con un límite de sonido detectado automáticamente.</a>:
+controles de volumen y voz recomendados, el puro <a href="/docs/sdk/audio-options.js"><code>audio-options.js</code></a> ayudantes,
+y un límite de reproducción aplicado por su mezclador.</p>
+<h2 id="multiplayer-invites-and-social">Multijugador, invitaciones y redes sociales.</h2>
+<p>El juego de sesiones, el emparejamiento, los logros del juego, las tablas de clasificación y las repeticiones necesitan un servidor
+(<a href="/es/docs/api/game-scripts.html">guion</a> o <a href="/es/docs/api/container-games.html">recipiente</a>). Salas en tiempo real y
+los amigos no. La sesión de chat y voz necesita la membresía de conversación correspondiente.</p>
+<table>
+<thead>
+<tr>
+<th>Área</th>
+<th>llamadas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sesiones</td>
+<td><code>mySessions()</code>, <code>getSession(id)</code>, <code>sessionRecovery(id)</code>, <code>leaveSession(id)</code>, <code>startAiSession()</code>; <code>StarHermit.launchSessionId</code> después del lanzamiento de una invitación</td>
+</tr>
+<tr>
+<td>Toma de juego</td>
+<td><code>const conn = connect(sessionId, { onGame, onError, onPresence, onAchievement, onResumed, onAbandoned, onOpen, onClose, onAuthLost })</code>, entonces <code>conn.send(data)</code>; se vuelve a conectar con el retroceso, renueva el token primero y se detiene en cierres normales/de política/de gran tamaño (1000/1008/1009), 4403/4404, o cuando se rechaza la renovación (consulte <a href="#reconnecting-and-expired-tokens">reconectando</a>)</td>
+</tr>
+<tr>
+<td>Casamentero</td>
+<td><code>queues()</code>, <code>joinQueue([keys])</code>, <code>matchStatus()</code>, <code>cancelMatch()</code>, <code>waitForMatch(opts)</code></td>
+</tr>
+<tr>
+<td>invita</td>
+<td><code>sendInvite(toUserId[, sessionId])</code> (con un <code>sessionId</code> el amigo se une a esa sesión de carrera), <code>invites()</code>, <code>acceptInvite(id)</code>, <code>declineInvite(id)</code>; <code>inviteLink(query)</code> para un enlace para compartir</td>
+</tr>
+<tr>
+<td>Publica una carrera en tus tablas de clasificación</td>
+<td><code>submitScores({ boardKey: number })</code> → claves aceptadas (ver <a href="#single-player-leaderboards">tablas de clasificación para un jugador</a>)</td>
+</tr>
+<tr>
+<td>Logros y tablas de clasificación (solo lectura)</td>
+<td><code>achievements()</code>, <code>linkedAchievements(otherSlug)</code>, <code>leaderboards()</code>, <code>leaderboard(key, opts)</code>, <code>leaderboardEntries(boardId, opts)</code>; desbloquear brindis a través de <code>on('achievement', …)</code></td>
+</tr>
+<tr>
+<td>Repeticiones</td>
+<td><code>myReplays(limit)</code>, <code>getReplay(id)</code></td>
+</tr>
+<tr>
+<td>charla de sesión</td>
+<td><code>chatMessages(id)</code>, <code>sendChat(id, text)</code>, <code>pollChat(id, onMessages, intervalMs)</code> — REST y sondeo solo para tokens de lanzamiento</td>
+</tr>
+<tr>
+<td>Salas de voz/tiempo real</td>
+<td><code>StarHermit.voice.*</code> (REST; la señalización WebRTC se deja en manos del juego), <code>StarHermit.realtime.*</code> (habitaciones más <code>ws/v1/realtime</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Todo lo que no esté envuelto está a una llamada de distancia: <code>StarHermit.api(path, { method, body })</code> envía un
+solicitud JSON autenticada (resuelve <code>null</code> en 404/204 o al cerrar sesión, rechaza
+<code>{ status, message }</code> en otras fallas, se renueva una vez en 401).</p>
+<h2 id="single-player-leaderboards">Tablas de clasificación para un jugador</h2>
+<p>Un cliente nunca puede publicar una puntuación (sólo el servidor del juego puede hacerlo), por lo que un juego para un solo jugador necesita una
+Pequeño script de plataforma para poseer sus tableros. <a href="/docs/sdk/score-script.js"><code>score-script.js</code></a> es uno: cópielo a continuación
+a tu juego, declaralo en <a href="/es/docs/starhermit-txt.html"><code>starhermit.txt</code></a> como <code>server=score-script.js</code>, y
+editar solo su <code>BOARDS</code> bloque, que enumera cada tablero como usted
+<a href="/es/docs/tutorials/game-leaderboards-achievements.html#1-create-the-leaderboards">crearlo</a>:</p>
+<pre><code class="language-js">var BOARDS = {
+  "high-score": { "name": "High score", "scoreType": "integer", "sortDirection": "desc", "minScore": 0, "maxScore": 1000000 }
+};
+</code></pre>
+<p>Cuando termine una carrera, publícala y muestra el lugar del jugador:</p>
+<pre><code class="language-js">const accepted = await StarHermit.submitScores({ 'high-score': total });   // [] when signed out or refused
+if (accepted.includes('high-score')) {
+  const board = await StarHermit.leaderboard('high-score', { pageSize: 100 });
+  const me = board.items.find(e =&gt; e.userId === StarHermit.userId);
+  showRank(me &amp;&amp; me.rank);
+}
+</code></pre>
+<p><code>submitScores</code> abre una sesión de práctica (<code>POST .../sessions/ai</code>), envía <code>{type:'result', scores}</code> en
+el zócalo del juego y resuelve las claves del tablero que el script aceptó; también emite <code>scores</code> con
+esa lista. El guión arroja una puntuación que no es un número del tipo del tablero o queda fuera de su
+<code>minScore</code>/<code>maxScore</code>, publica el resto a través de su <code>scores</code> regresa y finaliza la sesión. el cliente
+todavía informa el resultado. Una puntuación inventada dentro del rango puede pasar; Estas tablas son adecuadas para uso informal.
+jugar. Para competición validar la carrera en el script o contenedor antes de adjudicarla. el reconocimiento
+enumera las claves aceptadas por secuencias de comandos; no es prueba de que todos los tableros estuvieran activos o de que se haya logrado una nueva marca personal
+fue almacenado. Ver <a href="/es/docs/availability.html#what-makes-a-result-trustworthy">confianza y disponibilidad</a>.</p>
+<h2 id="reconnecting-and-expired-tokens">Reconexión y tokens caducados</h2>
+<p>Un socket lleva el token de inicio en su URL y un protocolo de enlace con un token caducado se rechaza antes.
+la actualización: el navegador solo informa el código de cierre <code>1006</code>, exactamente como una caída de la red. Entonces un fracaso
+La reconexión puede ser un error de autenticación y volver a intentar la misma URL nunca podrá recuperarse. Sólo obras de renovación.
+mientras el token actual sea válido y dentro de las 12 horas posteriores al lanzamiento original; después de eso sólo el
+El lanzador puede acuñar un nuevo token.</p>
+<p><code>connect()</code> maneja esto por sí mismo: antes de cada reconexión, renueva el token a través de
+<code>POST /api/v1/games/{slug}/launch-token</code> (a menos que se renovó desde que se abrió el socket) y se vuelve a abrir
+con el nuevo. Un error de red o servidor durante la renovación retrocede y renueva nuevamente; nunca
+Vuelve a abrir la URL anterior. Cuando se rechaza la renovación o el token ha caducado, el SDK cierra sesión (<code>auth</code> con
+<code>reason: 'expired'</code>), deja de reconectarse y llama <code>onAuthLost()</code>:</p>
+<pre><code class="language-js">const conn = StarHermit.connect(sessionId, {
+  onGame, onClose,
+  onAuthLost: () =&gt; showReconnectPanel(),   // e.g. "Session expired — Back to StarHermit"
+});
+backButton.onclick = () =&gt; StarHermit.relaunch();
+</code></pre>
+<p><code>relaunch()</code> envía al jugador de regreso para obtener un nuevo token de inicio: a través del inicio de sesión cuando se abrió el juego
+de esa manera (<code>StarHermit.launchKind === 'sign-in'</code>), de lo contrario al lanzador. Dentro del lanzador
+marco del juego, navega por la ventana superior, lo que los navegadores permiten solo mediante un gesto del usuario, así que llámalo
+desde un clic; regresa <code>false</code> cuando se denegó la navegación.</p>
+<p>Un navegador puede ocultar la sesión finalizada, los términos, la membresía o las fallas de compilación como <code>1006</code>. ante un
+reintento automático, <code>connect()</code> comprueba el estado de la sesión a través de REST y, cuando <code>opts.build</code> se suministra,
+lo compara con la información del juego. <code>onUnavailable(error)</code> recibe un fallo REST permanente o finaliza
+sesión; <code>onTermsRequired(body)</code> solicita la aceptación de los términos explícitos. Crear una nueva conexión después
+resolviendo estos. <code>onClose(1008)</code> significa que la conexión fue reemplazada o violó la política; no
+volver a abrirlo automáticamente.</p>
+<p>Sockets tu juego se abre solo (<code>realtime.socketUrl(roomId)</code>, <code>voice.socketUrl(roomId)</code>) necesita el
+misma regla. Antes de reabrir uno, llame <code>renewForReconnect()</code> y actuar sobre su resultado:</p>
+<pre><code class="language-js">async function reopen() {
+  const r = await StarHermit.renewForReconnect();
+  if (r === 'renewed') ws = new WebSocket(StarHermit.realtime.socketUrl(roomId)); // fresh token in the URL
+  else if (r === 'retry') setTimeout(reopen, backoff());                         // renewal itself failed
+  else if (r === 'terms-required') showTermsPanel();                              // explicit acceptance
+  else showReconnectPanel();                                                     // 'relaunch'
+}
+</code></pre>
+<p>Las renovaciones simultáneas comparten una solicitud. <code>terms-required</code> conserva el token del jugador y emite
+<code>termsrequired</code>; mostrar <code>getTerms()</code> y llamar <code>acceptTerms(displayed.hash)</code> sólo en el jugador
+Acepte la acción y vuelva a intentarlo. Los sockets que administra tu juego también necesitan comprobaciones REST para detectar recursos finalizados.
+y debe detenerse cuando se cierre la política. Ver <a href="/es/docs/troubleshooting.html#websockets">solución de problemas</a>.</p>
+<h2 id="events">Eventos</h2>
+<p><code>StarHermit.on(type, fn)</code> devuelve una función para cancelar la suscripción; <code>off(type, fn)</code> también funciona.</p>
+<table>
+<thead>
+<tr>
+<th>Evento</th>
+<th>Carga útil</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>auth</code></td>
+<td><code>{ signedIn, userId }</code> al iniciar sesión; <code>{ signedIn: false, reason }</code> al cerrar sesión o al vencimiento (<code>reason: 'expired'</code> cuando se rechaza la renovación - oferta <code>relaunch()</code>)</td>
+</tr>
+<tr>
+<td><code>saved</code></td>
+<td><code>true</code> / <code>false</code> después de cada nube escribe</td>
+</tr>
+<tr>
+<td><code>saveerror</code></td>
+<td><code>{ op: 'load' }</code> después de una lectura fallida; <code>{ op: 'write', blocked: true }</code> por una escritura rechazada</td>
+</tr>
+<tr>
+<td><code>achievement</code></td>
+<td>un desbloqueo presionado en el zócalo del juego</td>
+</tr>
+<tr>
+<td><code>scores</code></td>
+<td>las claves del tablero aceptadas por <code>submitScores</code> (<code>[]</code> cuando no se publicó nada)</td>
+</tr>
+<tr>
+<td><code>saveconflict</code></td>
+<td><code>{ etag }</code> cuando otro dispositivo cambió el guardado; recargar antes de fusionar/guardar</td>
+</tr>
+<tr>
+<td><code>termsrequired</code></td>
+<td>El error de términos devuelto por una renovación del token de lanzamiento; conservar el token y solicitar el consentimiento</td>
+</tr>
+</tbody>
+</table>
+<h2 id="keeping-your-copy-current">Mantener su copia actualizada</h2>
+<p>Trate el archivo como suministrado: cópielo sin cambios, nunca edite su copia y reemplácelo al por mayor cuando
+El archivo de esta página cambia. Asegúrate de que tu paso de construcción o empaquetado se envíe junto con el del juego.
+otros archivos estáticos.</p>
+
+{% endraw %}

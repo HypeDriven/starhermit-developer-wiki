@@ -1,0 +1,474 @@
+---
+layout: "wiki"
+lang: "bn"
+title: "খেলা স্ক্রিপ্ট"
+source_url: "/docs/api/game-scripts.html"
+source_path: "docs/api/game-scripts.md"
+source_hash: "cd6edb40d369c5c960591888b2d4bcb941948f0cd0a801d320fe8ae34ab69966"
+translation: "machine"
+permalink: "/bn/docs/api/game-scripts.html"
+---
+{% raw %}
+<h1 id="game-scripts">খেলা স্ক্রিপ্ট</h1>
+<p>একটি StarHermit প্রামাণিক খেলা একটি দ্বারা সংজ্ঞায়িত করা যেতে পারে <strong>একক জাভাস্ক্রিপ্ট ফাইল</strong> একটি স্যান্ডবক্সে সার্ভার-সাইড কার্যকর করা হয়েছে <a href="https://github.com/sebastienros/jint">জিন্ত</a> ইঞ্জিন স্ক্রিপ্টটি সেই গেমের নিয়মগুলির একমাত্র কর্তৃত্ব: এটি প্রতিটি প্লেয়ারের আদেশকে বৈধ করে, অবস্থাকে পরিবর্তন করে, প্রতিটি ক্লায়েন্ট কী দেখতে পারে তা সিদ্ধান্ত নেয়, Elo গণনা করে এবং গেমগুলি শেষ করে৷ ক্লায়েন্টদের শূন্য কর্তৃত্ব আছে। এই পৃষ্ঠাটি জাভাস্ক্রিপ্ট রানটাইম নথিভুক্ত করে; যে গেমগুলির জন্য অন্য ভাষা প্রয়োজন তা পরিবর্তে প্রয়োগ করতে পারে <a href="/bn/docs/api/container-games.html">কন্টেইনার গেম সার্ভার</a> প্রোটোকল উভয়ই একই প্লেয়ার-ফেসিং ব্যবহার করে <a href="/bn/docs/api/games.html">গেম API</a>. জুড়ে কাজের উদাহরণ হল দাবা — এখানে রেফারেন্স বাস্তবায়ন <a href="https://github.com/HypeDriven/starhermit-chess">হাইপড্রাইভেন/স্টারহার্মিট-দাবা</a>.</p>
+<h2 id="execution-model">মৃত্যুদন্ডের মডেল</h2>
+<ul>
+<li>প্রতি গেমে একটি জেএস ফাইল, একটিতে কার্যকর করা হয়েছে <strong>প্রতি আহ্বানের জন্য তাজা স্যান্ডবক্সযুক্ত জিন্ট ইঞ্জিন</strong>. কলগুলির মধ্যে মেমরিতে কিছুই স্থির থাকে না — সমস্ত রাজ্য আপনার ফেরত দেওয়া নথিগুলিতে থাকে৷</li>
+<li>পরিবেষ্টিত নেই <code>Date</code> বা <code>Math.random</code>. সময় এবং এলোমেলোতা হিসাবে সরবরাহ করা হয়: <code>ctx.now</code> (ms epoch) এবং <code>ctx.random</code> (ভেতরে ভেসে আসা <code>[0, 1)</code>).</li>
+<li>যখন কোনো খেলোয়াড় একটি টেকসই কমান্ড পাঠায়, যখন একটি অধিবেশন তৈরি হয় এবং পর্যায়ক্রমিকভাবে প্ল্যাটফর্মটি স্ক্রিপ্টের আহ্বান জানায় <code>onTick</code> ঝাড়ু দেয় (দেখুন <a href="/bn/docs/api/games.html#runtime-timing">গেম API - রানটাইম টাইমিং</a>) রিয়েলটাইম <code>{type:"input", realtime:true}</code> ফ্রেমগুলি হল ব্যতিক্রম: এগুলিকে বাফার করা হয় সর্বশেষ-জয় এবং পরবর্তী টিককে একটি ব্যাচ হিসাবে বিতরণ করা হয়৷</li>
+</ul>
+<h2 id="entry-points">এন্ট্রি পয়েন্ট</h2>
+<p>হ্যান্ডলারদের অনাবৃত করুন <code>globalThis.game</code>. ছয়টি ঐচ্ছিক <strong>স্থির</strong> ঘোষণাগুলি তাদের পাশাপাশি বসে:
+<code>tickRateHz</code> প্ল্যাটফর্মকে জিজ্ঞাসা করে কত ঘন ঘন আহ্বান করতে হবে <code>onTick</code> - যদি আপনার গেমের উপর নির্ভর করে তবে এটি ঘোষণা করুন
+টিক দিন, যেহেতু একটি গেম যা বলে যে প্রতি চার সেকেন্ডে একবার টিক দেওয়া হয় না (দেখুন <a href="#tick-rate">টিক রেট</a>),
+<code>achievements</code> গেমের কৃতিত্ব নিবন্ধন করে (দেখুন <a href="#achievements">অর্জন</a>), <code>replays</code>
+প্ল্যাটফর্মকে আপনার সমাপ্ত সেশন রাখতে বলে (দেখুন <a href="#replays">রিপ্লে</a>), <code>persistent</code> বিরতি
+যখন সবাই চলে যায় তখন সেশনগুলি শেষ না করে (দেখুন <a href="#persistent-sessions">অবিরাম সেশন</a>),
+<code>linkedAchievements</code> অন্যান্য গেমের নাম দিন যার আনলক আপনি পাবেন <code>ctx.linkedAchievements</code> (দেখুন
+<a href="/bn/docs/api/achievements.html#achievements-from-other-games">অন্যান্য গেম থেকে অর্জন</a>), এবং <code>queues</code> ঘোষণা করে
+ম্যাচ ম্যাচমেকিং এর আকারগুলি গ্রহণ করে (দেখুন <a href="/bn/docs/api/games.html#matchmaking">গেমস - ম্যাচমেকিং</a>) একটি খেলা
+যে কোনো সারি ঘোষণা করে না একটি অন্তর্নিহিত 1v1 আছে:</p>
+<pre><code class="language-js">globalThis.game = {
+  tickRateHz: 0, // turn-based: opt out of periodic ticks
+  replays: true, // keep finished sessions as replays
+  queues: [{ key: "duos", teams: 2, teamSize: 2 }],
+  achievements: [
+    { key: "first-win", name: "First Win", description: "Win a match.", points: 10 }
+  ],
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<p>ঘোষণাপত্র আপনার স্ক্রিপ্ট মূল্যায়ন দ্বারা পড়া হয় <strong>যখন গেমটি প্রকাশিত বা আপডেট করা হয়</strong>,
+প্রতিটি আহ্বানে নয় — তাই তাদের অবশ্যই স্ট্যাটিক মান হতে হবে <code>game</code> বস্তু একটি আপডেট প্রকাশ করুন
+একটি পরিবর্তন প্রয়োগ করতে।</p>
+<ul>
+<li><code>createSession(ctx)</code> — যখন একটি সেশন তৈরি করা হয় তখন বলা হয় (ম্যাচমেকিং, আমন্ত্রণ-গ্রহণ, এআই অনুশীলন, বা একটি রিয়েলটাইম রুম শুরু হচ্ছে — দেখুন <a href="#room-bound-sessions">রুম-বাউন্ড সেশন</a>).</li>
+<li><code>onPlayerMessage(ctx)</code> — গেমপ্লে ওয়েবসকেটের মাধ্যমে প্রাপ্ত টেকসই ক্লায়েন্ট কমান্ডের জন্য বলা হয়েছে। ইনপুটগুলি স্পষ্টভাবে চিহ্নিত৷ <code>realtime:true</code> এই এন্ট্রি পয়েন্ট বাইপাস.</li>
+<li><code>onMembershipChange(ctx)</code> - ঐচ্ছিক। যখন একজন খেলোয়াড় একটি চলমান অধিবেশনে যোগ দেয় বা ছেড়ে যায় তখন বলা হয় (a <a href="/bn/docs/api/realtime.html">জয়েন-ইন-প্রোগ্রেস রুম</a>, অথবা একটি <a href="/bn/docs/api/games.html#inviting-a-friend-into-a-game-in-progress">চলমান একটি খেলায় আমন্ত্রণ জানান</a>). <code>ctx.players</code> ইতিমধ্যে পরিবর্তন প্রতিফলিত, এবং <code>ctx.membership</code> হয় <code>{ change: "joined" | "left", userId, name, team, slot }</code>. প্রত্যাবর্তন <code>{ ok: false }</code> যোগদান প্রত্যাখ্যান করা; এই হুক ছাড়া একটি স্ক্রিপ্ট প্রতিটি যোগদান প্রত্যাখ্যান করে। একটি ছুটি চূড়ান্ত যা আপনি ফিরে যান. অর্জন এবং স্কোর ফলাফল অশ্বারোহণ করতে পারে; ক <code>sessionState</code> উপেক্ষা করা হয়।</li>
+<li><code>onTick(ctx)</code> — কার্যকর টিক হারে প্ল্যাটফর্মের টাইমার পরিষেবা দ্বারা ডাকা হয়; সর্বশেষ রিয়েলটাইম ইনপুট পাওয়া যায় <code>ctx.inputs</code>. 0 Hz-এ সমাধান করা একটি গেম পর্যায়ক্রমিক কল গ্রহণ করে না, তবে স্ক্রিপ্ট চুক্তি সন্তুষ্ট করার জন্য ফাংশনটি এখনও উপস্থিত থাকা উচিত।</li>
+</ul>
+<h2 id="context-object">প্রসঙ্গ বস্তু</h2>
+<pre><code class="language-js">ctx = {
+  now: 1721473200000,              // ms epoch, from the host clock
+  random: 0.7231,                  // float in [0, 1), from the host RNG
+  sessionId: "0f8fad5b-...",       // current session id
+  pausedMs: 0,                     // persistent games only: total ms this session has spent paused
+  players: [                       // session participants
+    { id: "7c9e6679-...", name: "alice" },
+    { id: "00000000-0000-4000-8000-00000000a1a1", name: "The House", ai: true }
+  ],
+  sessionState: { /* ... */ },     // this script's session document, or null
+  playerStates: {                  // per-player documents (elo, history), or null
+    "7c9e6679-...": { elo: 1200, wins: 4, losses: 2, draws: 1, /* ... */ }
+  },
+  message: {                       // onPlayerMessage only
+    from: "7c9e6679-...",          // the authenticated user id — trusted
+    data: { type: "move", from: "e2", to: "e4" }  // client payload — untrusted (example: a chess move)
+  },
+  inputs: [                        // onTick only; omitted when none are pending
+    { from: "7c9e6679-...",        // authenticated sender id — trusted
+      data: { type: "input", seq: 42, mx: 0.7, mz: -0.2 } }
+  ]
+}
+</code></pre>
+<ul>
+<li>AI আসনটি (যদি উপস্থিত থাকে) সাথে পতাকাযুক্ত <code>ai: true</code> এর প্লেয়ার এন্ট্রিতে।</li>
+<li>একটি খেলা যে ঘোষণা <code>linkedAchievements</code> এছাড়াও পায় <code>ctx.linkedAchievements</code>: <code>{ &lt;playerId&gt;: { &lt;otherSlug&gt;: [unlocked keys] } }</code>, প্রতিটি আহ্বানে পুনরায় পড়ুন। দেখুন <a href="/bn/docs/api/achievements.html#achievements-from-other-games">অন্যান্য গেম থেকে অর্জন</a>.</li>
+<li>রুম-বাউন্ড সেশন (একটি রিয়েলটাইম রুম থেকে শুরু) দুটি অতিরিক্ত ctx ক্ষেত্র পান, <code>ctx.room</code> এবং <code>ctx.presence</code>, চালু <strong>প্রতিটি</strong> আমন্ত্রণ - দেখুন <a href="#room-bound-sessions">রুম-বাউন্ড সেশন</a>.</li>
+<li><strong>থেকে কিছুই বিশ্বাস <code>ctx.message.data</code> বা <code>ctx.inputs[].data</code>.</strong> বিশ্বস্ত পরিচয়টি সংশ্লিষ্ট <code>from</code>, যা সার্ভার প্রমাণীকৃত সংযোগ থেকে সংযুক্ত করে — ক্লায়েন্ট কখনই এটি সরবরাহ বা ফাঁকি দিতে পারে না।</li>
+<li>ইনপুট সঙ্গে ব্যাচিং নির্বাচন করুন <code>{type:"input", realtime:true, ...}</code>. অচিহ্নিত <code>input</code> কমান্ড টেকসই থাকে <code>onPlayerMessage</code> পশ্চাদগামী সামঞ্জস্যের জন্য আহ্বান. রিয়েলটাইম ইনপুট প্রতি প্রেরক একটি মুলতুবি স্লট ব্যবহার করে: আন্দোলন সর্বশেষ-জয়, যখন <code>pass</code>, <code>shoot</code>, এবং <code>tackle</code> অ্যাকশন প্রান্তগুলি একত্রিত করা হয়েছে যাতে নিম্নলিখিত আন্দোলনের নমুনা পরবর্তী টিকের আগে তাদের মুছে ফেলতে পারে না। ব্যাচ গ্রহণ করার সময় স্ক্রিপ্টগুলিকে অবশ্যই ক্ল্যাম্প এবং প্রতিটি মান যাচাই করতে হবে।</li>
+</ul>
+<h2 id="tick-rate">টিক রেট</h2>
+<p>প্ল্যাটফর্ম চলছে <code>onTick</code> একটি কনফিগারযোগ্য হারে সক্রিয় সেশন প্রতি sweeps. <strong>আপনার স্ক্রিপ্ট এটি চায় হার জন্য জিজ্ঞাসা</strong> একটি স্ট্যাটিক ঘোষণা করে <code>tickRateHz</code> গেম অবজেক্টে, এন্ট্রি পয়েন্টের পাশাপাশি:</p>
+<pre><code class="language-js">globalThis.game = {
+  tickRateHz: 15,          // ask the platform to tick this game 15x/second
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<ul>
+<li>ঘোষণাটি পাঠ করা হয় <strong>যখন আপনার গেম প্রকাশিত বা আপডেট হয়</strong>, প্রতিটি টিক নয়। এটি পরিবর্তন করার পরে একটি আপডেট প্রকাশ করুন।</li>
+<li><strong>একটি খেলা যা কোনো হার ঘোষণা করে না 0.25 Hz এ টিক দেওয়া হয়</strong> - প্রতি চার সেকেন্ডে একবার। যে প্রচুর
+একটি মুভ ঘড়ি বা সময়সীমার বিচার করুন এবং প্ল্যাটফর্মের প্রায় কিছুই খরচ হয় না, তবে এটি অনেক ধীর
+যে কোন কিছুর জন্য আপনার গেমপ্লে নির্ভর করে। যদি <code>onTick</code> আপনার গেম চালায়, আপনার প্রয়োজনীয় হার ঘোষণা করুন।</li>
+<li>অনুরোধ প্ল্যাটফর্মে সর্বোচ্চ ক্ল্যাম্প করা হয় (<strong>30 Hz</strong> ডিফল্টরূপে), তাই একটি গেম কম চাইতে পারে
+প্ল্যাটফর্ম অনুমতি দেয় কিন্তু এর বেশি কখনই নয়। চাও <strong>0</strong> একটি খেলার জন্য সম্পূর্ণরূপে টিক নিষ্ক্রিয় করতে
+যে শুধুমাত্র প্লেয়ার কমান্ড প্রতিক্রিয়া.</li>
+<li>হার হতে পারে <strong>ভগ্নাংশ</strong>: <code>0.5</code> প্রতি দুই সেকেন্ডে একটি টিক। ক্ষুদ্রতম অ-শূন্য হার হয়
+<code>0.01</code> Hz — একটি অপ্ট-আউট হিসাবে পড়ার পরিবর্তে এটিতে একটি ছোট ধনাত্মক সংখ্যা উত্থাপিত হয়, কারণ a
+ছোট ভগ্নাংশ একটি ধীর খেলা. শুধুমাত্র জন্য টিক বন্ধ <code>0</code> বা একটি নেতিবাচক হার। একটি অনুপস্থিত বা
+অব্যবহারযোগ্য ঘোষণা (একটি স্ট্রিং, <code>null</code>, <code>NaN</code>) 0.25 Hz ডিফল্ট নেয়।</li>
+<li>একটি অপারেটর একটি নির্দিষ্ট গেমের জন্য রেট ওভাররাইড করতে পারে, উভয় দিকেই।</li>
+<li>রিয়েলটাইম ইনপুটগুলি টিকগুলির মধ্যে সর্বশেষ-জয়, যখন বিচ্ছিন্ন অ্যাকশন প্রান্তগুলি ক্রমানুসারে থাকে৷ একটি ধীর প্রাপক একটি অপ্রচলিত স্ন্যাপশট এড়িয়ে যেতে পারে কিন্তু সিমুলেশন বা অন্যান্য প্রাপকদের বিলম্ব করতে পারে না।</li>
+</ul>
+<h2 id="replays">রিপ্লে</h2>
+<p>একটি অধিবেশন শেষ হলে, প্ল্যাটফর্ম তার চূড়ান্ত রাখতে পারে <code>sessionState</code> হিসাবে <strong>রিপ্লে</strong> — the
+নথি দ্বারা পরিবেশিত <code>GET /api/v1/games/{slug}/replays/{sessionId}</code> (দেখুন
+<a href="/bn/docs/api/games.html#replays">গেম API - রিপ্লে</a>) একটি রিপ্লে ম্যাচের রেকর্ড যতক্ষণ ধরে রাখা হয়
+হয়, তাই <strong>এটি জিজ্ঞাসা করলেই আপনার গেমটি একটি পায়</strong>:</p>
+<pre><code class="language-js">globalThis.game = {
+  replays: true,           // keep finished sessions as replays
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<ul>
+<li>ঘোষণা একটি আক্ষরিক হতে হবে <code>true</code> বা <code>false</code> - অন্য কিছু কোন ঘোষণা হিসাবে পড়া হয়, এবং
+একটি খেলা যে কিছুই ঘোষণা করে না কোন রিপ্লে আছে.</li>
+<li>এটা পড়া হয় <strong>যখন আপনার গেম প্রকাশিত বা আপডেট হয়</strong>. এটি পরিবর্তন করার পরে একটি আপডেট প্রকাশ করুন।</li>
+<li>একটি প্ল্যাটফর্ম অপারেটর একটি নির্দিষ্ট গেমের জন্য উভয় উপায়ে উত্তর দিতে পারে, তাই ঘোষণাটি একটি অনুরোধ
+গ্যারান্টির পরিবর্তে। <code>GET /api/v1/games/{slug}</code> হিসাবে উত্তর রিপোর্ট <code>replaysEnabled</code> -
+আপনার রিপ্লে UI এর উপর শাখা করুন, আপনার স্ক্রিপ্ট যা চেয়েছে তার উপর নয়।</li>
+<li>রিপ্লে বন্ধের সাথে অন্য কিছুই পরিবর্তন হয় না: আপনার সেশনের অবস্থা এখনও সংরক্ষণ করা হয় এবং এখনও হস্তান্তর করা হয়
+হিসাবে প্রতিটি আহ্বান <code>ctx.sessionState</code>, এবং এটি এখনও ক্র্যাশ পুনরুদ্ধার পয়েন্ট। কি খেলা
+রিপ্লে ছাড়া পাওয়া যায় না একটি অনুলিপি যা সেশনের বাইরে থাকে, তাই এর রিপ্লে শেষ পয়েন্ট উত্তর দেয়
+<code>404</code>.</li>
+<li>ফাইনাল ডিজাইন করুন <code>sessionState</code> রিপ্লে করার যোগ্য হতে - একটি মুভ লগ, বা আপনার ক্লায়েন্টের যা প্রয়োজন
+ম্যাচ পুনর্গঠন করতে। দাবা রেফারেন্স বাস্তবায়ন রাখে <code>state.game.moves</code> এবং এটি পদক্ষেপ
+একই নিয়ম মডিউলের মাধ্যমে প্ল্যাটফর্মটি কার্যকর করে।</li>
+</ul>
+<h2 id="persistent-sessions">অবিরাম সেশন</h2>
+<p>একটি খেলা যে ঘোষণা <code>persistent: true</code> প্রত্যেক খেলোয়াড় চলে গেলে তার সেশন রাখে। প্রায় 15
+শেষ সংযোগ বিচ্ছিন্ন করার সেকেন্ড পরে সেশন হয় <strong>বিরতি দেওয়া</strong> - না <code>onTick</code> কল - এবং প্রথম
+পুনরায় সংযোগ করার জন্য প্লেয়ার এটি পুনরায় শুরু করে। সংযোগ বিচ্ছিন্ন করা বা নিষ্ক্রিয়তা অধিবেশনটি পরিত্যাগ করার পরিবর্তে বিরতি দেয়। একটি খেলা ফলাফল, মালিক
+কর্ম, সুস্পষ্ট চূড়ান্ত-সদস্যদের ছুটি, কনফিগার করা ধরে রাখার মেয়াদ, বা টার্মিনাল পুনরুদ্ধার ব্যর্থতা হতে পারে
+এখনও এটি শেষ। দেখুন <a href="/bn/docs/session-lifecycle.html">সেশন জীবনচক্র</a>.</p>
+<pre><code class="language-js">globalThis.game = {
+  persistent: true,        // pause empty sessions instead of ending them
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<ul>
+<li>একটি আক্ষরিক হতে হবে <code>true</code> বা <code>false</code>. এটা পড়া হয় <strong>যখন আপনার গেম প্রকাশিত বা আপডেট হয়</strong>.</li>
+<li><code>ctx.now</code> দেয়াল ঘড়ি থাকে। ক্রমাগত সেশনও পান <code>ctx.pausedMs</code>, মোট সময় ব্যয়
+বিরতি, তাই <code>ctx.now - ctx.pausedMs</code> এমন একটি ঘড়ি যা স্থির থাকে যখন কেউ থাকে না।</li>
+<li>বিরতি দেওয়া সেশনগুলি প্রতি-প্লেয়ার সেশন ক্যাপের সাথে গণনা করা হয়, তাই খেলোয়াড়দের একটি কমান্ড দিন যা শেষ হয় a
+একটি সঙ্গে বিশ্বের <code>result</code>.</li>
+</ul>
+<p>দেখুন <a href="/bn/docs/tutorials/persistent-sessions.html">ক্রমাগত সেশন টিউটোরিয়াল</a> একটি কাজের উদাহরণ এবং ক্লায়েন্ট প্রবাহের জন্য।</p>
+<h2 id="matchmaking-seat-layout">ম্যাচমেকিং সিট লেআউট</h2>
+<p>নতুন ম্যাচমেড সেশন গ্রহণ <code>ctx.matchmaking</code> অন <strong>প্রতিটি</strong> আমন্ত্রণ (তৈরি, আদেশ এবং টিক)।
+এটি সারির আকার এবং আসন সংরক্ষণ করে এমনকি যদি গেমটি পরে পুনরায় স্থাপন করা হয়:</p>
+<pre><code class="language-js">ctx.matchmaking = {
+  queue: "ffa", teams: 4, teamSize: 1,
+  seats: [
+    { id: "human-uuid", name: "Alice", team: 0, slot: 0, ai: false },
+    { id: "synthetic-ai-uuid", name: "AI 2-1", team: 1, slot: 0, ai: true },
+    { id: null, name: null, team: 2, slot: 0, ai: false },
+    { id: null, name: null, team: 3, slot: 0, ai: false }
+  ]
+};
+</code></pre>
+<p><code>ctx.players</code> শুধুমাত্র দখলকৃত আসন রয়েছে, সঙ্গে <code>team</code> এবং <code>ai:true</code> AI এর জন্য। দল/স্লট সূচী হয়
+শূন্য-ভিত্তিক। এআই আইডি এই সেশনের মধ্যে স্থিতিশীল এবং StarHermit অ্যাকাউন্ট আইডি নয়। শুধু মানুষ
+অধিবেশন/চ্যাট সদস্যপদ আছে এবং অ্যাকাউন্ট প্লেয়ার-স্টেট, রেটিং বা অর্জনের লেখা পেতে পারে।
+এআই অবস্থা রাখুন <code>sessionState</code>. আপনার গেমের স্থিতিতে ক্লায়েন্টদের যে রোস্টার ফিল্ডের প্রয়োজন তা কপি করুন
+বা সম্প্রচার। পুরানো সেশন এবং নন-ম্যাচমেকিং সেশন বাদ দিতে পারে <code>ctx.matchmaking</code>.</p>
+<p>একটি শুরুর সময়সীমা ঘোষণা করুন এবং সর্বাধিক AI গণনা করুন৷
+<a href="/bn/docs/starhermit-txt.html#starting-matchmaking-before-every-human-seat-is-filled"><code>starhermit.txt</code></a>.
+এআই গণনা সহ <code>0</code>, খালি আসন খালি থাকে। একই প্রসঙ্গ ধারক সার্ভারে বিতরণ করা হয়।</p>
+<h2 id="room-bound-sessions">রুম-বাউন্ড সেশন</h2>
+<p>একটি অধিবেশন হতে পারে <strong>রিয়েলটাইম রুমে আবদ্ধ</strong>: যখন ক <a href="/bn/docs/api/realtime.html">রিয়েলটাইম রুম</a> একটি খেলার জন্য <code>server=</code> স্ক্রিপ্ট শুরু হয়, প্ল্যাটফর্মটি রুমের জন্য একটি এন-প্লেয়ার সেশন তৈরি করে <strong>মানব</strong> অংশগ্রহণকারীরা (এআই আসন শুধুমাত্র স্ক্রিপ্ট-মুখী রোস্টারে বিদ্যমান)। এইভাবে সার্ভার-অনুমোদিত রিয়েলটাইম গেম (যেমন ফুটবল) চলে: রুমগুলি লবি/ম্যাচমেকিং প্রদান করে, স্ক্রিপ্ট ম্যাচ চালায়। দেখুন <a href="/bn/docs/api/realtime.html#room-bound-sessions">রিয়েলটাইম রুম - সেতু</a> রুমের পাশের জীবনচক্রের জন্য।</p>
+<p>প্রতিটি আহ্বান (<code>createSession</code>, <code>onPlayerMessage</code>, <code>onTick</code>) একটি রুম-বাউন্ড সেশনের দুটি অতিরিক্ত ctx ক্ষেত্র পাওয়া যায়:</p>
+<pre><code class="language-js">ctx.room = {
+  roomId: "0f8fad5b-...",
+  metadata: { /* ... */ },        // the room's opaque config.metadata blob
+  roster: [                       // frozen match roster, humans AND AI seats,
+    { userId: "7c9e6679-...",     //   ordered by team then slot
+      name: "alice", team: 0, slot: 0, ai: false },
+    { userId: null,               // AI seat — never a session player
+      name: "Rafa Vento", team: 0, slot: 1, ai: true }
+  ]
+};
+ctx.presence = {                  // every user who is or was a human participant
+  "7c9e6679-...": { online: true, left: false }
+};
+</code></pre>
+<ul>
+<li><code>presence.online</code> — ব্যবহারকারীর উভয় সংযোগ রেজিস্ট্রিতে একটি লাইভ সকেট রয়েছে (রিয়েলটাইম রুম <strong>বা</strong> <code>ws/v1/games</code>).</li>
+<li><code>presence.left</code> — ব্যবহারকারী আর একটি সক্রিয় আসন ধারণ করে না: তারা স্পষ্টভাবে ছেড়ে গেছে এবং তাদের আসনটি এআই অংশগ্রহণকারীতে রূপান্তরিত হয়েছে। <code>left</code> স্থায়ী হয়; <code>online</code> ফ্ল্যাপ হতে পারে। স্ক্রিপ্টটি এই ফ্ল্যাগগুলি থেকে AI টেকওভার / পুনরায় যোগদানের যুক্তি চালাবে বলে আশা করা হচ্ছে।</li>
+<li>প্রতিটি আহ্বানে রোস্টারটি পুনরায় পড়া হয়, তাই আসন রূপান্তর (মানব → AI) হওয়ার সাথে সাথে দেখা যায়।</li>
+</ul>
+<p>যখন একটি রুম-বাউন্ড স্ক্রিপ্ট ফিরে আসে <code>result</code>, প্ল্যাটফর্মটি সেশন শেষ করে, <strong>ফলাফলটি ঘরে সঞ্চয় করে এবং ঘরটি বন্ধ করে দেয়</strong> - হোস্ট-জমা করা কোনো ফলাফল জড়িত নয়।</p>
+<p>বিপরীতটি সত্য নয়: <strong>একটি রুম বন্ধ তার অধিবেশন শেষ হয় না.</strong> যদি রুমটি প্রথমে বন্ধ হয়ে যায় (উদাহরণস্বরূপ, কারণ তার শেষ মানুষ যোগদান-প্রগতি ছাড়াই একটি রুম ছেড়ে চলে গেছে — কখনোই কেবল হোস্ট অফলাইনে যাওয়ার কারণে নয়, যা শুধুমাত্র সেশন সক্রিয় থাকাকালীন হোস্টের ভূমিকাকে সরিয়ে দেয়), সেশনটি চলতে থাকে, <code>ctx.room.roster</code> খালি হয়ে যায় এবং প্রতিটি মানুষ দেখায় <code>left: true</code>. প্রত্যাবর্তন <code>result</code> তাহলে ম্যাচ শেষ হলেই আসর। দেখুন <a href="/bn/docs/api/realtime.html#the-60-second-host-rule-and-room-bound-sessions">রিয়েলটাইম রুম — 60-সেকেন্ডের হোস্ট নিয়ম এবং রুম-বাউন্ড সেশন</a>.</p>
+<h2 id="return-shape">প্রত্যাবর্তন আকৃতি</h2>
+<p>প্রতিটি এন্ট্রি পয়েন্ট একই আকৃতি প্রদান করে (ব্যতীত সমস্ত ক্ষেত্র ঐচ্ছিক <code>ok</code>):</p>
+<pre><code class="language-js">return {
+  ok: true,                        // false on failure
+  error: "Illegal move",           // goes only to the sender (as a WS "error" frame)
+  sessionState: { /* ... */ },     // REPLACES the stored session document
+  playerStates: {                  // REPLACES stored per-player documents
+    "7c9e6679-...": { elo: 1216, /* ... */ }
+  },
+  broadcast: [                     // only these messages ever reach clients
+    { to: "all", data: { type: "moved", /* ... */ } },
+    { to: ["9b2f8c1a-..."], data: { type: "state", /* ... */ } }
+  ],
+  eloUpdates: {                    // published to the game's leaderboard by the host
+    "7c9e6679-...": 1216,
+    "9b2f8c1a-...": 1184
+  },
+  achievements: {                  // server-authoritative unlocks, by player id
+    "7c9e6679-...": ["first-win", "flawless"]
+  },
+  scores: {                        // to your game's own leaderboards, by board key
+    "high-score": { "7c9e6679-...": 4200 }
+  },
+  result: { kind: "white-win", reason: "checkmate" }  // ends the session (example: a chess result)
+};
+</code></pre>
+<p>মূল নিয়ম:</p>
+<ul>
+<li><code>sessionState</code> এবং প্রতিটি এন্ট্রি <code>playerStates</code> <strong>প্রতিস্থাপন</strong> সংরক্ষিত নথিগুলি - সর্বদা সম্পূর্ণ নথি ফেরত দিন, কখনও আলাদা হয় না।</li>
+<li>শুধুমাত্র তালিকাভুক্ত বার্তা <code>broadcast</code> ক্লায়েন্টদের কাছে বিতরণ করা হয়, প্রতিটি স্পষ্ট প্লেয়ার আইডিতে সম্বোধন করা হয় বা <code>"all"</code>. অন্য কিছু ফাঁস.</li>
+<li><code>eloUpdates</code> রেটিং পরিবর্তনের একমাত্র উপায়। মান প্রতিটি খেলোয়াড়ের হয় <strong>নতুন পরম রেটিং</strong>, প্রেরিত হিসাবে প্রয়োগ করা হয়েছে — প্ল্যাটফর্মটি প্রতি ম্যাচের পরিবর্তনকে ক্যাপ করে না, তাই এটি নিজেই আটকে দিন (দেখুন <a href="/bn/docs/api/games.html#elo-per-match">ম্যাচ প্রতি এলো</a>) হোস্ট তাদের ম্যাচমেকিং এর জন্য ব্যবহার করে এবং গেমের লিডারবোর্ডে প্রকাশ করে; ক্লায়েন্টরা সরাসরি স্কোর জমা দিতে পারে না (দেখুন <a href="/bn/docs/api/leaderboards.html">লিডারবোর্ড</a>) রেটিং রাখুন <code>playerStates[id].elo</code> তাই একজন মালিকের <a href="/bn/docs/api/leaderboards.html#resetting-a-players-rating">রেটিং রিসেট</a> আপনার কপিও পৌঁছে যায়।</li>
+<li><code>achievements</code> অর্জন মঞ্জুর করা হয় একমাত্র উপায়. কীগুলি গেমের কৃতিত্বের বিরুদ্ধে সমাধান করা হয় — ঘোষিত, বা এর মালিক দ্বারা তৈরি — এবং প্ল্যাটফর্ম দ্বারা স্থির থাকে; দেখুন <a href="#achievements">অর্জন</a>.</li>
+<li><code>scores</code> আপনার গেমের নিজস্ব লিডারবোর্ড পরিবর্তন করার একমাত্র উপায় - দেখুন <a href="#leaderboards">লিডারবোর্ড</a>.</li>
+<li>এর মাধ্যমে গেমস শেষ করুন <code>result</code>. হোস্ট তারপর সেশন শেষ, এবং সঙ্গে একটি খেলা জন্য <a href="#replays">রিপ্লে</a> <strong>ফাইনাল আর্কাইভ করে <code>sessionState</code></strong> রিপ্লে হিসাবে ( দ্বারা পরিবেশিত <code>GET .../replays/{sessionId}</code> — দেখুন <a href="/bn/docs/api/games.html#replays">গেম API</a>).</li>
+</ul>
+<h2 id="achievements">অর্জন</h2>
+<p>আপনার স্ক্রিপ্ট হল <strong>শুধুমাত্র</strong> আপনার গেমের কৃতিত্ব আনলক করতে পারে এমন জিনিস। কোনো ক্লায়েন্ট নেই
+তাদের জন্য শেষ পয়েন্ট: <code>POST /api/v1/me/achievements/unlock</code> গেম-স্কোপড কৃতিত্ব সরাসরি প্রত্যাখ্যান করে,
+এবং প্রকাশক CRUD এন্ডপয়েন্ট তাদের স্পর্শ করতে অস্বীকার করে। গেমের মালিক পাশে কৃতিত্ব যোগ করতে পারেন
+মাধ্যমে ঘোষিত বেশী
+<a href="/bn/docs/api/achievements.html#achievements-created-by-the-games-owner"><code>/me/github-games/{id}/achievements</code></a>;
+আপনার স্ক্রিপ্ট ঠিক একই ভাবে কী দ্বারা সেগুলি আনলক করে। এটি সার্ভার হিসাবে অর্জন করে তোলে-
+গেমের বাকি অংশের মতোই প্রামাণিক, এবং এটি প্রক্রিয়া <strong>যেকোনো</strong> একটি সঙ্গে খেলা <code>server=</code> স্ক্রিপ্ট
+ব্যবহার করা উচিত — যার গেমপ্লে অন্য কোথাও চলে (দেখুন
+<a href="/bn/docs/api/achievements.html#which-games-can-use-this">কোন গেম এই ব্যবহার করতে পারেন</a>).</p>
+<h3 id="declare">ঘোষণা করুন</h3>
+<p>একটি স্থির <code>achievements</code> অ্যারে উপর <code>game</code> বস্তু শুধুমাত্র <code>key</code> প্রয়োজন হয়:</p>
+<pre><code class="language-js">globalThis.game = {
+  achievements: [
+    { key: "first-win", name: "First Win", description: "Win a match.", points: 10 },
+    { key: "flawless",  name: "Flawless",  description: "Win without conceding.",
+      points: 50, secret: true, icon: "https://cdn.example/flawless.png" }
+  ],
+  // ...entry points
+};
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>মাঠ</th>
+<th>টাইপ</th>
+<th>নোট</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>key</code></td>
+<td>স্ট্রিং</td>
+<td><strong>প্রয়োজন।</strong> স্থিতিশীল আইডি, ≤ 128 অক্ষর, গেমের মধ্যে অনন্য। প্রথমটির পরে সদৃশগুলি উপেক্ষা করা হয়।</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>স্ট্রিং</td>
+<td>ডিফল্ট থেকে <code>key</code>.</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>স্ট্রিং</td>
+<td>ডিফল্ট থেকে <code>""</code>.</td>
+</tr>
+<tr>
+<td><code>icon</code></td>
+<td>স্ট্রিং</td>
+<td>ঐচ্ছিক URL.</td>
+</tr>
+<tr>
+<td><code>secret</code></td>
+<td>বুলিয়ান</td>
+<td>পর্যন্ত একজন খেলোয়াড় থেকে লুকানো <em>তারা</em> এটা আনলক ডিফল্ট থেকে <code>false</code>.</td>
+</tr>
+<tr>
+<td><code>points</code></td>
+<td>সংখ্যা</td>
+<td>0-10000 এ আটকানো হয়েছে। ডিফল্ট থেকে <code>0</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>গেমটি প্রকাশিত বা আপডেট হলে অ্যারে প্রয়োগ করা হয়:</p>
+<ul>
+<li>দ্বারা সংজ্ঞা মিলেছে <code>key</code> — একটি নাম, আইকন, পয়েন্ট, বা গোপন পতাকা সম্পাদনা করা বিদ্যমান সংজ্ঞা আপডেট করে, এবং যারা ইতিমধ্যে এটি অর্জন করেছে প্রত্যেকে এটি রাখে।</li>
+<li>আপনি ঘোষণা করা বন্ধ করা একটি কী মুছে ফেলা হয়েছে <strong>শুধুমাত্র যখন কেউ এটি আনলক করেনি</strong>. অর্জিত ইতিহাস কখনই ধ্বংস হয় না, তাই অবসরপ্রাপ্ত অর্জন খেলোয়াড়দের কাছে দৃশ্যমান থাকে যারা এটি ধরে রাখে।</li>
+<li>সর্বাধিক <strong>100</strong> গেম প্রতি কৃতিত্ব; এর বাইরে অতিরিক্ত বাদ দেওয়া হয়।</li>
+<li>ঘোষণা হল <strong>সেরা প্রচেষ্টা</strong>: বিকৃত এন্ট্রি বাদ দেওয়া হয়. সর্বদা এর সাথে প্রকাশিত সংজ্ঞা নিশ্চিত করুন <code>GET /api/v1/games/{slug}/achievements</code> গেম আপডেট করার পর।</li>
+</ul>
+<h3 id="unlock">আনলক</h3>
+<p>একটি প্রত্যাবর্তন <code>achievements</code> থেকে মানচিত্র <strong>যেকোনো</strong> প্রবেশ বিন্দু - <code>createSession</code>, <code>onPlayerMessage</code>, বা
+<code>onTick</code>:</p>
+<pre><code class="language-js">onTick(ctx) {
+  const state = JSON.parse(JSON.stringify(ctx.sessionState));
+  const unlocks = {};
+  for (const p of ctx.players) {
+    if (!p.ai &amp;&amp; state.scores[p.id] &gt;= 10) unlocks[p.id] = ["ten-points"];
+  }
+  return { ok: true, sessionState: state, achievements: unlocks };
+}
+</code></pre>
+<ul>
+<li>আনলক হয় <strong>অক্ষমতা</strong> — প্লেয়ারের কাছে ইতিমধ্যেই ধারণ করা একটি কী পুনরায় দাবি করা একটি নো-অপ, তাই একটি স্ক্রিপ্ট নিরাপদে এমন শর্ত থেকে পুরস্কার দিতে পারে যে এটি ট্র্যাকিংয়ের পরিবর্তে প্রতিটি টিককে পুনরায় মূল্যায়ন করে "ইতিমধ্যে পুরস্কৃত" তার নিজের রাজ্যে।</li>
+<li>অজানা কী (গেমটির মালিকের দ্বারা ঘোষিত বা তৈরি করা হয়নি), ব্যবহারকারী যারা এই সেশনের অংশগ্রহণকারী নন এবং এআই সিট নীরবে উপেক্ষা করা হয়।</li>
+<li>সর্বাধিক <strong>32</strong> প্রতি আহ্বান প্রতি খেলোয়াড়ের জন্য কীগুলি গ্রহণ করা হয়; একই অ্যারের আরও কী বাদ দেওয়া হয়।</li>
+<li>সারি বাকি আমন্ত্রণের লেখার সাথে স্থির থাকে, তাই একটি আনলক ব্যর্থ আমন্ত্রণে টিকে থাকতে পারে না।</li>
+</ul>
+<h3 id="delivery">ডেলিভারি</h3>
+<p>প্রতিটি নতুন মঞ্জুরি আনলক উপার্জনকারী খেলোয়াড়ের কাছে পুশ করা হয় <code>ws/v1/games</code> একটি স্বতন্ত্র ফ্রেম হিসাবে -
+এটা প্ল্যাটফর্মের সত্য, আপনার এক নয় <code>broadcast</code> বার্তা:</p>
+<pre><code class="language-json">{ "type": "achievement",
+  "data": { "key": "first-win", "name": "First Win", "description": "Win a match.",
+            "icon": null, "points": 10, "unlockedAt": "2026-07-25T09:14:02Z" } }
+</code></pre>
+<p>থেকে মঞ্জুর আনলক <code>createSession</code> কোন সকেট বিদ্যমান হওয়ার আগে জমি, তাই তারা কোন ফ্রেম ছাড়াই আসে -
+ক্লায়েন্টদের পড়তে হবে <code>GET /api/v1/games/{slug}/achievements</code> লোডের উপর এবং ফ্রেমটিকে হিসাবে বিবেচনা করুন
+লাইভ-আপডেট পথ। মধ্যে সম্পূর্ণ পৃষ্ঠ <a href="/bn/docs/api/achievements.html">অর্জন</a>.</p>
+<h2 id="leaderboards">লিডারবোর্ড</h2>
+<p>ইলো বোর্ড ছাড়াও, আপনার গেমে লিডারবোর্ড থাকতে পারে যার মালিক তৈরি করেন
+<a href="/bn/docs/api/leaderboards.html#your-games-own-leaderboards"><code>POST /api/v1/me/github-games/{id}/leaderboards</code></a>,
+প্রতিটি একটি সঙ্গে <code>key</code>. ফিরে তাদের পোস্ট <code>scores</code> যেকোনো এন্ট্রি পয়েন্ট থেকে — বোর্ড কী → প্লেয়ার আইডি →
+সংখ্যা:</p>
+<pre><code class="language-js">onPlayerMessage(ctx) {
+  var s = ctx.sessionState;
+  if (ctx.message.data.type === "finish-run") {
+    var scores = { "high-score": {}, "fastest-run": {} };
+    scores["high-score"][ctx.message.from] = s.points[ctx.message.from];
+    scores["fastest-run"][ctx.message.from] = ctx.now - s.startedAt;   // a time-ms board
+    return { ok: true, sessionState: s, scores: scores };
+  }
+  /* ... */
+}
+</code></pre>
+<ul>
+<li>প্রতিটি খেলোয়াড় তাদের রাখে <strong>সেরা</strong> বোর্ডের সাজানোর নির্দেশ অনুসারে প্রতিটি বোর্ডে স্কোর করুন, তাই রিপোর্ট করুন
+প্রতিটি ফলাফল - একটি খারাপ একটি সহজভাবে উপেক্ষা করা হয়.</li>
+<li>শুধুমাত্র অধিবেশন অংশগ্রহণকারীদের গণনা. অজানা বা নিষ্ক্রিয় কী, এবং বোর্ডের নিয়মের বাইরে স্কোর,
+নিঃশব্দে ফেলে দেওয়া হয়। রিটার্ন প্রতি সর্বোচ্চ 16টি বোর্ড।</li>
+<li>অপছন্দ <code>eloUpdates</code>, কিছুই প্রকাশ করা হয় না <code>playerStates</code> - আপনার নিজের কপি রাখুন
+<code>playerStates</code> যদি খেলায় ব্যক্তিগত সেরা ব্যাক পড়তে হয়।</li>
+</ul>
+<h2 id="where-your-script-runs">যেখানে আপনার স্ক্রিপ্ট চলে</h2>
+<p>একটি স্ক্রিপ্ট যা সীমা ছাড়াই পুনরাবৃত্তি করে, তার মেমরিকে নিঃশেষ করে দেয় বা তার সময় বাজেট অতিক্রম করে তা ব্যর্থ হয়
+আমন্ত্রণ এর ব্যর্থ ফলাফল প্রয়োগ করা হয় না। কমান্ড বা টিক এর মধ্যে একটি রিপোর্ট করে:</p>
+<ul>
+<li><code>Game script error: the script crashed its runtime (for example, by recursing without limit).</code></li>
+<li><code>Game script error: the script exceeded its memory budget.</code></li>
+<li><code>Game script error: the script exceeded its time budget.</code></li>
+</ul>
+<h2 id="your-games-share-of-the-server">আপনার খেলা সার্ভারের ভাগ</h2>
+<ul>
+<li><strong>স্ক্রিপ্ট সময়।</strong> একটি গেমের সমস্ত সেশন স্ক্রিপ্ট সময়ের বাজেট ভাগ করে, প্রতি সেকেন্ডে 2000 ms৷
+ডিফল্ট, প্রতিটি আমন্ত্রণ আসলে যা নিয়েছিল তার সাথে চার্জ করা হয়। তার ভাগের উপর একটি খেলা বরং প্রত্যাখ্যান করা হয়
+সারিবদ্ধ চেয়ে: একটি টিক বাদ দেওয়া হয়, একটি কমান্ডের সাথে উত্তর দেওয়া হয় "এই গেমটি তার শেয়ারের চেয়ে বেশি ব্যবহার করছে
+এই মুহূর্তে সার্ভারের; শীঘ্রই আবার চেষ্টা করুন", এবং একটি সেশন রিটার্ন তৈরি <code>429</code>.</li>
+<li><strong>কমান্ড।</strong> প্রতিটি খেলোয়াড় প্রতি সেকেন্ডে 20টি টেকসই কমান্ড পাঠাতে পারে (একটি সংক্ষিপ্ত বিস্ফোরণ সহ
+ভাতা); এর বাইরে একটি কমান্ডের উত্তর একটি দিয়ে দেওয়া হয় <code>error</code> ফ্রেম "অনেক কমান্ড; ধীর
+নিচে" ফ্রেমে একটি HTTP স্থিতি অন্তর্ভুক্ত নয়। রিয়েলটাইম ইনপুট আলাদাভাবে সীমিত।</li>
+<li><strong>ফলাফল.</strong> একটি সেশন শেষ হওয়ার ফলাফল সর্বাধিক 64 KB হতে পারে; একটি বড় এক সঙ্গে প্রত্যাখ্যান করা হয়
+<code>422</code>.</li>
+<li><strong>স্ক্রিপ্ট আকার.</strong> A <code>server=</code> স্ক্রিপ্ট সর্বাধিক 2 MB হতে পারে; একটি বড় এক সঙ্গে প্রত্যাখ্যান করা হয় <code>422</code> আগে
+এটা সংরক্ষিত বা পার্স করা হয়.</li>
+</ul>
+<p>অপারেটররা একটি পৃথক গেমের জন্য এগুলির প্রতিটি বাড়াতে বা কমাতে পারে।</p>
+<h2 id="budgets">বাজেট</h2>
+<p>এই সম্পদ বাজেটের অধীনে স্ক্রিপ্ট চালানো হয়:</p>
+<ul>
+<li>প্রতি আহ্বান ~250 ms CPU</li>
+<li>32 এমবি মেমরি</li>
+<li>প্রতি আহ্বানের জন্য একটি বিবৃতি ক্যাপ</li>
+<li>প্রতি-প্লেয়ার স্টেট বাইট বাজেট — সমস্ত রাষ্ট্রীয় নথি ক্রমিক এবং ছোট থাকতে হবে</li>
+<li>টেক্সট হয়ে গেলে মানগুলি সর্বাধিক 64 স্তরের গভীরে নেস্ট করে৷ একটি এন্ট্রি পয়েন্ট ফেরত যা কিছু, প্রতি
+ঘোষণা, <code>JSON.stringify</code>, এবং <code>Array.prototype.join</code>/<code>toString</code>/<code>toLocaleString</code> প্রত্যাখ্যান a
+একটি সঙ্গে গভীর মান <code>RangeError</code> (একটি ফেরত আসা আমন্ত্রণ ব্যর্থ করে: "64 টিরও বেশি স্তর নেস্ট করেছে
+গভীর"). <code>JSON.parse</code> ইতিমধ্যেই 64 এ থেমে গেছে, তাই একটি গভীর মান কখনও রাউন্ড-ট্রিপ করতে পারে না। <code>flat</code>
+64 লেভেল পর্যন্ত সমতল করে এবং অ্যারে বাসা বাঁধলে আরও গভীরে ছুড়ে দেয় — এমন একটি অ্যারে সহ
+নিজেই</li>
+<li>একটি কল মেমরি বাজেটের চেয়ে বেশি বরাদ্দ করতে পারে না। <code>repeat</code>, <code>padStart</code>/<code>padEnd</code>, <code>concat</code> এবং
+<code>replace</code>/<code>replaceAll</code> নিক্ষেপ <code>RangeError: Invalid string length</code> যখন ফলাফল অর্ধেক অতিক্রম করতে পারে
+অক্ষরে বাজেট (ডিফল্টে 16M 32 MB; একটি regex প্রতিস্থাপন সীমাবদ্ধ থাকে যেন প্রতিটি
+অবস্থান মিলেছে, যা শুধুমাত্র এক মিলিয়ন বা তার বেশি অক্ষরের স্ট্রিংকে প্রভাবিত করে)।
+<code>ArrayBuffer</code> এবং টাইপ করা অ্যারে থ্রো <code>RangeError</code> বাইটে বাজেট অতীত, এবং অ্যারে অতীত
+বাজেট/8 উপাদান প্রত্যাখ্যান করা হয়. আপনার হুক রিটার্ন করার পরে বাজেটও চেক করা হয়, তাই একটি
+অতিরিক্ত বাজেটের চূড়ান্ত বিবৃতি সফল হওয়ার পরিবর্তে আহ্বানকে ব্যর্থ করে।</li>
+</ul>
+<p>দাবা রেফারেন্স স্ক্রিপ্ট তার নথিগুলিকে উদ্দেশ্যমূলকভাবে ছোট রাখে — বাজেটের মধ্যে থাকার উদাহরণ হিসাবে, এর প্রতি-খেলোয়াড় ডক হল</p>
+<pre><code class="language-js">{
+  elo: 1200,
+  wins: 0, losses: 0, draws: 0,
+  lastColorVs: "9b2f8c1a-...",        // for color alternation on rematch
+  lastColorOrder: "w",
+  recentGames: [ /* up to 30 summaries */ ]
+}
+</code></pre>
+<p>সমবর্তী-সেশন ক্যাপ ডিফল্টরূপে প্রতি খেলোয়াড় 20।</p>
+<h2 id="the-platform-readable-window">প্ল্যাটফর্ম-পঠনযোগ্য উইন্ডো</h2>
+<p>মধ্যে সবকিছু <code>sessionState</code> প্ল্যাটফর্মে অস্বচ্ছ <strong>ছাড়া</strong> একটি ক্ষেত্র:</p>
+<pre><code class="language-js">sessionState.summary = {
+  turnPlayerId: "7c9e6679-...",
+  deadline: 1784642591000,
+  status: "active",
+  moveCount: 41
+};
+</code></pre>
+<p><code>deadline</code> একটি পূর্ণসংখ্যা ইউনিক্স টাইমস্ট্যাম্প ইন <strong>মিলিসেকেন্ড</strong>, অথবা কোনো সময়সীমা না থাকলে বাদ দেওয়া হয়।
+একটি ISO তারিখ স্ট্রিং স্বীকৃত নয়। <code>turnPlayerId</code> প্লেয়ার UUID.</p>
+<p><code>GET /api/v1/games/{slug}/sessions/mine</code> পড়ে <code>summary</code> গণনা করা <code>myTurn</code> এবং <code>deadline</code> কলারের জন্য। প্রতিটি রাষ্ট্র পরিবর্তনের উপর এটি সঠিক রাখুন; আপনার স্ক্রিপ্ট যেখানে পছন্দ করে সেখানে অন্য সবকিছু রাখুন।</p>
+<h2 id="worked-example-the-chess-script">কাজের উদাহরণ: দাবা স্ক্রিপ্ট</h2>
+<p>এই বিভাগের সবকিছুই দাবা রেফারেন্স বাস্তবায়নের জন্য নির্দিষ্ট — রাষ্ট্রের আকার, বোর্ড এনকোডিং, কমান্ড সেট, গেম-ওভারের কারণ, এলো ধ্রুবক, এআই এবং টাইমআউটগুলি হল দাবার নিজস্ব পছন্দ, যা এর স্ক্রিপ্টে সংজ্ঞায়িত করা হয়েছে। এর কোনোটিই প্ল্যাটফর্মের আচরণ নয়; আপনার খেলা তার নিজস্ব সমতুল্য সংজ্ঞায়িত করে.</p>
+<p>অধিবেশন অবস্থা:</p>
+<pre><code class="language-js">{
+  white: "7c9e6679-...",
+  black: "9b2f8c1a-...",
+  aiId: "00000000-0000-4000-8000-00000000a1a1",   // present in AI games
+  game: {
+    board: "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr", // 64 chars
+    turn: "w",
+    castling: { K: true, Q: true, k: true, q: true },
+    epSquare: null,
+    halfmoveClock: 0,
+    fullmove: 1,
+    moves: [ { from: "e2", to: "e4", promo: null, san: "e4", at: 1721473200000 } ],
+    positionCounts: { /* fen-key: count, for threefold repetition */ },
+    status: "active"
+  },
+  createdAt: 1721473200000,
+  deadline: 1721559600000,
+  result: null,
+  drawOfferBy: null,
+  summary: { turnPlayerId: "...", deadline: "...", status: "active", moveCount: 1 }
+}
+</code></pre>
+<p>বোর্ড এনকোডিং: একটি 64-অক্ষরের স্ট্রিং যেখানে <code>index = rank * 8 + file</code> এবং <code>a1</code> সূচক 0 হয়। <code>PNBRQK</code> সাদা টুকরা, <code>pnbrqk</code> কালো, <code>.</code> একটি খালি বর্গক্ষেত্র।</p>
+<p>দ্বারা পরিচালিত কমান্ড <code>onPlayerMessage</code>: <code>sync</code>, <code>move</code>, <code>resign</code>, <code>offer-draw</code>, <code>accept-draw</code>, <code>decline-draw</code> (তারের আকার <a href="/bn/docs/api/games.html#example-chess-command-shapes">গেম API</a>).</p>
+<p>খেলা-ওভার <code>reason</code> মান: <code>checkmate</code>, <code>stalemate</code>, <code>threefold-repetition</code>, <code>fifty-move-rule</code>, <code>insufficient-material</code>, <code>resignation</code>, <code>agreement</code>, <code>timeout</code>, <code>timeout-no-moves</code>.</p>
+<p>অন্যান্য দাবা সুনির্দিষ্ট:</p>
+<ul>
+<li><strong>এলো</strong> K=32 ব্যবহার করে, গণনা করা হয় <code>finishGame</code> যখন একটি খেলা শেষ হয়, এবং এর মাধ্যমে ফিরে আসে <code>eloUpdates</code>.</li>
+<li><strong>এআই প্লে:</strong> যখন এআই সিট সরাতে হবে, <code>aiReply</code> নাটক <strong>"hal"</strong> — একটি লোভী উপাদান-ক্যাপচার ইঞ্জিন — একই আহ্বানের ভিতরে। কোনো বাহ্যিক বট নেই।</li>
+<li><strong>সময়সীমা:</strong> <code>onTick</code> 24-ঘণ্টার মুভ ঘড়ির বিচার করে — যদি কোনও চাল না খেলা হয় তাহলে গেমটি হল a <code>timeout-no-moves</code> আঁকা অন্যথায় সরানো প্লেয়ার দ্বারা হেরে যায় <code>timeout</code>.</li>
+</ul>
+<h2 id="deployment">স্থাপনা</h2>
+<p>আপনার গেমের ভান্ডারে স্ক্রিপ্টটি ঘোষণা করুন <code>starhermit.txt</code> প্রকাশ:</p>
+<pre><code>server=server.js
+</code></pre>
+<p>GitHub ইন্টিগ্রেশনের মাধ্যমে প্রকাশনা প্রবাহিত হয় — দেখুন <a href="/bn/docs/api/github-games.html">গিটহাব গেমস</a>. প্ল্যাটফর্মটি নথিভুক্ত বাজেটের মধ্যে স্ক্রিপ্টটি কার্যকর করে। একত্রিত করবেন না <code>server=</code> সঙ্গে <code>container.image=</code>; ব্যবহার করুন <a href="/bn/docs/api/container-games.html">ধারক রানটাইম</a> পরিবর্তে একটি ছবি শিপিং যখন.</p>
+<h2 id="best-practices">সর্বোত্তম অনুশীলন</h2>
+<ul>
+<li><strong>প্রতিটি আদেশ যাচাই করুন.</strong> চিকিৎসা <code>ctx.message.data</code> প্রতিকূল হিসাবে: স্পর্শ করার আগে প্রকার, রেঞ্জ, টার্ন অর্ডার এবং গেমের স্থিতি পরীক্ষা করুন।</li>
+<li><strong>আমন্ত্রণ দ্রুত রাখুন এবং ছোট করুন।</strong> আপনার প্রতি প্লেয়ার ডক ~250 ms এবং একটি বাইট বাজেট আছে; দাবা রেফারেন্স স্ক্রিপ্ট, উদাহরণস্বরূপ, ক্যাপস <code>recentGames</code> এই কারণে 30টি এন্ট্রিতে।</li>
+<li><strong>ব্যবহার করুন <code>ctx.now</code> / <code>ctx.random</code> শুধুমাত্র</strong> না <code>Date</code>, না <code>Math.random</code> — হোস্ট ঘড়ি এবং পাশা মালিক.</li>
+<li><strong>ডিজাইন <code>broadcast</code> শুধুমাত্র ক্লায়েন্ট চুক্তি হিসাবে বার্তা.</strong> স্ক্রিপ্ট যা পাঠায় তা থেকে ক্লায়েন্টদের অবশ্যই পুরো গেমটি রেন্ডার করতে সক্ষম হতে হবে; সম্প্রচার না করা কিছু তাদের জন্য বিদ্যমান নেই.</li>
+<li><strong>একটি ফাইল, দুটি সারফেস।</strong> একই ফাইল একটি পৃথক রপ্তানির মাধ্যমে ক্লায়েন্ট-সাইড নিয়ম হিসাবে দ্বিগুণ হতে পারে: দাবা রেফারেন্স বাস্তবায়ন, উদাহরণস্বরূপ, প্রকাশ করে <code>globalThis.chessRules</code> ব্রাউজারের জন্য (প্রিভিউ সরান, বৈধতা ইঙ্গিত) এবং <code>globalThis.game</code> হোস্টের জন্য। সত্যের একটি উৎস, ক্লায়েন্টের উপর শূন্য কর্তৃত্ব।</li>
+<li><strong>সর্বদা এর মাধ্যমে গেমস শেষ করুন <code>result</code></strong> তাই প্ল্যাটফর্মটি Elo আপডেট প্রকাশ করে এবং আপনার গেমের রিপ্লে আর্কাইভ করে <a href="#replays">রিপ্লে</a>.</li>
+</ul>
+<p>দেখুন <a href="/bn/docs/tutorials/chess-walkthrough.html">দাবা ওয়াকথ্রু</a> একটি লাইন-বাই-লাইন সফরের জন্য, এবং <a href="/bn/docs/tutorials/ai-prompts.html">এআই প্রম্পট</a> আপনার নিজের স্ক্রিপ্ট তৈরি করতে সাহায্যের জন্য।</p>
+<p>শেয়ার করা হয়েছে <a href="/bn/docs/api/conventions.html">এপিআই কনভেনশন</a> রেসপন্স পার্সিং, টাইমস্ট্যাম্প, পেজিনেশন এবং পুনঃপ্রচেষ্টা বর্ণনা করুন।</p>
+<p>দেখুন <a href="/bn/docs/credentials.html">শংসাপত্রের সামঞ্জস্য</a> এবং <a href="/bn/docs/api/contracts.html">মেশিন-পাঠযোগ্য চুক্তি</a>.</p>
+
+{% endraw %}

@@ -1,0 +1,125 @@
+---
+layout: "wiki"
+lang: "bn"
+title: "লোড করুন এবং নিরাপদে অগ্রগতি সংরক্ষণ করুন"
+source_url: "/docs/tutorials/cloud-save-sync.html"
+source_path: "docs/tutorials/cloud-save-sync.md"
+source_hash: "3d1bef0f13bb54f639d96ca6ff1c5607c172a4d25d7707062b404cba46d5de83"
+translation: "machine"
+permalink: "/bn/docs/tutorials/cloud-save-sync.html"
+---
+{% raw %}
+<h1 id="load-and-save-progress-safely">লোড করুন এবং নিরাপদে অগ্রগতি সংরক্ষণ করুন</h1>
+<p>সাইন-ইন করা প্লেয়ারের ক্লায়েন্ট-মালিকানাধীন অগ্রগতির জন্য ক্লাউড সেভ ব্যবহার করুন। স্বাক্ষরবিহীন একক প্লেয়ার বিকল্প
+মেমরিতে অগ্রগতি ধরে রাখে এবং অ্যাকাউন্ট সেভ করে পড়া বা লিখতে পারে না। পছন্দ অন্তর্গত
+<a href="/bn/docs/api/games.html#per-player-game-settings">খেলা সেটিংস</a>, অগ্রগতি নথি নয়।</p>
+<p>একটি লঞ্চ টোকেন ঠিক অ্যাক্সেস করতে পারে <code>game:&lt;gameId&gt;</code>, কোথায় <code>gameId</code> তার <code>game_scope</code>. প্ল্যাটফর্ম
+প্রতি স্লটে একটি সংরক্ষণ সহ অস্বচ্ছ বাইট সঞ্চয় করে। আপনার গেমের প্রত্যাশিত বিন্যাস যাচাই করুন। দেখুন
+<a href="/bn/docs/api/catalog.html#cloud-saves">ক্লাউড সেভ</a> কোটা এবং শর্তসাপেক্ষ শিরোনামের জন্য।</p>
+<p><img src="/docs/images/bn/cloud-save-flow.svg" alt="লেখার আগে লোড করুন এবং যাচাই করুন। ব্যর্থ পড়া ব্লক আপলোড; কন্ডিশনাল রাইট নতুন সংরক্ষণ এবং পৃষ্ঠ দ্বন্দ্ব সংরক্ষণ করে।"></p>
+<h2 id="a-small-complete-json-recipe">একটি ছোট সম্পূর্ণ JSON রেসিপি</h2>
+<p>কপি <a href="/docs/sdk/cloud-save-store.js"><code>cloud-save-store.js</code></a> আপনার বিল্ড মধ্যে. এই উদাহরণ কাঁচা সঞ্চয়
+UTF-8 JSON বাইট; প্ল্যাটফর্ম তাদের পরিবেশন করে <code>application/zip</code> কিন্তু একটি জিপ বিন্যাস প্রয়োজন হয় না.
+জিপ সংরক্ষণের জন্য একটি ভিন্ন পাঠক ব্যবহার করুন, সহ <a href="/bn/docs/sdk/javascript.html#cloud-saves">ব্রাউজার SDK এর ZIP সংরক্ষণ করে</a>.
+বিদ্যমান খেলোয়াড়দের জন্য মাইগ্রেশন প্ল্যান ছাড়া ফরম্যাট পরিবর্তন করবেন না।</p>
+<pre><code class="language-js">import { CloudSaveStore } from './cloud-save-store.js';
+
+const store = new CloudSaveStore({
+  gameId: StarHermit.slug,
+  token: () =&gt; StarHermit.token, // Always obtain the current renewed token.
+});
+const valid = value =&gt; value?.version === 1 &amp;&amp; Number.isSafeInteger(value.points) &amp;&amp; value.points &gt;= 0;
+let progress = { version: 1, points: 0 };
+let saving = false;
+
+async function startAccountGame() {
+  // Keep gameplay/saving disabled until this resolves.
+  const remote = await store.load(valid);
+  progress = remote ?? { version: 1, points: 0 };
+  render(progress);
+}
+
+async function saveCheckpoint() {
+  if (saving) return; // Coalesce checkpoints; do not issue overlapping writes.
+  saving = true;
+  showSync('Saving…');
+  try {
+    await store.save(progress);
+    showSync('Saved');
+  } catch (error) {
+    if (error.status === 412) {
+      // Keep local progress in memory. Offer Reload cloud or an explicit merge.
+      showConflict(() =&gt; startAccountGame());
+    } else showSync('Save failed; retry after resolving the error');
+  } finally {
+    saving = false;
+  }
+}
+</code></pre>
+<p><code>render</code>, <code>showSync</code>, এবং <code>showConflict</code> আপনার UI. অপেক্ষা করুন <code>startAccountGame()</code> সক্রিয় করার আগে
+খেলা বা সংরক্ষণ। লোড ব্যর্থ হলে, প্লেয়ারের বর্তমান স্থানীয় অবস্থা বজায় রাখুন, ব্যর্থতা প্রদর্শন করুন,
+এবং আপলোড ব্লক রাখুন। ক <code>404</code> খালি-স্লট কেস; <code>401</code>, <code>403</code>, <code>5xx</code>, বিকৃত JSON,
+অথবা একটি অসমর্থিত সংরক্ষণ সংস্করণ খালি স্লট নয়।</p>
+<p>রেসিপি শংসাপত্র পুনর্নবীকরণ করে না. ব্রাউজার SDK লঞ্চ টোকেন রিনিউ করে যখন সেগুলি থাকে
+বৈধ মুলতুবি থাকা শর্তাদি সমাধান করুন বা পুনরায় পড়ার চেষ্টা করার আগে গেমের প্রবেশ প্রবাহের মাধ্যমে পুনরায় প্রমাণীকরণ করুন।</p>
+<h2 id="conditions-and-conflicts">শর্ত এবং দ্বন্দ্ব</h2>
+<table>
+<thead>
+<tr>
+<th>কি লোড ছিল</th>
+<th>পরবর্তী লেখার শিরোনাম</th>
+<th>অন্য ডিভাইস লিখলে</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ETag এর সাথে বিদ্যমান সংরক্ষণ</td>
+<td><code>If-Match: &lt;etag&gt;</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>সংরক্ষণ নেই (<code>404</code>)</td>
+<td><code>If-None-Match: *</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>কিছুই সফলভাবে লোড হয়নি৷</td>
+<td>লেখা নেই</td>
+<td>পড়ার জন্য আবার চেষ্টা করতে থাকুন বা প্লেয়ারকে আনট্র্যাকড প্লেতে থাকতে দিন</td>
+</tr>
+</tbody>
+</table>
+<p>থেকে সংস্করণ ব্যবহার করুন <strong>আপনার লোড করা ডেটা</strong>, পরবর্তী মেটাডেটা চেক নয়। ফিরে আসা নতুন ETag বজায় রাখুন
+প্রতিটি সফল লেখার মাধ্যমে। ক <code>412</code> গেমটি বর্তমান সংস্করণ লোড না হওয়া পর্যন্ত ব্লকগুলি আরও সংরক্ষণ করে
+খেলোয়াড় এটি গ্রহণ করে বা একত্রিত করে। নিঃশব্দে শর্তটি সরিয়ে অন্য ডিভাইস ওভাররাইট করবেন না।
+সেই ওভাররাইটকে পূর্বাবস্থায় ফেরাতে API কোনো সংরক্ষণের ইতিহাস অফার করে না।</p>
+<p>যদি দুটি ডিভাইসকে স্বাধীনভাবে কাউন্টার বা ইনভেন্টরি আপডেট করতে হয়, একটি একক শেষ-লেখা-জয় নথি
+খেলার সাথে মানানসই নাও হতে পারে। সার্ভার-অনুমোদিত অবস্থা ব্যবহার করুন এবং পরিবর্তে বৈধ গেম কমান্ড সংজ্ঞায়িত করুন।</p>
+<h2 id="save-format-and-migration">বিন্যাস এবং স্থানান্তর সংরক্ষণ করুন</h2>
+<p>একটি ফর্ম্যাট সংস্করণ অন্তর্ভুক্ত করুন এবং রিমোট গ্রহণ করার আগে প্রকার, পরিসর এবং প্রয়োজনীয় ক্ষেত্রগুলি যাচাই করুন
+অগ্রগতি সমর্থিত পুরানো সংস্করণগুলির জন্য একটি মাইগ্রেশন লিখুন৷ একটি নতুন অজানা সংস্করণ অক্ষত রাখুন;
+এটিকে ডিফল্টে রিসেট করবেন না এবং এটিতে আপলোড করবেন না। ক্লাউড ডেটা ক্লায়েন্ট-নিয়ন্ত্রিত, তাই কখনই এটি ব্যবহার করবেন না
+একটি প্রতিযোগিতামূলক স্কোর বা প্রদত্ত এনটাইটেলমেন্টের প্রমাণ হিসাবে।</p>
+<p>ডিফল্ট ডিকোড-সংরক্ষণ সীমা হল 10 MiB। Base64 অনুরোধের অংশে মোটামুটি এক তৃতীয়াংশ যোগ করে।
+<code>413 cloud_save_too_large</code>, <code>409 cloud_save_slots_exhausted</code>, এবং <code>507 cloud_save_quota_exceeded</code>
+বিভিন্ন ক্ষমতা ব্যর্থতা হয়; পরিদর্শন <code>code</code> এবং <code>limit</code>. সম্মান <code>Retry-After</code> অন <code>429</code>.</p>
+<h2 id="checkpoints-and-page-exit">চেকপয়েন্ট এবং পৃষ্ঠা প্রস্থান</h2>
+<p>অর্থপূর্ণ চেকপয়েন্টে সংরক্ষণ করুন এবং একটি দৃশ্যমান সংরক্ষণ ক্রিয়া অফার করুন। দ্রুত পরিবর্তন এবং সিরিয়ালাইজ debounce
+লেখে তাই প্রত্যেকে শেষ স্বীকৃত সংস্করণ ব্যবহার করে। স্বীকার না হওয়া পর্যন্ত একটি নোংরা সূচক রাখুন।
+একটি ব্যর্থ অনুরোধ একটি নিশ্চিত সংরক্ষণ নয়; একটি অস্পষ্ট লেখার পরে, অন্য লেখার আগে পুনরায় লোড করুন।</p>
+<p>একটি পৃষ্ঠা-প্রস্থান আপলোড সেরা প্রচেষ্টা. ব্রাউজার <code>fetch(..., { keepalive: true })</code> একটি ছোট ইন-ফ্লাইট শেয়ার করে
+শারীরিক ভাতা, সাধারণত 64 KiB; একটি 10 ​​MiB সংরক্ষণ এটির উপর নির্ভর করতে পারে না। কোনো অনুরোধের আগে একটি ট্যাব বন্ধ হতে পারে
+শেষ স্থায়িত্বের জন্য সাধারণ ফোরগ্রাউন্ড সেভ ব্যবহার করুন এবং অস্বীকৃত অগ্রগতি হিসাবে লেবেল করবেন না
+সংরক্ষিত Quickstart প্রতিটি পয়েন্ট সংগ্রহে তার ছোট নথি সংরক্ষণ করে।</p>
+<h2 id="verify-in-your-game">আপনার খেলা যাচাই করুন</h2>
+<ol>
+<li>একটি খালি স্লট দিয়ে শুরু করুন; অগ্রগতি সংগ্রহ করুন, সংরক্ষণ করুন, পুনরায় লোড করুন এবং এটি ফেরত নিশ্চিত করুন।</li>
+<li>একটি নেটওয়ার্ক ত্রুটি সহ পড়া প্রত্যাখ্যান, <code>403</code>, বা অবৈধ তথ্য; কোন আপলোড অনুসরণ নিশ্চিত করুন.</li>
+<li>একটি সংস্করণে দুটি ট্যাব খুলুন। A-তে সংরক্ষণ করুন, তারপর B: B-কে অবশ্যই একটি দ্বন্দ্ব দেখা দিতে হবে এবং এর স্থানীয় অবস্থা সংরক্ষণ করতে হবে।</li>
+<li>অজানা ডেটা ওভাররাইট না করে একটি পুরানো/নতুন ফর্ম্যাট এবং অনুপস্থিত স্বীকৃতি পরীক্ষা করুন।</li>
+<li>আনট্র্যাকড একক-প্লেয়ার মোডে প্রবেশ করুন এবং যাচাই করুন যে খেলাটি ক্লাউড-সংরক্ষণের অনুরোধ করে না।</li>
+</ol>
+<p>দেখুন <a href="/bn/docs/tutorials/browser-quickstart.html">রানেবল কুইকস্টার্ট</a>, <a href="/bn/docs/api/conventions.html">এপিআই কনভেনশন</a>, এবং
+<a href="/bn/docs/troubleshooting.html#game-setup-and-storage">সমস্যা সমাধান</a>.</p>
+
+{% endraw %}

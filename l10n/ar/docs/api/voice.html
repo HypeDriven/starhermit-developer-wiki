@@ -1,0 +1,194 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "صوت"
+source_url: "/docs/api/voice.html"
+source_path: "docs/api/voice.md"
+source_hash: "b854ce844a33279125a6c44c43b800b3efef80cbcf31d1f74a9f17192fab0aef"
+translation: "machine"
+permalink: "/ar/docs/api/voice.html"
+---
+{% raw %}
+<h1 id="voice">صوت</h1>
+<p>يوفر صوت StarHermit غرفًا صوتية لكل محادثة عبر REST API (<code>api/v1/voice</code>) بالإضافة إلى WebSocket الثنائي/النص المختلط (<code>ws/v1/voice</code>) لإشارات الصوت وWebRTC. تتطلب جميع نقاط نهاية REST المصادقة. قد يختلف توفر الصوت. تختلف أجسام الخطأ؛ يرى <a href="/ar/docs/api/conventions.html#requests-and-responses">اتفاقيات API</a>.</p>
+<p>ترتكز الغرف على أ <a href="/ar/docs/api/chat.html">محادثة الدردشة</a>; العضوية في المحادثة بوابة لكل شيء، لذا فإن قواعد الصداقة في الدردشة تحكم الصوت أيضًا (محادثات جلسة اللعبة تتجاوز الصداقة). الحدود: 3 غرف نشطة لكل محادثة، بحد أقصى 10 مشاركين لكل غرفة، برنامج ترميز <code>"opus"</code>.</p>
+<h2 id="rest-endpoints">نقاط النهاية REST</h2>
+<p>قاعدة: <code>https://api.starhermit.com/api/v1/voice</code>.</p>
+<table>
+<thead>
+<tr>
+<th>طريقة</th>
+<th>طريق</th>
+<th>مصادقة</th>
+<th>وصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>بريد</td>
+<td><code>/rooms</code></td>
+<td>JWT</td>
+<td>إنشاء غرفة صوتية للمحادثة</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/rooms?conversationId=</code></td>
+<td>JWT</td>
+<td>قائمة الغرف للمحادثة</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/rooms/{roomId}</code></td>
+<td>JWT</td>
+<td>احصل على غرفة</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/rooms/{roomId}/join</code></td>
+<td>JWT</td>
+<td>الانضمام إلى غرفة (مطلوب قبل WS)</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/rooms/{roomId}/leave</code></td>
+<td>JWT</td>
+<td>اترك غرفة</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/rooms/{roomId}/mute</code></td>
+<td>JWT</td>
+<td>قم بتعيين حالة كتم الصوت الخاصة بك</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/rooms/{roomId}/participants/{userId}/server-mute</code></td>
+<td>جي دبليو تي (منشئ)</td>
+<td>كتم صوت المضيف لا يمكن للمشارك رفعه</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/rooms/{roomId}/close</code></td>
+<td>JWT</td>
+<td>إغلاق غرفة (منشئ المحتوى فقط)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-room">قم بإنشاء غرفة</h3>
+<p><code>POST /rooms</code></p>
+<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 10 }
+</code></pre>
+<p>يعود أ <code>VoiceRoomDto</code>.</p>
+<h3 id="room-shape">شكل الغرفة</h3>
+<p><code>GET /rooms?conversationId=&lt;guid&gt;</code> → <code>VoiceRoomDto[]</code>; <code>GET /rooms/{roomId}</code> → <code>VoiceRoomDto</code>:</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "conversationId": "&lt;guid&gt;",
+  "creatorUserId": "&lt;guid&gt;",
+  "codec": "opus",
+  "status": "Active",
+  "maxParticipants": 10,
+  "createdAt": "2026-07-22T07:00:00Z",
+  "participants": [
+    {
+      "userId": "&lt;guid&gt;",
+      "username": "alice",
+      "isMuted": false,
+      "isConnected": true,
+      "joinedAt": "2026-07-22T07:01:00Z"
+    }
+  ]
+}
+</code></pre>
+<h3 id="join-leave-mute-close">انضم، غادر، كتم الصوت، أغلق</h3>
+<p><code>POST /rooms/{roomId}/join</code> → <code>VoiceRoomDto</code>. هذا الانضمام REST هو <strong>مطلوب</strong> قبل فتح WebSocket؛ الاتصال بدون إرجاعه <code>403</code>. تؤدي إعادة الانضمام إلى مسح بيانات المشارك <strong>ملك</strong> صامت (<code>isMuted</code>); مضيف <code>isServerMuted</code> ينجو من الإجازة وإعادة الاتصال.</p>
+<p><code>POST /rooms/{roomId}/leave</code> → <code>204</code>.</p>
+<p><code>POST /rooms/{roomId}/mute</code> مع <code>{ "muted": true }</code> → <code>204</code>. هذا هو كتم الصوت الخاص بالمشارك ولا يمكنه مسح كتم صوت المضيف.</p>
+<p><code>POST /rooms/{roomId}/participants/{userId}/server-mute</code> مع <code>{ "muted": true }</code> → <code>204</code> (المبدع فقط). يتم إسقاط الصوت في حالة ضبط أي من كتم الصوت.</p>
+<p><code>POST /rooms/{roomId}/close</code> → <code>204</code> (المبدع فقط).</p>
+<p>اذكر كتم صوتك عند الاتصال بدلاً من وراثة ما يتذكره الصف.</p>
+<h2 id="websocket-wsv1voice">مقبس ويب: <code>ws/v1/voice</code></h2>
+<p>الاتصال ب <code>wss://api.starhermit.com/ws/v1/voice?roomId=&lt;guid&gt;</code> مع JWT عبر <code>Authorization</code> رأس, <code>?ticket=</code>، أو <code>?access_token=</code>. راحة سابقة <code>join</code> مطلوب.</p>
+<p>البروتوكول مختلط:</p>
+<h3 id="binary-frames--audio">الإطارات الثنائية – الصوت</h3>
+<p>الإطارات الثنائية تحمل الصوت (مثل Opus). يقوم الخادم بترحيل كل إطار إلى المشاركين الآخرين على النحو التالي:</p>
+<pre><code>[16-byte senderUserId][audio…]
+</code></pre>
+<p>يبدأ الخادم بـ <strong>مصادق عليه</strong> معرف المرسل ولا يثق مطلقًا في المرسل الذي يقدمه العميل. يتم إسقاط الصوت من المستخدمين الذين تم كتم صوتهم. الحدود: 100 حزمة/الثانية لكل مستخدم، الحد الأقصى للإطار 4000 بايت.</p>
+<h3 id="text-frames--client--server-control">إطارات النص - التحكم في العميل → الخادم</h3>
+<pre><code class="language-json">{ "type": "mute", "muted": true }
+</code></pre>
+<pre><code class="language-json">{ "type": "speaking", "speaking": true }
+</code></pre>
+<pre><code class="language-json">{ "type": "rtc", "to": "&lt;guid&gt;", "payload": { } }
+</code></pre>
+<pre><code class="language-json">{ "type": "deafen", "deafened": true }
+</code></pre>
+<p><code>rtc</code> الحمولات عبارة عن إشارات WebRTC غير شفافة، ويتم توجيهها إلى المشارك الموجه إليه.
+<code>deafen</code> يمنع الصوت الثنائي المُرحَّل الوارد لهذا المقبس؛ لا يتم كتم الصوت تلقائيًا
+الصوت الصادر أو اتصال نظير منفصل. قم بتطبيقها محليًا عندما يختار اللاعب الصم.</p>
+<p>يعرض شكل مشارك REST كتم صوته، وليس كتم صوت المضيف. القائمة الصوتية الأولية والانضمام إلى الأحداث
+تشمل <code>serverMuted</code>; لا يوجد حدث دفع منفصل لتغيير كتم صوت المضيف. إذا كانت لعبتك تستخدم P2P
+الصوت، يجب أن تكون إشارات كتم صوت المضيف وتنفيذها جزءًا من تكامل الوسائط الخاصة بك.</p>
+<p>عندما ينقطع آخر مقبس صوت، تنتهي عضوية غرفة الصوت. اتصل بالراحه <code>join</code> مرة أخرى من قبل
+إعادة الاتصال واستعادة كتم الصوت المقصود قبل إرسال الصوت.</p>
+<h3 id="server--client-events">الخادم → أحداث العميل</h3>
+<p>ظرف: <code>{ "event": "&lt;name&gt;", "data": { } }</code>.</p>
+<table>
+<thead>
+<tr>
+<th>حدث</th>
+<th><code>data</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>voice.roster</code></td>
+<td><code>{ "roomId", "participants": [{ "userId", "muted", "serverMuted" }] }</code> - أرسلت إلى الوافد الجديد</td>
+</tr>
+<tr>
+<td><code>voice.participant_joined</code></td>
+<td><code>{ "roomId", "userId", "muted", "serverMuted" }</code></td>
+</tr>
+<tr>
+<td><code>voice.participant_left</code></td>
+<td><code>{ "roomId", "userId" }</code></td>
+</tr>
+<tr>
+<td><code>voice.mute_changed</code></td>
+<td><code>{ "roomId", "userId", "muted" }</code></td>
+</tr>
+<tr>
+<td><code>voice.deafened</code></td>
+<td>`{ "معرف الغرفة", "معرف المستخدم", "يصم الآذان" }</td>
+</tr>
+<tr>
+<td><code>voice.speaking</code></td>
+<td><code>{ "roomId", "userId", "speaking" }</code></td>
+</tr>
+<tr>
+<td><code>voice.rtc</code></td>
+<td><code>{ "roomId", "from", "payload" }</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="example-integration-pattern-from-the-chess-reference-implementation">نموذج لنمط التكامل (من التنفيذ المرجعي للشطرنج)</h2>
+<p>يتم الاشتراك في الصوت لكل جلسة لعبة. عميل نموذجي <code>enable()</code> تدفق:</p>
+<ol>
+<li><code>GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;</code> للعثور على غرفة موجودة، وإلا <code>POST /api/v1/voice/rooms</code> لإنشاء واحدة.</li>
+<li><code>POST /api/v1/voice/rooms/{roomId}/join</code>.</li>
+<li>يفتح <code>ws/v1/voice?roomId=&lt;guid&gt;</code>.</li>
+</ol>
+<p>في <a href="/ar/docs/tutorials/chess-walkthrough.html">تنفيذ مرجع الشطرنج</a>، يتم تشغيل الصوت عبر WebRTC P2P مع التفاوض المثالي؛ يتم تبادل الإشارات من خلال <code>rtc</code> رسائل التحكم (<code>{ "sdp": … }</code> / <code>{ "ice": … }</code> الحمولات)، مع مسار Opus الثنائي الذي يتم ترحيله بواسطة الخادم باعتباره البديل.</p>
+<p>رموز الإطلاق على مستوى اللعبة <strong>يمكن</strong> استخدم Voice REST وWebSocket للغرف الملحقة بجلسات اللعب الخاصة بهم.</p>
+<h2 id="see-also">انظر أيضا</h2>
+<ul>
+<li><a href="/ar/docs/tutorials/audio-options.html">خيارات الصوت</a> - مستوى الصوت الأساسي والميكروفون وعناصر التحكم بالضغط والتحدث،
+مع غطاء التشغيل الذي تم اكتشافه تلقائيًا</li>
+<li><a href="/ar/docs/api/chat.html">محادثة</a> - الغرف مرساة للمحادثات؛ فضح جلسات اللعبة <code>chatConversationId</code></li>
+<li><a href="/ar/docs/api/games.html">ألعاب</a> - جلسات اللعبة وإطلاق الرموز</li>
+<li><a href="/ar/docs/api/relay.html">تتابع</a> - بايت مروحي لرمز الشبكة الخاص باللعبة</li>
+</ul>
+<p>يرى <a href="/ar/docs/credentials.html">التوافق الاعتماد</a> و <a href="/ar/docs/api/contracts.html">العقود المقروءة آليا</a>.</p>
+
+{% endraw %}

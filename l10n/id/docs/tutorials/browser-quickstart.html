@@ -1,0 +1,111 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Bangun game browser pertama Anda yang dihosting"
+source_url: "/docs/tutorials/browser-quickstart.html"
+source_path: "docs/tutorials/browser-quickstart.md"
+source_hash: "41cf9fbedb43c0236d904fb42d9467a521861df09572f995e085dda2e06c1d23"
+translation: "machine"
+permalink: "/id/docs/tutorials/browser-quickstart.html"
+---
+{% raw %}
+<h1 id="build-your-first-hosted-browser-game">Bangun game browser pertama Anda yang dihosting</h1>
+<p><a href="/docs/examples/browser-quickstart.zip">Unduh Kolektor Bintang</a>, permainan kecil lengkap dengan dua entri
+pilihan: permainan akun dengan penyimpanan cloud, dan permainan pemain tunggal yang kemajuannya hanya disimpan di memori.
+<a href="/docs/examples/browser-quickstart/index.html">Coba mainkan tanpa tanda tangan</a> di wiki ini; masuk akun menjadi
+tersedia setelah Anda menerbitkan salinan Anda sendiri di StarHermit.</p>
+<p>Anda memerlukan akun StarHermit untuk mempublikasikan. Game itu sendiri tidak memerlukan backend server, ketergantungan
+instalasi, langkah pembangunan, atau organisasi penerbit.</p>
+<h2 id="1-unzip-and-play-locally">1. Buka zip dan mainkan secara lokal</h2>
+<p>ZIP berisi <code>index.html</code>, <code>app.js</code>, <code>style.css</code>, <code>starhermit.txt</code>, dan dua file pembantu.
+Sajikan folder yang diekstraksi dengan server statis lokal, misalnya:</p>
+<pre><code class="language-bash">python3 -m http.server 8000 --directory star-collector
+</code></pre>
+<p>Di Sini <code>star-collector</code> adalah folder tempat Anda mengekstrak. Membuka <code>http://localhost:8000</code> dan pilih
+<strong>Mainkan pemain tunggal (kemajuan tidak disimpan)</strong>. Klik bintangnya. Kembali ke awal atau memuat ulang
+memulai proses baru yang tidak terlacak. Mode ini tidak menulis kemajuan lokal maupun kemajuan akun.</p>
+<h2 id="2-publish-the-distributable-folder">2. Publikasikan folder yang dapat didistribusikan</h2>
+<p>Manifesnya sudah ada di folder root:</p>
+<pre><code class="language-ini">name=Star Collector Quickstart
+launch=index.html
+description=A small single-player game with account saves or untracked play.
+</code></pre>
+<p>Di UI penerbitan game StarHermit, tambahkan folder ini sebagai game baru. Seluruh folder yang dipilih adalah
+bangunan yang diterbitkan. Simpan hanya file yang ingin Anda sajikan. Setara API mengemas file
+di bawah <code>client/</code> dan mengirimkan arsip gzip mentah:</p>
+<pre><code class="language-bash">mkdir -p bundle/client
+cp -R star-collector/. bundle/client/
+cp star-collector/starhermit.txt bundle/starhermit.txt
+# Write the archive outside bundle so it cannot include itself.
+tar -C bundle -czf star-collector.tar.gz .
+
+curl --fail-with-body -X POST https://api.starhermit.com/api/v1/me/github-games/upload \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H 'Content-Type: application/gzip' \
+  --data-binary @star-collector.tar.gz
+</code></pre>
+<p><code>ACCESS_TOKEN</code> adalah token akun lengkap Anda, setelah penerimaan persyaratan saat ini secara eksplisit. Tanggapannya
+<code>game.id</code>, <code>game.gameSlug</code>, dan subdomain yang dihosting mengidentifikasi game Anda. Buka URL yang dihosting kembali.
+Untuk rilis berikutnya gunakan game itu <a href="/id/docs/api/github-games.html#push-a-game-bundle">titik akhir bundel</a>
+daripada membuat daftar lain. Melihat <a href="/id/docs/tutorials/ci-cd-build-upload.html">penerbitan CI</a> ketika siap.</p>
+<h2 id="3-try-the-two-account-entry-paths">3. Coba dua jalur masuk akun</h2>
+<p><strong>Peluncuran dari StarHermit:</strong> persediaan peluncur <code>#game_token=&lt;jwt&gt;</code>. Pembantu menangkapnya dan
+menghapusnya dari URL sebelum modul game dijalankan. Memilih <strong>Lanjutkan dengan akun StarHermit Anda</strong>.</p>
+<p><strong>Buka URL yang dihosting secara langsung:</strong> memilih <strong>Masuk dengan StarHermit</strong>. Pemilih penyedia mengizinkan
+pemain masuk dengan akun yang ada atau buat akun. Ia kembali langsung ke game ini dengan cakupan
+<code>#access_token=&lt;jwt&gt;</code>; tidak ada kredensial seluruh akun yang dikirim ke game.</p>
+<p>Permainan memuat kemajuan hanya ketika pemain memilih permainan akun. Jika persyaratan saat ini memerlukan persetujuan,
+ini menampilkan dokumen sebagai teks dan penawaran <strong>Terima dan lanjutkan</strong>. Penerimaan hanya mengirimkan hash
+revisi yang ditampilkan. Revisi yang diubah ditampilkan kembali untuk keputusan eksplisit lainnya.</p>
+<h2 id="4-check-progress-and-failures">4. Periksa kemajuan dan kegagalan</h2>
+<p>Kumpulkan beberapa bintang dalam mode akun, tunggu <strong>Disimpan</strong>, dan muat ulang. Hitungan kembali setelah memilih
+permainan akun. Buka tab kedua dengan jumlah simpanan yang sama: simpan di satu tab, lalu kumpulkan di tab lainnya. Itu
+yang kedua harus menunjukkan konflik dan penawaran <strong>Muat kemajuan cloud terbaru</strong> alih-alih menimpanya.</p>
+<p>Dokumen penyimpanannya adalah <code>{ version: 1, points: &lt;non-negative integer&gt; }</code>. Permainan memuat dan memvalidasi
+sebelum menulis, menggunakan ETag yang dimuat untuk pembaruan bersyarat, dan memblokir penulisan setelah pembacaan gagal.
+Ini menyimpan di setiap koleksi dan memberi label pada data yang disimpan hanya setelah pengakuan. Melihat
+<a href="/id/docs/tutorials/cloud-save-sync.html">resep hemat</a> untuk format, migrasi, dan dokumen yang lebih besar.</p>
+<p>Memilih pemutaran yang tidak terlacak akan membuang token pemain game dan menghentikan pembaruan latar belakang. Tidak ada awan
+penyimpanan, pencapaian, papan peringkat, atau penulisan kemajuan lokal terjadi. Memilih akun bermain lagi menggunakan
+masuk untuk mendapatkan token baru.</p>
+<h2 id="5-adapt-it-to-your-game">5. Sesuaikan dengan permainan Anda</h2>
+<p>Ganti tombol bintang dan skema kemajuan dengan gameplay Anda. Simpan pilihan entri, token
+penangkapan, penerimaan persyaratan eksplisit, aturan muat sebelum penyimpanan, penanganan kesalahan, dan status penyimpanan.
+Deklarasikan tindakan keyboard dalam manifes dan baca <a href="/id/docs/api/games.html#per-player-control-bindings">mengontrol API</a>
+ketika game Anda membutuhkan rebinding. Masukkan preferensi volume dan grafis <a href="/id/docs/api/games.html#per-player-game-settings">pengaturan</a>.</p>
+<p>Untuk hasil kompetitif multipemain atau tervalidasi, tambahkan <a href="/id/docs/choosing-an-integration.html">skrip atau wadah</a>.
+Penghitung cloud mulai cepat ini adalah kemajuan milik klien, bukan bukti skor yang sah.</p>
+<table>
+<thead>
+<tr>
+<th>Mengajukan</th>
+<th>Tujuan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index.html</code>, <code>style.css</code></td>
+<td>Entri, persyaratan, gameplay, dan UI status yang dapat diakses</td>
+</tr>
+<tr>
+<td><code>app.js</code></td>
+<td>Mode masuk, persetujuan eksplisit, validasi kemajuan, pos pemeriksaan, konflik</td>
+</tr>
+<tr>
+<td><code>starhermit-sdk.js</code></td>
+<td>Pengambilan token peluncuran, proses masuk yang dihosting, pembaruan token</td>
+</tr>
+<tr>
+<td><code>cloud-save-store.js</code></td>
+<td>Resep pemuatan JSON mentah/penyimpanan bersyarat</td>
+</tr>
+<tr>
+<td><code>starhermit.txt</code></td>
+<td>Metadata penerbitan publik</td>
+</tr>
+</tbody>
+</table>
+<p>Melihat <a href="/id/docs/credentials.html">kredensial</a>, <a href="/id/docs/api/conventions.html">konvensi API</a>, Dan
+<a href="/id/docs/troubleshooting.html">pemecahan masalah</a> ketika permintaan berperilaku berbeda dari yang diharapkan.</p>
+
+{% endraw %}

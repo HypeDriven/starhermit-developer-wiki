@@ -9,6 +9,11 @@ Pages over this repo (`CNAME`; Jekyll converts `docs/x.md` to `/docs/x.html`). `
 applies the shared granite layout in `_layouts/wiki.html`, with CSS/JS under `assets/`.
 No application build or CI — pushing the repository publishes it.
 
+English Markdown is the source of truth. Nine static machine-translated locales live under `l10n/`,
+with UI data in `_data/locales.json` and localized SVGs in `docs/images/<language>/`. After changing
+public prose, run `npm run localize:refresh` (sends prose to Google Translate); use `npm run localize`
+for offline regeneration from `scripts/localization-cache.json`. Do not edit generated pages directly.
+
 It documents the *public contract* of `../starhermit` as an integration guide for any game or external
 client. `../starhermit-chess` is the reference example used throughout; it is an illustration, not the
 subject.

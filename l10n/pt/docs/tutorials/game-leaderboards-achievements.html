@@ -1,0 +1,331 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Tutorial: tabelas de classificação e conquistas para o seu jogo"
+source_url: "/docs/tutorials/game-leaderboards-achievements.html"
+source_path: "docs/tutorials/game-leaderboards-achievements.md"
+source_hash: "96ac3993941c25c39514f47fc1c97e41e66138bc4e9b8d819a8bb8bb12108f31"
+translation: "machine"
+permalink: "/pt/docs/tutorials/game-leaderboards-achievements.html"
+---
+{% raw %}
+<h1 id="tutorial-leaderboards-and-achievements-for-your-game">Tutorial: tabelas de classificação e conquistas para o seu jogo</h1>
+<p>Se você possui um jogo no StarHermit, você é o editor dele. Você pode dar <strong>tabelas de classificação</strong> (pontuação alta,
+corrida mais rápida, sequência mais longa) e <strong>conquistas</strong> sem uma conta de editor ou qualquer
+permissão. Possuir o jogo é tudo o que você precisa.</p>
+<p>Existe uma regra por trás de tudo nesta página: <strong>você os define, o servidor do seu jogo escreve
+eles.</strong> O cliente de um jogador nunca pode postar uma pontuação ou reivindicar uma conquista por isso, e seu servidor deve validar a jogabilidade que os rendeu. Recusando envios diretos de API
+por si só não impede um cliente modificado de inventar eventos de jogo. É por isso que o jogo precisa de um back-end confiável: um
+<code>server=</code> roteiro ou um <code>container.image=</code> em <a href="/pt/docs/starhermit-txt.html"><code>starhermit.txt</code></a>.</p>
+<p>Este tutorial foi desenvolvido para um pequeno jogo de arcade, <em>Colecionador de estrelas</em>: uma corrida termina quando o jogador
+trava e tem um total de pontos e um tempo de execução.</p>
+<ol>
+<li><a href="#before-you-start">Antes de começar</a></li>
+<li><a href="#1-create-the-leaderboards">Crie as tabelas de classificação</a></li>
+<li><a href="#2-create-the-achievements">Crie as conquistas</a></li>
+<li><a href="#3-post-scores-and-unlock-achievements-from-your-script">Publique pontuações e desbloqueie conquistas do seu script</a></li>
+<li><a href="#3b-the-same-from-a-container">O mesmo de um contêiner</a></li>
+<li><a href="#4-show-them-in-your-game">Mostre-os em seu jogo</a></li>
+<li><a href="#5-look-after-them">Cuide deles</a></li>
+</ol>
+<h2 id="before-you-start">Antes de começar</h2>
+<p>Você precisa de:</p>
+<ul>
+<li><strong>Um jogo com back-end de servidor</strong> que você possui: aquele que você adicionou do seu próprio repositório, carregou
+como uma pasta ou <a href="/pt/docs/tutorials/claim-existing-game.html">reivindicado</a>. Um jogo somente para navegador responde <code>409</code> para cada chamada
+abaixo, com uma mensagem dizendo o porquê.</li>
+<li><strong>Um token de acesso de usuário completo</strong>, não o token de lançamento de um jogo. Os tokens de lançamento são limitados ao jogo
+superfície do jogador e não consegue alcançar <code>/me/...</code>.</li>
+<li><strong>ID do seu jogo</strong> (também é seu <code>&lt;id&gt;.starhermit.com</code> endereço):</li>
+</ul>
+<pre><code class="language-bash">ACCESS_TOKEN='your-full-user-access-token'
+API=https://api.starhermit.com
+
+curl -s "$API/api/v1/me/github-games" -H "Authorization: Bearer $ACCESS_TOKEN" |
+  jq '.[] | {id, displayName, gameSlug}'
+</code></pre>
+<pre><code class="language-bash">GAME_ID='the-id-from-above'
+</code></pre>
+<p><code>gameSlug</code> é como seu cliente chama o jogo <code>/api/v1/games/{slug}/...</code>. Cada jogo que você adicionou
+ou carregado tem um jogo somente para navegador incluído, portanto, não informa se existe um servidor:
+<code>GET /api/v1/games/{slug}</code> faz - ele responde <code>404</code> até que o jogo tenha um back-end.</p>
+<h2 id="1-create-the-leaderboards">1. Crie as tabelas de classificação</h2>
+<p>Star Collector ganha dois tabuleiros: mais pontos (quanto maior, melhor) e corrida mais rápida até 100 pontos (menor
+é melhor).</p>
+<pre><code class="language-bash">curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/leaderboards" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "high-score", "name": "High score",
+        "scoreType": "integer", "sortDirection": "desc",
+        "minScore": 0, "maxScore": 1000000 }'
+
+curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/leaderboards" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "fastest-100", "name": "Fastest to 100",
+        "scoreType": "time-ms", "sortDirection": "asc" }'
+</code></pre>
+<p>Cada chamada retorna <code>201</code> e o conselho, incluindo seus <code>id</code> e <code>key</code>. Seu servidor usa o <strong>chave</strong>,
+então escolha-o com cuidado. A chave, <code>scoreType</code> e <code>sortDirection</code> não pode ser alterado posteriormente.</p>
+<table>
+<thead>
+<tr>
+<th><code>scoreType</code></th>
+<th>Aceita</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>integer</code></td>
+<td>números inteiros</td>
+</tr>
+<tr>
+<td><code>decimal</code></td>
+<td>qualquer número</td>
+</tr>
+<tr>
+<td><code>time-ms</code></td>
+<td>milissegundos inteiros e não negativos</td>
+</tr>
+</tbody>
+</table>
+<p>Definir <code>minScore</code>/<code>maxScore</code> ao que seu jogo pode realmente produzir. Uma pontuação fora deles é descartada,
+que é uma proteção barata contra um bug na lógica do seu próprio servidor.</p>
+<h2 id="2-create-the-achievements">2. Crie as conquistas</h2>
+<p>Você pode conceder conquistas ao jogo de duas maneiras e pode usar as duas ao mesmo tempo:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Declarado em código</th>
+<th>Criado por meio da API</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Onde</td>
+<td><code>game.achievements</code> em seu roteiro ou <code>/describe</code> em seu contêiner</td>
+<td><code>POST /me/github-games/{id}/achievements</code></td>
+</tr>
+<tr>
+<td>Alterado por</td>
+<td>publicando uma atualização</td>
+<td>uma chamada de API, com efeito imediato</td>
+</tr>
+<tr>
+<td>Bom para</td>
+<td>as conquistas em torno do seu código é construído</td>
+<td>adicionando ou reformulando alguns sem autorização</td>
+</tr>
+</tbody>
+</table>
+<p>Ambos os tipos são desbloqueados da mesma maneira, com o retorno da chave pelo servidor. Aqui criamos dois através
+a API:</p>
+<pre><code class="language-bash">curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/achievements" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "century", "name": "Century",
+        "description": "Collect 100 stars in one run.", "points": 10 }'
+
+curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/achievements" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "untouchable", "name": "Untouchable",
+        "description": "Reach 500 points without losing a shield.",
+        "points": 50, "secret": true }'
+</code></pre>
+<p>A <code>secret</code> a conquista permanece oculta dos jogadores até que eles a desbloqueiem.</p>
+<p>Para ver tudo o que o jogo tem, incluindo as conquistas declaradas pelo seu código, liste-as:</p>
+<pre><code class="language-bash">curl -s "$API/api/v1/me/github-games/$GAME_ID/achievements" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" | jq '.[] | {key, origin, unlocks}'
+</code></pre>
+<p><code>origin</code> é <code>declared</code> para conquistas do seu código e <code>owner</code> pelas conquistas que você criou
+aqui. Você só pode editar e excluir <code>owner</code> uns. UM <code>declared</code> um seria devolvido pelo seu próximo
+atualização, então a API recusa (<code>409</code>) e você o altera no código.</p>
+<h2 id="3-post-scores-and-unlock-achievements-from-your-script">3. Publique pontuações e desbloqueie conquistas do seu script</h2>
+<p>Seu script relata os dois tipos de resultado em seu valor de retorno. Isso pode ser feito de qualquer gancho:
+<code>createSession</code>, <code>onPlayerMessage</code> ou <code>onTick</code>.</p>
+<ul>
+<li><code>scores</code>: tecla do tabuleiro → ID do jogador → número.</li>
+<li><code>achievements</code>: ID do jogador → chaves para desbloquear.</li>
+</ul>
+<pre><code class="language-js">'use strict';
+
+function endRun(ctx, s, playerId) {
+  var run = s.runs[playerId];
+  var scores = { "high-score": {} };
+  scores["high-score"][playerId] = run.points;
+  if (run.reached100At) {
+    scores["fastest-100"] = {};
+    scores["fastest-100"][playerId] = run.reached100At - run.startedAt;
+  }
+
+  var unlocked = [];
+  if (run.stars &gt;= 100) unlocked.push("century");
+  if (run.points &gt;= 500 &amp;&amp; !run.lostShield) unlocked.push("untouchable");
+  var achievements = {};
+  achievements[playerId] = unlocked;
+
+  run.over = true;
+  return {
+    ok: true,
+    sessionState: s,
+    scores: scores,
+    achievements: achievements,
+    broadcast: [{ to: [playerId], data: { type: "run-over", points: run.points } }]
+  };
+}
+
+globalThis.game = {
+  tickRateHz: 10,
+
+  createSession(ctx) {
+    var runs = {};
+    ctx.players.forEach(function (p) {
+      runs[p.id] = { points: 0, stars: 0, lostShield: false, startedAt: ctx.now,
+                     reached100At: null, over: false };
+    });
+    return { ok: true, sessionState: { runs: runs } };
+  },
+
+  onPlayerMessage(ctx) {
+    var s = ctx.sessionState;
+    var from = ctx.message.from;
+    var run = s.runs[from];
+    var msg = ctx.message.data || {};
+    if (!run || run.over) return { ok: false, error: "No run in progress" };
+
+    // The client reports what happened; the script decides what it is worth.
+    if (msg.type === "collect") {
+      run.stars += 1;
+      run.points += 5;
+      if (run.points &gt;= 100 &amp;&amp; !run.reached100At) run.reached100At = ctx.now;
+      return { ok: true, sessionState: s };
+    }
+    if (msg.type === "shield-lost") {
+      run.lostShield = true;
+      return { ok: true, sessionState: s };
+    }
+    if (msg.type === "crash") return endRun(ctx, s, from);
+    return { ok: false, error: "Unknown command" };
+  },
+
+  onTick(ctx) { return { ok: true }; }
+};
+</code></pre>
+<p>Coisas que você faz <strong>não</strong> precisa lidar com:</p>
+<ul>
+<li><strong>Piores pontuações.</strong> Cada jogador mantém sua melhor pontuação em cada tabuleiro, julgada pela pontuação do tabuleiro.
+<code>sortDirection</code>. Relate cada corrida e a plataforma mantém o melhor.</li>
+<li><strong>Repetir desbloqueios.</strong> Desbloquear algo que um jogador já possui não adianta nada, então devolva a chave
+sempre que a condição for válida.</li>
+<li><strong>A identificação de qualquer outra pessoa.</strong> Pontuações e desbloqueios para pessoas que não estão na sessão, incluindo a IA
+assento, são ignorados.</li>
+</ul>
+<p>Chaves desconhecidas, quadros inativos e pontuações fora do intervalo são eliminados silenciosamente. Seu script não recebe
+erro para eles, então verifique suas placas uma vez, como em <a href="#4-show-them-in-your-game">seção 4</a>.</p>
+<p>Um jogo real deveria ter o servidor calculando pontos e tempos a partir de seu próprio estado autoritativo, não
+confiança <code>collect</code> mensagens como elas são. Este exemplo é curto para mostrar o relatório.
+<a href="/pt/docs/api/game-scripts.html#leaderboards">Scripts de jogos</a> tem o contrato de forma de retorno completo.</p>
+<h2 id="3b-the-same-from-a-container">3b. O mesmo de um contêiner</h2>
+<p>Um jogo contêiner envia as mesmas duas coisas em seu WebSocket de controle:</p>
+<pre><code class="language-json">{ "type": "scores", "sessionId": "…",
+  "scores": { "high-score": { "&lt;userId&gt;": 740 }, "fastest-100": { "&lt;userId&gt;": 41250 } } }
+
+{ "type": "achievements", "sessionId": "…",
+  "unlocks": { "&lt;userId&gt;": ["century"] } }
+</code></pre>
+<p><code>scores</code> também pode ser incluído em qualquer envelope de resposta do qual seu contêiner retorna <code>/sessions</code>. O
+aplicam-se as mesmas regras: apenas participantes, melhor pontuação mantida, chaves desconhecidas ignoradas. Ver
+<a href="/pt/docs/api/container-games.html#control-channel">Servidores de jogos em contêiner</a>.</p>
+<h2 id="4-show-them-in-your-game">4. Mostre-os em seu jogo</h2>
+<p>Seu cliente lê tudo com o token de lançamento que já possui. Nada aqui precisa do
+token do proprietário.</p>
+<p><strong>Encontre as placas.</strong></p>
+<pre><code class="language-js">const boards = await api(`/api/v1/games/${slug}/leaderboards`);
+// [{ id, key: "high-score", name: "High score", sortDirection: "desc", ... }, ...]
+const high = boards.find(b =&gt; b.key === "high-score");
+</code></pre>
+<p>Somente placas ativas são listadas.</p>
+<p><strong>Leia um quadro.</strong></p>
+<pre><code class="language-js">const page = await api(`/api/v1/leaderboards/${high.id}/entries?page=1&amp;pageSize=10`);
+// { items: [{ rank, username, score, ... }], total, page, pageSize }
+const friends = await api(`/api/v1/leaderboards/${high.id}/entries?friendsOnly=true&amp;pageSize=10`);
+</code></pre>
+<p>Por um <code>time-ms</code> tabuleiro, formate a pontuação como um tempo: <code>41250</code> → <code>0:41.25</code>.</p>
+<p><strong>Conquistas.</strong></p>
+<ul>
+<li><code>GET /api/v1/games/{slug}/achievements</code> lista todas as conquistas com o jogador <code>unlocked</code>
+estado. Os segredos permanecem ocultos até serem conquistados.</li>
+<li>O desbloqueio em si chega ao vivo <code>ws/v1/games</code> como
+<code>{"type":"achievement","data":{key,name,description,points,...}}</code>. Mostre um brinde quando isso acontecer.
+A chamada list no carregamento captura qualquer coisa desbloqueada enquanto o soquete estava fechado.</li>
+</ul>
+<p>Ver <a href="/pt/docs/api/achievements.html#3-the-player-is-notified-over-the-gameplay-socket">Conquistas</a> para
+o quadro.</p>
+<h2 id="5-look-after-them">5. Cuide deles</h2>
+<p><strong>Renomeie um tabuleiro ou altere seus limites.</strong></p>
+<pre><code class="language-bash">curl -s -X PUT "$API/api/v1/me/github-games/$GAME_ID/leaderboards/$BOARD_ID" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "name": "All-time high score", "maxScore": 2000000 }'
+</code></pre>
+<p>Novos limites aplicam-se apenas a novas pontuações.</p>
+<p><strong>Aposente um tabuleiro, mas mantenha suas pontuações.</strong> Enviar <code>{ "isActive": false }</code>. A diretoria deixa de aceitar
+pontua e desaparece da lista do jogo. Suas entradas ainda podem ser lidas por id.</p>
+<p><strong>Redefinir de acordo com uma programação.</strong> Dê um quadro <code>"resetSchedule": "daily"</code>, <code>"weekly"</code> ou <code>"monthly"</code> (em
+criar, ou mais tarde com <code>PUT</code>) e recomeça às 00:00 UTC de cada período — perfeito para um "isso
+melhor da semana" placa ao lado de uma de todos os tempos. Nada a fazer em seu roteiro: relate as pontuações normalmente e
+a primeira pontuação de cada jogador em um novo período conta. Ver
+<a href="/pt/docs/api/leaderboards.html#reset-schedules">Redefinir programações</a>.</p>
+<p><strong>Comece uma nova temporada manualmente.</strong> Para uma temporada única, em vez de um cronograma, crie um novo quadro
+(<code>high-score-s2</code>), aponte seu script para ele e retire o antigo.</p>
+<p><strong>Exclua um quadro.</strong> <code>DELETE .../leaderboards/{id}</code> remove o quadro e todas as suas entradas, e
+não pode ser desfeito.</p>
+<p><strong>Edite uma conquista.</strong> <code>PUT .../achievements/{achievementId}</code> com qualquer um <code>name</code>,
+<code>description</code>, <code>icon</code>, <code>secret</code> e <code>points</code>. A chave nunca muda.</p>
+<p><strong>Exclua uma conquista.</strong> Isso funciona apenas para aquele que você criou e que ninguém desbloqueou ainda.
+As conquistas conquistadas são permanentes.</p>
+<p><strong>Mova uma conquista para o código.</strong> Declare a mesma chave em <code>game.achievements</code> e publicar. O
+declaração assume a conquista existente e os jogadores que a possuem a mantêm.</p>
+<table>
+<thead>
+<tr>
+<th>Resposta</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>404</code></td>
+<td>O jogo não é seu, ou o tabuleiro ou conquista não pertence a ele</td>
+</tr>
+<tr>
+<td><code>409</code> "… back-end do servidor…"</td>
+<td>O jogo não tem <code>server=</code> ou <code>container.image=</code></td>
+</tr>
+<tr>
+<td><code>409</code> "já tem…"</td>
+<td>A chave é tomada, por um conselho ou por uma conquista declarada ou criada</td>
+</tr>
+<tr>
+<td><code>409</code> "declarado pelo servidor do jogo"</td>
+<td>Altere essa conquista em seu código</td>
+</tr>
+<tr>
+<td><code>409</code> "já desbloqueado"</td>
+<td>Os jogadores o seguram, então não pode ser excluído</td>
+</tr>
+<tr>
+<td><code>400</code></td>
+<td>Uma chave com outros caracteres, um nome ausente ou <code>minScore</code> &gt; <code>maxScore</code></td>
+</tr>
+</tbody>
+</table>
+<p>Limites: 2.048 tabelas de classificação e 200 conquistas criadas por jogo, além de até 100 declaradas.</p>
+<h2 id="checklist">Lista de verificação</h2>
+<ul>
+<li>[ ] O jogo tem um <code>server=</code> roteiro ou <code>container.image=</code>, e <code>gameSlug</code> está definido em <code>GET /me/github-games</code>.</li>
+<li>[] Cada placa possui uma chave estável e o direito <code>scoreType</code> e <code>sortDirection</code> (eles não podem mudar mais tarde).</li>
+<li>[] O servidor retorna <code>scores</code> e <code>achievements</code> (script) ou envia as mensagens de controle (contêiner), elaboradas a partir do estado autoritativo.</li>
+<li>[ ] O cliente encontra pranchas com <code>GET /games/{slug}/leaderboards</code>, nunca codifica seus IDs e lê entradas por ID.</li>
+<li>[] O cliente carrega <code>GET /games/{slug}/achievements</code> e faz um brinde no <code>achievement</code> quadro.</li>
+<li>[ ] Placas antigas são retiradas com <code>isActive: false</code> em vez de excluído, a menos que você realmente queira que as pontuações desapareçam.</li>
+</ul>
+
+{% endraw %}

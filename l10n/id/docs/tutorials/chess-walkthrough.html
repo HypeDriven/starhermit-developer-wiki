@@ -1,0 +1,357 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Panduan integrasi: membuat game di StarHermit"
+source_url: "/docs/tutorials/chess-walkthrough.html"
+source_path: "docs/tutorials/chess-walkthrough.md"
+source_hash: "7821c7dca4a5960c279cb38770c02c54213ef04443d3147dac75b7d222022dec"
+translation: "machine"
+permalink: "/id/docs/tutorials/chess-walkthrough.html"
+---
+{% raw %}
+<h1 id="integration-walkthrough-building-a-game-on-starhermit">Panduan integrasi: membuat game di StarHermit</h1>
+<p>Halaman ini menjelaskan siklus hidup penuh pengintegrasian game dengan StarHermit, langkah demi langkah — publikasikan, luncurkan, menu, perjodohan, mainkan, obrolan, suara, peringkat, putar ulang. Semua yang ditampilkan berlaku untuk <strong>setiap</strong> game: game Anda menggantikan slugnya sendiri, perintahnya sendiri, dan skrip aturannya sendiri.</p>
+<p>Contoh yang berjalan adalah implementasi referensi catur sumber terbuka, <a href="https://github.com/HypeDriven/starhermit-chess">catur pertapa bintang</a>: permainan catur korespondensi (24 jam per gerakan, diberi peringkat elo) yang dibuat sebagai permainan browser statis tanpa build dalam vanilla HTML/JS/CSS. Untuk setiap langkah, panduan ini menunjukkan panggilan persis yang dilakukan klien game dan file dalam repo referensi yang melakukan panggilan tersebut. Di mana pun nilai khusus catur muncul — UUID permainan referensi, perintah gerakan, pengkodean papan, dan sebagainya "hal" AI, batas waktu perpindahan 24 jam — itu adalah contoh nilai yang ditentukan oleh game Anda sendiri dalam skripnya sendiri.</p>
+<p>Bacalah di samping halaman referensi API yang ditautkannya. Daftar periksa di bagian akhir merangkum semuanya menjadi apa yang perlu ditiru oleh game Anda sendiri.</p>
+<h2 id="1-anatomy-of-a-platform-hosted-game">1. Anatomi game yang dihosting platform</h2>
+<p>Game platform bernaskah adalah situs statis biasa ditambah satu file aturan. Implementasi referensi catur, misalnya, tidak memiliki bundler, tidak memiliki kerangka kerja, tidak ada langkah pembuatan:</p>
+<table>
+<thead>
+<tr>
+<th>Mengajukan</th>
+<th>Peran</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index.html</code></td>
+<td>Seluruh halaman: papan, menu, obrolan, dan UI suara</td>
+</tr>
+<tr>
+<td><code>app.js</code></td>
+<td>Bootstrap aplikasi, menu utama, perjodohan, undangan, pemutaran ulang, profil</td>
+</tr>
+<tr>
+<td><code>net.js</code></td>
+<td>Lapisan HTTP: jalur permainan tercakup, token peluncuran, penyegaran token</td>
+</tr>
+<tr>
+<td><code>game.js</code></td>
+<td>Pengontrol dalam game: gameplay WebSocket, obrolan, suara</td>
+</tr>
+<tr>
+<td><code>ui.js</code></td>
+<td>Rendering papan dan menu</td>
+</tr>
+<tr>
+<td><code>style.css</code></td>
+<td>Gaya</td>
+</tr>
+<tr>
+<td><code>server.js</code></td>
+<td>Aturannya — lihat di bawah</td>
+</tr>
+<tr>
+<td><code>starhermit.txt</code></td>
+<td>Publikasikan manifes</td>
+</tr>
+</tbody>
+</table>
+<p>Dalam implementasi referensi, <code>server.js</code> patut mendapat perhatian khusus. Dia <strong>keduanya</strong> hal-hal sekaligus:</p>
+<ul>
+<li>Itu <strong>skrip otoritatif server</strong> platform mengeksekusi (melalui host Jint-nya) dengan mengekspos <code>globalThis.game</code>. Setiap gerakan divalidasi di sini, di server, sesuai kontrak <a href="/id/docs/api/game-scripts.html">game-scripts.md</a>.</li>
+<li>milik klien <strong>mesin aturan bersama</strong>, diekspos sebagai <code>globalThis.chessRules</code>, yang digunakan browser untuk rendering papan, memindahkan pratinjau, dan memutar ulang pemutaran.</li>
+</ul>
+<p>Satu file, satu sumber kebenaran, <strong>nol aturan otoritas pada klien</strong>. Klien game yang mengikuti pola ini tidak pernah memutuskan apakah suatu perpindahan sah atau tidak — ia akan menampilkan apa yang disiarkan oleh server. Ini adalah satu-satunya ide arsitektur terpenting dalam permainan platform bernaskah, dan implementasi referensi menunjukkannya.</p>
+<h2 id="2-publishing-your-game">2. Publikasikan game Anda</h2>
+<p>Penerbitan game apa pun dimulai dengan <code>starhermit.txt</code> bermanifestasi di root repo. Ini menyatakan permainan itu <code>name</code>, <code>launch</code> titik masuk, <code>owner</code>, Dan <code>server</code> naskah. Opsional <code>cover=</code> adalah karya seni di ubin perpustakaan — lihat <a href="/id/docs/starhermit-txt.html#game-with-cover-art">Itu <code>starhermit.txt</code> tampak</a>. Manifes implementasi referensi, misalnya:</p>
+<pre><code class="language-text">name=StarHermit Chess
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6  # StarHermit user ID, not username/nickname
+server=server.js
+</code></pre>
+<p>Gunakan yang tidak dapat diubah <code>id</code> dari <code>GET /api/v1/me</code> untuk <code>owner</code>; nama pengguna dan nama panggilan ditampilkan
+nilai-nilai dan tidak boleh digunakan sebagai pengidentifikasi kepemilikan nyata.</p>
+<p>Platform mengkloning repo, menyajikan file statis di <code>&lt;slug&gt;.starhermit.com</code> — slug adalah cairan yang diberikan platform untuk game tersebut, bukan nama yang Anda pilih; permainan referensinya adalah <code>83fd04b1-3cbe-4b09-a251-3733ad4b9d94</code>, jadi dapat dimainkan secara langsung <a href="https://83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com">83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com</a> — dan proxy <code>/api</code> Dan <code>/ws</code> ke bagian belakang <strong>asal yang sama</strong>. Satu keputusan tersebut menghapus seluruh kategori pekerjaan: tanpa CORS, tanpa konfigurasi berbasis API, tanpa deteksi lingkungan — klien game hanya menggunakan jalur relatif.</p>
+<p>Aliran penuh: <a href="/id/docs/api/github-games.html">github-games.md</a> Dan <a href="/id/docs/api/publisher.html">publisher.md</a>.</p>
+<h2 id="3-launch-and-authentication">3. Peluncuran dan otentikasi</h2>
+<p>Alur referensi catur menerima kredensial dari peluncur platform:</p>
+<ol>
+<li>Peluncur memanggil <code>POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/launch-token</code> (ditunjukkan dengan UUID game referensi; gantikan milik Anda sendiri) dengan JWT platform lengkap pengguna.</li>
+<li>Itu akan kembali berumur pendek, <strong>lingkup permainan</strong> token:</li>
+</ol>
+<pre><code class="language-json">{ "token": "&lt;jwt&gt;", "expiresInSeconds": 3600 }
+</code></pre>
+<ol start="3">
+<li>Ini membuka permainan di <code>index.html#game_token=&lt;jwt&gt;</code>, opsional dengan <code>&amp;session_id=&lt;guid&gt;</code> ditambahkan untuk tautan dalam undangan.</li>
+</ol>
+<p>Dalam implementasi referensi, klien membaca hash <strong>sekali</strong>, lalu kupas dengan <code>history.replaceState</code> jadi token tidak pernah tertinggal di bilah URL atau riwayat (<code>app.js</code>, <code>App.init</code>). Ini menerjemahkan payload JWT untuk dua klaim:</p>
+<ul>
+<li><code>sub</code> — id pengguna</li>
+<li><code>game_scope</code> — siput permainan</li>
+</ul>
+<p>Klaim kedua itu penting: <strong>klien game tidak boleh melakukan hard-code pada slugnya</strong>. Implementasi referensi membangun setiap URL API sebagai <code>/api/v1/games/&lt;slug&gt;</code> ditambah akhiran (<code>net.js</code>, <code>Net.gamePath</code>), jadi kode yang sama berfungsi untuk game apa pun, slug apa pun, penerapan apa pun.</p>
+<p><strong>Menyegarkan.</strong> Token yang dicakup diizinkan untuk melakukan panggilan ulang <code>launch-token</code> untuk permainannya sendiri, sehingga klien biasanya menyegarkan secara berkala — implementasi referensi menyegarkan setiap 45 menit (<code>net.js</code>, <code>Net.startRefresh</code>), dengan nyaman dalam masa hidup 60 menit.</p>
+<p>Sebuah permainan yang dibuka secara langsung malah bisa menawarkan <a href="/id/docs/api/auth.html#sign-in-from-a-directly-opened-browser-game">masuk browser</a>,
+yang kembali <code>#access_token</code> daripada peluncurnya <code>#game_token</code>. Tangani kedua jalur masuk jika
+kamu mendukung keduanya. Perpanjang menggunakan masa pakai yang dikembalikan dan patuhi rantai perpanjangan 12 jam default
+langit-langit. A <code>403 terms_acceptance_required</code> mengharuskan pemain untuk melakukannya <a href="/id/docs/api/profile.html#terms-acceptance">terima melalui akun mereka</a>;
+atau tampilkan persyaratan dalam game dan terima dengan token peluncuran pemain. Masuk lagi tidak
+penerimaan rekaman.</p>
+<p>Referensi autentikasi: <a href="/id/docs/api/auth.html">auth.md</a>, <a href="/id/docs/api/games.html">games.md</a>.</p>
+<h2 id="4-loading-the-main-menu">4. Memuat menu utama</h2>
+<p>Menu permainan biasanya dibuka dengan sejumlah kecil GET melawan slugnya sendiri. Dalam implementasi referensi ini adalah <code>refreshMenu</code> di dalam <code>app.js</code>:</p>
+<p><strong>Info permainan + statistik saya:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94
+</code></pre>
+<pre><code class="language-json">{
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "name": "StarHermit Chess",
+  "enabled": true,
+  "leaderboardId": "&lt;guid&gt;",
+  "maxConcurrentSessionsPerPlayer": 20,
+  "me": {
+    "userId": "&lt;guid&gt;",
+    "elo": 1420,
+    "wins": 31,
+    "losses": 18,
+    "draws": 4,
+    "activeSessionCount": 3
+  }
+}
+</code></pre>
+<p>Itu <code>me</code> blok adalah seluruh kartu pemain — elo, rekaman, dan berapa banyak sesi bersamaan yang diizinkan yang digunakan (20 dalam contoh catur).</p>
+<p><strong>Sesi saya:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/mine
+</code></pre>
+<pre><code class="language-json">[
+  {
+    "sessionId": "&lt;guid&gt;",
+    "status": "active",
+    "players": [ /* ... */ ],
+    "createdAt": "…",
+    "finishedAt": null,
+    "myTurn": true,
+    "deadline": 1784642591000
+  }
+]
+</code></pre>
+<p><code>myTurn</code> Dan <code>deadline</code> Inilah yang membuat daftar sesi permainan korespondensi berguna — pemain melihat sekilas permainan mana yang menunggunya dan kapan setiap gerakan harus dilakukan.</p>
+<p><strong>Papan peringkat teman:</strong></p>
+<pre><code class="language-http">GET /api/v1/leaderboards/{leaderboardId}/entries?friendsOnly=true&amp;page=1&amp;pageSize=10
+</code></pre>
+<p>menggunakan <code>leaderboardId</code> dari respons info game.</p>
+<p><strong>Tayangan ulang terkini:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/mine?limit=10
+</code></pre>
+<p><strong>Undangan yang tertunda:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites
+</code></pre>
+<p>Referensi: <a href="/id/docs/api/games.html">games.md</a>, <a href="/id/docs/api/leaderboards.html">leaderboards.md</a>.</p>
+<h2 id="5-getting-players-into-a-session--three-ways">5. Mengajak pemain mengikuti suatu sesi — ada tiga cara</h2>
+<p>Panduan ini menggunakan perjodohan, penerimaan undangan, dan latihan AI untuk membuat sesi. Permainan yang memerlukan lobi dapat digunakan <a href="/id/docs/api/realtime.html">ruangan waktu nyata</a>, yang alur awalnya juga dapat membuat sesi otoritatif yang terikat.</p>
+<h3 id="a-matchmaking">A. Penjaruman</h3>
+<p>Dalam implementasi referensi, <code>App.startMatchmaking</code> di dalam <code>app.js</code>:</p>
+<pre><code class="language-http">POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking
+</code></pre>
+<p>Responsnya berupa tiket:</p>
+<pre><code class="language-json">{ "ticketId": "&lt;guid&gt;", "status": "queued" }
+</code></pre>
+<p>atau pertandingan langsung:</p>
+<pre><code class="language-json">{ "status": "matched", "sessionId": "&lt;guid&gt;" }
+</code></pre>
+<p>Saat mengantri, klien melakukan polling pada titik akhir pencocokan — jajak pendapat implementasi referensi <code>GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking</code> setiap 3 detik, dan <code>DELETE /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/matchmaking</code> membatalkan tiketnya. Klien referensi juga memastikan pemain tidak pernah terjebak menatap pemintal: setelah 30 detik tak tertandingi, a <strong>"Bermain melawan hal"</strong> tombol muncul ("hal" adalah lawan AI bawaan dari contoh catur — lihat §12), dan <code>POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/ai</code> kembali <code>{ "sessionId" }</code>.</p>
+<h3 id="b-friend-invite">B. Undangan teman</h3>
+<p>Dalam implementasi referensi, <code>App.inviteFriend</code> di dalam <code>app.js</code>. Daftar teman pertama — titik akhir ini secara eksplisit diizinkan untuk token dalam cakupan game:</p>
+<pre><code class="language-http">GET /api/v1/me/friends
+</code></pre>
+<p>Kemudian kirimkan undangannya:</p>
+<pre><code class="language-http">POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites
+{ "toUserId": "&lt;guid&gt;" }
+</code></pre>
+<p>Penerima menerima (atau menolak) dari kliennya sendiri:</p>
+<pre><code class="language-http">POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/{id}/accept   → { "sessionId": "&lt;guid&gt;" }
+POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/{id}/decline  → 204
+</code></pre>
+<p>Menerima itulah yang menciptakan sesi. Itu <code>&amp;session_id=</code> launch-hash deep-link (§3) langsung memasukkan pemain yang diundang ke dalamnya.</p>
+<p>Undangan pertemanan hanya menjangkau orang-orang yang sudah berteman. Untuk menarik seseorang yang tidak (atau tidak berada di platform sama sekali), implementasi referensi juga menawarkan a <strong>Bagikan tautan undangan</strong> tombol (<code>App.shareInviteLink</code>): satu baris bangunan string yang disalin</p>
+<pre><code>https://dashboard.starhermit.com/game-invite/&lt;Net.userId&gt;/&lt;slug&gt;
+</code></pre>
+<p>ke papan klip. Dasbor web menangani semua yang dibutuhkan penerima — login, permintaan pertemanan, nama panggilan, meluncurkan game — lalu mengirimkan undangan bermain kembali ke pembagi, sehingga masuk ke daftar undangan yang sama. Melihat <a href="/id/docs/api/games.html#share-links-invite-by-url">Bagikan tautan</a> untuk kontrak penuh.</p>
+<h3 id="c-the-rule">C. Aturannya</h3>
+<p>Sesi dibuat dengan perjodohan, penerimaan undangan, <code>sessions/ai</code>, atau memulai ruang waktu nyata dengan
+ujung belakang server. Untuk lobi dengan kursi, gunakan <a href="/id/docs/api/realtime.html">API ruangan waktu nyata</a>.</p>
+<h2 id="6-playing-over-the-gameplay-websocket">6. Memainkan gameplay WebSocket</h2>
+<p>Putaran pemutarannya sama untuk setiap game yang diberi skrip: ambil sesi, buka soket, render siaran, kirim perintah. Dalam implementasi referensi, ini ada di dalamnya <code>game.js</code>, <code>GameController</code>.</p>
+<p><strong>Ambil sesi:</strong></p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/{sessionId}
+</code></pre>
+<pre><code class="language-json">{
+  "sessionId": "&lt;guid&gt;",
+  "status": "active",
+  "players": [ /* ... */ ],
+  "createdAt": "…",
+  "finishedAt": null,
+  "chatConversationId": "&lt;guid&gt;",
+  "result": null
+}
+</code></pre>
+<p>Catatan <code>chatConversationId</code> — Anda memerlukannya untuk obrolan (§7) dan suara (§8).</p>
+<p><strong>Hubungkan soket gameplay:</strong></p>
+<pre><code class="language-text">ws(s)://&lt;host&gt;/ws/v1/games?sessionId=&lt;id&gt;&amp;access_token=&lt;token&gt;
+</code></pre>
+<p>Pada <code>open</code>, klien segera mengirimkan perintah sinkronisasi:</p>
+<pre><code class="language-json">{ "type": "cmd", "data": { "type": "sync" } }
+</code></pre>
+<p>Pada setiap pemutusan sambungan, ia akan tersambung kembali dengan backoff eksponensial dari 1 detik hingga batas atas 30 detik, dan <strong>mengirim ulang sinkronisasi pada setiap pembukaan</strong>. Perintah sinkronisasi membuat koneksi ulang menjadi tanpa status dan idempoten: apa pun yang dilewatkan klien, server akan menyiarkan ulang.</p>
+<p><strong>Amplop.</strong> Setiap frame adalah amplop JSON tipis:</p>
+<ul>
+<li>Klien → server: <code>{"type":"cmd","data":&lt;command&gt;}</code></li>
+<li>Server → klien: <code>{"type":"game","data":…}</code>, <code>{"type":"error","error":…}</code>, <code>{"type":"presence","userId","online"}</code></li>
+</ul>
+<p><strong>Perintah permainan ditentukan oleh skrip aturan Anda sendiri.</strong> Perintah contoh catur, misalnya (the <code>data</code> muatan a <code>cmd</code> bingkai):</p>
+<pre><code class="language-json">{ "type": "sync" }
+{ "type": "move", "from": "e2", "to": "e4", "promo": "q" }
+{ "type": "resign" }
+{ "type": "offer-draw" }
+{ "type": "accept-draw" }
+{ "type": "decline-draw" }
+</code></pre>
+<p>Dalam contoh catur, <code>promo</code> hanya hadir pada gerakan promosi.</p>
+<p><strong>Siaran juga ditentukan oleh skrip.</strong> Siaran contoh catur (the <code>data</code> muatan a <code>game</code> bingkai):</p>
+<ul>
+<li><code>state</code> — cuplikan lengkapnya:</li>
+</ul>
+<pre><code class="language-json">{
+  "type": "state",
+  "white": "&lt;userId&gt;",
+  "black": "&lt;userId&gt;",
+  "ratings": { "white": 1420, "black": 1388 },
+  "board": "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr",
+  "turn": "w",
+  "moves": [ { "from": "e2", "to": "e4", "promo": null, "san": "e4", "at": "…" } ],
+  "status": "active",
+  "result": null,
+  "deadline": 1784642591000,
+  "drawOfferBy": null,
+  "ai": false,
+  "aiName": null
+}
+</code></pre>
+<p>Itu <code>board</code> adalah string 64 karakter, <code>index = rank * 8 + file</code> dengan <code>a1 = 0</code>, menggunakan <code>PNBRQK</code> untuk putih, <code>pnbrqk</code> untuk hitam, <code>.</code> untuk kotak kosong — pengkodean khusus catur; game Anda menentukan bentuk statusnya sendiri.</p>
+<ul>
+<li><code>moved</code> – satu gerakan diterapkan.</li>
+<li><code>draw-offered</code> / <code>draw-declined</code>.</li>
+<li><code>game-over</code> — <code>{ "result": { "kind", "reason", "at" }, "view" }</code>, Di mana <code>reason</code> nilai ditentukan oleh skrip; contoh catur yang digunakan <code>checkmate</code>, <code>stalemate</code>, <code>threefold-repetition</code>, <code>fifty-move-rule</code>, <code>insufficient-material</code>, <code>resignation</code>, <code>agreement</code>, <code>timeout</code>, <code>timeout-no-moves</code>.</li>
+</ul>
+<p><strong>Identitas tidak pernah diambil dari muatan.</strong> Klien mengirimkan perintah tanpa id pengguna, dan skrip tidak pernah mempercayai perintah langsung — platform meneruskan pengirim yang diautentikasi ke skrip. Tidak ada yang perlu dipalsukan.</p>
+<p>Melihat <a href="/id/docs/api/game-scripts.html">game-scripts.md</a> untuk kontrak naskah di balik semua ini.</p>
+<h2 id="7-in-game-chat">7. Obrolan dalam game</h2>
+<p>Setiap sesi membawa a <code>chatConversationId</code> (§6) yang dapat digunakan klien game untuk obrolan dalam game. Dalam implementasi referensi, <code>initChat</code> di dalam <code>game.js</code> menggunakannya seperti ini:</p>
+<pre><code class="language-http">GET  /api/v1/chat/conversations/{id}/messages?page=1&amp;pageSize=50
+POST /api/v1/chat/conversations/{id}/messages
+     { "content": "good luck!" }
+</code></pre>
+<p>Soket obrolan waktu nyata <code>ws/v1/chat</code> adalah <strong>diblokir untuk token cakupan game</strong>. Klien referensi mencobanya sekali, ditolak, dan kembali melakukan polling pada titik akhir REST setiap 5 detik — rencanakan untuk melakukan polling dari awal di game Anda sendiri.</p>
+<p>Obrolan berfungsi meskipun kedua pemain mungkin bukan teman: percakapan sesi (ketik <code>"game"</code>) dibuat dengan kedua pemain sebagai peserta, jadi aturan izin obrolan biasa sudah dipenuhi.</p>
+<p>Referensi: <a href="/id/docs/api/chat.html">chat.md</a>.</p>
+<h2 id="8-voice">8. Suara</h2>
+<p>Suara bersifat opt-in, dan klien game biasanya menyimpannya <strong>mati secara default</strong>. Implementasi referensi menanganinya <code>game.js</code>, <code>VoiceController</code>. Saat pemain mengaktifkannya:</p>
+<ol>
+<li>Temukan atau buat ruangan yang terikat dengan percakapan sesi:</li>
+</ol>
+<pre><code class="language-http">GET  /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;
+POST /api/v1/voice/rooms
+     { "conversationId": "&lt;chatConversationId&gt;" }
+</code></pre>
+<ol start="2">
+<li>Bergabunglah:</li>
+</ol>
+<pre><code class="language-http">POST /api/v1/voice/rooms/{roomId}/join
+</code></pre>
+<ol start="3">
+<li>Hubungkan soket suara:</li>
+</ol>
+<pre><code class="language-text">ws(s)://&lt;host&gt;/ws/v1/voice?roomId=&lt;id&gt;&amp;access_token=&lt;token&gt;
+</code></pre>
+<p>Media adalah <strong>WebRTC peer-to-peer dengan negosiasi sempurna</strong>; soket hanya membawa sinyal dan kontrol:</p>
+<ul>
+<li>Sinyal: <code>{"type":"rtc","to":&lt;userId&gt;,"payload":{"sdp":…}}</code> atau <code>{"type":"rtc","to":&lt;userId&gt;,"payload":{"ice":…}}</code></li>
+<li>Kontrol: <code>{"type":"mute","muted":…}</code>, <code>{"type":"speaking","speaking":…}</code></li>
+<li>Acara server: <code>voice.roster</code>, <code>voice.participant_joined</code>, <code>voice.participant_left</code>, <code>voice.mute_changed</code>, <code>voice.speaking</code>, <code>voice.rtc</code></li>
+</ul>
+<p>Jika P2P gagal, cadangannya adalah frame biner opus yang dikirimkan ke server: id pengirim 16 byte diikuti dengan payload audio.</p>
+<p>Suara adalah <strong>dinonaktifkan di game AI</strong> — klien referensi memeriksa <code>view.ai</code> dari siaran negara dan tidak pernah menawarkan sakelar.</p>
+<p>Referensi: <a href="/id/docs/api/voice.html">voice.md</a>.</p>
+<h2 id="9-ratings-and-leaderboard">9. Peringkat dan papan peringkat</h2>
+<p>Klien game tidak pernah mengirimkan skor. Saat pertandingan berakhir, <strong>naskah</strong> kembali <code>eloUpdates</code> dan itu <strong>platform</strong> mempublikasikannya ke papan peringkat game. Klien tidak pernah bisa menulis entri papan peringkat secara langsung; server juga harus memvalidasi gameplay di balik pembaruan peringkatnya.</p>
+<p>Oleh karena itu, sisi klien sepele: baca entri (§4) dan render, seperti yang dilakukan implementasi referensi. Melihat <a href="/id/docs/api/leaderboards.html">leaderboards.md</a>.</p>
+<h2 id="10-replays">10. Memutar ulang</h2>
+<p>Sebuah permainan yang menyatakan <code>replays: true</code> dalam skripnya setiap sesi yang telah selesai disimpan oleh platform; klien cukup mengambil dan merendernya. Memeriksa <code>replaysEnabled</code> pada <code>GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94</code> sebelum menawarkan layar — operator dapat menjawab permainan dengan cara apa pun, dan titik akhir di bawah akan kembali <code>404</code> saat tayangan ulang dimatikan. Dalam implementasi referensi, pengambilannya adalah <code>App.loadReplays</code> / <code>App.openReplay</code> di dalam <code>app.js</code>:</p>
+<pre><code class="language-http">GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/mine?limit=10
+GET /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/replays/{sessionId}
+</code></pre>
+<p>Payload replay (ditunjukkan dengan bentuk hasil contoh catur):</p>
+<pre><code class="language-json">{
+  "sessionId": "&lt;guid&gt;",
+  "players": [ /* ... */ ],
+  "finishedAt": "…",
+  "result": {
+    "kind": "win",
+    "reason": "checkmate",
+    "at": "…",
+    "white": "&lt;userId&gt;",
+    "black": "&lt;userId&gt;",
+    "moveCount": 41,
+    "eloBefore": { "white": 1420, "black": 1388 },
+    "eloAfter": { "white": 1436, "black": 1372 }
+  },
+  "state": { "game": { "moves": [ /* ... */ ] } }
+}
+</code></pre>
+<p>Langkah pemirsa <code>state.game.moves</code> melalui yang dibagikan <code>chessRules</code> mesin secara lokal — sama <code>server.js</code> file aturan, berjalan di browser — jadi pemutaran ulang tidak memerlukan server bolak-balik; pertahankan versi aturan yang digunakan untuk pencocokan yang diarsipkan saat aturan berubah. Ini adalah hasil kedua dari desain satu file-dua peran dari §1, sebuah pola yang dapat diadopsi oleh game mana pun dengan file aturannya sendiri.</p>
+<h2 id="11-player-profiles">11. Profil pemain</h2>
+<p>Klien game menyelesaikan pemain lain melalui titik akhir profil publik. Dalam implementasi referensi, <code>App.profileFor</code> di dalam <code>app.js</code>:</p>
+<pre><code class="language-http">GET /api/v1/users/{id}/profile  → { "id": "…", "username": "…", "nickname": "…" }
+GET /api/v1/users/{id}/avatar   → image/png, or 404
+</code></pre>
+<p>Dua aturan UI yang diikuti klien referensi:</p>
+<ul>
+<li>Memberikan <strong>nama panggilan</strong>, tidak pernah nama pengguna.</li>
+<li>Jatuh kembali ke <code>"Player " + id.slice(0, 8)</code> ketika profil tidak ada atau nama panggilan kosong.</li>
+</ul>
+<p>Referensi: <a href="/id/docs/api/profile.html">profile.md</a>.</p>
+<h2 id="12-ai-practice-opponents">12. AI melatih lawan</h2>
+<p><code>POST /api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/sessions/ai</code> (ditunjukkan dengan contoh slug) membuat sesi di mana platform menandai satu kursi <code>ai: true</code> di dalam <code>createSession</code>. Skrip itu sendiri yang berperan — perilaku AI adalah sesuatu yang ditentukan oleh skrip Anda sendiri. Dalam contoh catur, kursinya dimainkan oleh "hal", mesin penangkap material rakus yang membalas <strong>dalam pemanggilan yang sama</strong> yang memproses gerakan manusia.</p>
+<p>Skrip permainan memutuskan apakah latihan akan mengubah peringkat pemain manusia. Kursi AI tidak bisa
+menerima status pemain akun, peringkat, atau pencapaian menulis. Simpan semua statistik AI dalam status sesi.</p>
+<h2 id="13-what-the-reference-game-does-not-use">13. Apa yang TIDAK digunakan oleh game referensi</h2>
+<p>Implementasi referensi catur tidak menyentuh satupun dari hal-hal tersebut, namun semuanya tersedia untuk permainan yang memerlukannya:</p>
+<ul>
+<li><strong>Prestasi</strong> — permainan apa pun dengan a <code>server=</code> skrip dapat mendeklarasikannya (<code>game.achievements</code>) dan memberi mereka server-otoritatif dari hook siklus hidup apa pun; catur tidak. Judul katalog memiliki jalur terpisah yang diklaim klien: <a href="/id/docs/api/achievements.html">achievements.md</a>, <a href="/id/docs/api/game-scripts.html#achievements">game-scripts.md</a>.</li>
+<li><strong>Katalog / hak</strong> — untuk game yang didistribusikan dan dijual melalui katalog: <a href="/id/docs/api/catalog.html">catalog.md</a>.</li>
+<li><strong>Menyampaikan</strong> — saluran relai frekuensi tinggi untuk permainan real-time yang bergerak cepat dengan skrip per-perintah yang berjalan bolak-balik terlalu lambat: <a href="/id/docs/api/relay.html">relay.md</a>.</li>
+<li><strong>Perpustakaan eksternal</strong> — menghubungkan perpustakaan game Steam, Epic, atau GOG: <a href="/id/docs/api/external-libraries.html">external-libraries.md</a>.</li>
+</ul>
+<p>Contoh catur, permainan papan berbasis giliran, tidak memerlukan satupun dari itu. Jika game Anda bersifat real-time, terdistribusi dalam katalog, atau memerlukan muatan biner, halaman-halaman tersebut adalah tempat untuk mencarinya selanjutnya.</p>
+<h2 id="14-integration-checklist">14. Daftar periksa integrasi</h2>
+<ul>
+<li>[ ] Tambahkan a <code>starhermit.txt</code> tampak (<code>name</code>, <code>launch</code>, <code>owner</code>, <code>server</code>; opsional <code>cover=</code> untuk ubin perpustakaan).</li>
+<li>[ ] Membaca <code>#game_token</code> dari hash URL satu kali, lalu hapus dengan <code>history.replaceState</code>.</li>
+<li>[ ] Dekode JWT untuk <code>sub</code> (id pengguna) dan <code>game_scope</code> (siput) — jangan pernah melakukan hard-code pada slug Anda.</li>
+<li>[ ] Bangun semua jalur API sebagai URL relatif asal yang sama: <code>/api/v1/games/&lt;slug&gt;</code> + akhiran.</li>
+<li>[ ] Segarkan token peluncuran setiap 45 menit melalui <code>POST …/launch-token</code>.</li>
+<li>[ ] Gunakan <code>cmd</code> / <code>sync</code> Pola WebSocket: menyelimuti semuanya, menyinkronkan setiap pembukaan, menyambungkan kembali dengan backoff 1 detik → 30 detik.</li>
+<li>[ ] Rancang perintah dan siaran skrip Anda <strong>sebagai kontrak klien</strong> — klien merender siaran dan mengirimkan perintah, tidak lebih.</li>
+<li>[ ] Mengembalikan objek ringkasan <code>{ turnPlayerId, deadline, status, moveCount }</code> sehingga daftar sesi dapat menunjukkan giliran siapa.</li>
+<li>[ ] Akhiri permainan dengan mengembalikan a <code>result</code> — Nilai pengembalian itulah yang menggerakkan replay dan elo.</li>
+<li>[ ] Nyatakan <code>replays: true</code> dalam skrip Anda jika Anda ingin sesi yang sudah selesai dipertahankan, dan aktifkan UI replay <code>replaysEnabled</code>.</li>
+</ul>
+<p>Platform ini menyediakan otentikasi, sesi, perjodohan, dan penyimpanan; skrip Anda menyediakan
+aturan permainan. Mulailah dengan <a href="/id/docs/tutorials/browser-quickstart.html">mulai cepat browser</a> untuk unggahan pertama yang lengkap.</p>
+
+{% endraw %}

@@ -1,0 +1,512 @@
+---
+layout: "wiki"
+lang: "bn"
+title: "টিউটোরিয়াল: একটি মাল্টিপ্লেয়ার কার্ট রেসার তৈরি করুন"
+source_url: "/docs/tutorials/kart-racer.html"
+source_path: "docs/tutorials/kart-racer.md"
+source_hash: "d1191e3e810a9f7c888152161e331f2cebb8c39f3e6d39661e4cde37fd39c340"
+translation: "machine"
+permalink: "/bn/docs/tutorials/kart-racer.html"
+---
+{% raw %}
+<h1 id="tutorial-build-a-multiplayer-kart-racer">টিউটোরিয়াল: একটি মাল্টিপ্লেয়ার কার্ট রেসার তৈরি করুন</h1>
+<p>এই টিউটোরিয়ালটি একটি আর্কেড কার্ট রেসারের মাল্টিপ্লেয়ার স্তর তৈরি করে — আটটি কার্ট পর্যন্ত, ব্যক্তিগত
+বন্ধুদের সাথে লবি, অপরিচিতদের সাথে দ্রুত যোগদান, সিপিইউ ড্রাইভাররা খালি গ্রিড স্লট পূরণ করছে, একটি গণনা,
+ল্যাপস, একটি ফিনিশিং অর্ডার এবং অর্জন — StarHermit API-তে। এটি নেটকোড চুক্তি কভার করে
+এবং প্ল্যাটফর্ম কল; আপনার ইঞ্জিন, ট্র্যাক আর্ট এবং হ্যান্ডলিং মডেল আপনার নিজস্ব।</p>
+<p>এখানে খেলা-নির্দিষ্ট সবকিছু — the <code>grand-prix</code> সারি, বাইনারি ফ্রেম বিন্যাস, আইটেম বোতাম,
+পদার্থবিজ্ঞানের ধ্রুবক - একটি উদাহরণ মান। শুধুমাত্র শেষ পয়েন্ট, ফ্রেম খাম এবং সীমা আছে
+প্ল্যাটফর্ম আচরণ, এবং প্রতিটি তার রেফারেন্স পৃষ্ঠার সাথে লিঙ্ক করে।</p>
+<h2 id="1-pick-an-architecture">1. একটি স্থাপত্য চয়ন করুন</h2>
+<p>সার্ভার টিক বাজেটের জন্য একটি রেসার হল খেলার সবচেয়ে কঠিন আকৃতি: কার্ট দ্রুত চলে, সংঘর্ষ হয় এবং
+খেলোয়াড়রা 50 ms স্টিয়ারিং ল্যাগ অনুভব করে। StarHermit আপনাকে এটি চালানোর দুটি উপায় দেয়, উভয়ই একটি থেকে শুরু করে
+<a href="/bn/docs/api/realtime.html">রিয়েলটাইম রুম</a>:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><strong>উ: হোস্ট-রুটেড</strong></th>
+<th><strong>B. সার্ভার-অনুমোদিত স্ক্রিপ্ট</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>কে অনুকরণ করে</td>
+<td>রুম হোস্টের ক্লায়েন্ট, যেকোন হারে এটি পছন্দ করে (60 Hz+)</td>
+<td>আপনার <code>server=</code> স্ক্রিপ্ট, সর্বাধিক <strong>30 Hz</strong></td>
+</tr>
+<tr>
+<td>পরিবহন</td>
+<td>বাইনারি ফ্রেম চালু <code>ws/v1/realtime</code></td>
+<td>JSON <code>cmd</code>/<code>game</code> ফ্রেম চালু <code>ws/v1/games</code></td>
+</tr>
+<tr>
+<td>প্রতারণা</td>
+<td>হোস্ট বিশ্বস্ত</td>
+<td>ক্লায়েন্টদের শূন্য কর্তৃত্ব আছে</td>
+</tr>
+<tr>
+<td>ইলো, স্ক্রিপ্ট কৃতিত্ব</td>
+<td>না (হোস্ট একটি ক্ল্যাম্পড ফলাফল পোস্ট করে)</td>
+<td>হ্যাঁ - <code>eloUpdates</code>, <code>achievements</code>, রিপ্লে</td>
+</tr>
+<tr>
+<td>জন্য সেরা</td>
+<td>বন্ধুদের সাথে নৈমিত্তিক রেস, সম্পূর্ণ বিশ্বস্ত পদার্থবিদ্যা</td>
+<td>সহজ আর্কেড পদার্থবিদ্যার সাথে র‌্যাঙ্ক করা রেসিং</td>
+</tr>
+</tbody>
+</table>
+<p>দিয়ে শুরু করুন <strong>A</strong> যদি না আপনার র‌্যাঙ্ক করা খেলার প্রয়োজন হয়; অধ্যায় 7 দেখায় কি জন্য পরিবর্তন <strong>B</strong>. A
+<a href="/bn/docs/api/container-games.html">ধারক সার্ভার</a> একটি আট-কার্টও চালাতে পারে <strong>রুমে আবদ্ধ</strong> জাতি এবং
+প্রামাণিকভাবে 60 Hz এ অনুকরণ করুন। এর সরাসরি গেম API ম্যাচমেকিং বর্তমানে একটি অন্তর্নিহিত 1v1 ব্যবহার করে
+সারি, তাই বড় গ্রিডের জন্য একটি রিয়েলটাইম রুম ব্যবহার করুন। প্ল্যাটফর্ম ধারক এর লুপ ধাপ না.</p>
+<h2 id="2-manifest">2. প্রকাশ</h2>
+<p>এটি দিয়ে বিতরণযোগ্য বিল্ড ফোল্ডারটি প্রকাশ করুন <code>starhermit.txt</code> এর মূলে (দেখুন
+<a href="/bn/docs/starhermit-txt.html">ম্যানিফেস্ট</a>) দ <code>control.*</code> লাইন প্লেয়ারদের একটি রিবাইন্ডিং UI দেয় এবং আপনার
+ক্লায়েন্ট a <a href="/bn/docs/api/games.html#per-player-control-bindings">API নিয়ন্ত্রণ করে</a> থেকে বাইন্ডিং পড়তে:</p>
+<pre><code class="language-ini">name=Turbo Hermits
+launch=index.html
+cover=art/cover.png
+control.accelerate=KeyW+ArrowUp | Accelerate
+control.brake=KeyS+ArrowDown | Brake / reverse
+control.left=KeyA+ArrowLeft | Steer left
+control.right=KeyD+ArrowRight | Steer right
+control.drift=ShiftLeft+ShiftRight | Drift
+control.item=Space | Use item
+</code></pre>
+<p>পথ A আছে <strong>না</strong> <code>server=</code> লাইন যদি একটি গেম একটি স্ক্রিপ্ট পাঠায়, একটি রুম শুরু করা একটি আবদ্ধ সেশন তৈরি করে
+এবং শুধুমাত্র স্ক্রিপ্ট ম্যাচটি শেষ করতে পারে — হোস্টের <code>POST .../result</code> দৌড় শেষ হওয়ার পথ বন্ধ করে
+(ধারা 7)।</p>
+<h2 id="3-sign-in-and-read-the-basics">3. সাইন ইন করুন এবং মূল বিষয়গুলি পড়ুন৷</h2>
+<p>একটি প্ল্যাটফর্ম-হোস্টেড গেম এর সাথে খোলা হয় <code>#game_token=&lt;jwt&gt;</code> URL-এ - একবার পড়ুন, এটি দিয়ে ফালান
+<code>history.replaceState</code>, এবং এর 60-মিনিট মেয়াদ শেষ হওয়ার আগে এটি রিফ্রেশ করুন (বিস্তারিত
+<a href="/bn/docs/tutorials/chess-walkthrough.html#3-launch-and-authentication">দাবা ওয়াকথ্রু</a> এবং
+<a href="/bn/docs/api/auth.html">প্রমাণ</a>) আপনার স্লাগ টোকেন এর <code>game_scope</code> দাবি (বা <code>location.hostname</code>এর
+প্রথম লেবেল); এটা হার্ড কোড না.</p>
+<p>লোড করার সময়, মেনুতে যা প্রয়োজন তা আনুন:</p>
+<pre><code class="language-http">GET /api/v1/games/{slug}/controls     # effective key bindings (manifest defaults + overrides)
+GET /api/v1/games/{slug}/settings     # camera, volume, last chosen kart — your own keys
+GET /api/v1/realtime/rooms/mine       # 200 → the player is still in a race; rejoin it
+</code></pre>
+<p>সঙ্গে মেনু পছন্দ সংরক্ষণ করুন <code>PATCH /api/v1/games/{slug}/settings</code> (<code>{"settings":{"kart":"hermit-crab"}}</code>)
+সেটিংস মেশিন জুড়ে প্লেয়ার অনুসরণ করে এবং কোনো ঘোষণার প্রয়োজন নেই।</p>
+<h2 id="4-the-lobby">4. লবি</h2>
+<p>একটি গ্র্যান্ড প্রিক্স সবার জন্য বিনামূল্যে, তাই রুমে আটটি আসনের একটি দল রয়েছে৷ ট্র্যাক, ল্যাপ কাউন্ট এবং ইঞ্জিন
+ক্লাস অস্বচ্ছ মধ্যে যান <code>metadata</code>:</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms
+Authorization: Bearer &lt;launch token&gt;
+
+{ "teamCount": 1, "seatsPerTeam": 8, "backfillAfterSeconds": 45,
+  "aiPlayers": 0, "name": "Friday cup", "isVisible": true,
+  "metadata": { "track": "coral-loop", "laps": 3, "cc": 150 } }
+</code></pre>
+<p>একটি লঞ্চ টোকেন দিয়ে রুম এর খেলা টোকেন থেকে আসে, তাই <code>gameSlug</code> বাদ দেওয়া যেতে পারে। সৃষ্টিকর্তা
+সিট এ হোস্ট হয় <code>(0, 0)</code>. এখান থেকে লবি হল সাধারণ রুম প্রবাহ:</p>
+<ul>
+<li><strong>বন্ধুরা</strong> — <code>POST /rooms/{id}/invites</code> সঙ্গে <code>{"toUserId": ...}</code>. প্ল্যাটফর্ম তাদের অবহিত করে;
+তাদের আসন গ্রহণ. ছয়-অক্ষর দেখাও <code>joinCode</code> তাই বন্ধুরাও এটি টাইপ করতে পারে
+<code>POST /rooms/join-by-code</code>.</li>
+<li><strong>অপরিচিত</strong> - হোস্ট কল <code>POST /rooms/{id}/open</code>. কোন রুম কল সঙ্গে খেলোয়াড়দের
+<code>POST /rooms/quick-join</code> সঙ্গে <code>{"seats": 1}</code> এবং, অন <code>404</code>, তৈরি এবং তাদের নিজস্ব খুলুন.</li>
+<li><strong>ট্র্যাক ভোট / হোস্ট মানসিক পরিবর্তন</strong> — <code>PATCH /rooms/{id}</code> নতুন সঙ্গে <code>metadata</code> এবং রুম এর
+<code>revision</code> হিসাবে <code>expectedRevision</code>.</li>
+<li><strong>সিপিইউ-এর বিরুদ্ধে একক</strong> — দিয়ে তৈরি করুন <code>"aiPlayers": 7</code>, তারপর <code>POST /rooms/{id}/start</code>.</li>
+</ul>
+<p>একটি খোলা ঘর নিজেই শুরু হয় যখন সমস্ত আটটি আসন পূর্ণ হয় বা <code>backfillAfterSeconds</code> পাস হোস্ট
+এছাড়াও পারেন <code>POST /rooms/{id}/start</code>. প্রতিটি স্থির-খালি আসন একজন এআই অংশগ্রহণকারী হয়ে ওঠে — সেগুলি আপনার
+CPU ড্রাইভার।</p>
+<h2 id="5-the-race-socket-host-routed">5. রেস সকেট (হোস্ট-রুটেড)</h2>
+<h3 id="connect">সংযোগ করুন</h3>
+<p>প্রত্যেক অংশগ্রহণকারী এক-ব্যবহারের টিকিটের সাথে রিয়েলটাইম সকেট খোলে:</p>
+<pre><code class="language-js">const { ticket } = await api.post("/api/v1/realtime/connection-tickets"); // { ticket, expiresIn }
+const ws = new WebSocket(
+  `wss://api.starhermit.com/ws/v1/realtime?roomId=${roomId}&amp;ticket=${encodeURIComponent(ticket)}`);
+ws.binaryType = "arraybuffer";
+</code></pre>
+<p>পাঠ্য ফ্রেমগুলি হল JSON পুশ এবং নিয়ন্ত্রণ ফ্রেম; বাইনারি ফ্রেম হল গেমপ্লে। দ <code>roster</code> ধাক্কা হয়
+আপনার গ্রিড: শুরু করার পরে এটি হিমায়িত হয়, এআই আসন অন্তর্ভুক্ত। একটি দলের সঙ্গে, একটি কার্ট এর গ্রিড স্লট তার
+অংশগ্রহণকারীর <code>slot</code>.</p>
+<pre><code class="language-js">ws.onmessage = (e) =&gt; {
+  if (typeof e.data === "string") return onControl(JSON.parse(e.data)); // roster, presence, event, ready, chat, result
+  const bytes = new Uint8Array(e.data);
+  const sender = guidFromDotNet(bytes.subarray(0, 16)); // server-stamped, trustworthy
+  onGameplay(sender, new DataView(e.data, 16));          // your payload starts at byte 16
+};
+
+// The server prefixes the sender's participant id in .NET GUID byte order:
+// the first three groups are little-endian.
+function guidFromDotNet(b) {
+  const h = (i) =&gt; b[i].toString(16).padStart(2, "0");
+  return `${h(3)}${h(2)}${h(1)}${h(0)}-${h(5)}${h(4)}-${h(7)}${h(6)}-` +
+         `${h(8)}${h(9)}-${h(10)}${h(11)}${h(12)}${h(13)}${h(14)}${h(15)}`;
+}
+</code></pre>
+<p>আপনার নিজের পেলোডে কখনও প্লেয়ার আইডি রাখবেন না এবং এটিকে বিশ্বাস করবেন না — 16-বাইট উপসর্গই একমাত্র পরিচয়
+যে সার্ভার গ্যারান্টি দেয়।</p>
+<h3 id="routing-and-budget">রাউটিং এবং বাজেট</h3>
+<p>প্ল্যাটফর্মটি হোস্ট-রুটেড খেলার আকার প্রয়োগ করে:</p>
+<ul>
+<li>A <strong>অতিথি এর</strong> বাইনারি ফ্রেম পৌঁছায় <strong>শুধুমাত্র হোস্ট</strong> — সেটা হল ইনপুট চ্যানেল।</li>
+<li>দ <strong>হোস্ট এর</strong> বাইনারি ফ্রেম পৌঁছায় <strong>প্রত্যেক অতিথি</strong> — সেটা হল স্ন্যাপশট চ্যানেল।</li>
+<li>প্রতিটি ফ্রেম সর্বাধিক <strong>8 KB</strong>; প্রতিটি সংযোগ পাঠাতে পারে <strong>30টি বার্তা/সেকেন্ড</strong> (একের জন্য 2× বিস্ফোরণ
+দ্বিতীয়)। ওভার যাওয়া সঙ্গে সকেট বন্ধ <code>PolicyViolation</code>.</li>
+</ul>
+<p>তাই হোস্ট যে হারে সঠিক মনে করে তা অনুকরণ করে (60 Hz সাধারণত) কিন্তু <strong>পাঠায়</strong> এ স্ন্যাপশট
+20 Hz, এবং অতিথিরা 20 Hz এ ইনপুট পাঠান। এটি মাঝে মাঝে নিয়ন্ত্রণ ফ্রেমের জন্য হেডরুম ছেড়ে দেয়।</p>
+<h3 id="frame-layouts-example">ফ্রেম লেআউট (উদাহরণ)</h3>
+<p>ইনপুট, অতিথি → হোস্ট, 7 বাইট:</p>
+<table>
+<thead>
+<tr>
+<th>অফসেট</th>
+<th>টাইপ</th>
+<th>মাঠ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>u8</td>
+<td><code>1</code> = ইনপুট</td>
+</tr>
+<tr>
+<td>1</td>
+<td>u16</td>
+<td><code>seq</code> - প্রতি পাঠাতে বৃদ্ধি</td>
+</tr>
+<tr>
+<td>3</td>
+<td>i8</td>
+<td>স্টিয়ার, −127…127</td>
+</tr>
+<tr>
+<td>4</td>
+<td>u8</td>
+<td>থ্রোটল, 0…255</td>
+</tr>
+<tr>
+<td>5</td>
+<td>u8</td>
+<td>বিট: 0 ব্রেক, 1 ড্রিফট</td>
+</tr>
+<tr>
+<td>6</td>
+<td>u8</td>
+<td><code>itemPresses</code> - একটি কাউন্টার, একটি পতাকা নয়</td>
+</tr>
+</tbody>
+</table>
+<p><code>itemPresses</code> আইটেম-বোতাম প্রেসের একটি চলমান গণনা। 20 Hz এ 50 ms এর চেয়ে ছোট একটি প্রেস হবে
+অন্যথায় নমুনার মধ্যে পড়ে; একটি কাউন্টার সহ হোস্ট প্রতি বৃদ্ধি একটি আইটেম ফায়ার, তবে
+প্রেস অবতরণ.</p>
+<p>স্ন্যাপশট, হোস্ট → অতিথি, কার্ট প্রতি 4 + 22 বাইট (সম্পূর্ণ গ্রিডের জন্য 176 বাইট):</p>
+<table>
+<thead>
+<tr>
+<th>অফসেট</th>
+<th>টাইপ</th>
+<th>মাঠ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>u8</td>
+<td><code>2</code> = স্ন্যাপশট</td>
+</tr>
+<tr>
+<td>1</td>
+<td>u16</td>
+<td>হোস্ট টিক</td>
+</tr>
+<tr>
+<td>3</td>
+<td>u8</td>
+<td>কার্ট গণনা</td>
+</tr>
+<tr>
+<td>কার্ট প্রতি</td>
+<td>u8, f32 ×4, u8, u16, u8, u8</td>
+<td>স্লট, x, z, শিরোনাম, গতি, ল্যাপ, চেকপয়েন্ট, আইটেম, পতাকা</td>
+</tr>
+</tbody>
+</table>
+<p>অতিথিরা অন্যান্য কার্ট রেন্ডার করে <strong>অতীতে ~100 ms</strong>, দুই স্ন্যাপশট মধ্যে interpolating যে
+সেই সময় বন্ধনী করুন, এবং তাদের ইনপুট থেকে স্থানীয়ভাবে তাদের নিজস্ব কার্ট ভবিষ্যদ্বাণী করুন, হোস্টের দিকে সহজে
+অবস্থান যখন তারা একমত না। শেষ ইনপুট অন্তর্ভুক্ত করুন <code>seq</code> হোস্ট প্রতি কার্ট ইন প্রয়োগ করা হয় <code>flags</code> অথবা একটি
+অতিরিক্ত ক্ষেত্র যদি আপনি সঠিক পুনর্মিলন চান।</p>
+<h3 id="countdown-race-events-finish">কাউন্টডাউন, রেস ইভেন্ট, শেষ</h3>
+<p>কন্ট্রোল ফ্রেমগুলি হল JSON, সর্বাধিক 4 KB, এবং সার্ভার স্ট্যাম্প৷ <code>from</code> প্রেরকের অংশগ্রহণকারী আইডি সহ:</p>
+<ul>
+<li>অতিথিরা পাঠান <code>{"type":"ready"}</code> একবার ট্র্যাক লোড হয়েছে.</li>
+<li>হোস্ট প্রতিটি সংযুক্ত মানুষের জন্য প্রস্তুত (বা একটি টাইমআউট) হওয়ার জন্য অপেক্ষা করে, তারপর পাঠায়
+<code>{"type":"event","kind":"countdown","goInMs":3000}</code>. অতিথিরা তাদের স্থানীয় গণনা শুরু করে
+রসিদ - এই নির্ভুলতায় কোন ঘড়ি সিঙ্কের প্রয়োজন নেই।</li>
+<li>অন্যান্য রেস বীট এছাড়াও হয় <code>event</code> ফ্রেম: <code>{"kind":"lap","slot":3,"lap":2}</code>,
+<code>{"kind":"finished","slot":3,"place":1,"timeMs":94210}</code>.</li>
+<li><code>chat</code> প্রত্যেকের জন্য উপলব্ধ, কিন্তু অতিথিরা প্রতি মিনিটে 10টি কন্ট্রোল ফ্রেমের মধ্যে সীমাবদ্ধ - এর জন্য প্রচুর
+<code>ready</code> এবং কয়েক "gg"s, গেমপ্লের জন্য নয়।</li>
+</ul>
+<p>যখন শেষ মানুষ লাইনটি অতিক্রম করে (অথবা বিজয়ী শেষ হওয়ার পরে একটি টাইমার), হোস্ট জমা দেয়
+ফলাফল, যা রুম বন্ধ করে এবং ধাক্কা দেয় <code>{"type":"result"}</code> সবার কাছে:</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms/{id}/result
+
+{ "teamScores": [0],
+  "metadata": { "track": "coral-loop",
+                "order": [ { "slot": 3, "timeMs": 94210 }, { "slot": 0, "timeMs": 95002 } ],
+                "bestLapMs": 30112 } }
+</code></pre>
+<p><code>teamScores</code> প্রতি দলে ঠিক একটি এন্ট্রি প্রয়োজন (ক্ল্যাম্পড 0-50), যা a-তে দরকারী কিছুই বহন করে না
+সবার জন্য বিনামূল্যে; সমাপ্তি আদেশ বাস <code>metadata</code>. একটি দল রেস সঙ্গে একই ঘর
+<code>teamCount: 2</code> এবং প্রতিটি দলের পয়েন্ট <code>teamScores</code>.</p>
+<h3 id="cpu-drivers-leavers-and-host-changes">সিপিইউ ড্রাইভার, লিভার এবং হোস্ট পরিবর্তন</h3>
+<ul>
+<li><strong>গাড়ি চালানোর জন্য এআই আসনগুলি আপনার।</strong> প্ল্যাটফর্মটি আসন সংরক্ষণ করে এবং ড্রাইভারের নাম রাখে; হোস্ট এর
+সিমুলেশন এটিকে পরিচালনা করে (চেকপয়েন্টগুলির মধ্য দিয়ে একটি রেসিং লাইন, কিছু রাবার-ব্যান্ডিং সহ)।</li>
+<li><strong>একজন অতিথি যিনি মধ্য-জাতি ছেড়ে চলে যান</strong> (<code>POST /rooms/{id}/leave</code>) তাদের কার্টকে গ্রিডে রাখে: রোস্টার
+push একই অংশগ্রহণকারী দেখায় <code>id</code> এখন <code>isAi: true</code>, এবং হোস্টের CPU সেই কার্ট দখল করে।</li>
+<li><strong>একজন অতিথি যিনি ড্রপ করেন</strong> এখনও রুমে আছে; তাদের কার্ট কোস্টিং রাখুন এবং তাদের পুনরায় সংযোগ করতে দিন -
+নতুন সকেটটি পুরানোটিকে ছাড়িয়ে যায়।</li>
+<li><strong>যদি হোস্ট চলে যায়</strong>, হোস্ট ভূমিকা দীর্ঘতম যোগদান অবশিষ্ট মানুষের পাস এবং
+রোস্টার পুশ নতুন দেখায় <code>isHost</code>. প্রত্যেক অতিথি ইতিমধ্যেই সর্বশেষ সম্পূর্ণ স্ন্যাপশট ধারণ করে, তাই নতুন
+হোস্ট এটি থেকে সিমুলেশন পুনরায় শুরু করে এবং স্ন্যাপশট পাঠাতে শুরু করে; গেস্ট ইনপুট এখন তাদের রুট.
+হোস্ট মাইগ্রেশন হল আপনার কোডের কাজ — প্ল্যাটফর্মটি শুধুমাত্র ভূমিকা নিয়ে যায়।</li>
+<li><strong>হোস্ট শুধু সংযোগ বিচ্ছিন্ন হলে</strong>, রুমটি হোস্ট সকেট ছাড়াই 60 সেকেন্ড পরে বন্ধ হয়ে যায়।</li>
+</ul>
+<h2 id="6-around-the-race">6. দৌড়ের চারপাশে</h2>
+<ul>
+<li><strong>ভয়েস এবং চ্যাট.</strong> প্রত্যেক গেস্ট ইতিমধ্যে করতে পারেন <code>chat</code> রিয়েলটাইম সকেটে; ভয়েসের জন্য, দেখুন
+<a href="/bn/docs/api/voice.html">ভয়েস</a>.</li>
+<li><strong>রিম্যাচ।</strong> রেজাল্টের পর রুম বন্ধ। হোস্টকে একটি নতুন রুম তৈরি করতে এবং আমন্ত্রণ জানান
+আগের রোস্টারের মানুষ, অথবা সবাইকে দ্রুত যোগ দিতে পাঠান।</li>
+<li><strong>ল্যাপ-টাইম লিডারবোর্ড।</strong> একটি গেমের প্ল্যাটফর্ম লিডারবোর্ড হল এর ইলো বোর্ড, শুধুমাত্র একটি সার্ভার দ্বারা লেখা
+রানটাইম একটি প্রকাশক-সংজ্ঞায়িত লিডারবোর্ড গ্রহণ করে <code>POST /api/v1/leaderboards/{id}/submit</code>, কিন্তু যে
+স্কোর ক্লায়েন্ট দ্বারা দাবি করা হয় — একটি বন্ধুত্বপূর্ণ সময় ট্রায়ালের জন্য জরিমানা, পুরস্কার সহ কিছুর জন্য নয়।</li>
+</ul>
+<h2 id="7-variant-b-server-authoritative-racing">7. ভেরিয়েন্ট বি: সার্ভার-অথরিটেটিভ রেসিং</h2>
+<p>র‌্যাঙ্ক করা খেলার জন্য, সিমুলেশনটিকে একটি স্ক্রিপ্টে সরান। লবি অপরিবর্তিত; স্ক্রিপ্ট যোগ করুন এবং
+ম্যানিফেস্টে ম্যাচমেকিং সেটিংস:</p>
+<pre><code class="language-ini">server=server.js
+matchmaking.max_wait_seconds=20
+matchmaking.ai_players=7
+</code></pre>
+<p>এখন দুটি জিনিস রেস তৈরি করে: <strong>একটি রুম শুরু</strong> এর মানুষের জন্য একটি রুম-বাউন্ড সেশন তৈরি করে, এবং
+<strong>ম্যাচমেকিং</strong> (<code>POST /api/v1/games/{slug}/matchmaking?queue=grand-prix</code>) একটি তৈরি করে যখন আট
+প্লেয়ার পাওয়া যায় - অথবা, উপরের সেটিংস সহ, 20 সেকেন্ড পরে CPU-এর সাথে সাতটি পর্যন্ত খালি
+আসন বন্ধুদের একটি লবি একসাথে সারিবদ্ধ হতে পারে <code>POST /realtime/rooms/{id}/matchmake</code>.</p>
+<p>যেভাবেই হোক, ক্লায়েন্টরা নেয় <code>sessionId</code> (রুমের <code>gameSessionId</code>, অথবা মিলে যাওয়া টিকিটের) এবং
+খেলা <code>ws/v1/games?sessionId=…</code>. রিয়েলটাইম সকেট, যদি থাকে, শুধুমাত্র রোস্টারের জন্য রাখা হয়।</p>
+<h3 id="the-script">স্ক্রিপ্ট</h3>
+<p>পুরো সিমুলেশন সঞ্চালিত হয় <code>onTick</code> 30 Hz সিলিং এ প্রতিটি আহ্বান একটি তাজা স্যান্ডবক্স যে
+পায় <code>sessionState</code> ভিতরে এবং এটিকে ফিরিয়ে দেয়, তাই সেই অবস্থাটিকে ছোট রাখুন - এটি প্রতিটি টিককে সিরিয়ালাইজ করা হয়।</p>
+<pre><code class="language-js">const TRACK = { laps: 3, radius: 14,
+  checkpoints: [[0, 0], [120, 0], [160, 60], [120, 120], [0, 120], [-40, 60]] };
+
+globalThis.game = {
+  tickRateHz: 30,
+  replays: true,
+  queues: [{ key: "grand-prix", teams: 8, teamSize: 1 }],
+  achievements: [
+    { key: "chequered-flag", name: "Chequered Flag", description: "Win a race.", points: 10 }
+  ],
+
+  createSession(ctx) {
+    const karts = racers(ctx).map((r, i) =&gt; ({
+      id: r.id, name: r.name, ai: r.ai, x: -8 * (i % 2), z: -6 * i, heading: 0, speed: 0,
+      cp: 1, lap: 0, boost: 0, boosts: 1, input: {}, ack: 0, finishedAt: null
+    }));
+    return { ok: true, sessionState: { t: ctx.now, goAt: ctx.now + 4000, karts, order: [] } };
+  },
+
+  onPlayerMessage(ctx) {                       // durable commands: discrete actions
+    const s = copy(ctx.sessionState);
+    const k = s.karts.find((k) =&gt; k.id === ctx.message.from);
+    if (ctx.message.data?.type === "use-item" &amp;&amp; k &amp;&amp; k.boosts &gt; 0 &amp;&amp; ctx.now &gt;= s.goAt) {
+      k.boosts--; k.boost = 1.2;
+    }
+    return { ok: true, sessionState: s };
+  },
+
+  onTick(ctx) {
+    const s = copy(ctx.sessionState);
+    const dt = Math.min(Math.max((ctx.now - s.t) / 1000, 0), 0.1);
+    s.t = ctx.now;
+    for (const i of ctx.inputs || []) {        // latest realtime input per player since last tick
+      const k = s.karts.find((k) =&gt; k.id === i.from);
+      if (k) { k.input = i.data; k.ack = Math.max(k.ack, Math.floor(+i.data.seq) || 0); }
+    }
+    if (ctx.now &gt;= s.goAt) {
+      for (const k of s.karts) {
+        if (k.finishedAt) continue;
+        move(k, k.ai ? aiInput(k) : k.input, dt);   // pure motion — shared with the client
+        progress(k, s, ctx);                        // checkpoints, laps, finish — server only
+      }
+    }
+    const snap = s.karts.map((k) =&gt;
+      [k.id, r2(k.x), r2(k.z), r3(k.heading), r2(k.speed), r2(k.boost), k.lap, k.cp, k.ack]);
+    const out = { ok: true, sessionState: s,
+      broadcast: [{ to: "all", data: { type: "snap", t: s.t, goAt: s.goAt, karts: snap } }] };
+    if (raceOver(s, ctx)) Object.assign(out, finish(s, ctx));
+    return out;
+  }
+};
+</code></pre>
+<p>সাহায্যকারী সাধারণ গেম কোড. প্ল্যাটফর্মটি যে অংশগুলির বিষয়ে যত্নশীল:</p>
+<ul>
+<li><strong><code>racers(ctx)</code></strong> অধিবেশন শুরু যেটি থেকে গ্রিড পড়ে: <code>ctx.room.roster</code> একটি জন্য
+রুম (AI আসন আছে <code>userId: null</code>, তাই তাদের মত আইডি দিন <code>ai-0-5</code>), <code>ctx.matchmaking.seats</code> একটি জন্য
+ম্যাচমেড রেস (এর সাথে আসনগুলি এড়িয়ে যান <code>id: null</code>), অন্য <code>ctx.players</code>.</li>
+<li><strong><code>move(k, input, dt)</code></strong> আবশ্যক <strong>প্রতিটি ইনপুট মান ক্ল্যাম্প করুন</strong> — <code>steer</code> থেকে −1…1, <code>throttle</code> থেকে 0…1 —
+কারণ <code>ctx.inputs[].data</code> ক্লায়েন্ট যা পাঠিয়েছে তা। শুধুমাত্র <code>from</code> বিশ্বস্ত হয় এটা বিশুদ্ধ রাখুন -
+না <code>ctx</code>, কোন সেশন স্টেট নেই — তাই ক্লায়েন্টও এটি চালাতে পারে (দেখুন
+<a href="#client-side-prediction">ক্লায়েন্ট-সাইড পূর্বাভাস</a>).</li>
+<li><strong>এলোমেলোতা এবং সময়</strong> থেকে আসা <code>ctx.random</code> এবং <code>ctx.now</code>; নেই <code>Date</code> বা <code>Math.random</code>.</li>
+<li><strong><code>finish(s, ctx)</code></strong> রিটার্ন <code>result</code> (যা সেশন শেষ করে এবং, একটি রুমের জন্য, এটি বন্ধ করে)
+<code>achievements</code> বিজয়ীর জন্য যদি মানুষ, এবং <code>eloUpdates</code> হিউম্যান রেসারদের জন্য - উদাহরণস্বরূপ পেয়ারওয়াইসে
+সমাপ্তি ক্রম জুড়ে elo, থেকে পড়া এবং ফিরে লেখা <code>ctx.playerStates</code>. AI আসন যাবে না
+খেলোয়াড়ের অবস্থা, রেটিং বা কৃতিত্ব পান।</li>
+<li><strong><code>raceOver</code></strong> এছাড়াও জাতি শেষ করা উচিত কেউ শেষ করতে পারে না - প্রতিটি মানুষ চলে গেছে অনুযায়ী
+<code>ctx.presence</code> (রুম), অথবা একটি কঠিন সময়সীমা।</li>
+<li><strong>রিপ্লে</strong> শুধুমাত্র রাখা <em>চূড়ান্ত</em> <code>sessionState</code>. একটি কমপ্যাক্ট ল্যাপ-টাইম টেবিল এবং ফিনিশিং রাখুন
+এটিতে অর্ডার করুন, প্রতি-টিক অবস্থান লগ নয়।</li>
+</ul>
+<h3 id="the-client">ক্লায়েন্ট</h3>
+<p>একটি রিয়েলটাইম ইনপুট হিসাবে স্টিয়ারিং পাঠান প্রতিটি টিক এবং বিচ্ছিন্ন ক্রিয়াগুলি টেকসই কমান্ড হিসাবে:</p>
+<pre><code class="language-js">// ~30 Hz: latest-wins, batched into the next onTick
+send({ type: "cmd", data: { type: "input", realtime: true, seq: ++seq,
+                            steer, throttle, brake, drift } });
+
+// on key press: a durable command, runs onPlayerMessage immediately
+send({ type: "cmd", data: { type: "use-item" } });
+</code></pre>
+<p>আইটেম <strong>আবশ্যক</strong> একটি টেকসই আদেশ মাধ্যমে যান. রিয়েলটাইম ইনপুট হল সর্বশেষ-টিক্স এবং এর মধ্যে জয়
+প্ল্যাটফর্ম শুধুমাত্র এক-শট ক্ষেত্র সংরক্ষণ করে <code>pass</code>, <code>tackle</code> এবং <code>shoot</code> যখন একটি নতুন নমুনা
+একটি পুরানোটিকে প্রতিস্থাপন করে — রিয়েলটাইম ইনপুটে অন্য যেকোন বোতাম টিকের আগে ওভাররাইট করা যেতে পারে
+এটা দেখে</p>
+<p><code>achievement</code> ফ্রেম একই সকেটে আসে; পড়া <code>GET /api/v1/games/{slug}/achievements</code> অন
+এটি খোলার আগে মঞ্জুর করা কিছুর জন্য লোড করুন।</p>
+<h3 id="client-side-prediction">ক্লায়েন্ট-সাইড পূর্বাভাস</h3>
+<p>শুধুমাত্র সার্ভার যা পাঠায় তা রেন্ডার করলে কার্টকে মনে হয় যেন এটি কাদার মধ্য দিয়ে চালিত হয়। একটি স্টিয়ারিং
+পরিবর্তনের জন্য সার্ভারে পৌঁছাতে হবে, পরবর্তী টিক (30 Hz এ 33 ms পর্যন্ত) অপেক্ষা করতে হবে এবং একটিতে ফিরে আসতে হবে
+<code>snap</code> — 80 ms ping-এ যা কার্ট ঘুরার আগে 100 ms-এর বেশি। ভবিষ্যদ্বাণী লুকিয়ে রাখে যে: ক্লায়েন্ট
+চলে <strong>তার নিজস্ব কার্ট</strong> অবিলম্বে এবং প্রতিটি চিকিত্সা <code>snap</code> একটি সংশোধন হিসাবে, ছবি হিসাবে না.</p>
+<h4 id="share-the-motion-code">মোশন কোড শেয়ার করুন</h4>
+<p>উপরের স্ক্রিপ্টের মতো সিমুলেশনটি বিভক্ত করুন: একটি বিশুদ্ধ <code>move(k, input, dt)</code> পরিচালনার জন্য, এবং
+শুধুমাত্র সার্ভার <code>progress</code> চেকপয়েন্ট, ল্যাপ এবং সমাপ্তির জন্য। থেকে মোশন কোড প্রকাশ করুন <code>server.js</code>
+দ্বিতীয় বিশ্ব হিসাবে - প্যাটার্ন দাবা এর জন্য ব্যবহার করে <code>globalThis.chessRules</code> - এবং একই ফাইল লোড করুন
+ব্রাউজার:</p>
+<pre><code class="language-js">// server.js — shared by the platform's sandbox and the browser
+function move(k, input, dt) { /* clamp input, integrate speed, heading, x, z, boost */ }
+globalThis.kartPhysics = { move, TRACK };
+globalThis.game = { /* ... as above ... */ };
+</code></pre>
+<pre><code class="language-html">&lt;script src="server.js"&gt;&lt;/script&gt;  &lt;!-- defines kartPhysics; the client never calls game.* --&gt;
+</code></pre>
+<p>ক্লায়েন্ট ভবিষ্যদ্বাণী করে <strong>গতি শুধুমাত্র</strong>. ল্যাপস, পজিশন, আইটেম এবং ফিনিশ অর্ডার সার্ভারেরই থাকে
+কল বিট-অভিন্ন ফলাফল আশা করবেন না: স্যান্ডবক্স এবং ব্রাউজার শেষ বিটগুলিতে অসম্মত হতে পারে
+<code>Math.sin</code>/<code>Math.cos</code>, এবং অবস্থান <code>snap</code> বৃত্তাকার হয় পুনর্মিলন সেই প্রবাহকে শোষণ করে।</p>
+<h4 id="step-at-the-servers-rhythm">সার্ভারের ছন্দে পা বাড়ান</h4>
+<p>সার্ভার প্রতি ইনপুট এক ধাপ চালায় না. প্রতিটি টিক এটি প্রযোজ্য <strong>সর্বশেষ</strong> ইনপুট এটি ধরে রাখে
+যে কার্ট, একটি নতুন না আসা পর্যন্ত এটি ব্যবহার করতে থাকে, এবং এর পর থেকে বাস্তব সময়ের সাথে একত্রিত হয়
+আগের টিক। তাই ডিসপ্লে ফ্রেমের হারে না গিয়ে সেই আকৃতিটিকে আয়না করুন:</p>
+<pre><code class="language-js">const pending = [];                              // inputs the server hasn't acknowledged yet
+let seq = 0, predicted, previous;               // { x, z, heading, speed, boost }, seeded from the first snap
+let error = { x: 0, z: 0, heading: 0 };          // visual offset, decays in render()
+
+setInterval(() =&gt; {                              // 30 Hz, the script's tickRateHz
+  if (!predicted || serverNow() &lt; goAt) return;  // the server ignores movement before goAt
+  const input = { steer: readSteer(), throttle: readThrottle(), brake: held("brake"), drift: held("drift") };
+  const entry = { seq: ++seq, input, dt: 1 / 30 };
+  send({ type: "cmd", data: { type: "input", realtime: true, seq: entry.seq, ...input } });
+  pending.push(entry);
+  previous = { ...predicted };
+  kartPhysics.move(predicted, input, entry.dt);  // the kart responds now, not a round trip later
+}, 1000 / 30);
+</code></pre>
+<p>টিক হারের চেয়ে দ্রুত প্রেরণ করা নষ্ট হয় — প্রতি টিক শুধুমাত্র সর্বশেষ ইনপুট ব্যবহার করা হয় — এবং
+প্ল্যাটফর্ম তার প্রতি-সংযোগ ক্যাপের উপরে রিয়েলটাইম ইনপুট ড্রপ করে।</p>
+<h4 id="reconcile-on-every-snap">প্রতিটি উপর পুনর্মিলন <code>snap</code></h4>
+<p>স্ক্রিপ্ট প্রতিধ্বনিত হয় <code>ack</code>, সর্বোচ্চ <code>seq</code> এটি প্রতিটি কার্টের জন্য আবেদন করেছে। প্রতিটির উপর <code>snap</code>, আপনার রিওয়াইন্ড
+সার্ভারের অবস্থায় কার্ট করুন এবং সার্ভার এখনও যা দেখেনি তা পুনরায় চালান:</p>
+<pre><code class="language-js">function onSnap(snap) {
+  const [, x, z, heading, speed, boost, lap, cp, ack] = snap.karts.find((k) =&gt; k[0] === myId);
+  while (pending.length &amp;&amp; pending[0].seq &lt;= ack) pending.shift();   // applied or superseded
+
+  const corrected = { x, z, heading, speed, boost };
+  for (const p of pending) kartPhysics.move(corrected, p.input, p.dt);
+
+  if (!predicted) { predicted = corrected; previous = { ...corrected }; return; } // first snap
+  error.x += predicted.x - corrected.x;          // what the player would see jump
+  error.z += predicted.z - corrected.z;
+  error.heading += predicted.heading - corrected.heading;
+  if (Math.hypot(error.x, error.z) &gt; 3) error = { x: 0, z: 0, heading: 0 }; // wall hit, bump: snap
+  predicted = corrected;
+  hud.lap = lap; hud.checkpoint = cp;            // progress is never predicted
+}
+</code></pre>
+<p>পর্যন্ত সবকিছু বর্জন করা হচ্ছে <code>ack</code> সর্বশেষ-জয় কিছু ইনপুট এড়িয়ে গেলেও সঠিক: একটি এড়িয়ে যাওয়া
+সার্ভারে টিক লাগানোর আগে ইনপুট বাতিল করা হয়েছিল, তাই এটি সার্ভারের কার্টকেও প্রভাবিত করেনি।</p>
+<h4 id="smooth-corrections-render-at-frame-rate">মসৃণ সংশোধন, ফ্রেম হারে রেন্ডার</h4>
+<p>ছোট সংশোধন অদৃশ্য হওয়া উচিত. ভবিষ্যদ্বাণীকৃত অবস্থানে কার্টটি আঁকুন প্লাস একটি ক্ষয়
+ত্রুটি অফসেট, এবং শেষ দুটি 30 Hz ভবিষ্যদ্বাণী পদক্ষেপের মধ্যে ইন্টারপোলেট করুন যাতে একটি 60 বা 144 Hz ডিসপ্লে
+মসৃণভাবে চলে:</p>
+<pre><code class="language-js">function render(frameDt) {
+  const decay = Math.exp(-frameDt / 0.1);        // ~100 ms to absorb a correction
+  error.x *= decay; error.z *= decay; error.heading *= decay;
+  const a = sinceLastStep() * 30;                // 0…1 between prediction steps
+  drawKart(lerp(previous.x, predicted.x, a) + error.x,
+           lerp(previous.z, predicted.z, a) + error.z,
+           lerpAngle(previous.heading, predicted.heading, a) + error.heading);
+}
+</code></pre>
+<p>ক্ষয়ের চেয়ে স্ন্যাপ থ্রেশহোল্ড টিউন করুন: কার্ট দৈর্ঘ্যের চেয়ে বড় একটি সংশোধন একটি বাস্তব
+ইভেন্ট (একটি বাম্প যা আপনি ভবিষ্যদ্বাণী করেননি) এবং একটি ধীর স্লাইডের চেয়ে দ্রুত স্ন্যাপ হিসাবে ভাল পড়ে।</p>
+<h4 id="know-what-not-to-predict">কী ভবিষ্যদ্বাণী করা উচিত নয় তা জানুন</h4>
+<ul>
+<li><strong>অন্যান্য কার্ট।</strong> এগুলি অতীতে ~100 ms আঁকা হয়েছে (বাফার <code>snap</code>s এবং মধ্যে interpolate
+দুই যে বন্ধনী <code>serverNow() - 100</code>), তাই তাদের বিরুদ্ধে ভবিষ্যদ্বাণী করা একটি সংঘর্ষ হল একটি সংঘর্ষ
+যেখানে তারা <em>ছিল</em>. দেয়াল এবং ট্র্যাকের পূর্বাভাস দিন - তারা সরে না - এবং সার্ভারকে সমাধান করতে দিন
+kart-to-kart bumps. সংশোধন একটি রাউন্ড ট্রিপ মধ্যে আসে. বাফার শুষ্ক সঞ্চালিত হলে, extrapolate
+গতি থেকে এবং ~100 ms পর্যন্ত হেডিং, তারপর ধরে রাখুন।</li>
+<li><strong>আইটেম</strong> <code>use-item</code> একটি টেকসই কমান্ড, তাই এটি চলে <code>onPlayerMessage</code> আসার সাথে সাথে -
+কোন টিক অপেক্ষা করুন কী টিপে শিখা এবং শব্দ বাজান; গতির মাধ্যমে আসা যাক
+পুনর্মিলন, যেহেতু <code>boost</code> মধ্যে আছে <code>snap</code>. যদি সার্ভার প্রত্যাখ্যান করে (কোন চার্জ বাকি নেই), পরবর্তী
+<code>snap</code> এটা রোল ফিরে.</li>
+<li><strong>জাতি রাষ্ট্র।</strong> ল্যাপ কাউন্ট, পজিশন এবং ফিনিস থেকে আসা <code>snap</code> এবং শুধুমাত্র আপনার স্ক্রিপ্টের সম্প্রচার।</li>
+</ul>
+<h4 id="estimate-the-server-clock">সার্ভার ঘড়ি অনুমান</h4>
+<p><code>snap.t</code> এবং <code>goAt</code> সার্ভার সময় (<code>ctx.now</code>) ক্ষুদ্রতম পরিলক্ষিত ফাঁক থেকে একটি অফসেট রাখুন, যা
+ধীর ডেলিভারি ফিল্টার করে:</p>
+<pre><code class="language-js">let offset = Infinity;
+function noteSnap(snap) { offset = Math.min(offset, performance.now() - snap.t); }
+const serverNow = () =&gt; performance.now() - offset;
+</code></pre>
+<p>থেকে কাউন্টডাউন শুরু করুন <code>goAt</code>, এবং উপরের লুপ হিসাবে এটিতে গেট পূর্বাভাস। একটি কার্ট যা নড়াচড়া করে
+আগে <code>goAt</code> স্থানীয়ভাবে প্রথম দ্বারা গ্রিডে রাবার-ব্যান্ডেড ফিরে আসে <code>snap</code> শুরুর পর।</p>
+<p>এই সব টিউন করতে, বিকাশে কৃত্রিম বিলম্ব যোগ করুন (বিলম্ব <code>send</code> এবং <code>onSnap</code> 100-200 ms দ্বারা)
+এবং প্রতিটি সংশোধনের আকার লগ করুন — স্থির বড় সংশোধন মানে <code>move</code> থেকে সরে গেছে
+সার্ভারের অনুলিপি, বা একটি ইনপুট ক্ষেত্র প্রতিটি পাশে আলাদাভাবে আটকানো হচ্ছে।</p>
+<h2 id="checklist">চেকলিস্ট</h2>
+<ul>
+<li>[ ] <code>starhermit.txt</code> বিল্ড আউটপুটের রুটে, সঙ্গে <code>control.*</code> কার্ট কর্মের জন্য।</li>
+<li>হ্যাশ থেকে পড়া লঞ্চ টোকেন, ছিনতাই করা, রিফ্রেশ করা; থেকে slug <code>game_scope</code>.</li>
+<li>[ ] <code>GET /realtime/rooms/mine</code> প্রগতিশীল একটি রেসে পুনরায় যোগদানের জন্য লোডের উপর।</li>
+<li>[ ] এক দলের ঘর, ট্র্যাক ইন <code>metadata</code>; আমন্ত্রণ, কোড যোগদান, খুলুন + দ্রুত-যোগদান, একক সঙ্গে <code>aiPlayers</code>.</li>
+<li>[ ] একটি সংযোগ টিকিটের সাথে সকেট খোলা; 16-বাইট প্রেরক উপসর্গ ছিনতাই এবং পরিচয় হিসাবে ব্যবহৃত।</li>
+<li>[ ] হোস্ট স্ন্যাপশট এবং অতিথি ইনপুট ≤ 20 Hz প্রতিটি, ফ্রেম ≤ 8 KB; আইটেম একটি কাউন্টার হিসাবে প্রেস.</li>
+<li>কন্ট্রোল ফ্রেম হিসাবে রেডি → কাউন্টডাউন → রেস ইভেন্ট; অর্ডার সঙ্গে ফলাফল <code>metadata</code>.</li>
+<li>[ ] হোস্ট এআই আসন এবং লিভারের কার্ট চালায়; শেষ স্ন্যাপশট থেকে নতুন হোস্ট পুনরায় শুরু হয়।</li>
+<li>[ ] ভেরিয়েন্ট বি: <code>tickRateHz: 30</code>, ক্ল্যাম্পড ইনপুট, টেকসই কমান্ড হিসাবে আইটেম, <code>result</code> + <code>eloUpdates</code>.</li>
+<li>[ ] ভেরিয়েন্ট বি: শেয়ার করা সাথে ভবিষ্যদ্বাণী করা নিজস্ব কার্ট <code>move</code>, পুনর্মিলন <code>ack</code>, সংশোধন মসৃণ;
+আগে আন্দোলন নেই <code>goAt</code>; অন্যান্য কার্টগুলি ~100 ms পিছনে ইন্টারপোলেট করেছে৷</li>
+</ul>
+<h2 id="see-also">এছাড়াও দেখুন</h2>
+<ul>
+<li><a href="/bn/docs/api/realtime.html">রিয়েলটাইম রুম</a> — লবি, আসন, <code>ws/v1/realtime</code> চুক্তি</li>
+<li><a href="/bn/docs/api/game-scripts.html">খেলার স্ক্রিপ্ট</a> — টিক রেট, রিয়েলটাইম ইনপুট, রুম-বাউন্ড সেশন</li>
+<li><a href="/bn/docs/api/games.html">গেমস</a> — ম্যাচমেকিং, নিয়ন্ত্রণ, সেটিংস, গেমপ্লে সকেট</li>
+<li><a href="/bn/docs/starhermit-txt.html"><code>starhermit.txt</code></a> — নিয়ন্ত্রণ, ম্যাচমেকিং সময়সীমা, এআই আসন</li>
+</ul>
+
+{% endraw %}

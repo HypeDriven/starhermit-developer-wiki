@@ -1,0 +1,303 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "内容审核"
+source_url: "/docs/api/moderation.html"
+source_path: "docs/api/moderation.md"
+source_hash: "74f2579a081e00899406ae9d3a8f7551387f487818070f44fd4616907fdae6fe"
+translation: "machine"
+permalink: "/zh-CN/docs/api/moderation.html"
+---
+{% raw %}
+<h1 id="content-moderation">内容审核</h1>
+<p>游戏在向其他人展示之前会检查共享文本、JSON 文档和 PNG/JPEG/WebP 图像
+玩家。只有一个电流 <code>allow</code> 授权共享。 <code>review</code>, <code>block</code>、未知、待定、失败、
+过期和不兼容的策略结果都会隐藏内容。</p>
+<p><strong>目前在公共部署中无法进行审核检查。</strong> 之前读过发现
+启用共享。支票退回 <code>503 overloaded</code> 和 <code>Retry-After: 300</code>;这不承诺
+五分钟后可用。保持内容隐藏，直到您收到当前的允许决定。
+一代也 <a href="/zh-CN/docs/availability.html#reserved-generation-routes">不可用</a>.</p>
+<p>下面的合同描述了支持的审核调用及其可用时的行为。仅
+通过所有者审查 API 返回可访问、经过筛选的证据。</p>
+<h2 id="callers-and-routes">呼叫者和路线</h2>
+<p>玩家前缀是 <code>/api/v1/games/{slug}/moderation</code>。 JWT 和启动代币承载着玩家；
+启动令牌必须与该游戏匹配。实时容器服务器令牌也必须与游戏匹配。本地人
+客户端使用 API 基 URL；浏览器游戏可以使用其游戏来源 <code>/api</code> 代理人。</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>后缀</th>
+<th>呼叫者</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>得到</td>
+<td>（根）</td>
+<td>玩家或服务器</td>
+<td>可用性、有效限制、支持的内容和当前政策</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/check</code></td>
+<td>玩家或服务器</td>
+<td><code>200</code> 完整批次或 <code>202</code> 待检查</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/checks/{checkId}</code></td>
+<td>归属玩家或创建游戏服务器</td>
+<td><code>200</code> 地位; <code>410</code> 结果保留后</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/decisions/lookup</code></td>
+<td>玩家或服务器</td>
+<td><code>200</code> 已知/未知合格哈希值</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/flags</code></td>
+<td>玩家</td>
+<td><code>201</code> 旗帜收据；服务器无法归档标志</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/removed?since=&amp;pageSize=</code></td>
+<td>玩家或服务器</td>
+<td>分页取款和下一个光标</td>
+</tr>
+</tbody>
+</table>
+<p>玩家不能以其他玩家的身份过牌。服务器通常会发送 <code>sessionId</code> 和 <code>participantUserId</code>;
+参与者必须处于该游戏的活跃会话中，并且他们的检查费将被收取。对于一个
+持续世界重新检查无人在线，发送 <code>attribution: "game"</code> 并省略这两个字段。
+这会消耗单独的服务器速率和游戏预算，不记录任何玩家并允许轮询
+仅通过游戏的授权服务器身份。令牌刷新不会更改该逻辑标识。</p>
+<h2 id="availability">可用性</h2>
+<p><code>GET /api/v1/games/{slug}/moderation</code> 返回：</p>
+<pre><code class="language-json">{
+  "checksAvailable": false,
+  "contentReportingAvailable": false,
+  "disabledReason": "moderation_not_configured",
+  "policyVersion": "&lt;current effective version&gt;",
+  "supportedKinds": ["text", "image"],
+  "supportedContexts": ["chat", "name", "generated-content", "user-content"],
+  "limits": { "moderation.check.items": 20, "moderation.decision.allow_ttl_seconds": 3600 },
+  "acceptedPreviousPolicyVersion": null,
+  "previousPolicyValidUntil": null,
+  "deliveredContentGraceSeconds": 0
+}
+</code></pre>
+<p><code>limits</code> 包含有效的审核注册表值，超出了所示的两个值。玩家
+值包括该玩家的覆盖；服务器发现揭示了游戏津贴，绝无仅有
+玩家的。零游戏项目预算也会禁用检查（<code>game_budget_disabled</code>）。使用返回的策略重叠和宽限值；默认值两者都不提供。</p>
+<h2 id="check-exact-content">检查具体内容</h2>
+<pre><code class="language-http">POST /api/v1/games/{slug}/moderation/check
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  "items": [
+    { "id": "story", "kind": "text", "context": "user-content", "text": "abc" }
+  ]
+}
+</code></pre>
+<p>项目 ID 在批次内是唯一的，最多 128 个字符。文字仅承载 <code>text</code>;图片
+携带 <code>contentType</code> 和严格的标准填充 <code>dataBase64</code>，没有空格。声明形象
+类型必须与其标头匹配，并且字节和像素是有界的。 WAV、奥格·沃比斯、
+不支持 glTF 模型和字体（<code>415 unsupported_kind</code>）；音频支持被推迟。</p>
+<p>哈希值是 <code>sha256:</code> 后跟 SHA-256 的 64 个小写十六进制数字，覆盖确切的内容字节：</p>
+<ul>
+<li>对于文本，对字符串进行 JSON 解码，并将其 Unicode 标量值编码为不带 BOM 的 UTF-8。
+保留空格、行结尾和 Unicode 规范化；拒绝未配对的代理。</li>
+<li>作为文本提交的 JSON 文档将被哈希为其确切的文档字符串，而不进行解析，
+重新排序或重新序列化它。</li>
+<li>对于图像，在调整大小、转码或元数据更改之前对解码的字节进行哈希处理。</li>
+</ul>
+<p>三个 ASCII 字节 <code>abc</code> 散列到
+<code>sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad</code>。
+添加换行符会更改哈希值。请求信封、项目 ID、上下文、媒体类型和 base64
+编码不是哈希输入。平台计算提交的哈希值；接收游戏也必须
+对它们实际保存的字节进行散列并比较标识符。</p>
+<p>一个完整的项目有 <code>status: "complete"</code>, <code>contentHash</code>, <code>decision</code>、类别、修订、
+<code>checkedAt</code> 和 <code>decisionPolicyVersion</code>。仅允许携带 <code>validUntil</code>。响应信封
+具有当前有效的 <code>policyVersion</code>。如果有任何项目存在，验证将拒绝整批产品
+畸形的。接受的项目可能会单独失败， <code>status: "failed"</code>，有代码，没有决定。</p>
+<p>同步截止时间默认为两秒。未完成品产生 <code>202</code> 和 <code>checkId</code>,
+<code>pollAfterSeconds</code>, <code>expiresAt</code> 和 <code>Retry-After</code>。轮询支票；待决事项尚无决定。
+后台截止时间默认为 60 秒，然后未完成的项目会失败 <code>timeout</code> 和
+它的普通输入被删除。默认情况下，终端结果可读一小时。</p>
+<p>对已完成的项目进行轮询会参考实时合格决策、当前政策和保留。
+旧支票无法更新已撤回的批准。当前的块/评论照此返回；
+陈旧、过期或缺席的决定会产生失败的项目，并且不会更新有效性。</p>
+<h2 id="lookup-and-withdrawal-recovery">查找和撤回恢复</h2>
+<pre><code class="language-json">{
+  "hashes": ["sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"],
+  "kind": "text",
+  "context": "user-content"
+}
+</code></pre>
+<p>将此发送至 <code>/decisions/lookup</code>。图像查找也命名 <code>contentType</code>。批准资格为
+游戏、种类、经过验证的媒体类型和背景。条目有 <code>known</code> 做出决定、修改、
+<code>decisionPolicyVersion</code> 并允许有效性，或 <code>unknown</code> 和 <code>not_checked</code>, <code>policy_changed</code> 或者
+<code>expired</code>。在政策改变和普通决策保留后，人为封锁仍然有效。</p>
+<p>允许有效期默认为一小时，并且可以由操作员降低。到期前重新验证；
+没有针对中断启用的宽限期，也没有接受的先前基准版本。改变
+游戏政策会立即使之前的批准失效。人类允许仅在复检后幸存
+对于相同政策下仍通过当前基线的相同调查结果。</p>
+<p>轮询 <code>/removed</code> 在分发共享包之前以及在游戏过程中定期进行。隐藏匹配的哈希值
+并在提款时停止分配；删除包括维持旗帜和重新分类
+从允许到审查/阻止。 Feed 条目包括限定符、范围、决策、修订、政策、
+移除时间和安全原因。光标是不透明的排序标记；使用返回的游标而不是从时间派生游标。</p>
+<p>过期游标返回 <code>410 cursor_expired</code>。获取一个新的光标而不 <code>since</code>, 批量查找
+所有加载的共享哈希，仅在验证后才恢复。缺席提要绝不意味着批准。
+保存的本地副本不授权重新分发。 Feed 默认为 90 天的历史记录；
+耐用的人类方块比它更长寿。</p>
+<h2 id="flags-and-owner-review">旗帜和所有者评论</h2>
+<p>玩家发送 <code>/flags</code> a <code>reason</code> （最多 64 个字符），可选有界 <code>note</code>和内容，
+目标玩家，或两者兼而有之。内容证据使用与支票相同的项目形状。如果 <code>contentHash</code>
+也提供了，平台重新计算它并要求相等。裸露的哈希值不是证据；
+工作/检查参考未实施。玩家目标标志需要 <code>sessionId</code> 谁的名单
+包括报告者和目标。提交举报既不会改变决定，也不会自动改变
+阻止任何人。</p>
+<p>内容证据在分类以供路由之前被保留并隔离存储。延误了，
+失败或不可用的筛选永远不会打开所有者访问权限。当前的业主安全筛查许可证
+列表/详细信息/下载/分类。工作人员的调查结果隐藏了旗帜并限制了现有的旗帜和评论
+的相同证据。如果没有分类器，内容标志将返回 <code>403 content_reporting_disabled</code>
+没有重试建议或保留证据；仅限玩家使用的标志仍然可用。</p>
+<p>所有者路线需要完整的 JWT 和游戏所有权，如下 <code>/api/v1/me/github-games/{id}/moderation</code>:</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>后缀</th>
+<th>行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>获取/放置</td>
+<td><code>/policy</code></td>
+<td>读取/设置评级和更严格的类别阈值 <code>expectedVersion</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/flags</code> / <code>/flags/{flagId}</code></td>
+<td>分页筛选元数据/一个可访问标志</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/flags/{flagId}/evidence</code></td>
+<td>受控下载； <code>410</code> 证据失效后</td>
+</tr>
+<tr>
+<td>修补</td>
+<td><code>/flags/{flagId}</code></td>
+<td><code>action: "uphold"</code> 或者 <code>"dismiss"</code>、可选注释和 <code>expectedRevision</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/reviews</code> / <code>/reviews/{reviewId}</code></td>
+<td>分页保留审阅元数据/一篇可访问的审阅</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/reviews/{reviewId}/content</code></td>
+<td>受控下载； <code>410 review_expired</code> 当不可用时</td>
+</tr>
+<tr>
+<td>修补</td>
+<td><code>/reviews/{reviewId}</code></td>
+<td><code>action: "allow"</code> 或者 <code>"block"</code>、可选注释和 <code>expectedRevision</code></td>
+</tr>
+</tbody>
+</table>
+<p>清单取 <code>status</code>, <code>page</code> 和 <code>pageSize</code> （默认 20，最大 100）。只有业主更严格的政策
+可以允许当前通过平台基线的持有；基线保持需要平台
+在游戏所有者 API 之外进行审查。受限证据永远不会为所有者可见。
+过时的修订版是 <code>409 revision_conflict</code>。决定进行评论会删除其保留的内容；也到期
+阻止下载或批准它。解除一个标志不会撤消另一个块，并且没有所有者
+路线解除了人力障碍。</p>
+<p>证据是一个 <code>application/octet-stream</code> 附件与 <code>nosniff</code>、沙箱 CSP 和 <code>no-store</code>。
+在您的审核 UI 中将注释/原因保留为不受信任的文本。不要将它们呈现为标记或将它们用作
+附件 URL。</p>
+<h2 id="default-limits-and-errors">默认限制和错误</h2>
+<p>运营商可以调整游戏限制；玩家费率还支持按用户覆盖。阅读发现
+有效的实际值。</p>
+<table>
+<thead>
+<tr>
+<th>限制</th>
+<th>默认</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>每个请求的项目/查找哈希值</td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>文本/图像/总内容字节</td>
+<td>64 KiB / 5 MiB / 10 MiB</td>
+</tr>
+<tr>
+<td>图像像素</td>
+<td>2000万</td>
+</tr>
+<tr>
+<td>每分钟玩家检查/游戏归因的服务器检查</td>
+<td>30 / 30</td>
+</tr>
+<tr>
+<td>呼叫者每分钟读取的内容</td>
+<td>60</td>
+</tr>
+<tr>
+<td>每天每场比赛检查或筛选的项目</td>
+<td>10,000</td>
+</tr>
+<tr>
+<td>每天每场比赛每名玩家的旗帜数/每场比赛的开放旗帜数</td>
+<td>20 / 1,000</td>
+</tr>
+<tr>
+<td>标记注释字节</td>
+<td>4 KB</td>
+</tr>
+<tr>
+<td>每场比赛待定/保留的旗帜证据</td>
+<td>64 MiB / 256 MiB</td>
+</tr>
+<tr>
+<td>跨平台待定/保留的标志证据</td>
+<td>1 GiB / 4 GiB</td>
+</tr>
+<tr>
+<td>跨平台并发分类器调用</td>
+<td>8</td>
+</tr>
+<tr>
+<td>检查交货/允许有效性</td>
+<td>1小时/1小时</td>
+</tr>
+<tr>
+<td>普通审查保留/标记保留</td>
+<td>7天/30天</td>
+</tr>
+</tbody>
+</table>
+<p>队列/存储耗尽会拒绝新证据，而不是驱逐活动案例。尊重
+每个证据/审查端点报告的可访问性和过期时间。</p>
+<p>错误是 <code>{ error, code, retryAfterSeconds? }</code>. <code>400</code> 涵盖格式错误的内容/限定符， <code>401</code>
+缺少身份验证， <code>403</code> 范围/授权或基线限制， <code>404</code> 缺席/无法访问
+记录， <code>409</code> 哈希/修订/策略冲突， <code>410</code> 过期的内容/检查/游标， <code>413</code> 字节/项/
+像素限制，以及 <code>415</code> 不受支持的种类/类型。 <code>429</code> 涵盖费率/预算/队列/存储
+<code>Retry-After</code>。分类器中断是 <code>503 moderation_unavailable</code>;当前未配置的
+保留占位符 <code>503 overloaded</code>。任何错误、重试或付款都不能替代允许决定。</p>
+<p>共享 <a href="/zh-CN/docs/api/conventions.html">API约定</a> 描述响应解析、时间戳、分页和重试。</p>
+<p>看 <a href="/zh-CN/docs/credentials.html">凭证兼容性</a> 和 <a href="/zh-CN/docs/api/contracts.html">机器可读的合同</a>.</p>
+
+{% endraw %}

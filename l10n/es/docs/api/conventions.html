@@ -1,0 +1,192 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Convenciones API"
+source_url: "/docs/api/conventions.html"
+source_path: "docs/api/conventions.md"
+source_hash: "3772241b0e04e8e2f4e4ecf1c0ef8e2d956c065446a78c7df107b6205de258d6"
+translation: "machine"
+permalink: "/es/docs/api/conventions.html"
+---
+{% raw %}
+<h1 id="api-conventions">Convenciones API</h1>
+<p>Usos del DESCANSO <code>https://api.starhermit.com/api/v1/...</code>; uso de enchufes <code>wss://api.starhermit.com/ws/v1/...</code>.
+Los juegos alojados pueden llamar <code>/api/v1/...</code> y <code>/ws/v1/...</code> sobre su propio origen. Los clientes nativos utilizan el
+Origen de API pública. Una página de desarrollo en otro origen necesita un origen CORS permitido en el juego
+anfitrión; establecer una URL base del SDK por sí solo no autoriza ese origen.</p>
+<h2 id="requests-and-responses">Solicitudes y respuestas</h2>
+<p>Enviar JSON con <code>Content-Type: application/json</code>, excepto cargas de paquetes gzip sin formato. Nombres de miembros JSON
+son camelCase. Enviar credenciales de portador en el REST <code>Authorization</code> encabezamiento.</p>
+<table>
+<thead>
+<tr>
+<th>Respuesta</th>
+<th>como leerlo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>200</code> / <code>201</code> JSON</td>
+<td>Analizar el objeto o matriz documentado; tolerar campos adicionales</td>
+</tr>
+<tr>
+<td><code>204</code></td>
+<td>Éxito sin cuerpo; no llames <code>response.json()</code></td>
+</tr>
+<tr>
+<td><code>302</code></td>
+<td>Inicio de sesión en el navegador/redireccionamiento de confirmación; navegar en lugar de buscar páginas OAuth</td>
+</tr>
+<tr>
+<td><code>304</code></td>
+<td>Lectura condicional sin cambios; conservar los datos que ya posee</td>
+</tr>
+<tr>
+<td>Imagen, archivo adjunto, guardado en la nube</td>
+<td>Leer bytes, utilizando el tipo de contenido de respuesta y el contrato de punto final</td>
+</tr>
+<tr>
+<td>Error</td>
+<td>Primero lea el estado y luego analice el cuerpo a la defensiva.</td>
+</tr>
+</tbody>
+</table>
+<p>La forma de error común es <code>{ "error": "...", "code": "..." }</code>, con campos opcionales dependiendo de
+el punto final. <code>error</code> suele ser legible por humanos; <code>code</code> es un discriminador estable cuando se proporciona.
+Los términos y algunos otros puntos finales ponen a un discriminador directamente en <code>error</code>. Algunos puntos finales regresan sin formato
+texto, un cuerpo vacío o un objeto de detalles del problema de validación con <code>title</code>, <code>status</code> y <code>errors</code>.
+Los clientes no deben asumir que todas las respuestas fallidas son JSON o tienen los mismos campos.</p>
+<pre><code class="language-js">export async function readResponse(response) {
+  if (response.status === 204 || response.status === 304) return null;
+  const text = await response.text();
+  let body;
+  try { body = text ? JSON.parse(text) : null; } catch { body = text || null; }
+  if (!response.ok) {
+    const message = (body &amp;&amp; typeof body === 'object' &amp;&amp; (body.error || body.message || body.title))
+      || (typeof body === 'string' &amp;&amp; body) || response.statusText;
+    throw Object.assign(new Error(message), {
+      status: response.status, code: body?.code, body,
+      retryAfter: response.headers.get('Retry-After'),
+    });
+  }
+  return body;
+}
+</code></pre>
+<h2 id="time-sizes-and-nulls">Tiempo, tamaños y nulos</h2>
+<ul>
+<li><code>createdAt</code>, <code>updatedAt</code>, <code>finishedAt</code>y marcas de tiempo similares de cuenta/recurso son cadenas ISO 8601
+con un desplazamiento. Tratar ausente o <code>null</code> valores opcionales como no disponibles.</li>
+<li><code>ctx.now</code>, <code>summary.deadline</code>, lista de sesiones <code>deadline</code>, y <code>/time.serverTime</code> son enteros Unix
+<strong>milisegundos</strong>. Convertir con <code>new Date(value)</code>, no <code>Date.parse(value)</code>.</li>
+<li>Los valores límite en bytes son bytes, no caracteres Base64. Una carga JSON Base64 es más grande que su
+contenidos decodificados. Utilice el límite efectivo informado por un punto final cuando esté disponible.</li>
+<li>Omisión, <code>null</code>y un objeto vacío no son universalmente equivalentes. Ajustes <code>PATCH</code> elimina un
+clave nombrada con <code>null</code>; configuraciones de una sola tecla <code>PUT</code> víveres <code>null</code> como valor. Recopilación <code>PUT</code> reemplaza
+todo el mapa. Lea las reglas de actualización de cada punto final.</li>
+<li>Se fusiona un parche de configuración <strong>claves de nivel superior</strong>. Un valor de objeto proporcionado reemplaza el valor de esa clave;
+no fusiona recursivamente propiedades anidadas.</li>
+</ul>
+<h2 id="pagination">Paginación</h2>
+<p>La paginación es basada en uno donde <code>page</code>/<code>pageSize</code> son compatibles. Diferentes API tienen deliberadamente diferentes
+sobres de respuesta; no reutilice un analizador que asuma un único nombre de campo de recuento.</p>
+<table>
+<thead>
+<tr>
+<th>Área</th>
+<th>Forma de colección</th>
+<th>Tamaño de página predeterminado/máximo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Títulos y compilaciones de software.</td>
+<td><code>{ items, totalCount, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>mensajes de chat</td>
+<td><code>{ conversationId, items, totalCount, page, pageSize }</code></td>
+<td>50 / 100</td>
+</tr>
+<tr>
+<td>Entradas en la tabla de clasificación</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>software externo</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20; solicitar un tamaño de página pequeño y positivo</td>
+</tr>
+<tr>
+<td>Informes, registros de accidentes de contenedores, listas de moderación</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>Sesiones, amigos, listados de juegos, logros.</td>
+<td>matrices</td>
+<td>Límites específicos de endpoints; sin cursor genérico de página siguiente</td>
+</tr>
+<tr>
+<td>Feed de retiro de moderación</td>
+<td>Basado en cursor</td>
+<td>Mantener el cursor devuelto; recuperarse de <code>410</code> como está documentado</td>
+</tr>
+</tbody>
+</table>
+<p>Los metadatos de paginación de respuesta reflejan la página servida cuando esté disponible. <a href="/es/#api-reference">Páginas de referencia</a>
+y <a href="/es/docs/api/contracts.html">contratos legibles por máquina</a> describir parámetros de consulta específicos del punto final.</p>
+<h2 id="retry-and-concurrency">Reintento y concurrencia</h2>
+<table>
+<thead>
+<tr>
+<th>Situación</th>
+<th>Acción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Token de acceso a la cuenta rechazado con <code>401</code></td>
+<td>Actualizar una vez, utilizando una solicitud de actualización compartida; luego inicie sesión si es rechazado</td>
+</tr>
+<tr>
+<td>El token de lanzamiento expiró</td>
+<td>Obtenga un nuevo token a través del inicio de sesión/lanzador; los tokens caducados no pueden renovarse solos</td>
+</tr>
+<tr>
+<td><code>403 terms_acceptance_required</code></td>
+<td>Mostrar y aceptar explícitamente los términos actuales, luego volver a intentarlo</td>
+</tr>
+<tr>
+<td>Otro <code>403</code></td>
+<td>Resolver el alcance, la membresía, los permisos o el estado de la cuenta; no actualizar en un bucle</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>Resolver conflictos de duplicados/estados/revisiones; volver a leer antes de cambiar un recurso</td>
+</tr>
+<tr>
+<td>guardar en la nube <code>412</code></td>
+<td>Carga la versión más nueva y deja que el juego la fusione o la adopte.</td>
+</tr>
+<tr>
+<td><code>429</code> o temporal <code>503</code></td>
+<td>Honor <code>Retry-After</code>, agregar jitter y reintentos enlazados</td>
+</tr>
+<tr>
+<td>Fallo de red durante una escritura</td>
+<td>Es posible que se desconozca el resultado; inspeccionar el estado del recurso antes de repetir la acción</td>
+</tr>
+</tbody>
+</table>
+<p><code>Retry-After</code> pueden ser segundos o una fecha HTTP. No inventes un encabezado de idempotencia: la API no
+prometen un mecanismo general de clave de idempotencia. Un reintento de creación de sesión o una invitación pueden crear
+otro recurso o conflicto con el primero. Prefiere lecturas y operaciones explícitamente idempotentes para
+reintentos automáticos. Actualizar la rotación, completar las cargas, los términos de consentimiento y los resultados del juego terminal cada uno
+tienen sus propias reglas.</p>
+<p>Para escrituras de comparación e intercambio, utilice ETags guardados en la nube, room <code>expectedRevision</code>, o revisiones de moderación
+donde sea compatible. Una escritura exitosa no es necesariamente una implementación de contenedor completa; verificar su
+estado antes de enviar jugadores a una nueva construcción. Ver <a href="/es/docs/troubleshooting.html">solución de problemas</a>.</p>
+
+{% endraw %}

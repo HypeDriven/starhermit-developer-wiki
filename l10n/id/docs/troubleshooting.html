@@ -1,0 +1,245 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Memecahkan masalah integrasi"
+source_url: "/docs/troubleshooting.html"
+source_path: "docs/troubleshooting.md"
+source_hash: "90e68e1757a4a8c75ac94bd580f2ff54e378593f19cbd554a1bba1ba70d4ebc2"
+translation: "machine"
+permalink: "/id/docs/troubleshooting.html"
+---
+{% raw %}
+<h1 id="troubleshoot-an-integration">Memecahkan masalah integrasi</h1>
+<p>Mulailah dengan status HTTP, titik akhir, dan kelompok kredensial. Reproduksi permintaan terkecil menggunakan
+ID game dan kredensial yang sama, lalu periksa status sumber daya saat ini. Simpan token dan pemain
+menyimpan data dari log dan laporan dukungan.</p>
+<h2 id="sign-in-and-access">Masuk dan akses</h2>
+<table>
+<thead>
+<tr>
+<th>Gejala</th>
+<th>Memeriksa</th>
+<th>Tindakan selanjutnya</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>401</code> pada REST</td>
+<td>Kedaluwarsa token dan apakah itu akun atau token peluncuran</td>
+<td>Refresh sesi akun satu kali; perbarui token peluncuran yang masih valid atau masuk untuk peluncuran baru</td>
+</tr>
+<tr>
+<td><code>403 terms_acceptance_required</code></td>
+<td>Dokumen terkini dari <code>/api/v1/terms</code></td>
+<td>Tampilkan dan terima hashnya hanya pada tindakan pemain; token peluncuran akun dan pemain berfungsi</td>
+</tr>
+<tr>
+<td><code>403</code> dicakup ke game lain</td>
+<td><code>game_scope</code> versus permainan/ruangan/penyimpanan yang diminta</td>
+<td>Gunakan UUID game Anda sendiri dan persisnya <code>game:&lt;gameId&gt;</code> kunci penyimpanan cloud</td>
+</tr>
+<tr>
+<td><code>403</code> pada <code>/me/game-invites</code> dari sebuah permainan</td>
+<td>Token peluncuran tidak dapat membaca kotak masuk seluruh akun</td>
+<td>Pemilihan <code>/games/{slug}/invites</code> Dan <code>/realtime/rooms/invites</code></td>
+</tr>
+<tr>
+<td><code>403 oauth_session_required</code></td>
+<td>Tindakan ini mengubah kredensial akun</td>
+<td>Masuk melalui penyedia langsung; sesi kunci publik hanya dapat mencabut kuncinya sendiri</td>
+</tr>
+<tr>
+<td><code>403</code> untuk akun yang ditangguhkan</td>
+<td>Pesan yang dikembalikan</td>
+<td>Hentikan percobaan masuk/penyegaran ulang otomatis; arahkan pemain ke dukungan akun</td>
+</tr>
+<tr>
+<td>Pengembalian masuk langsung <code>400</code></td>
+<td><code>returnUrl</code> harus HTTPS persis di tempat asal game tersebut</td>
+<td>Gunakan URL game yang dihosting; URL pengembangan lokal bukan tujuan pengembalian yang diizinkan</td>
+</tr>
+<tr>
+<td>Proses masuk gagal sewaktu-waktu <code>Invalid signature.</code></td>
+<td>Tantangan serialisasi, khususnya <code>+</code> dalam sekejap</td>
+<td>Gunakan yang tepat <a href="/id/docs/tutorials/public-key-onboarding.html#3-sign-in-with-the-key">byte penandatanganan kunci publik</a></td>
+</tr>
+<tr>
+<td>Pendaftaran kembali <code>429</code></td>
+<td>Tunjangan pendaftaran email/IP</td>
+<td>Menghormati <code>Retry-After</code>; konfirmasi email sebelum mengirim pendaftaran lain</td>
+</tr>
+</tbody>
+</table>
+<h2 id="game-setup-and-storage">Pengaturan dan penyimpanan game</h2>
+<table>
+<thead>
+<tr>
+<th>Gejala</th>
+<th>Memeriksa</th>
+<th>Tindakan selanjutnya</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/games/{slug}</code> kembali <code>404</code>, tapi pengaturannya berfungsi</td>
+<td>Apakah game memiliki backend skrip atau container?</td>
+<td>Game khusus browser memiliki pengaturan dan token peluncuran tetapi tidak memiliki info game/sesi yang resmi</td>
+</tr>
+<tr>
+<td>Kontrol kembali <code>404</code></td>
+<td>Sah <code>control.*</code> baris dalam manifes yang dipublikasikan</td>
+<td>Publikasikan deklarasi; menulis tidak dapat membuat tindakan yang tidak dideklarasikan</td>
+</tr>
+<tr>
+<td>Mengikat ulang satu kunci akan menyetel ulang kunci lainnya</td>
+<td>Kontrol <code>PUT</code> menggantikan semua penggantian</td>
+<td>Kirim peta penggantian lengkap, atau gunakan SDK <code>setControl()</code> yang mempertahankan peta efektif</td>
+</tr>
+<tr>
+<td>Pengaturan menghilang setelahnya <code>PUT</code></td>
+<td>Koleksi <code>PUT</code> menggantikan seluruh peta</td>
+<td>Menggunakan <code>PATCH</code> untuk kunci tingkat atas yang diubah; objek bersarang diganti sebagai satu nilai</td>
+</tr>
+<tr>
+<td>Penyimpanan cloud pemain baru kembali <code>404</code></td>
+<td>Belum ada penyimpanan untuk slot itu</td>
+<td>Mulailah dari awal hanya untuk hasil ini; kegagalan lainnya harus memblokir unggahan</td>
+</tr>
+<tr>
+<td>Simpan pengembalian tulis <code>412</code></td>
+<td>Perangkat lain menulis versi baru</td>
+<td>Muat ulang, validasi, dan gabungkan/adopsi sebelum penulisan bersyarat lainnya</td>
+</tr>
+<tr>
+<td>Simpan pengembalian <code>413</code>, <code>409</code>, atau <code>507</code></td>
+<td>Simpan ukuran, jumlah slot, atau kuota akun</td>
+<td>Periksa yang dikembalikan <code>code</code> Dan <code>limit</code>; mengurangi ukuran atau menyelesaikan kapasitas</td>
+</tr>
+<tr>
+<td>Batas waktu tidak ada dalam daftar sesi</td>
+<td><code>summary.deadline</code> jenis</td>
+<td>Mengembalikan stempel waktu Unix bilangan bulat dalam milidetik, bukan string ISO</td>
+</tr>
+<tr>
+<td>Skor/prestasi tidak muncul</td>
+<td>Kunci, definisi aktif, peserta, batasan nilai</td>
+<td>Verifikasi definisi dan keluaran server; penulisan yang tidak valid diabaikan; laporan klien bukanlah bukti</td>
+</tr>
+<tr>
+<td>Perjodohan kembali <code>404</code> setelah pertandingan</td>
+<td>Sesi yang cocok mungkin telah berakhir</td>
+<td>Kembali ke lobi dan mulai pencarian baru alih-alih membuka kembali tiket lama</td>
+</tr>
+</tbody>
+</table>
+<h2 id="websockets">soket web</h2>
+<p>Pembaruan browser yang gagal biasanya muncul sebagai kode penutup <code>1006</code>, menyembunyikan respons HTTP.
+Sebelum mencoba lagi, lakukan panggilan REST ke game/sesi/ruangan yang sama untuk membedakan otentikasi,
+persyaratan, keanggotaan, sesi selesai, dan kegagalan memulai server sementara. Periksa kompatibilitas build
+melalui info game saat Anda menyediakan <code>?build=</code>. Dapatkan tiket koneksi baru untuk setiap peningkatan.</p>
+<table>
+<thead>
+<tr>
+<th>Tutup/hasil</th>
+<th>Arti</th>
+<th>Tindakan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>1000</code></td>
+<td>Tutup biasa</td>
+<td>Berhenti kecuali pemutar secara eksplisit memulai koneksi lain</td>
+</tr>
+<tr>
+<td><code>1001</code> ditambah kesalahan resume</td>
+<td>Dunia belum bisa dilanjutkan</td>
+<td>Hubungkan kembali dengan backoff setelah memeriksa status sesi</td>
+</tr>
+<tr>
+<td><code>1006</code></td>
+<td>Kehilangan jaringan atau peningkatan yang ditolak</td>
+<td>Periksa status REST dan kredensial saat ini; percobaan ulang terikat</td>
+</tr>
+<tr>
+<td><code>1008</code></td>
+<td>Pelanggaran kebijakan atau koneksi yang digantikan</td>
+<td>Hentikan sambungan ulang otomatis; menawarkan penyambungan kembali yang disengaja setelah memperbaiki penyebabnya</td>
+</tr>
+<tr>
+<td><code>1009</code></td>
+<td>Pesan terlalu besar</td>
+<td>Kurangi ukuran bingkai sebelum menyambungkannya kembali</td>
+</tr>
+<tr>
+<td>HTTP <code>409 build_mismatch</code></td>
+<td>Ketidakcocokan build klien/server</td>
+<td>Muat ulang build yang kompatibel; jangan menciptakan nilai build yang cocok</td>
+</tr>
+<tr>
+<td>HTTP <code>410 session_not_active</code></td>
+<td>Sesi selesai</td>
+<td>Kembali ke lobi atau memutar ulang; berhenti menyambung kembali</td>
+</tr>
+<tr>
+<td><code>error: "Too many commands; slow down."</code></td>
+<td>Tunjangan perintah tahan lama skrip</td>
+<td>Kecepatan perintah diskrit; masukkan input berkelanjutan ke dalam <code>data</code> dengan <code>type: "input", realtime: true</code></td>
+</tr>
+</tbody>
+</table>
+<p>Minta status permainan penuh setelah tersambung kembali; jangan memutar ulang gerakan atau gerakan non-idempoten lainnya secara membabi buta
+perintah. <code>resumed</code> berarti membuang prediksi dan menyinkronkan ulang. <code>abandoned</code> adalah terminal.
+Melihat <a href="/id/docs/api/contracts.html#websocket-contracts">Kontrak WebSocket</a>.</p>
+<h2 id="publishing-and-container-startup">Penerbitan dan startup kontainer</h2>
+<table>
+<thead>
+<tr>
+<th>Gejala</th>
+<th>Memeriksa</th>
+<th>Tindakan selanjutnya</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mengunggah <code>413</code> dengan <code>limitBytes</code></td>
+<td>Tunjangan upload/hosting yang efektif</td>
+<td>Kurangi bundel atau pohon gabungan yang dihasilkan</td>
+</tr>
+<tr>
+<td>Unggahan HTTP besar <code>413</code> tanpa bidang kesalahan platform</td>
+<td>Batas isi permintaan sebelum API</td>
+<td>Menggunakan <code>ws/v1/game-upload</code>; mengirim <code>complete</code> setelah semua byte</td>
+</tr>
+<tr>
+<td>Mengunggah <code>422</code></td>
+<td>Tata letak arsip, peluncuran file, keamanan jalur, manifes</td>
+<td>Perbaiki kesalahan bernama; API mengharapkan mentah <code>.tar.gz</code>, bukan multi-bagian</td>
+</tr>
+<tr>
+<td>Pengunggahan berhasil tetapi server tidak tersedia</td>
+<td>Kesiapan penempatan</td>
+<td>Penyebaran jajak pendapat; byte yang diterima tidak berarti penampung sudah siap</td>
+</tr>
+<tr>
+<td>Permulaan ruang kontainer kembali bersifat sementara <code>503</code></td>
+<td>Server mungkin bangun</td>
+<td>Pertahankan lobi dan coba lagi dengan kemunduran; jangan kembali ke simulasi klien</td>
+</tr>
+<tr>
+<td>Permintaan kontainer gagal dalam validasi kunci pemanggilan</td>
+<td>Lingkungan startup dan perbandingan header yang tepat</td>
+<td>Baca kunci pemanggilan yang disuntikkan saat ini; laporkan kegagalan terus-menerus dengan ID game dan log yang dibersihkan</td>
+</tr>
+<tr>
+<td>Kegagalan penerapan yang terus-menerus</td>
+<td>Status penerapan dan log/kerusakan yang terlihat oleh pemilik</td>
+<td>Perbaiki build atau konfigurasi dan publikasikan rilis baru yang berfungsi</td>
+</tr>
+</tbody>
+</table>
+<p>Untuk laporan dukungan yang berguna, sertakan ID game, versi klien/build, titik akhir dan metode, status/kode,
+perkiraan waktu UTC, langkah reproduksi, dan log sanitasi yang relevan. ID sesi/ruangan membantu menemukan lokasi
+sumber daya. Jangan melampirkan kredensial, kunci pribadi, atau penyimpanan penuh pemain tanpa persetujuan mereka.</p>
+
+{% endraw %}

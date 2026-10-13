@@ -1,0 +1,185 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "تقارير الأعطال والأخطاء"
+source_url: "/docs/api/reports.html"
+source_path: "docs/api/reports.md"
+source_hash: "6d28d99eae2ec0d57e0611ea1d1db48136d4f38dacbb270fd4242dbfd0f0e97a"
+translation: "machine"
+permalink: "/ar/docs/api/reports.html"
+---
+{% raw %}
+<h1 id="crash-and-bug-reports">تقارير الأعطال والأخطاء</h1>
+<p>يمكن للاعبين الإبلاغ عن أي عطل أو خلل من داخل أي لعبة تحتوي على سبيكة ثابتة — ألعاب للمتصفح فقط
+مضمن - باستخدام رمز إطلاق اللعبة أو رمز المستخدم الكامل. يقرأ صاحب اللعبة ويفرز و
+يحذفها من خلال <code>/api/v1/me/github-games/{id}/reports</code>.</p>
+<p>للحصول على مخرجات الخادم وسجلات الأعطال الخاصة بلعبة الحاوية، راجع
+<a href="/ar/docs/api/container-games.html#your-servers-output-and-crash-reports">خوادم الألعاب المستضافة على حاوية — تقارير المخرجات والأعطال الخاصة بخادمك</a>.</p>
+<h2 id="endpoints">نقاط النهاية</h2>
+<table>
+<thead>
+<tr>
+<th>طريقة</th>
+<th>طريق</th>
+<th>مصادقة</th>
+<th>وصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/games/{slug}/reports</code></td>
+<td>إطلاق الرمز المميز لتلك اللعبة، أو JWT</td>
+<td>تقديم تقرير عن الأعطال أو الأخطاء</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/reports/mine</code></td>
+<td>إطلاق الرمز المميز لتلك اللعبة، أو JWT</td>
+<td>أحدث 50 تقريرًا لهذه اللعبة، مع حالتها</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/github-games/{id}/reports</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td>تقارير القائمة: <code>?kind=crash|bug&amp;status=open|acknowledged|resolved&amp;page=&amp;pageSize=</code> (≤100)</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td>تقرير واحد مع قائمة المرفقات الخاصة به</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}/attachments/{attachmentId}</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td>مرفق، دائمًا كتنزيل</td>
+</tr>
+<tr>
+<td>رقعة</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td>تعيين <code>status</code></td>
+</tr>
+<tr>
+<td>يمسح</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td>حذف تقرير → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="file-a-report">تقديم تقرير</h2>
+<pre><code class="language-http">POST /api/v1/games/{slug}/reports
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  "kind": "crash",
+  "title": "Crash entering the second level",
+  "description": "TypeError: cannot read properties of undefined (reading 'tiles')\n    at loadLevel (game.js:812)",
+  "clientVersion": "1.4.2",
+  "platform": "web",
+  "buildId": "a1b2c3d",
+  "sessionId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "attachments": [
+    { "fileName": "console.log", "contentType": "text/plain", "dataBase64": "…" }
+  ]
+}
+</code></pre>
+<ul>
+<li><code>kind</code> يكون <code>crash</code> أو <code>bug</code>; <code>title</code> مطلوب (أقل من 200 حرف).</li>
+<li>كل شيء آخر اختياري. <code>userAgent</code> الإعدادات الافتراضية للطلب <code>User-Agent</code> header.</li>
+<li>إجابة: <code>201 { "id", "kind", "status": "open", "createdAt" }</code>.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>حالة</th>
+<th>معنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td>مشوه: غير معروف <code>kind</code>، مفتقد <code>title</code>، base64 غير صالح، أو ليس JSON</td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>لعبة غير معروفة أو تمت إزالتها</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>الوصف أو عدد المرفقات أو وحدات بايت المرفقات تتجاوز حدود اللعبة</td>
+</tr>
+<tr>
+<td><code>429</code></td>
+<td>تجاوز الحد الأقصى للتقرير اليومي لهذه اللعبة؛ يرى <code>Retry-After</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="limits">حدود</h2>
+<p>يمكن للمشغلين تغيير كل من هذه العناصر للمنصة بأكملها وللألعاب الفردية؛ الحد اليومي
+يمكن أيضًا ضبطها للاعب واحد.</p>
+<table>
+<thead>
+<tr>
+<th>حد</th>
+<th>تقصير</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>تقارير لكل لاعب لكل مباراة يوميا</td>
+<td>20</td>
+</tr>
+<tr>
+<td>طول الوصف</td>
+<td>20.000 حرف</td>
+</tr>
+<tr>
+<td>المرفقات لكل تقرير</td>
+<td>4</td>
+</tr>
+<tr>
+<td>بايت المرفق لكل تقرير</td>
+<td>2 ميجابايت</td>
+</tr>
+<tr>
+<td>يتم الاحتفاظ بالتقارير لكل لعبة</td>
+<td>2,000</td>
+</tr>
+<tr>
+<td>البايتات المحفوظة لكل لعبة</td>
+<td>256 ميجابايت</td>
+</tr>
+<tr>
+<td>حفظ</td>
+<td>90 يوما</td>
+</tr>
+</tbody>
+</table>
+<p>عندما تصل اللعبة إلى حد التخزين الخاص بها، تتم إزالة التقارير الأقدم - التي تم حلها أولاً - إلى
+إفساح المجال. يتم رفض تقرير واحد أكبر من الحد الإجمالي للبايت لكل لعبة <code>413</code>.</p>
+<h2 id="triage-reports-game-owner">تقارير الفرز (مالك اللعبة)</h2>
+<p>تعود القائمة <code>{ "items", "total", "page", "pageSize" }</code>; كل عنصر يحمل اسم المراسل،
+<code>kind</code>, <code>status</code>, <code>title</code>وتفاصيل العميل وعدد المرفقات الخاصة به. نقل تقرير من خلال
+<code>open</code> → <code>acknowledged</code> → <code>resolved</code> مع:</p>
+<pre><code class="language-http">PATCH /api/v1/me/github-games/{id}/reports/{reportId}
+Content-Type: application/json
+
+{ "status": "resolved" }
+</code></pre>
+<p>يتم تقديم المرفقات كتنزيلات (<code>Content-Disposition: attachment</code>, <code>nosniff</code>، وضع الحماية
+CSP). الأنواع الخاملة فقط هي التي تحتفظ بنوع المحتوى المعلن عنها - text وJSON وPNG وJPEG وWebP وGIF وzip و
+غزيب. يتم تقديم أي شيء آخر، بما في ذلك العلامات <code>application/octet-stream</code>.</p>
+<h2 id="from-the-javascript-sdk">من جافا سكريبت SDK</h2>
+<pre><code class="language-js">StarHermit.reportBug('Score did not save', 'Finished level 3, score shows 0', { clientVersion: '1.4.2' });
+StarHermit.captureCrashes({ clientVersion: '1.4.2' });   // opt-in: uncaught errors become crash reports
+</code></pre>
+<p>انظر <a href="/ar/docs/sdk/javascript.html#crash-and-bug-reports">جافا سكريبت SDK</a>.</p>
+<p>مشترك <a href="/ar/docs/api/conventions.html">اتفاقيات API</a> وصف تحليل الاستجابة، والطوابع الزمنية، وترقيم الصفحات، وإعادة المحاولة.</p>
+<p>يرى <a href="/ar/docs/credentials.html">التوافق الاعتماد</a> و <a href="/ar/docs/api/contracts.html">العقود المقروءة آليا</a>.</p>
+
+{% endraw %}

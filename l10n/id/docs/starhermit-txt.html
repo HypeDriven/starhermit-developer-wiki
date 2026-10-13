@@ -1,0 +1,523 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Itu starhermit.txt Tampak"
+source_url: "/docs/starhermit-txt.html"
+source_path: "docs/starhermit-txt.md"
+source_hash: "38da20ba901e3ed0e8f6bde30e7b48f3d55c06efc0c8800aa7bd175be7fc0788"
+translation: "machine"
+permalink: "/id/docs/starhermit-txt.html"
+---
+{% raw %}
+<h1 id="the-starhermittxt-manifest">Itu <code>starhermit.txt</code> Tampak</h1>
+<p><code>starhermit.txt</code> adalah file teks biasa kecil yang memberi tahu StarHermit apa nama game Anda, bagaimana caranya
+meluncurkannya, dan jenis server apa (jika ada) yang dijalankannya. Ini adalah satu-satunya file yang dicari platform
+semua yang Anda publikasikan.</p>
+<p><strong>Itu milik akar dari apa yang Anda unggah</strong> — baik untuk file klien game maupun untuk file khusus
+server.</p>
+<p>Anda tidak harus membuat sendiri file tersebut. Klien Windows dan dasbor web keduanya
+tampilkan manifes sebagai <strong>bidang yang dapat diedit</strong>: apa pun yang sudah dibawa oleh bangunan Anda, isi terlebih dahulu, dan
+apa pun yang disimpannya saat Anda menekan Unggah ditulis ke dalam bundel sebagai manifes. Jadi membangun dengan
+tidak <code>starhermit.txt</code> masih dapat diterbitkan, dan a <code>.tar</code> — yang tidak dapat Anda edit di tempatnya — adalah sebagai
+dapat diedit sebagai folder. Mengirimkan file di dalam build Anda masih layak dilakukan: file tersebut dikirimkan bersama
+artefak, sehingga nilainya tepat pada saat orang lain mengunggahnya.</p>
+<h2 id="the-rule-that-surprises-people">Aturan yang mengejutkan orang</h2>
+<blockquote>
+<p><strong>Segala sesuatu yang ada di sebelah manifes akan diunggah.</strong></p>
+</blockquote>
+<p>Folder yang Anda pilih bukanlah direktori proyek yang digali oleh platform untuk pembangunan — folder tersebut
+isinya <strong>adalah</strong> game yang diterbitkan, disalin apa adanya. Setiap file dan setiap subfolder yang berdekatan
+<code>starhermit.txt</code>, pada kedalaman berapa pun, naik dan disajikan kepada pemain.</p>
+<p>Jadi pilihlah milikmu <strong>keluaran build yang dapat didistribusikan</strong>, bukan pohon sumber Anda. Mengunggah direktori kerja
+berarti mengirimkan sumber Anda, catatan Anda, aset Anda yang belum diminimalkan, dan eksperimen setengah jadi Anda ke sana
+setiap pemain, dan membakar ruang disk game Anda pada file yang tidak dimuat oleh siapa pun.</p>
+<p>Beberapa nama selalu dilewati, karena nama tersebut tidak pernah menjadi bagian dari game yang diterbitkan:
+<code>.git</code>, <code>node_modules</code>, <code>.DS_Store</code>, <code>Thumbs.db</code>. Segala sesuatu yang lain adalah permainan yang adil - termasuk
+<code>README.md</code>, <code>.env</code> file, <code>*.psd</code> sumber dan <code>*.map</code> file. Jika Anda tidak mau menyerahkannya kepada pemain,
+jangan tinggalkan di sebelah manifes.</p>
+<p><img src="/docs/images/id/publish-build.svg" alt="Buat folder klien yang dapat didistribusikan dengan starhermit.txt sebagai root, publikasikan, dan sajikan kontennya di subdomain game."></p>
+<h2 id="where-it-goes">Ke mana perginya</h2>
+<h3 id="a-game-client">Klien permainan</h3>
+<pre><code class="language-text">my-game-dist/
+  starhermit.txt        &lt;- belongs at this level
+  index.html            &lt;- your launch file
+  game.js
+  assets/
+    sprites.png
+    music.ogg
+</code></pre>
+<p>Memilih <code>my-game-dist/</code>. Isinya menjadi permainan, disajikan di
+<code>https://&lt;slug&gt;.starhermit.com/</code>, Dan <code>index.html</code> adalah apa yang dimuat pemain.</p>
+<p><strong>Atau pilih satu <code>.tar</code> tata letak yang persis seperti itu</strong> — "Tambahkan dari .tar" di klien desktop, itu
+<code>.tar</code> bidang di dasbor. Klien membaca entri arsip, memasukkannya kembali ke dalam bundel
+untuk Anda, dan mengisi kolom manifes dari a <code>starhermit.txt</code> di dalamnya. Menggunakan <code>--format=ustar</code>:</p>
+<pre><code class="language-bash">tar --format=ustar -cf my-game.tar -C my-game-dist .
+</code></pre>
+<p>Arsip yang menggunakan nama panjang GNU atau header PAX yang diperluas ditolak. Format tersebut menyimpan entri yang asli
+jalan di a <em>memisahkan</em> blok metadata, jadi menempatkannya kembali berarti menulis ulang metadata — dan mendapatkannya
+salah secara halus akan menerbitkan game yang korup. Jika build Anda mencapai batas jalur usstar (100 byte untuk a
+nama, 155 untuk awalan direktorinya), persingkat nama folder terdalam atau unggah foldernya.</p>
+<h3 id="a-dedicated-server">Server khusus</h3>
+<pre><code class="language-text">my-server-dist/
+  starhermit.txt        &lt;- belongs at this level
+  image.tar            &lt;- docker save output of your server image
+</code></pre>
+<p>Memilih <code>my-server-dist/</code> — <strong>atau pilih <code>image.tar</code> dengan sendirinya</strong>, karena manifesnya bisa berasal dari
+bidang dialog sebagai gantinya. Berbeda dengan folder klien, distribusi server memiliki dua arti
+file: manifes, dan gambar container yang dihasilkan oleh</p>
+<pre><code class="language-bash">docker save my-server:latest &gt; image.tar
+</code></pre>
+<p>Apa pun yang ada di folder server akan tertinggal dan tidak diunggah — platform akan menjalankannya
+container, jadi gambar tersebut sudah berisi file server Anda. Tetap menyimpan manifes di sini berarti
+pembangunan server menggambarkan dirinya sendiri dan dapat diunggah ulang sendiri.</p>
+<h2 id="format">Format</h2>
+<p>Garis dari <code>key=value</code>. Baris kosong diabaikan, <code>#</code> memulai komentar, dan spasi di sekitar tombol dan
+nilai dipangkas. Nama kunci tidak membedakan huruf besar dan kecil, kecuali jalur folder di dalamnya <code>cache.&lt;folder&gt;</code> peka huruf besar-kecil; kunci yang tidak diketahui diabaikan, sehingga kesalahan ketik gagal secara diam-diam —
+periksa ejaan Anda berdasarkan tabel di bawah.</p>
+<pre><code class="language-text"># My Game - browser-only
+name=My Game
+launch=index.html
+</code></pre>
+<h3 id="keys-every-game-may-set">Kunci yang dapat diatur oleh setiap permainan</h3>
+<table>
+<thead>
+<tr>
+<th>Kunci</th>
+<th>Alias</th>
+<th>Arti</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>—</td>
+<td>Nama tampilan yang dilihat pemain. Diperlukan kecuali Anda memberikan nama tampilan di formulir unggahan.</td>
+</tr>
+<tr>
+<td><code>launch</code></td>
+<td><code>launch_path</code>, <code>html</code></td>
+<td>Jalan menuju entri <code>.html</code>, relatif terhadap manifes. Defaultnya adalah <code>index.html</code> ketika file dengan nama itu berada di root.</td>
+</tr>
+<tr>
+<td><code>cover</code></td>
+<td><code>cover_art</code>, <code>coverart</code></td>
+<td>Karya seni di ubin perpustakaan game. Jalur relatif terhadap file peluncuran (<code>cover.png</code>, <code>art/box.jpg</code>) atau mutlak <code>https://</code> URL. Opsional — tanpa ubin, ubin akan menampilkan favicon. Nilai yang buruk dihilangkan daripada menolak permainan.</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>—</td>
+<td>Teks halaman toko yang dibaca pemain tentang game Anda. Satu baris; menulis <code>\n</code> untuk jeda baris. Atau gunakan <code>description.file</code> untuk menyimpannya dalam file. Melihat <a href="#description-and-release-notes">Deskripsi dan catatan rilis</a>.</td>
+</tr>
+<tr>
+<td><code>release_notes</code></td>
+<td><code>releasenotes</code></td>
+<td>Apa yang berubah dalam build ini. Aturan yang sama seperti <code>description</code>; <code>release_notes.file</code> menunjuk ke file sebagai gantinya.</td>
+</tr>
+<tr>
+<td><code>owner</code></td>
+<td><code>username</code>, <code>user</code></td>
+<td><strong>Aliran repositori saja.</strong> Pemilik StarHermit <strong>ID pengguna (UUID)</strong> dari <code>GET /api/v1/me</code>, bukan nama pengguna. Memungkinkan Anda <a href="/id/docs/tutorials/claim-existing-game.html">mengklaim daftar yang ditambahkan orang lain</a> dengan membuktikan bahwa Anda mengontrol repositori. Diabaikan pada unggahan — lihat <a href="#who-owns-an-uploaded-game">Siapa pemilik game yang diunggah</a>.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="description-and-release-notes">Deskripsi dan catatan rilis</h3>
+<p>Dua potongan teks opsional ditampilkan di samping permainan Anda: a <strong>keterangan</strong> (apa permainannya) dan
+<strong>catatan rilis</strong> (apa yang berubah pada build yang Anda terbitkan). Masing-masing dapat ditulis dalam
+memanifestasikan dirinya atau disimpan dalam filenya sendiri.</p>
+<p><strong>sebaris</strong>, untuk teks pendek. Manifesnya adalah satu baris per kunci, jadi tulislah <code>\n</code> dimanapun kamu mau a
+jeda baris (dan <code>\\</code> untuk garis miring terbalik literal):</p>
+<pre><code class="language-text">name=Asteroid Garden
+launch=index.html
+description=Tend a garden on a drifting asteroid.\nPlant, water, and dodge the meteor showers.
+release_notes=- New: night cycle\n- Fixed: seeds vanishing after a reload
+</code></pre>
+<p><strong>Dari sebuah file</strong>, untuk waktu yang lebih lama — ini adalah formulir yang digunakan untuk catatan rilis sebenarnya:</p>
+<pre><code class="language-text">name=Asteroid Garden
+launch=index.html
+description.file=DESCRIPTION.md
+release_notes.file=CHANGELOG.md
+</code></pre>
+<pre><code class="language-text">my-game-dist/
+  starhermit.txt
+  DESCRIPTION.md
+  CHANGELOG.md
+  index.html
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Kunci</th>
+<th>Alias</th>
+<th>Arti</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>description</code></td>
+<td>—</td>
+<td>Teks deskripsi, sebaris.</td>
+</tr>
+<tr>
+<td><code>description.file</code></td>
+<td>—</td>
+<td>Jalan menuju a <code>.md</code>, <code>.markdown</code> atau <code>.txt</code> file yang menyimpan deskripsi.</td>
+</tr>
+<tr>
+<td><code>release_notes</code></td>
+<td><code>releasenotes</code></td>
+<td>Teks catatan rilis, sebaris.</td>
+</tr>
+<tr>
+<td><code>release_notes.file</code></td>
+<td><code>releasenotes.file</code></td>
+<td>Jalan menuju a <code>.md</code>, <code>.markdown</code> atau <code>.txt</code> file yang memegang catatan rilis.</td>
+</tr>
+</tbody>
+</table>
+<p>Aturannya:</p>
+<ul>
+<li><strong>Jalur file bersifat relatif <code>starhermit.txt</code></strong> (root repositori untuk game repositori), bukan
+ke file peluncuran. TIDAK <code>..</code>, tidak memimpin <code>/</code>, dan hanya <code>.md</code>, <code>.markdown</code> atau <code>.txt</code>; jalur lainnya
+diabaikan daripada menolak permainan. Filenya harus <em>di dalam</em> apa yang Anda terbitkan, memang begitu
+disajikan kepada pemain seperti file lain di samping manifes. Jangan memasukkan apa pun ke dalamnya, kamu
+tidak akan menunjukkannya kepada mereka.</li>
+<li><strong>Sebuah file menang atas baris sebaris.</strong> Deklarasikan keduanya dan teks sebaris hanya merupakan cadangan, digunakan
+ketika file tidak dapat ditemukan.</li>
+<li><strong>Teks dibaca ulang setiap kali manifesnya</strong>: setiap upload atau push yang membawa a
+manifes, dan setiap penerapan repositori (dari komit yang diterapkan). Hapus kedua baris dan
+teks dihapus. File yang dideklarasikan tetapi hilang, tanpa fallback sebaris, akan meninggalkan teks
+permainan sudah dimiliki.</li>
+<li><strong>Mengapa berupa file dan bukan teks multi-baris dalam manifes?</strong> Setiap kunci lainnya dibaca baris demi baris. Jika sebuah
+paragraf catatan rilis bisa berada di dalam manifes, sebuah catatan yang kebetulan tertulis
+<code>owner=someone</code> akan dibaca sebagai <code>owner=</code> garis.</li>
+<li><strong>Ukuran</strong>: deskripsi dipotong menjadi 4.000 karakter dan catatan rilis menjadi 20.000. Teks yang lebih panjang adalah
+dipersingkat, bukan ditolak. Akhiran garis dinormalisasi dan garis kosong depan dan belakang dipangkas.</li>
+<li><strong>Pemformatan</strong>: teks disimpan persis seperti yang tertulis. Penurunan harga adalah pilihan yang masuk akal, tapi apakah
+itu dirender atau ditampilkan sebagai teks biasa terserah klien untuk menampilkannya.</li>
+<li><strong>Catatan rilis diganti, bukan diakumulasi.</strong> Setiap terbitan membawa catatan untuk <em>itu</em> membangun. Simpan
+riwayat lengkap Anda di log perubahan Anda sendiri dan publikasikan bagian yang dibutuhkan pemain.</li>
+</ul>
+<p>Klien membaca deskripsi dari daftar game dan catatan rilis dari
+<a href="/id/docs/api/github-games.html#description-and-release-notes"><code>GET /api/v1/github-games/{id}/release-notes</code></a>.</p>
+<h3 id="browser-asset-caching">Cache aset browser</h3>
+<p>Menggunakan <code>cache.&lt;folder&gt;=&lt;seconds&gt;</code> untuk mengatur <code>Cache-Control: public, max-age=&lt;seconds&gt;</code> pada host statis
+file. Durasi adalah bilangan bulat <strong>0–31536000</strong> (setahun):</p>
+<pre><code class="language-ini">cache..=0
+cache.audio=31536000
+cache.audio/live=0
+cache.assets/textures=604800
+</code></pre>
+<p>Di Sini <code>cache..</code> menyetel default seluruh situs ke nol (validasi ulang saat digunakan kembali), <code>audio/</code> cache selama setahun,
+<code>audio/live/</code> memvalidasi ulang, dan <code>assets/textures/</code> cache selama seminggu. Gunakan nama file dengan hash konten untuk
+aset berumur panjang: penerapan ulang tidak membuat salinan yang sudah disimpan dalam cache di browser pemain menjadi tidak valid.</p>
+<p>Jalur peka huruf besar-kecil, relatif terhadap root yang dihosting (root repositori atau milik bundel <code>client/</code>
+direktori), dan cocokkan seluruh folder termasuk turunannya. <code>audio</code> tidak cocok <code>audiobooks</code>.
+Garis miring tambahan bersifat opsional; folder yang paling spesifik menang, dan duplikat terakhir menang. Menggunakan <code>.</code>
+hanya untuk root default; jalur absolut, segmen kosong, <code>.</code>/<code>..</code> segmen, garis miring terbalik, <code>%</code>, <code>?</code>,
+<code>#</code>, <code>:</code> dan karakter kontrol ditolak. Tanpa aturan yang cocok, tidak ada keadaan statis yang eksplisit
+<code>Cache-Control</code> tajuk. Panggilan API, WebSockets, dan fallback aset hilang yang dialirkan secara eksternal
+tidak terpengaruh.</p>
+<h3 id="allowing-another-website-to-access-your-hosted-game">Mengizinkan situs web lain mengakses game yang Anda host</h3>
+<p>Untuk klien browser di asal lain, deklarasikan hingga <strong>lima</strong> asal HTTP/HTTPS yang tepat:</p>
+<pre><code class="language-ini">cors.origins=https://example.com,https://play.example.org,http://localhost:5173
+</code></pre>
+<p>Misalnya, setelah menerbitkan manifes ini, halaman pengembangan aktif <code>http://localhost:5173</code> bisa mengambil
+aset dari game yang Anda host:</p>
+<pre><code class="language-js">const response = await fetch('https://YOUR_GAME_UID.starhermit.com/assets/levels.json');
+if (!response.ok) throw new Error(`Asset request failed: ${response.status}`);
+const levels = await response.json();
+</code></pre>
+<p>Setiap asal adalah skema, nama host yang tepat, dan port opsional. Wildcard, domain kosong, kredensial,
+jalur (bahkan trailing <code>/</code>), pertanyaan dan fragmen ditolak. Skema dan port harus cocok;
+subdomain tidak disertakan secara implisit. Ulang <code>cors.origins</code> garis digabungkan, dengan paling banyak lima
+entri di seluruh manifes (duplikat juga dihitung). Hilangkan kunci untuk tidak mengizinkan asal tambahan;
+nilai kosong tidak valid.</p>
+<p>Hal ini berlaku untuk aset statis, cadangan aset yang hilang, dan <code>/api/</code> permintaan aktif <strong>tuan rumah permainan Anda</strong>.
+Asal yang diizinkan menerima header CORS yang diberi kredensial; OPTIONS preflight mengizinkan GET, HEAD, POST, PUT,
+PATCH, DELETE dan OPTIONS dengan header yang diminta. Otentikasi dan otorisasi API masih
+terapkan. Ini tidak mengkonfigurasi CORS aktif <code>api.starhermit.com</code>, mengubah aturan asal WebSocket, atau memperluas
+URL kembali yang diizinkan oleh login game browser. Game yang berjalan di host asal sendiri tidak memerlukan
+deklarasi CORS tambahan.</p>
+<h3 id="publishing-cache-and-cors-settings">Menerbitkan cache dan pengaturan CORS</h3>
+<p>Kedua kebijakan dipublikasikan dengan file klien. Penerapan repositori membaca komit yang disematkan.
+Dalam bundel, root <code>starhermit.txt</code> diutamakan <code>client/starhermit.txt</code>.
+Unggahan gabungan tanpa manifes mempertahankan kebijakan yang ada; manifes yang disediakan menggantikannya
+(menghilangkan pengaturan akan menghapusnya). Penggantian penuh tanpa manifes menghapus kedua kebijakan tersebut.
+Pengaturan tidak valid menolak publikasi sebelum mengganti file langsung (<code>422</code> untuk unggahan; sebuah gagal
+penyebaran repositori). Melihat <a href="/id/docs/api/github-games.html#partial-updates-modemerge">pembaruan bundel</a>.</p>
+<h3 id="controls">Kontrol</h3>
+<p>Deklarasikan tindakan keyboard yang digunakan game Anda, dengan tombol default yang dapat diubah oleh pemain:</p>
+<pre><code class="language-text">control.left=KeyA+ArrowLeft | Move left
+control.jump=Space+KeyW | Jump
+</code></pre>
+<p><code>control.&lt;action&gt;=&lt;code&gt;[+&lt;code&gt;...][ | &lt;label&gt;]</code>: ID tindakan adalah huruf kecil, angka dan
+<code>_</code>; kode adalah <code>KeyboardEvent.code</code> nilai (<code>KeyA</code>, <code>Space</code>, <code>ArrowLeft</code>), hingga 4 per tindakan yang digabungkan
+dengan <code>+</code>; paling banyak 32 tindakan, dan tidak ada kunci pada dua tindakan. Baris yang tidak valid dilewati secara diam-diam, dan a
+permainan tanpa garis yang valid tidak memiliki kontrol - kontrolnya adalah jawaban API
+<code>404 "This game declares no controls."</code>. Aturan ini berlaku saat Anda memublikasikan build yang memuatnya.
+Melihat <a href="/id/docs/tutorials/game-controls.html">Tutorial: tambahkan kontrol ke game Anda</a>.</p>
+<h3 id="keys-for-a-game-with-server-logic">Kunci untuk game dengan logika server</h3>
+<p>Memilih <strong>satu</strong> gaya server. Mendeklarasikan keduanya <code>server=</code> Dan <code>container.image=</code> ditolak.</p>
+<p>Ini bekerja di sebuah <strong>folder yang diunggah</strong> serta tempat penyimpanan. A <code>server=</code> skrip berjalan di dalam
+folder yang Anda unggah dan sumbernya dibaca langsung dari arsip, sehingga merupakan permainan yang berwibawa
+aturan tidak memerlukan repositori sama sekali. Jika deklarasi tidak dapat dipenuhi — naskahnya hilang,
+menunjuk ke luar folder, atau meminta penampung yang tidak Anda izinkan untuk dijalankan — keseluruhan unggahannya
+menolak daripada membuat game setengah terkonfigurasi.</p>
+<table>
+<thead>
+<tr>
+<th>Kunci</th>
+<th>Arti</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server</code> (alias <code>server_script</code>)</td>
+<td>Jalur ke file JavaScript yang dijalankan sebagai server resmi di kotak pasir StarHermit. Melihat <a href="/id/docs/api/game-scripts.html">Skrip Permainan</a>.</td>
+</tr>
+<tr>
+<td><code>container.image</code></td>
+<td>A <strong>intisari-disematkan</strong> gambar (<code>name@sha256:&lt;64 hex&gt;</code>) untuk dijalankan sebagai server. Tag ditolak. Melihat <a href="/id/docs/api/container-games.html">Server Game Kontainer</a>.</td>
+</tr>
+<tr>
+<td><code>container.port</code></td>
+<td>Port yang didengarkan oleh container Anda.</td>
+</tr>
+<tr>
+<td><code>container.memory_mb</code></td>
+<td>Memori yang diminta dalam MiB, dibatasi hingga batas operator.</td>
+</tr>
+<tr>
+<td><code>container.cpu</code></td>
+<td>Batas CPU untuk kontainer.</td>
+</tr>
+<tr>
+<td><code>container.health</code></td>
+<td>Jalur platform menyelidiki kesiapan.</td>
+</tr>
+<tr>
+<td><code>container.env.&lt;NAME&gt;</code></td>
+<td>Variabel lingkungan diteruskan ke penampung Anda.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="starting-matchmaking-before-every-human-seat-is-filled">Memulai perjodohan sebelum setiap kursi manusia terisi</h3>
+<p>Pengaturan ini berlaku untuk game resmi yang menggunakan perjodohan StarHermit, dengan a
+JavaScript atau server kontainer:</p>
+<pre><code class="language-ini">matchmaking.max_wait_seconds=30
+matchmaking.ai_players=2
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Kunci</th>
+<th>Arti</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>matchmaking.max_wait_seconds</code></td>
+<td>Bilangan bulat <strong>0–86400</strong>. Mulai pertandingan yang kurang terisi ketika tiket tertua yang dipilih telah menunggu beberapa detik. <code>0</code> segera dimulai. Hilangkan untuk mempertahankan perilaku default full-human-match-or-expire.</td>
+</tr>
+<tr>
+<td><code>matchmaking.ai_players</code></td>
+<td>Bilangan bulat <strong>0–31</strong>, bawaan <strong>0</strong>. Pada tenggat waktu, isi kursi kosong sebanyak ini dengan AI; biarkan kursi kosong selanjutnya tetap kosong. Memerlukan <code>matchmaking.max_wait_seconds</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Kapasitas antrian berasal dari skrip <code>game.queues</code>; tanpa deklarasi itu adalah 1v1.
+Wadah saat ini <code>/describe</code> pembaca tidak mengimpor <code>queues</code>, jadi penjodohan kontainer digunakan
+bentuk 1v1 implisit. Misalnya, dalam antrian delapan kursi yang dinyatakan dalam skrip dengan tiga orang menunggu,
+setting di atas dimulai dengan tiga manusia, dua pemain AI dan tiga kursi kosong. Manusia seutuhnya
+pertandingan dapat dimulai sebelum batas waktu dan tidak mendapat AI. Menyetel AI ke <code>0</code> memungkinkan kecocokan khusus manusia
+dengan kursi kosong, termasuk satu manusia jika game mendukungnya.</p>
+<p>Platform memeriksa enqueue dan selama pemeriksaan perjodohan berkala (default setiap <strong>5 detik</strong>),
+jadi permulaan dapat mengikuti batas waktu hingga interval sapuan pada beban normal. Kompatibilitas Elo
+dan subset antrean yang diizinkan untuk setiap tiket masih berlaku. Para pihak tetap bersama dalam satu tim; di
+batas waktu partai yang lebih kecil atau pemain solo dapat menempati tim yang lebih besar, dengan sisa kursi
+tersedia untuk AI atau dibiarkan kosong. Tiket tidak digabungkan menjadi satu tim.</p>
+<p><strong>Server game Anda harus menerima kecocokan yang kurang terisi dan menerapkan perilaku AI.</strong> tanda StarHermit
+para pemain AI; itu tidak menghasilkan gerakan mereka. Sesi yang ditolak membatalkan tiket yang dipilih.
+Tata letak kursi beku disediakan sebagai <code>ctx.matchmaking</code>, dan kursi yang ditempati muncul <code>ctx.players</code>;
+melihat <a href="/id/docs/api/game-scripts.html#matchmaking-seat-layout">konteks server</a>. Kursi kosong tidak otomatis
+diisi oleh bergabung terlambat.</p>
+<p>Penyebaran ulang dan pengunggahan repositori menerapkan pengaturan ini. Manifes yang disediakan tanpa kunci akan direset
+mereka; sebuah patch tanpa manifes akan mempertahankannya. Nilai yang tidak valid ditolak (upload <code>422</code>, atau gagal
+penyebaran repositori). Pengaturan ini tidak mempengaruhi permainan latihan eksplisit atau ruang waktu nyata
+gabung cepat/isi ulang.</p>
+<h2 id="how-to-create-one">Cara membuatnya</h2>
+<ol>
+<li>Buka editor teks biasa — Notepad, TextEdit, VS Code, apa saja. Bukan Kata.</li>
+<li>Ketikkan kunci yang dibutuhkan game Anda, satu kunci per baris (mulai dari contoh di bawah).</li>
+<li>Simpan sebagai <code>starhermit.txt</code> di folder yang akan Anda unggah, dikodekan sebagai UTF-8.</li>
+</ol>
+<p>Di Windows, Notepad "Dokumen Teks" jenis penyimpanan ditambahkan <code>.txt</code> untuk apa pun yang Anda ketik, jadi beri nama
+mengajukan <code>starhermit.txt</code> hasil <code>starhermit.txt.txt</code>. Pilihlah <strong>Semua File</strong> dalam dialog simpan, atau
+nyalakan File Explorer <strong>Ekstensi nama file</strong> lihat dan ganti namanya setelahnya. Sebuah file bernama
+<code>starhermit.txt.txt</code> tidak ditemukan dan pengunggahan ditolak.</p>
+<p>Namanya persis: semua huruf kecil, tanpa spasi. <code>Starhermit.txt</code> Dan <code>starhermit.TXT</code> bekerja karena
+pencarian tidak peka huruf besar-kecil, tapi <code>starhermit.text</code>, <code>starhermit.cfg</code> Dan <code>manifest.txt</code> tidak.</p>
+<h2 id="examples">Contoh</h2>
+<h3 id="browser-only-game">Game khusus browser</h3>
+<pre><code class="language-text">name=Asteroid Garden
+launch=index.html
+</code></pre>
+<h3 id="game-with-cover-art">Game dengan seni sampul</h3>
+<pre><code class="language-text">name=Asteroid Garden
+launch=index.html
+cover=art/cover.png
+</code></pre>
+<p>Jalur relatif diselesaikan terhadap file peluncuran (no <code>..</code>, tidak memimpin <code>/</code>, tidak ada string kueri) dan
+harus diakhiri dengan <code>.png</code>, <code>.jpg</code>/<code>.jpeg</code>, <code>.gif</code>, <code>.webp</code> atau <code>.svg</code>. URL absolut harus berupa <code>https://</code> —
+<code>http://</code> dijatuhkan — dan byte-bytenya diendus, sehingga URL itu sendiri tidak memerlukan ekstensi gambar.</p>
+<p>Baris tersebut dibaca ulang pada setiap penerapan, jadi mengubahnya akan mengubah sampulnya dan menghapusnya akan menghapusnya
+penutup. Kumpulan gambar dari <strong>Kelola → Seni sampul</strong> di dasbor web (atau oleh operator StarHermit)
+menimpanya: pilihan itu berada di luar pembangunan, jadi penerapan ulang tidak akan membatalkannya. Menghapus
+upload jatuh kembali ke baris ini lagi.</p>
+<h4 id="library-tiles">Ubin perpustakaan</h4>
+<p>Seni sampul adalah seni poster: kedua perpustakaan <strong>skalakan untuk mengisi ubin dan tanaman tengah</strong> apa pun fungsinya
+tidak cocok. Bentuk ubinnya tidak sama.</p>
+<table>
+<thead>
+<tr>
+<th>Permukaan</th>
+<th>Ubin</th>
+<th>Tanaman</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>klien Windows</td>
+<td>Potret 96×128 (3:4)</td>
+<td>Mengisi potret; seni yang lebih luas kehilangan sisinya</td>
+</tr>
+<tr>
+<td>Dasbor web</td>
+<td>Persegi</td>
+<td>Mengisi kotak; seni yang lebih tinggi kehilangan bagian atas dan bawah</td>
+</tr>
+</tbody>
+</table>
+<p>Pertahankan subjek di dalam <strong>tengah</strong>. Potret 3:4 yang kotak tengahnya merupakan komposisi, atau a
+persegi yang garis tengahnya 3:4, bertahan dari kedua tanaman. Kotak surat tidak pernah diterapkan — kosong
+margin yang Anda tambahkan di sekitar karya seni akan terpotong bersama yang lainnya.</p>
+<p>Sampul SVG ditampilkan di perpustakaan web. Klien Windows tidak memiliki decoder SVG, sehingga ubin mundur
+ke favicon saat ubin web masih menampilkan sampulnya. Pilih PNG, JPEG, atau WEBP bila Anda mau
+ubin yang sama pada keduanya.</p>
+<h3 id="game-with-a-description-and-release-notes">Game dengan deskripsi dan catatan rilis</h3>
+<pre><code class="language-text">name=Asteroid Garden
+launch=index.html
+description=Tend a garden on a drifting asteroid.
+release_notes.file=CHANGELOG.md
+</code></pre>
+<h3 id="static-site-whose-entry-point-is-not-at-the-root">Situs statis yang titik masuknya bukan di root</h3>
+<pre><code class="language-text">name=Tower Rush
+launch=public/game.html
+</code></pre>
+<h3 id="game-with-a-sandboxed-javascript-server">Game dengan server JavaScript kotak pasir</h3>
+<pre><code class="language-text">name=Correspondence Chess
+launch=index.html
+server=server.js
+</code></pre>
+<h3 id="game-with-a-container-server">Game dengan server kontainer</h3>
+<pre><code class="language-text">name=Voxel Skirmish
+launch=index.html
+container.image=ghcr.io/octocat/voxel-server@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+container.port=8080
+container.memory_mb=512
+container.health=/healthz
+container.env.LOG_LEVEL=info
+</code></pre>
+<h3 id="claiming-a-listing-you-own--repository-games-only">Mengklaim listingan yang Anda miliki — hanya game repositori</h3>
+<p>Mengatur <code>owner</code> ke ID pengguna StarHermit yang tidak dapat diubah dikembalikan sebagai <code>id</code> oleh <code>GET /api/v1/me</code>—bukan itu
+nama pengguna atau nama panggilan profil:</p>
+<pre><code class="language-text">name=My Game
+launch=index.html
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6
+</code></pre>
+<h2 id="who-owns-an-uploaded-game">Siapa pemilik game yang diunggah</h2>
+<p><strong>Akun yang mengunggahnya.</strong> Selalu, dan tidak ada yang perlu dikonfigurasi.</p>
+<p>Sebuah unggahan tidak memiliki tempat penyimpanan di baliknya, jadi tidak ada yang dapat membuktikan kendalinya kepada siapa pun: the
+platform mencatat akun pengunggahan sebagai pengirim dan membiarkan bidang pemilik GitHub kosong
+tidak ada klaim yang dapat menandingi baris tersebut. Sebuah <code>owner=</code> baris dalam build yang diunggah diabaikan, dan klien mengabaikannya
+tidak menawarkan bidang untuk itu — menempatkan permainan atas nama orang lain akan memberikan mereka tanggung jawab
+untuk konten yang tidak mereka terbitkan, yang seharusnya tidak dapat dilakukan oleh formulir unggah.</p>
+<p>Menyerahkan game yang sudah Anda miliki kepada orang lain merupakan tindakan terpisah dan disengaja dari menu Kelola game tersebut
+setelah faktanya, bukan keputusan yang dibuat sambil menambahkannya.</p>
+<h2 id="publishing-from-a-github-repository-instead">Menerbitkan dari repositori GitHub sebagai gantinya</h2>
+<p>Jika game Anda berada di a <code>github.com</code> repositori, letakkan <code>starhermit.txt</code> di <strong>akar repositori</strong> dan
+kirimkan URL repo — platform membaca manifes langsung dari repo dan tidak ada unggahan
+terlibat. Semua hal di atas berlaku tidak berubah, kecuali itu "semuanya berdekatan" berarti semuanya masuk
+repositori, yang merupakan alasan bagus untuk menyimpan output dan sumber build di repo terpisah (atau untuk menggunakan
+unggahan folder untuk keluaran bawaan Anda).</p>
+<p>Melihat <a href="/id/docs/api/github-games.html">Permainan GitHub</a> untuk aliran repositori, dan
+<a href="/id/docs/api/github-games.html#add-a-game-from-a-local-folder">Tambahkan game dari folder lokal</a> untuk unggahan
+titik akhir yang dihubungi klien.</p>
+<h2 id="limits">Batasan</h2>
+<p>Satu permainan mungkin menempati <strong>2 GB</strong> di starhermit.com (tunjangan dapat bervariasi berdasarkan penerapan), dan itu saja
+juga batas atas pada satu unggahan pengganti. A <a href="/id/docs/api/github-games.html#partial-updates-modemerge"><code>?mode=merge</code></a>
+patch dibatasi oleh pohon yang dihasilkan, jadi unggahan kecil yang akan membuat permainan langsung melebihi
+tunjangan ditolak. Secara mendalam
+jalur bersarang ditolak: format arsip membatasi jalur pada 100 karakter untuk nama file ditambah 155
+untuk awalan direktorinya, jadi persingkat rantai folder yang sangat panjang.</p>
+<h2 id="troubleshooting">Pemecahan masalah</h2>
+<table>
+<thead>
+<tr>
+<th>Apa yang kamu lihat</th>
+<th>Mengapa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Klien mengatakan bangunan Anda tidak memiliki manifes</td>
+<td>TIDAK <code>starhermit.txt</code> pada akar dari apa yang Anda pilih (salinan yang lebih dalam tidak dihitung). Ini adalah perintah, bukan penolakan — isi kolom dialog dan dialog akan ditulis untuk Anda.</td>
+</tr>
+<tr>
+<td>Milikmu <code>.tar</code> ditolak sebagai "header yang diperluas"</td>
+<td>Itu <em>klien</em> pengepak yang menampung kembali satu <code>.tar</code> ke dalam <code>client/</code> masih menolak nama panjang GNU dan blok PAX (menulis ulang blok metadata tersebut adalah cara memberi nama entri berikutnya). <code>git archive</code> Dan <code>tar -czf .</code> diterima oleh platform itu sendiri. Buat ulang dengan <code>tar --format=ustar</code>, atau unggah foldernya.</td>
+</tr>
+<tr>
+<td>Anda mengedit bidang tetapi nilai lama masih aktif</td>
+<td>Manifes di dalam build Anda tidak berubah; hanya bundelnya yang mendapat yang baru. Perbarui file di build Anda sehingga upload berikutnya dimulai dari nilai yang benar.</td>
+</tr>
+<tr>
+<td>"Nama tampilan diperlukan"</td>
+<td>TIDAK <code>name=</code> baris, dan tidak ada nama tampilan yang diketikkan ke dalam formulir.</td>
+</tr>
+<tr>
+<td>"Diperlukan jalur peluncuran"</td>
+<td>TIDAK <code>launch=</code> garis dan tidak <code>index.html</code> di akar folder.</td>
+</tr>
+<tr>
+<td>"File yang diunggah tidak berisi file peluncuran"</td>
+<td><code>launch=</code> memberi nama file yang tidak ada dalam folder. Periksa ejaannya dan apakah itu relatif terhadap manifes, bukan absolut.</td>
+</tr>
+<tr>
+<td>Game Anda diterbitkan tetapi filenya hilang</td>
+<td>File-file itu tidak bersebelahan dengan manifes. Pengunggahan dimulai dari folder yang dipegang <code>starhermit.txt</code>; tidak ada apa pun di atasnya yang disertakan.</td>
+</tr>
+<tr>
+<td>Ubin perpustakaan menampilkan favicon, bukan sampul Anda</td>
+<td><code>cover=</code> hilang, bukan jalur gambar yang dapat digunakan/<code>https://</code> URL, atau file tersebut tidak berada di samping file peluncuran. Nilai-nilai buruk dihilangkan secara diam-diam — game tetap diterbitkan. SVG hanya muncul di perpustakaan web; ubin Windows kembali ke favicon. Sebuah gambar dari <strong>Kelola → Seni sampul</strong> menimpa manifes sampai Anda menghapusnya di sana.</td>
+</tr>
+<tr>
+<td>Deskripsi atau catatan rilis Anda tidak muncul</td>
+<td>Kuncinya salah eja (kunci yang tidak diketahui diabaikan), itu <code>*.file</code> jalan bukan a <code>.md</code>/<code>.markdown</code>/<code>.txt</code> file relatif terhadap <code>starhermit.txt</code>, atau file tersebut tidak ada dalam apa yang Anda publikasikan. File yang hilang menyimpan teks sebelumnya.</td>
+</tr>
+<tr>
+<td>Catatan rilis Anda ditampilkan <code>\n</code> secara harfiah</td>
+<td>Hanya formulir sebaris yang berubah <code>\n</code> menjadi jeda baris. Teks dibaca dari a <code>*.file</code> digunakan persis seperti yang tertulis.</td>
+</tr>
+<tr>
+<td><code>container.image</code> ditolak</td>
+<td>Itu tidak disematkan pada intisari. Menggunakan <code>name@sha256:&lt;64 hex&gt;</code>, bukan tag.</td>
+</tr>
+<tr>
+<td>Kata API kontrol "Game ini menyatakan tidak ada kontrol."</td>
+<td>Tidak valid <code>control.*</code> baris dalam build yang sedang live. Periksa garis berlawanan <a href="#controls">Kontrol</a> dan publikasikan versi baru — lihat <a href="/id/docs/tutorials/game-controls.html">Tutorial: tambahkan kontrol ke game Anda</a>.</td>
+</tr>
+</tbody>
+</table>
+
+{% endraw %}

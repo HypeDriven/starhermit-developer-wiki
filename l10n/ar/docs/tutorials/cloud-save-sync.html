@@ -1,0 +1,125 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "تحميل وحفظ التقدم بأمان"
+source_url: "/docs/tutorials/cloud-save-sync.html"
+source_path: "docs/tutorials/cloud-save-sync.md"
+source_hash: "3d1bef0f13bb54f639d96ca6ff1c5607c172a4d25d7707062b404cba46d5de83"
+translation: "machine"
+permalink: "/ar/docs/tutorials/cloud-save-sync.html"
+---
+{% raw %}
+<h1 id="load-and-save-progress-safely">تحميل وحفظ التقدم بأمان</h1>
+<p>استخدم الحفظ السحابي للتقدم المملوك للعميل الخاص باللاعب الذي قام بتسجيل الدخول. خيار اللاعب الفردي غير الموقع
+يحتفظ بالتقدم في الذاكرة ولا يقرأ أو يكتب حفظ الحساب. التفضيلات تنتمي إلى
+<a href="/ar/docs/api/games.html#per-player-game-settings">إعدادات اللعبة</a>، وليس وثيقة التقدم.</p>
+<p>يمكن لرمز الإطلاق الوصول بالضبط <code>game:&lt;gameId&gt;</code>، أين <code>gameId</code> هو <code>game_scope</code>. المنصة
+يخزن وحدات البايت غير الشفافة، مع حفظ واحد لكل فتحة. تحقق من صحة التنسيق الذي تتوقعه لعبتك. يرى
+<a href="/ar/docs/api/catalog.html#cloud-saves">الحفظ السحابي</a> للحصص والرؤوس الشرطية.</p>
+<p><img src="/docs/images/ar/cloud-save-flow.svg" alt="تحميل والتحقق من صحتها قبل الكتابة. فشل عمليات تحميل كتلة القراءة؛ تحافظ عمليات الكتابة المشروطة على عمليات الحفظ الأحدث والتعارضات السطحية."></p>
+<h2 id="a-small-complete-json-recipe">وصفة JSON صغيرة كاملة</h2>
+<p>ينسخ <a href="/docs/sdk/cloud-save-store.js"><code>cloud-save-store.js</code></a> في البناء الخاص بك. هذا المثال يخزن الخام
+UTF-8 بايت JSON؛ المنصة تخدمهم <code>application/zip</code> ولكن لا يتطلب تنسيق ZIP.
+استخدم قارئًا مختلفًا لحفظ ملفات ZIP، بما في ذلك <a href="/ar/docs/sdk/javascript.html#cloud-saves">يحفظ ملف ZIP الخاص بمتصفح SDK</a>.
+لا تقم بتغيير التنسيقات بدون خطة ترحيل للاعبين الحاليين.</p>
+<pre><code class="language-js">import { CloudSaveStore } from './cloud-save-store.js';
+
+const store = new CloudSaveStore({
+  gameId: StarHermit.slug,
+  token: () =&gt; StarHermit.token, // Always obtain the current renewed token.
+});
+const valid = value =&gt; value?.version === 1 &amp;&amp; Number.isSafeInteger(value.points) &amp;&amp; value.points &gt;= 0;
+let progress = { version: 1, points: 0 };
+let saving = false;
+
+async function startAccountGame() {
+  // Keep gameplay/saving disabled until this resolves.
+  const remote = await store.load(valid);
+  progress = remote ?? { version: 1, points: 0 };
+  render(progress);
+}
+
+async function saveCheckpoint() {
+  if (saving) return; // Coalesce checkpoints; do not issue overlapping writes.
+  saving = true;
+  showSync('Saving…');
+  try {
+    await store.save(progress);
+    showSync('Saved');
+  } catch (error) {
+    if (error.status === 412) {
+      // Keep local progress in memory. Offer Reload cloud or an explicit merge.
+      showConflict(() =&gt; startAccountGame());
+    } else showSync('Save failed; retry after resolving the error');
+  } finally {
+    saving = false;
+  }
+}
+</code></pre>
+<p><code>render</code>, <code>showSync</code>، و <code>showConflict</code> هي واجهة المستخدم الخاصة بك. انتظر <code>startAccountGame()</code> قبل التمكين
+اللعب أو الحفظ. عند فشل التحميل، احتفظ بالحالة المحلية الحالية للاعب، واعرض الفشل،
+وإبقاء التحميلات محظورة. أ <code>404</code> هي حالة الفتحة الفارغة؛ <code>401</code>, <code>403</code>, <code>5xx</code>، JSON مشوه،
+أو أن نسخة الحفظ غير المدعومة ليست فتحات فارغة.</p>
+<p>الوصفة لا تجدد أوراق الاعتماد. يقوم متصفح SDK بتجديد الرموز المميزة للإطلاق أثناء بقائها
+صالح. قم بحل الشروط المعلقة أو قم بإعادة المصادقة من خلال تدفق إدخال اللعبة قبل إعادة محاولة القراءة.</p>
+<h2 id="conditions-and-conflicts">الظروف والصراعات</h2>
+<table>
+<thead>
+<tr>
+<th>ما تم تحميله</th>
+<th>رأس على الكتابة القادمة</th>
+<th>إذا كتب جهاز آخر</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>الحفظ الحالي باستخدام ETag</td>
+<td><code>If-Match: &lt;etag&gt;</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>لا يوجد حفظ (<code>404</code>)</td>
+<td><code>If-None-Match: *</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>لم يتم تحميل أي شيء بنجاح</td>
+<td>لا الكتابة</td>
+<td>استمر في إعادة محاولة القراءة أو اسمح للاعب بالبقاء في اللعب غير المتعقب</td>
+</tr>
+</tbody>
+</table>
+<p>استخدم الإصدار من <strong>البيانات التي قمت بتحميلها</strong>، وليس فحص البيانات الوصفية لاحقًا. احتفظ بعلامة ETag الجديدة التي تم إرجاعها
+بكل كتابة ناجحة. أ <code>412</code> يتم حفظ الكتل بشكل أكبر حتى تقوم اللعبة بتحميل الإصدار الحالي و
+يتبناها اللاعب أو يدمجها. لا تقم بإزالة الحالة بصمت والكتابة فوق جهاز آخر.
+لا تقدم واجهة برمجة التطبيقات (API) أي سجل حفظ للتراجع عن عملية الكتابة الفوقية هذه.</p>
+<p>إذا كان يجب على جهازين تحديث العدادات أو المخزون بشكل مستقل، فستكون وثيقة واحدة هي الفائزة بالكتابة الأخيرة
+قد لا تناسب اللعبة. استخدم حالة ترخيص الخادم وحدد أوامر اللعبة التي تم التحقق من صحتها بدلاً من ذلك.</p>
+<h2 id="save-format-and-migration">حفظ التنسيق والهجرة</h2>
+<p>قم بتضمين إصدار التنسيق والتحقق من صحة الأنواع والنطاقات والحقول المطلوبة قبل اعتماد جهاز التحكم عن بعد
+التقدم. اكتب ترحيلًا للإصدارات الأقدم المدعومة. احتفظ بإصدار أحدث غير معروف سليمًا؛
+لا تقم بإعادة تعيينه إلى الإعدادات الافتراضية والتحميل عليه. تخضع البيانات السحابية لتحكم العميل، لذا لا تتعامل معها أبدًا
+كدليل على النتيجة التنافسية أو الاستحقاق المدفوع.</p>
+<p>الحد الافتراضي للحفظ الذي تم فك تشفيره هو 10 ميجابايت. يضيف Base64 ثلث نص الطلب تقريبًا.
+<code>413 cloud_save_too_large</code>, <code>409 cloud_save_slots_exhausted</code>، و <code>507 cloud_save_quota_exceeded</code>
+هي فشل القدرات المختلفة؛ فحص <code>code</code> و <code>limit</code>. شرف <code>Retry-After</code> على <code>429</code>.</p>
+<h2 id="checkpoints-and-page-exit">نقاط التفتيش وخروج الصفحة</h2>
+<p>احفظ عند نقاط تفتيش ذات معنى واعرض إجراء حفظ مرئيًا. فضح التغييرات السريعة وإجراء تسلسل
+يكتب بحيث يستخدم كل واحد الإصدار الأخير المعترف به. احتفظ بمؤشر قذر حتى يتم التعرف عليه.
+الطلب الفاشل ليس عملية حفظ مؤكدة؛ بعد كتابة غامضة، أعد التحميل قبل كتابة أخرى.</p>
+<p>يعد تحميل الخروج من الصفحة أفضل جهد. المتصفح <code>fetch(..., { keepalive: true })</code> يشارك صغيرة في الرحلة
+بدل الجسم، عادة 64 كيلو بايت؛ لا يمكن الاعتماد على حفظ 10 ميجابايت. قد يتم إغلاق علامة التبويب قبل أي طلب
+التشطيبات. استخدم عمليات حفظ المقدمة العادية من أجل المتانة، ولا تقم بتسمية التقدم غير المعترف به على أنه
+تم الحفظ. يقوم برنامج التشغيل السريع بحفظ مستنده الصغير في كل مجموعة نقاط.</p>
+<h2 id="verify-in-your-game">تحقق في لعبتك</h2>
+<ol>
+<li>ابدأ بفتحة فارغة؛ جمع التقدم وحفظه وإعادة تحميله والتأكد من عودته.</li>
+<li>رفض القراءات مع وجود خطأ في الشبكة، <code>403</code>أو بيانات غير صالحة؛ تأكيد عدم وجود أي تحميل يتبع.</li>
+<li>افتح علامتي تبويب في إصدار واحد. احفظ في A، ثم B: يجب على B أن يبرز الصراع ويحافظ على حالته المحلية.</li>
+<li>اختبر تنسيقًا أقدم/أحدث وإقرارًا مفقودًا دون الكتابة فوق البيانات غير المعروفة.</li>
+<li>أدخل وضع اللاعب الفردي الذي لم يتم تعقبه وتأكد من أن اللعب لا يقدم أي طلبات حفظ على السحابة.</li>
+</ol>
+<p>يرى <a href="/ar/docs/tutorials/browser-quickstart.html">البداية السريعة القابلة للتشغيل</a>, <a href="/ar/docs/api/conventions.html">اتفاقيات API</a>، و
+<a href="/ar/docs/troubleshooting.html#game-setup-and-storage">استكشاف الأخطاء وإصلاحها</a>.</p>
+
+{% endraw %}

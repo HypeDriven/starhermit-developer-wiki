@@ -1,0 +1,111 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "Créez votre premier jeu par navigateur hébergé"
+source_url: "/docs/tutorials/browser-quickstart.html"
+source_path: "docs/tutorials/browser-quickstart.md"
+source_hash: "41cf9fbedb43c0236d904fb42d9467a521861df09572f995e085dda2e06c1d23"
+translation: "machine"
+permalink: "/fr/docs/tutorials/browser-quickstart.html"
+---
+{% raw %}
+<h1 id="build-your-first-hosted-browser-game">Créez votre premier jeu par navigateur hébergé</h1>
+<p><a href="/docs/examples/browser-quickstart.zip">Télécharger le collecteur d'étoiles</a>, un petit jeu complet à deux entrées
+options&#160;: jeu de compte avec sauvegardes dans le cloud et jeu solo dont la progression est conservée uniquement en mémoire.
+<a href="/docs/examples/browser-quickstart/index.html">Essayez une lecture non signée</a> sur ce wiki&#160;; la connexion au compte devient
+disponible après avoir publié votre propre copie sur StarHermit.</p>
+<p>Vous avez besoin d'un compte StarHermit pour publier. Le jeu lui-même n'a besoin d'aucun serveur backend, ni de dépendance
+l'installation, l'étape de build ou l'organisation de l'éditeur.</p>
+<h2 id="1-unzip-and-play-locally">1. Décompressez et jouez localement</h2>
+<p>Le ZIP contient <code>index.html</code>, <code>app.js</code>, <code>style.css</code>, <code>starhermit.txt</code>, et les deux fichiers d'aide.
+Servez le dossier extrait avec un serveur statique local, par exemple&#160;:</p>
+<pre><code class="language-bash">python3 -m http.server 8000 --directory star-collector
+</code></pre>
+<p>Ici <code>star-collector</code> est le dossier dans lequel vous avez extrait. Ouvrir <code>http://localhost:8000</code> et choisissez
+<strong>Jouez en solo (la progression n'est pas enregistrée)</strong>. Cliquez sur l'étoile. Retour au départ ou rechargement
+démarre une nouvelle exécution non suivie. Ce mode n'écrit ni la progression locale ni la progression du compte.</p>
+<h2 id="2-publish-the-distributable-folder">2. Publiez le dossier distribuable</h2>
+<p>Le manifeste se trouve déjà à la racine du dossier&#160;:</p>
+<pre><code class="language-ini">name=Star Collector Quickstart
+launch=index.html
+description=A small single-player game with account saves or untracked play.
+</code></pre>
+<p>Dans l'interface utilisateur de publication de jeux de StarHermit, ajoutez ce dossier en tant que nouveau jeu. L'intégralité du dossier sélectionné est le
+version publiée. Conservez uniquement les fichiers que vous avez l'intention de servir. L'équivalent API regroupe les fichiers
+sous <code>client/</code> et envoie une archive gzip brute&#160;:</p>
+<pre><code class="language-bash">mkdir -p bundle/client
+cp -R star-collector/. bundle/client/
+cp star-collector/starhermit.txt bundle/starhermit.txt
+# Write the archive outside bundle so it cannot include itself.
+tar -C bundle -czf star-collector.tar.gz .
+
+curl --fail-with-body -X POST https://api.starhermit.com/api/v1/me/github-games/upload \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H 'Content-Type: application/gzip' \
+  --data-binary @star-collector.tar.gz
+</code></pre>
+<p><code>ACCESS_TOKEN</code> est votre jeton de compte complet, après acceptation explicite des conditions actuelles. La réponse est
+<code>game.id</code>, <code>game.gameSlug</code>, et le sous-domaine hébergé identifie votre jeu. Ouvrez l'URL hébergée renvoyée.
+Pour les versions ultérieures, utilisez le nom de ce jeu <a href="/fr/docs/api/github-games.html#push-a-game-bundle">point de terminaison du bundle</a>
+plutôt que de créer une autre annonce. Voir <a href="/fr/docs/tutorials/ci-cd-build-upload.html">Publication CI</a> quand il est prêt.</p>
+<h2 id="3-try-the-two-account-entry-paths">3. Essayez les deux chemins d'entrée de compte</h2>
+<p><strong>Lancement depuis StarHermit&#160;:</strong> le lanceur fournit <code>#game_token=&lt;jwt&gt;</code>. L'assistant le capture et
+le supprime de l'URL avant l'exécution du module de jeu. Choisir <strong>Continuez avec votre compte StarHermit</strong>.</p>
+<p><strong>Ouvrez directement l'URL hébergée&#160;:</strong> choisir <strong>Connectez-vous avec StarHermit</strong>. Le sélecteur de fournisseur permet au
+joueur, connectez-vous avec un compte existant ou créez-en un. On revient directement sur ce jeu avec un scope
+<code>#access_token=&lt;jwt&gt;</code>; aucun identifiant à l'échelle du compte n'est envoyé au jeu.</p>
+<p>Le jeu charge la progression uniquement lorsque le joueur choisit de jouer avec un compte. Si les conditions actuelles doivent être acceptées,
+il affiche le document sous forme de texte et propose <strong>Accepter et continuer</strong>. L'acceptation envoie uniquement le hachage
+de la révision affichée. Une révision modifiée est réaffichée pour une autre décision explicite.</p>
+<h2 id="4-check-progress-and-failures">4. Vérifiez les progrès et les échecs</h2>
+<p>Collectez quelques étoiles en mode compte, attendez <strong>Enregistré</strong>, et rechargez. Le décompte revient après avoir choisi
+jeu de compte. Ouvrez un deuxième onglet sur le même décompte sauvegardé : sauvegardez dans l'un, puis collectez dans l'autre. Le
+le deuxième doit montrer un conflit et proposer <strong>Charger les dernières avancées du cloud</strong> au lieu de l'écraser.</p>
+<p>Le document de sauvegarde est <code>{ version: 1, points: &lt;non-negative integer&gt; }</code>. Le jeu se charge et valide
+avant d'écrire, utilise l'ETag chargé pour les mises à jour conditionnelles et bloque les écritures après un échec de lecture.
+Il enregistre à chaque collecte et étiquette les données enregistrées uniquement après accusé de réception. Voir
+<a href="/fr/docs/tutorials/cloud-save-sync.html">la recette salvatrice</a> pour les formats, la migration et les documents plus volumineux.</p>
+<p>La sélection d'un jeu non suivi supprime le jeton de joueur du jeu et arrête le renouvellement de l'arrière-plan. Pas de nuage
+une sauvegarde, une réussite, un classement ou une écriture de progression locale se produisent. Choisir de jouer à nouveau en compte utilise
+connectez-vous pour obtenir un nouveau jeton.</p>
+<h2 id="5-adapt-it-to-your-game">5. Adaptez-le à votre jeu</h2>
+<p>Remplacez le bouton étoile et le schéma de progression par votre gameplay. Conserver les choix d'entrée, jeton
+capture, acceptation des termes explicites, règle de chargement avant sauvegarde, gestion des erreurs et état de sauvegarde.
+Déclarez les actions du clavier dans le manifeste et lisez le <a href="/fr/docs/api/games.html#per-player-control-bindings">API de contrôle</a>
+lorsque votre jeu a besoin de reliures. Mettez les préférences de volume et de graphiques dans <a href="/fr/docs/api/games.html#per-player-game-settings">paramètres</a>.</p>
+<p>Pour les résultats multijoueurs ou compétitifs validés, ajoutez <a href="/fr/docs/choosing-an-integration.html">un script ou un conteneur</a>.
+Le compteur cloud de ce démarrage rapide correspond à une progression appartenant au client et non à une preuve d'un score légitime.</p>
+<table>
+<thead>
+<tr>
+<th>Déposer</th>
+<th>But</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index.html</code>, <code>style.css</code></td>
+<td>Entrée, termes, gameplay et interface utilisateur de statut accessibles</td>
+</tr>
+<tr>
+<td><code>app.js</code></td>
+<td>Modes de saisie, consentement explicite, validation de progression, points de contrôle, conflits</td>
+</tr>
+<tr>
+<td><code>starhermit-sdk.js</code></td>
+<td>Capture du jeton de lancement, connexion hébergée, renouvellement du jeton</td>
+</tr>
+<tr>
+<td><code>cloud-save-store.js</code></td>
+<td>Recette de chargement JSON brut/sauvegarde conditionnelle</td>
+</tr>
+<tr>
+<td><code>starhermit.txt</code></td>
+<td>Métadonnées de publication publique</td>
+</tr>
+</tbody>
+</table>
+<p>Voir <a href="/fr/docs/credentials.html">informations d'identification</a>, <a href="/fr/docs/api/conventions.html">Conventions API</a>, et
+<a href="/fr/docs/troubleshooting.html">dépannage</a> lorsqu'une requête se comporte différemment que prévu.</p>
+
+{% endraw %}

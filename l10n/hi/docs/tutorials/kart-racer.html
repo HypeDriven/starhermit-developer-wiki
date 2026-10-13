@@ -1,0 +1,512 @@
+---
+layout: "wiki"
+lang: "hi"
+title: "ट्यूटोरियल: एक मल्टीप्लेयर कार्ट रेसर बनाएं"
+source_url: "/docs/tutorials/kart-racer.html"
+source_path: "docs/tutorials/kart-racer.md"
+source_hash: "d1191e3e810a9f7c888152161e331f2cebb8c39f3e6d39661e4cde37fd39c340"
+translation: "machine"
+permalink: "/hi/docs/tutorials/kart-racer.html"
+---
+{% raw %}
+<h1 id="tutorial-build-a-multiplayer-kart-racer">ट्यूटोरियल: एक मल्टीप्लेयर कार्ट रेसर बनाएं</h1>
+<p>यह ट्यूटोरियल एक आर्केड कार्ट रेसर की मल्टीप्लेयर परत बनाता है - आठ कार्ट तक, निजी
+दोस्तों के साथ लॉबी, अजनबियों के साथ जल्दी-जल्दी जुड़ना, सीपीयू ड्राइवर खाली ग्रिड स्लॉट भरना, उलटी गिनती,
+लैप्स, एक फिनिशिंग ऑर्डर और उपलब्धियां - स्टारहर्मिट एपीआई पर। इसमें नेटकोड अनुबंध शामिल है
+और प्लेटफ़ॉर्म कॉल करता है; आपका इंजन, ट्रैक आर्ट और हैंडलिंग मॉडल आपका अपना है।</p>
+<p>यहां सब कुछ गेम-विशिष्ट है - द <code>grand-prix</code> कतार, बाइनरी फ्रेम लेआउट, आइटम बटन,
+भौतिकी स्थिरांक - एक उदाहरण मान है। केवल समापन बिंदु, फ़्रेम लिफ़ाफ़े और सीमाएँ हैं
+प्लेटफ़ॉर्म व्यवहार, और प्रत्येक उसके संदर्भ पृष्ठ से लिंक करता है।</p>
+<h2 id="1-pick-an-architecture">1. एक वास्तुकला चुनें</h2>
+<p>सर्वर टिक बजट के लिए रेसर गेम का सबसे कठिन आकार है: कार्ट तेजी से चलते हैं, टकराते हैं, और
+खिलाड़ियों को 50 एमएस का स्टीयरिंग लैग महसूस होता है। StarHermit आपको इसे चलाने के दो तरीके देता है, दोनों एक से शुरू होते हैं
+<a href="/hi/docs/api/realtime.html">वास्तविक समय कक्ष</a>:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><strong>A. होस्ट-रूटेड</strong></th>
+<th><strong>बी. सर्वर-आधिकारिक स्क्रिप्ट</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>अनुकरण कौन करता है</td>
+<td>रूम होस्ट का ग्राहक, किसी भी दर पर इसे पसंद करता है (60 हर्ट्ज+)</td>
+<td>आपका <code>server=</code> स्क्रिप्ट, ज़्यादा से ज़्यादा <strong>30 हर्ट्ज</strong></td>
+</tr>
+<tr>
+<td>परिवहन</td>
+<td>बाइनरी फ़्रेम चालू <code>ws/v1/realtime</code></td>
+<td>JSON <code>cmd</code>/<code>game</code> फ़्रेम चालू <code>ws/v1/games</code></td>
+</tr>
+<tr>
+<td>बेईमानी करना</td>
+<td>मेज़बान पर भरोसा है</td>
+<td>ग्राहकों के पास शून्य अधिकार है</td>
+</tr>
+<tr>
+<td>एलो, स्क्रिप्ट उपलब्धियाँ</td>
+<td>नहीं (मेजबान एक क्लैंप्ड परिणाम पोस्ट करता है)</td>
+<td>हाँ - <code>eloUpdates</code>, <code>achievements</code>, रिप्ले</td>
+</tr>
+<tr>
+<td>के लिए सर्वोत्तम</td>
+<td>दोस्तों के साथ आकस्मिक दौड़, पूर्ण निष्ठा भौतिकी</td>
+<td>सरल आर्केड भौतिकी के साथ रैंक वाली रेसिंग</td>
+</tr>
+</tbody>
+</table>
+<p>के साथ शुरू <strong>A</strong> जब तक आपको रैंक वाले खेल की आवश्यकता न हो; धारा 7 दिखाती है कि किस लिए परिवर्तन होता है <strong>B</strong>. A
+<a href="/hi/docs/api/container-games.html">कंटेनर सर्वर</a> आठ-कार्ट भी चला सकते हैं <strong>कमरे में बंद</strong> दौड़ और
+आधिकारिक तौर पर 60 हर्ट्ज़ पर अनुकरण करें। इसका प्रत्यक्ष गेम्स एपीआई मैचमेकिंग वर्तमान में एक अंतर्निहित 1v1 का उपयोग करता है
+कतार, इसलिए बड़े ग्रिड के लिए रीयलटाइम रूम का उपयोग करें। प्लेटफ़ॉर्म कंटेनर के लूप को स्टेप नहीं करता है।</p>
+<h2 id="2-manifest">2. प्रकट होना</h2>
+<p>इसके साथ वितरण योग्य बिल्ड फ़ोल्डर प्रकाशित करें <code>starhermit.txt</code> इसके मूल में (देखें)
+<a href="/hi/docs/starhermit-txt.html">प्रकट</a>). <code>control.*</code> लाइनें खिलाड़ियों को एक रिबाइंडिंग यूआई और आपका प्रदान करती हैं
+ग्राहक ए <a href="/hi/docs/api/games.html#per-player-control-bindings">एपीआई को नियंत्रित करता है</a> यहां से बाइंडिंग पढ़ने के लिए:</p>
+<pre><code class="language-ini">name=Turbo Hermits
+launch=index.html
+cover=art/cover.png
+control.accelerate=KeyW+ArrowUp | Accelerate
+control.brake=KeyS+ArrowDown | Brake / reverse
+control.left=KeyA+ArrowLeft | Steer left
+control.right=KeyD+ArrowRight | Steer right
+control.drift=ShiftLeft+ShiftRight | Drift
+control.item=Space | Use item
+</code></pre>
+<p>पथ A है <strong>नहीं</strong> <code>server=</code> रेखा। यदि कोई गेम एक स्क्रिप्ट भेजता है, तो एक कमरा शुरू करने से एक बाध्य सत्र बनता है
+और केवल स्क्रिप्ट ही मैच को समाप्त कर सकती है - मेज़बान की <code>POST .../result</code> दौड़ समाप्त होने का तरीका बंद हो जाता है
+(धारा 7).</p>
+<h2 id="3-sign-in-and-read-the-basics">3. साइन इन करें और मूल बातें पढ़ें</h2>
+<p>एक प्लेटफ़ॉर्म-होस्टेड गेम इसके साथ खोला जाता है <code>#game_token=&lt;jwt&gt;</code> यूआरएल में - इसे एक बार पढ़ें, इसे हटा दें
+<code>history.replaceState</code>, और इसकी 60 मिनट की समाप्ति से पहले इसे ताज़ा करें (विवरण यहां दिया गया है)।
+<a href="/hi/docs/tutorials/chess-walkthrough.html#3-launch-and-authentication">शतरंज का पूर्वाभ्यास</a> और
+<a href="/hi/docs/api/auth.html">प्रमाणन</a>). आपका स्लग टोकन है <code>game_scope</code> दावा (या <code>location.hostname</code>का
+पहला लेबल); इसे कभी भी हार्ड-कोड न करें।</p>
+<p>लोड होने पर, मेनू को जो चाहिए वह प्राप्त करें:</p>
+<pre><code class="language-http">GET /api/v1/games/{slug}/controls     # effective key bindings (manifest defaults + overrides)
+GET /api/v1/games/{slug}/settings     # camera, volume, last chosen kart — your own keys
+GET /api/v1/realtime/rooms/mine       # 200 → the player is still in a race; rejoin it
+</code></pre>
+<p>इसके साथ मेनू विकल्प सहेजें <code>PATCH /api/v1/games/{slug}/settings</code> (<code>{"settings":{"kart":"hermit-crab"}}</code>).
+सेटिंग्स सभी मशीनों में प्लेयर का अनुसरण करती हैं और किसी घोषणा की आवश्यकता नहीं है।</p>
+<h2 id="4-the-lobby">4. लॉबी</h2>
+<p>ग्रांड प्रिक्स सभी के लिए निःशुल्क है, इसलिए कमरे में आठ सीटों वाली एक टीम है। ट्रैक, लैप गिनती और इंजन
+कक्षा अपारदर्शी में जाओ <code>metadata</code>:</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms
+Authorization: Bearer &lt;launch token&gt;
+
+{ "teamCount": 1, "seatsPerTeam": 8, "backfillAfterSeconds": 45,
+  "aiPlayers": 0, "name": "Friday cup", "isVisible": true,
+  "metadata": { "track": "coral-loop", "laps": 3, "cc": 150 } }
+</code></pre>
+<p>लॉन्च टोकन के साथ कमरे का गेम टोकन से आता है, इसलिए <code>gameSlug</code> मिटाया जा सकता है। रचयिता
+सीट पर मेजबान है <code>(0, 0)</code>. यहाँ से लॉबी साधारण कमरे की तरह बहती है:</p>
+<ul>
+<li><strong>दोस्त</strong> — <code>POST /rooms/{id}/invites</code> साथ <code>{"toUserId": ...}</code>. मंच उन्हें सूचित करता है;
+उन्हें सीटें स्वीकार करना. छः अक्षर दिखाओ <code>joinCode</code> ताकि मित्र भी इसे टाइप कर सकें
+<code>POST /rooms/join-by-code</code>.</li>
+<li><strong>अजनबी</strong> - मेज़बान कॉल करता है <code>POST /rooms/{id}/open</code>. बिना कमरे वाले खिलाड़ी कॉल करते हैं
+<code>POST /rooms/quick-join</code> साथ <code>{"seats": 1}</code> और पर <code>404</code>, अपना खुद का बनाएं और खोलें।</li>
+<li><strong>ट्रैक वोट/मेजबान का मन परिवर्तन</strong> — <code>PATCH /rooms/{id}</code> नये के साथ <code>metadata</code> और कमरे का
+<code>revision</code> जैसा <code>expectedRevision</code>.</li>
+<li><strong>सीपीयू के विरुद्ध एकल</strong> - साथ बनाएं <code>"aiPlayers": 7</code>, तब <code>POST /rooms/{id}/start</code>.</li>
+</ul>
+<p>जब सभी आठ सीटें भर जाती हैं तो एक खुला कमरा अपने आप शुरू हो जाता है <code>backfillAfterSeconds</code> गुजरता है; मेज़बान
+भी कर सकते हैं <code>POST /rooms/{id}/start</code>. प्रत्येक अभी भी खाली सीट एआई भागीदार बन जाती है - वे आपकी हैं
+सीपीयू ड्राइवर.</p>
+<h2 id="5-the-race-socket-host-routed">5. रेस सॉकेट (मेजबान-रूटेड)</h2>
+<h3 id="connect">जोड़ना</h3>
+<p>प्रत्येक प्रतिभागी एक-उपयोग टिकट के साथ रीयलटाइम सॉकेट खोलता है:</p>
+<pre><code class="language-js">const { ticket } = await api.post("/api/v1/realtime/connection-tickets"); // { ticket, expiresIn }
+const ws = new WebSocket(
+  `wss://api.starhermit.com/ws/v1/realtime?roomId=${roomId}&amp;ticket=${encodeURIComponent(ticket)}`);
+ws.binaryType = "arraybuffer";
+</code></pre>
+<p>टेक्स्ट फ़्रेम JSON पुश और नियंत्रण फ़्रेम हैं; बाइनरी फ़्रेम गेमप्ले हैं। <code>roster</code> धक्का है
+आपका ग्रिड: शुरू होने के बाद यह जम गया है, एआई सीटें शामिल हैं। एक टीम के साथ, एक कार्ट का ग्रिड स्लॉट उसका होता है
+प्रतिभागी का <code>slot</code>.</p>
+<pre><code class="language-js">ws.onmessage = (e) =&gt; {
+  if (typeof e.data === "string") return onControl(JSON.parse(e.data)); // roster, presence, event, ready, chat, result
+  const bytes = new Uint8Array(e.data);
+  const sender = guidFromDotNet(bytes.subarray(0, 16)); // server-stamped, trustworthy
+  onGameplay(sender, new DataView(e.data, 16));          // your payload starts at byte 16
+};
+
+// The server prefixes the sender's participant id in .NET GUID byte order:
+// the first three groups are little-endian.
+function guidFromDotNet(b) {
+  const h = (i) =&gt; b[i].toString(16).padStart(2, "0");
+  return `${h(3)}${h(2)}${h(1)}${h(0)}-${h(5)}${h(4)}-${h(7)}${h(6)}-` +
+         `${h(8)}${h(9)}-${h(10)}${h(11)}${h(12)}${h(13)}${h(14)}${h(15)}`;
+}
+</code></pre>
+<p>अपने पेलोड में कभी भी प्लेयर आईडी न रखें और उस पर भरोसा न करें - 16-बाइट उपसर्ग ही एकमात्र पहचान है
+जिसकी सर्वर गारंटी देता है.</p>
+<h3 id="routing-and-budget">रूटिंग और बजट</h3>
+<p>प्लेटफ़ॉर्म होस्ट-रूटेड प्ले के आकार को लागू करता है:</p>
+<ul>
+<li>A <strong>अतिथि का</strong> बाइनरी फ्रेम पहुँचते हैं <strong>केवल मेजबान</strong> - वह इनपुट चैनल है।</li>
+<li> <strong>मेज़बान का</strong> बाइनरी फ्रेम पहुँचते हैं <strong>हर मेहमान</strong> - वह स्नैपशॉट चैनल है।</li>
+<li>प्रत्येक फ़्रेम अधिकतम है <strong>8 केबी</strong>; प्रत्येक कनेक्शन भेज सकता है <strong>30 संदेश/सेकंड</strong> (2× एक के लिए फट गया
+दूसरा). ऊपर जाने से सॉकेट बंद हो जाता है <code>PolicyViolation</code>.</li>
+</ul>
+<p>तो मेजबान जो भी दर सही लगता है उस पर अनुकरण करता है (60 हर्ट्ज सामान्य है) लेकिन <strong>भेजता है</strong> स्नैपशॉट पर
+20 हर्ट्ज़, और मेहमान 20 हर्ट्ज़ पर इनपुट भेजते हैं। यह कभी-कभार नियंत्रण फ्रेम के लिए हेडरूम छोड़ देता है।</p>
+<h3 id="frame-layouts-example">फ़्रेम लेआउट (उदाहरण)</h3>
+<p>इनपुट, अतिथि → होस्ट, 7 बाइट्स:</p>
+<table>
+<thead>
+<tr>
+<th>ओफ़्सेट</th>
+<th>प्रकार</th>
+<th>मैदान</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>u8</td>
+<td><code>1</code> = इनपुट</td>
+</tr>
+<tr>
+<td>1</td>
+<td>u16</td>
+<td><code>seq</code> - प्रत्येक प्रेषण में वृद्धि</td>
+</tr>
+<tr>
+<td>3</td>
+<td>i8</td>
+<td>स्टीयर, −127…127</td>
+</tr>
+<tr>
+<td>4</td>
+<td>u8</td>
+<td>गला घोंटना, 0…255</td>
+</tr>
+<tr>
+<td>5</td>
+<td>u8</td>
+<td>बिट्स: 0 ब्रेक, 1 ड्रिफ्ट</td>
+</tr>
+<tr>
+<td>6</td>
+<td>u8</td>
+<td><code>itemPresses</code> - एक काउंटर, झंडा नहीं</td>
+</tr>
+</tbody>
+</table>
+<p><code>itemPresses</code> आइटम-बटन दबाने की चालू गिनती है। 20 हर्ट्ज़ पर 50 एमएस से छोटा प्रेस होगा
+अन्यथा नमूनों के बीच गिरना; एक काउंटर के साथ मेजबान प्रति वेतन वृद्धि एक आइटम फायर करता है, हालाँकि
+प्रेस उतरे.</p>
+<p>स्नैपशॉट, होस्ट → अतिथि, 4 + 22 बाइट्स प्रति कार्ट (पूर्ण ग्रिड के लिए 176 बाइट्स):</p>
+<table>
+<thead>
+<tr>
+<th>ओफ़्सेट</th>
+<th>प्रकार</th>
+<th>मैदान</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>u8</td>
+<td><code>2</code> = स्नैपशॉट</td>
+</tr>
+<tr>
+<td>1</td>
+<td>u16</td>
+<td>होस्ट टिक</td>
+</tr>
+<tr>
+<td>3</td>
+<td>u8</td>
+<td>कार्ट गिनती</td>
+</tr>
+<tr>
+<td>प्रति कार्ट</td>
+<td>u8, f32 ×4, u8, u16, u8, u8</td>
+<td>स्लॉट, एक्स, जेड, हेडिंग, स्पीड, लैप, चेकपॉइंट, आइटम, झंडे</td>
+</tr>
+</tbody>
+</table>
+<p>अतिथि अन्य कार्ट प्रस्तुत करते हैं <strong>~ 100 एमएस अतीत में</strong>, दो स्नैपशॉट के बीच अंतरवेश
+उस समय को ब्रैकेट करें, और अपने इनपुट से स्थानीय रूप से अपने स्वयं के कार्ट की भविष्यवाणी करें, जिससे मेजबान की ओर आसानी हो
+स्थिति जब वे असहमत हों। अंतिम इनपुट शामिल करें <code>seq</code> होस्ट ने प्रति कार्ट लागू किया <code>flags</code> या एक
+यदि आप सटीक मिलान चाहते हैं तो अतिरिक्त फ़ील्ड।</p>
+<h3 id="countdown-race-events-finish">उलटी गिनती, दौड़ प्रतियोगिताएं, समापन</h3>
+<p>नियंत्रण फ़्रेम JSON हैं, अधिकतम 4 KB, और सर्वर स्टैम्प <code>from</code> प्रेषक की प्रतिभागी आईडी के साथ:</p>
+<ul>
+<li>मेहमान भेजते हैं <code>{"type":"ready"}</code> एक बार ट्रैक लोड हो गया।</li>
+<li>होस्ट प्रत्येक कनेक्टेड मानव के तैयार होने (या टाइमआउट) की प्रतीक्षा करता है, फिर भेजता है
+<code>{"type":"event","kind":"countdown","goInMs":3000}</code>. मेहमान अपनी स्थानीय उलटी गिनती शुरू करते हैं
+रसीद - इस परिशुद्धता पर कोई घड़ी सिंक की आवश्यकता नहीं है।</li>
+<li>अन्य रेस बीट भी हैं <code>event</code> फ़्रेम: <code>{"kind":"lap","slot":3,"lap":2}</code>,
+<code>{"kind":"finished","slot":3,"place":1,"timeMs":94210}</code>.</li>
+<li><code>chat</code> सभी के लिए उपलब्ध है, लेकिन मेहमानों के लिए प्रति मिनट 10 नियंत्रण फ़्रेम तक सीमित हैं - जो कि बहुत है
+<code>ready</code> और कुछ "जीजी"s, गेमप्ले के लिए नहीं।</li>
+</ul>
+<p>जब अंतिम मानव रेखा पार कर जाता है (या विजेता के समाप्त होने के बाद एक टाइमर), तो मेज़बान सबमिट कर देता है
+परिणाम, जो कमरे को बंद कर देता है और धक्का देता है <code>{"type":"result"}</code> सबके लिए:</p>
+<pre><code class="language-http">POST /api/v1/realtime/rooms/{id}/result
+
+{ "teamScores": [0],
+  "metadata": { "track": "coral-loop",
+                "order": [ { "slot": 3, "timeMs": 94210 }, { "slot": 0, "timeMs": 95002 } ],
+                "bestLapMs": 30112 } }
+</code></pre>
+<p><code>teamScores</code> प्रति टीम बिल्कुल एक प्रविष्टि की आवश्यकता है (0-50 तक सीमित), जिसमें कुछ भी उपयोगी नहीं है
+सभी के लिए मुफ़्त; अंतिम क्रम रहता है <code>metadata</code>. एक टीम दौड़ के साथ एक ही कमरा है
+<code>teamCount: 2</code> और प्रत्येक टीम के अंक <code>teamScores</code>.</p>
+<h3 id="cpu-drivers-leavers-and-host-changes">सीपीयू ड्राइवर, लीवर और होस्ट परिवर्तन</h3>
+<ul>
+<li><strong>ड्राइव करने के लिए AI सीटें आपकी हैं।</strong> प्लेटफ़ॉर्म सीट आरक्षित करता है और ड्राइवर का नाम बताता है; मेज़बान का
+सिमुलेशन इसे चलाता है (कुछ रबर-बैंडिंग के साथ चौकियों के माध्यम से एक रेसिंग लाइन)।</li>
+<li><strong>एक अतिथि जो दौड़ के बीच में ही चला जाता है</strong> (<code>POST /rooms/{id}/leave</code>) उनके कार्ट को ग्रिड पर रखता है: रोस्टर
+पुश उसी प्रतिभागी को दिखाता है <code>id</code> अब <code>isAi: true</code>, और होस्ट का सीपीयू उस कार्ट पर कब्ज़ा कर लेता है।</li>
+<li><strong>एक मेहमान जो छोड़ता है</strong> अभी भी कमरे में है; उनके कार्ट को चालू रखें और उन्हें पुनः कनेक्ट होने दें -
+नवीनतम सॉकेट पुराने सॉकेट का स्थान ले लेता है।</li>
+<li><strong>यदि मेज़बान चला जाए</strong>, मेज़बान की भूमिका सबसे लंबे समय तक जुड़े रहने वाले शेष मानव के पास चली जाती है
+रोस्टर पुश नया दिखाता है <code>isHost</code>. प्रत्येक अतिथि के पास पहले से ही नवीनतम पूर्ण स्नैपशॉट है, इसलिए नया
+होस्ट इससे सिमुलेशन फिर से शुरू करता है और स्नैपशॉट भेजना शुरू करता है; अतिथि इनपुट अब उन तक पहुंच रहे हैं।
+होस्ट माइग्रेशन आपके कोड का काम है - प्लेटफ़ॉर्म केवल भूमिका को आगे बढ़ाता है।</li>
+<li><strong>यदि होस्ट बस डिस्कनेक्ट हो जाता है</strong>, होस्ट सॉकेट के बिना कमरा 60 सेकंड के बाद बंद हो जाता है।</li>
+</ul>
+<h2 id="6-around-the-race">6. दौड़ के आसपास</h2>
+<ul>
+<li><strong>आवाज और बातचीत.</strong> प्रत्येक अतिथि पहले से ही कर सकता है <code>chat</code> रीयलटाइम सॉकेट पर; आवाज के लिए, देखें
+<a href="/hi/docs/api/voice.html">आवाज़</a>.</li>
+<li><strong>दोबारा मैच करें.</strong> नतीजे के बाद कमरा बंद है. मेज़बान से एक नया कमरा बनाने और आमंत्रित करने को कहें
+पिछले रोस्टर के इंसान, या सभी को शीघ्र-ज्वाइन पर वापस भेज दें।</li>
+<li><strong>लैप-टाइम लीडरबोर्ड।</strong> किसी गेम का प्लेटफ़ॉर्म लीडरबोर्ड उसका एलो बोर्ड होता है, जो केवल एक सर्वर द्वारा लिखा जाता है
+रनटाइम. प्रकाशक द्वारा परिभाषित लीडरबोर्ड स्वीकार करता है <code>POST /api/v1/leaderboards/{id}/submit</code>, लेकिन वह
+ग्राहक द्वारा स्कोर का दावा किया जाता है - एक दोस्ताना समय परीक्षण के लिए ठीक है, पुरस्कार वाली किसी भी चीज़ के लिए नहीं।</li>
+</ul>
+<h2 id="7-variant-b-server-authoritative-racing">7. वेरिएंट बी: सर्वर-आधिकारिक रेसिंग</h2>
+<p>रैंक किए गए खेल के लिए, सिमुलेशन को एक स्क्रिप्ट में ले जाएं। लॉबी अपरिवर्तित है; स्क्रिप्ट जोड़ें और
+मेनिफेस्ट में मिलान सेटिंग:</p>
+<pre><code class="language-ini">server=server.js
+matchmaking.max_wait_seconds=20
+matchmaking.ai_players=7
+</code></pre>
+<p>अब दो चीज़ें दौड़ पैदा करती हैं: <strong>एक कमरा शुरू करना</strong> अपने मनुष्यों के लिए एक कमरे में बंद सत्र बनाता है, और
+<strong>मंगनी करना</strong> (<code>POST /api/v1/games/{slug}/matchmaking?queue=grand-prix</code>) आठ होने पर एक बनाता है
+खिलाड़ी मिल जाते हैं - या, उपरोक्त सेटिंग्स के साथ, 20 सेकंड के बाद सीपीयू सात तक खाली हो जाते हैं
+सीटें. दोस्तों की एक लॉबी एक साथ कतार में लग सकती है <code>POST /realtime/rooms/{id}/matchmake</code>.</p>
+<p>किसी भी तरह, ग्राहक इसे लेते हैं <code>sessionId</code> (कमरे का <code>gameSessionId</code>, या मिलान टिकट) और
+फिर से खेलना <code>ws/v1/games?sessionId=…</code>. रियलटाइम सॉकेट, यदि कोई हो, केवल रोस्टर के लिए रखा जाता है।</p>
+<h3 id="the-script">लिपि</h3>
+<p>संपूर्ण अनुकरण चलता है <code>onTick</code> 30 हर्ट्ज़ छत पर। प्रत्येक आह्वान एक ताज़ा सैंडबॉक्स है
+मिलता है <code>sessionState</code> अंदर और इसे वापस लौटाता है, इसलिए उस स्थिति को छोटा रखें - यह हर टिक को क्रमबद्ध करता है।</p>
+<pre><code class="language-js">const TRACK = { laps: 3, radius: 14,
+  checkpoints: [[0, 0], [120, 0], [160, 60], [120, 120], [0, 120], [-40, 60]] };
+
+globalThis.game = {
+  tickRateHz: 30,
+  replays: true,
+  queues: [{ key: "grand-prix", teams: 8, teamSize: 1 }],
+  achievements: [
+    { key: "chequered-flag", name: "Chequered Flag", description: "Win a race.", points: 10 }
+  ],
+
+  createSession(ctx) {
+    const karts = racers(ctx).map((r, i) =&gt; ({
+      id: r.id, name: r.name, ai: r.ai, x: -8 * (i % 2), z: -6 * i, heading: 0, speed: 0,
+      cp: 1, lap: 0, boost: 0, boosts: 1, input: {}, ack: 0, finishedAt: null
+    }));
+    return { ok: true, sessionState: { t: ctx.now, goAt: ctx.now + 4000, karts, order: [] } };
+  },
+
+  onPlayerMessage(ctx) {                       // durable commands: discrete actions
+    const s = copy(ctx.sessionState);
+    const k = s.karts.find((k) =&gt; k.id === ctx.message.from);
+    if (ctx.message.data?.type === "use-item" &amp;&amp; k &amp;&amp; k.boosts &gt; 0 &amp;&amp; ctx.now &gt;= s.goAt) {
+      k.boosts--; k.boost = 1.2;
+    }
+    return { ok: true, sessionState: s };
+  },
+
+  onTick(ctx) {
+    const s = copy(ctx.sessionState);
+    const dt = Math.min(Math.max((ctx.now - s.t) / 1000, 0), 0.1);
+    s.t = ctx.now;
+    for (const i of ctx.inputs || []) {        // latest realtime input per player since last tick
+      const k = s.karts.find((k) =&gt; k.id === i.from);
+      if (k) { k.input = i.data; k.ack = Math.max(k.ack, Math.floor(+i.data.seq) || 0); }
+    }
+    if (ctx.now &gt;= s.goAt) {
+      for (const k of s.karts) {
+        if (k.finishedAt) continue;
+        move(k, k.ai ? aiInput(k) : k.input, dt);   // pure motion — shared with the client
+        progress(k, s, ctx);                        // checkpoints, laps, finish — server only
+      }
+    }
+    const snap = s.karts.map((k) =&gt;
+      [k.id, r2(k.x), r2(k.z), r3(k.heading), r2(k.speed), r2(k.boost), k.lap, k.cp, k.ack]);
+    const out = { ok: true, sessionState: s,
+      broadcast: [{ to: "all", data: { type: "snap", t: s.t, goAt: s.goAt, karts: snap } }] };
+    if (raceOver(s, ctx)) Object.assign(out, finish(s, ctx));
+    return out;
+  }
+};
+</code></pre>
+<p>मददगार साधारण गेम कोड हैं। प्लेटफ़ॉर्म जिन भागों की परवाह करता है:</p>
+<ul>
+<li><strong><code>racers(ctx)</code></strong> सत्र की शुरुआत चाहे जो भी हो, ग्रिड को पढ़ता है: <code>ctx.room.roster</code> एक के लिए
+कमरा (एआई सीटें हैं <code>userId: null</code>, तो उन्हें इस तरह की आईडी दें <code>ai-0-5</code>), <code>ctx.matchmaking.seats</code> एक के लिए
+मैचमेड रेस (सीटें छोड़ें <code>id: null</code>), अन्य <code>ctx.players</code>.</li>
+<li><strong><code>move(k, input, dt)</code></strong> अवश्य <strong>प्रत्येक इनपुट मान को क्लैंप करें</strong> — <code>steer</code> से −1…1, <code>throttle</code> से 0…1--
+क्योंकि <code>ctx.inputs[].data</code> ग्राहक ने जो कुछ भी भेजा है। केवल <code>from</code> भरोसा किया जाता है. इसे शुद्ध रखें -
+नहीं <code>ctx</code>, कोई सत्र स्थिति नहीं - इसलिए ग्राहक इसे भी चला सकता है (देखें)।
+<a href="#client-side-prediction">ग्राहक-पक्ष भविष्यवाणी</a>).</li>
+<li><strong>यादृच्छिकता और समय</strong> से आते हैं <code>ctx.random</code> और <code>ctx.now</code>; कोई नहीं है <code>Date</code> या <code>Math.random</code>.</li>
+<li><strong><code>finish(s, ctx)</code></strong> रिटर्न <code>result</code> (जो सत्र समाप्त करता है और, एक कमरे के लिए, इसे बंद कर देता है),
+<code>achievements</code> विजेता के लिए यदि मानव, और <code>eloUpdates</code> मानव रेसरों के लिए - उदाहरण के लिए जोड़ीदार
+अंतिम क्रम में एलो, से पढ़ें और वापस लिखें <code>ctx.playerStates</code>. एआई सीटें नहीं हो सकतीं
+खिलाड़ी की स्थिति, रेटिंग या उपलब्धियाँ प्राप्त करें।</li>
+<li><strong><code>raceOver</code></strong> उन जातियों को भी ख़त्म करना चाहिए जिन्हें कोई ख़त्म नहीं कर सकता - हर इंसान के अनुसार चला गया
+<code>ctx.presence</code> (कमरे), या एक कठिन समय सीमा।</li>
+<li><strong>रिप्ले</strong> केवल रखें <em>अंतिम</em> <code>sessionState</code>. एक कॉम्पैक्ट लैप-टाइम टेबल और फिनिशिंग रखें
+इसमें ऑर्डर करें, प्रति-टिक स्थिति लॉग नहीं।</li>
+</ul>
+<h3 id="the-client">ग्राहक</h3>
+<p>हर टिक पर रियलटाइम इनपुट के रूप में स्टीयरिंग भेजें और टिकाऊ कमांड के रूप में अलग-अलग क्रियाएं करें:</p>
+<pre><code class="language-js">// ~30 Hz: latest-wins, batched into the next onTick
+send({ type: "cmd", data: { type: "input", realtime: true, seq: ++seq,
+                            steer, throttle, brake, drift } });
+
+// on key press: a durable command, runs onPlayerMessage immediately
+send({ type: "cmd", data: { type: "use-item" } });
+</code></pre>
+<p>सामान <strong>अवश्य</strong> एक टिकाऊ आदेश से गुजरें। रीयलटाइम इनपुट टिकों के बीच नवीनतम जीत हैं, और
+प्लेटफ़ॉर्म केवल एक-शॉट फ़ील्ड को सुरक्षित रखता है <code>pass</code>, <code>tackle</code> और <code>shoot</code> जब एक नया नमूना
+पुराने को प्रतिस्थापित करता है - रीयलटाइम इनपुट में किसी भी अन्य बटन को टिक से पहले ओवरराइट किया जा सकता है
+इसे देखता है.</p>
+<p><code>achievement</code> फ़्रेम एक ही सॉकेट पर आते हैं; पढ़ना <code>GET /api/v1/games/{slug}/achievements</code> पर
+खुलने से पहले दी गई किसी भी चीज़ के लिए लोड करें।</p>
+<h3 id="client-side-prediction">ग्राहक-पक्ष भविष्यवाणी</h3>
+<p>केवल वही प्रस्तुत करना जो सर्वर भेजता है, कार्ट को ऐसा महसूस कराता है जैसे उसे कीचड़ में चलाया गया हो। एक स्टीयरिंग
+परिवर्तन को सर्वर तक पहुंचना होगा, अगले टिक की प्रतीक्षा करनी होगी (30 हर्ट्ज पर 33 एमएस तक), और वापस आना होगा
+<code>snap</code> - 80 एमएस पिंग पर जो कार्ट घूमने से पहले 100 एमएस से अधिक है। भविष्यवाणी यह छिपाती है: ग्राहक
+चलता है <strong>इसका अपना कार्ट</strong> तुरंत और प्रत्येक का इलाज करता है <code>snap</code> सुधार के रूप में, चित्र के रूप में नहीं।</p>
+<h4 id="share-the-motion-code">मोशन कोड साझा करें</h4>
+<p>सिमुलेशन को उपरोक्त स्क्रिप्ट की तरह विभाजित करें: एक शुद्ध <code>move(k, input, dt)</code> संभालने के लिए, और
+केवल सर्वर <code>progress</code> चौकियों, लैप्स और फिनिशिंग के लिए। मोशन कोड को उजागर करें <code>server.js</code>
+दूसरे वैश्विक के रूप में - शतरंज जिस पैटर्न का उपयोग करता है <code>globalThis.chessRules</code> - और उसी फ़ाइल को इसमें लोड करें
+ब्राउज़र:</p>
+<pre><code class="language-js">// server.js — shared by the platform's sandbox and the browser
+function move(k, input, dt) { /* clamp input, integrate speed, heading, x, z, boost */ }
+globalThis.kartPhysics = { move, TRACK };
+globalThis.game = { /* ... as above ... */ };
+</code></pre>
+<pre><code class="language-html">&lt;script src="server.js"&gt;&lt;/script&gt;  &lt;!-- defines kartPhysics; the client never calls game.* --&gt;
+</code></pre>
+<p>ग्राहक भविष्यवाणी करता है <strong>केवल गति</strong>. अंतराल, स्थिति, आइटम और अंतिम क्रम सर्वर का रहता है
+बुलाओ. बिट-समान परिणामों की अपेक्षा न करें: सैंडबॉक्स और ब्राउज़र अंतिम बिट्स में असहमत हो सकते हैं
+<code>Math.sin</code>/<code>Math.cos</code>, और पदों में <code>snap</code> गोलाकार हैं. मेल-मिलाप उस बहाव को सोख लेता है।</p>
+<h4 id="step-at-the-servers-rhythm">सर्वर की लय पर कदम रखें</h4>
+<p>सर्वर प्रति इनपुट एक चरण नहीं चलता है। प्रत्येक टिक यह लागू होता है <strong>नवीनतम</strong> यह इनपुट को धारण करता है
+वह कार्ट, नया आने तक इसका उपयोग करता रहता है, और उसके बाद से वास्तविक समय में एकीकृत हो जाता है
+पिछला टिक. इसलिए डिस्प्ले फ़्रेम दर पर कदम बढ़ाने के बजाय उस आकार को प्रतिबिंबित करें:</p>
+<pre><code class="language-js">const pending = [];                              // inputs the server hasn't acknowledged yet
+let seq = 0, predicted, previous;               // { x, z, heading, speed, boost }, seeded from the first snap
+let error = { x: 0, z: 0, heading: 0 };          // visual offset, decays in render()
+
+setInterval(() =&gt; {                              // 30 Hz, the script's tickRateHz
+  if (!predicted || serverNow() &lt; goAt) return;  // the server ignores movement before goAt
+  const input = { steer: readSteer(), throttle: readThrottle(), brake: held("brake"), drift: held("drift") };
+  const entry = { seq: ++seq, input, dt: 1 / 30 };
+  send({ type: "cmd", data: { type: "input", realtime: true, seq: entry.seq, ...input } });
+  pending.push(entry);
+  previous = { ...predicted };
+  kartPhysics.move(predicted, input, entry.dt);  // the kart responds now, not a round trip later
+}, 1000 / 30);
+</code></pre>
+<p>टिक दर से अधिक तेजी से भेजना व्यर्थ है - प्रति टिक केवल नवीनतम इनपुट का उपयोग किया जाता है - और
+प्लेटफ़ॉर्म रीयलटाइम इनपुट को अपनी प्रति-कनेक्शन सीमा से ऊपर छोड़ देता है।</p>
+<h4 id="reconcile-on-every-snap">हर बात पर सामंजस्य बिठाएं <code>snap</code></h4>
+<p>स्क्रिप्ट गूँजती है <code>ack</code>, उच्चतम <code>seq</code> इसने प्रत्येक कार्ट के लिए आवेदन किया है। सभी के ऊपर <code>snap</code>, अपने को रिवाइंड करें
+सर्वर की स्थिति पर कार्ट करें और जो सर्वर ने अभी तक नहीं देखा है उसे दोबारा चलाएं:</p>
+<pre><code class="language-js">function onSnap(snap) {
+  const [, x, z, heading, speed, boost, lap, cp, ack] = snap.karts.find((k) =&gt; k[0] === myId);
+  while (pending.length &amp;&amp; pending[0].seq &lt;= ack) pending.shift();   // applied or superseded
+
+  const corrected = { x, z, heading, speed, boost };
+  for (const p of pending) kartPhysics.move(corrected, p.input, p.dt);
+
+  if (!predicted) { predicted = corrected; previous = { ...corrected }; return; } // first snap
+  error.x += predicted.x - corrected.x;          // what the player would see jump
+  error.z += predicted.z - corrected.z;
+  error.heading += predicted.heading - corrected.heading;
+  if (Math.hypot(error.x, error.z) &gt; 3) error = { x: 0, z: 0, heading: 0 }; // wall hit, bump: snap
+  predicted = corrected;
+  hud.lap = lap; hud.checkpoint = cp;            // progress is never predicted
+}
+</code></pre>
+<p>तक सब कुछ त्याग देना <code>ack</code> सही है भले ही नवीनतम-जीत कुछ इनपुट छोड़ देता है: एक छोड़ दिया गया
+सर्वर टिक करने से पहले इनपुट को हटा दिया गया था, इसलिए इसने सर्वर के कार्ट को कभी भी प्रभावित नहीं किया।</p>
+<h4 id="smooth-corrections-render-at-frame-rate">सुचारू सुधार, फ्रेम दर पर प्रस्तुत करना</h4>
+<p>छोटे सुधार अदृश्य होने चाहिए. कार्ट को पूर्वानुमानित स्थिति के साथ-साथ एक क्षयकारी स्थान पर ड्रा करें
+त्रुटि ऑफसेट, और पिछले दो 30 हर्ट्ज भविष्यवाणी चरणों के बीच इंटरपोलेट करें ताकि 60 या 144 हर्ट्ज डिस्प्ले हो
+सुचारू रूप से चलता है:</p>
+<pre><code class="language-js">function render(frameDt) {
+  const decay = Math.exp(-frameDt / 0.1);        // ~100 ms to absorb a correction
+  error.x *= decay; error.z *= decay; error.heading *= decay;
+  const a = sinceLastStep() * 30;                // 0…1 between prediction steps
+  drawKart(lerp(previous.x, predicted.x, a) + error.x,
+           lerp(previous.z, predicted.z, a) + error.z,
+           lerpAngle(previous.heading, predicted.heading, a) + error.heading);
+}
+</code></pre>
+<p>क्षय के बजाय स्नैप थ्रेशोल्ड को ट्यून करें: कार्ट लंबाई से बड़ा सुधार वास्तविक है
+घटना (एक उछाल जिसकी आपने भविष्यवाणी नहीं की थी) और धीमी स्लाइड की तुलना में त्वरित स्नैप के रूप में बेहतर ढंग से पढ़ता है।</p>
+<h4 id="know-what-not-to-predict">जानिए क्या भविष्यवाणी नहीं करनी चाहिए</h4>
+<ul>
+<li><strong>अन्य कार्ट.</strong> वे अतीत में ~100 एमएस खींचे गए हैं (बफर)। <code>snap</code>s और के बीच प्रक्षेप करें
+दो वह कोष्ठक <code>serverNow() - 100</code>), इसलिए उनके विरुद्ध भविष्यवाणी की गई टक्कर एक टक्कर है
+वे कहाँ <em>थे</em>. दीवारों और ट्रैक का अनुमान लगाएं - वे हिलते नहीं हैं - और सर्वर को समाधान करने दें
+कार्ट-टू-कार्ट बम्प्स। सुधार एक राउंड ट्रिप के भीतर आता है। यदि बफ़र सूख जाता है, तो एक्सट्रपलेशन करें
+गति और दिशा से ~100 एमएस तक, फिर रुकें।</li>
+<li><strong>सामान।</strong> <code>use-item</code> एक टिकाऊ कमांड है, इसलिए यह चलता रहता है <code>onPlayerMessage</code> जैसे ही यह आता है -
+कोई टिक नहीं रुको. कुंजी दबाने पर लौ और ध्वनि बजाएं; गति को आने दो
+सुलह, तब से <code>boost</code> में है <code>snap</code>. यदि सर्वर मना कर देता है (कोई शुल्क नहीं बचा है), तो अगला
+<code>snap</code> इसे वापस रोल करता है.</li>
+<li><strong>जाति अवस्था.</strong> लैप गिनती, स्थिति और समापन से आते हैं <code>snap</code> और केवल आपकी स्क्रिप्ट का प्रसारण होता है।</li>
+</ul>
+<h4 id="estimate-the-server-clock">सर्वर घड़ी का अनुमान लगाएं</h4>
+<p><code>snap.t</code> और <code>goAt</code> सर्वर समय हैं (<code>ctx.now</code>). सबसे छोटे देखे गए अंतर से ऑफसेट रखें, जो
+धीमी डिलीवरी को फ़िल्टर करता है:</p>
+<pre><code class="language-js">let offset = Infinity;
+function noteSnap(snap) { offset = Math.min(offset, performance.now() - snap.t); }
+const serverNow = () =&gt; performance.now() - offset;
+</code></pre>
+<p>से उलटी गिनती शुरू करें <code>goAt</code>, और उस पर गेट भविष्यवाणी जैसा कि ऊपर लूप करता है। एक कार्ट जो चलती है
+पहले <code>goAt</code> स्थानीय स्तर पर रबर-बैंड से पहले ग्रिड में वापस लाया जाता है <code>snap</code> शुरुआत के बाद.</p>
+<p>यह सब समायोजित करने के लिए, विकास में कृत्रिम विलंबता (विलंब) जोड़ें <code>send</code> और <code>onSnap</code> 100-200 एमएस तक)
+और प्रत्येक सुधार का आकार लॉग करें - स्थिर बड़े सुधार का मतलब है <code>move</code> से भटक गया है
+सर्वर की प्रतिलिपि, या इनपुट फ़ील्ड को प्रत्येक तरफ अलग-अलग क्लैंप किया जा रहा है।</p>
+<h2 id="checklist">जांच सूची</h2>
+<ul>
+<li>[ ] <code>starhermit.txt</code> बिल्ड आउटपुट के मूल में, के साथ <code>control.*</code> कार्ट क्रियाओं के लिए.</li>
+<li>[ ] हैश से पढ़ा गया टोकन लॉन्च करें, छीन लिया गया, ताज़ा किया गया; स्लग से <code>game_scope</code>.</li>
+<li>[ ] <code>GET /realtime/rooms/mine</code> चल रही दौड़ में फिर से शामिल होने के लिए लोड पर।</li>
+<li>[ ] एक-टीम कक्ष, ट्रैक इन <code>metadata</code>; आमंत्रण, जॉइन कोड, ओपन + क्विक-ज्वाइन, सोलो विद <code>aiPlayers</code>.</li>
+<li>[ ] कनेक्शन टिकट के साथ सॉकेट खोला गया; 16-बाइट प्रेषक उपसर्ग को हटा दिया गया और पहचान के रूप में उपयोग किया गया।</li>
+<li>[ ] होस्ट स्नैपशॉट और अतिथि इनपुट ≤ 20 हर्ट्ज प्रत्येक पर, फ्रेम ≤ 8 केबी; आइटम को काउंटर के रूप में दबाया जाता है।</li>
+<li>[ ] तैयार → ​​उलटी गिनती → नियंत्रण फ्रेम के रूप में दौड़ की घटनाएं; आदेश के साथ परिणाम <code>metadata</code>.</li>
+<li>[ ] होस्ट एआई सीटें और लीवर्स कार्ट चलाता है; नया होस्ट अंतिम स्नैपशॉट से फिर से शुरू होता है।</li>
+<li>[ ] वेरिएंट बी: <code>tickRateHz: 30</code>, क्लैंप किए गए इनपुट, टिकाऊ कमांड के रूप में आइटम, <code>result</code> + <code>eloUpdates</code>.</li>
+<li>[ ] वैरिएंट बी: साझा के साथ स्वयं के कार्ट की भविष्यवाणी की गई <code>move</code>, पर सुलह हो गई <code>ack</code>, सुधार सुचारु किए गए;
+पहले कोई हलचल नहीं <code>goAt</code>; अन्य कार्ट्स ने ~100 एमएस पीछे प्रक्षेपित किया।</li>
+</ul>
+<h2 id="see-also">यह भी देखें</h2>
+<ul>
+<li><a href="/hi/docs/api/realtime.html">रीयलटाइम कमरे</a> - लॉबी, सीटें, <code>ws/v1/realtime</code> अनुबंध</li>
+<li><a href="/hi/docs/api/game-scripts.html">गेम स्क्रिप्ट</a> - टिक रेट, रियलटाइम इनपुट, रूम-बाउंड सेशन</li>
+<li><a href="/hi/docs/api/games.html">खेल</a> - मंगनी, नियंत्रण, सेटिंग्स, गेमप्ले सॉकेट</li>
+<li><a href="/hi/docs/starhermit-txt.html"><code>starhermit.txt</code></a> - नियंत्रण, मंगनी की समय सीमा, एआई सीटें</li>
+</ul>
+
+{% endraw %}

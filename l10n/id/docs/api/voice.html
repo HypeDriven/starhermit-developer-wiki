@@ -1,0 +1,194 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Suara"
+source_url: "/docs/api/voice.html"
+source_path: "docs/api/voice.md"
+source_hash: "b854ce844a33279125a6c44c43b800b3efef80cbcf31d1f74a9f17192fab0aef"
+translation: "machine"
+permalink: "/id/docs/api/voice.html"
+---
+{% raw %}
+<h1 id="voice">Suara</h1>
+<p>Suara StarHermit menyediakan ruang suara per percakapan melalui REST API (<code>api/v1/voice</code>) ditambah WebSocket biner/teks campuran (<code>ws/v1/voice</code>) untuk sinyal audio dan WebRTC. Semua titik akhir REST memerlukan autentikasi. Ketersediaan suara mungkin berbeda. Badan kesalahan bervariasi; melihat <a href="/id/docs/api/conventions.html#requests-and-responses">konvensi API</a>.</p>
+<p>Kamar berlabuh ke a <a href="/id/docs/api/chat.html">percakapan obrolan</a>; keanggotaan dalam percakapan adalah gerbang segalanya, jadi aturan pertemanan obrolan juga mengatur suara (percakapan sesi permainan mengabaikan persahabatan). Batasan: 3 ruang aktif per percakapan, maksimal 10 peserta per ruang, codec <code>"opus"</code>.</p>
+<h2 id="rest-endpoints">titik akhir REST</h2>
+<p>Basis: <code>https://api.starhermit.com/api/v1/voice</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POS</td>
+<td><code>/rooms</code></td>
+<td>JWT</td>
+<td>Buat ruang suara untuk percakapan</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/rooms?conversationId=</code></td>
+<td>JWT</td>
+<td>Buat daftar ruangan untuk percakapan</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/rooms/{roomId}</code></td>
+<td>JWT</td>
+<td>Dapatkan kamar</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/rooms/{roomId}/join</code></td>
+<td>JWT</td>
+<td>Bergabunglah dengan ruangan (wajib sebelum WS)</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/rooms/{roomId}/leave</code></td>
+<td>JWT</td>
+<td>Tinggalkan ruangan</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/rooms/{roomId}/mute</code></td>
+<td>JWT</td>
+<td>Atur status bisu Anda sendiri</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/rooms/{roomId}/participants/{userId}/server-mute</code></td>
+<td>JWT (pencipta)</td>
+<td>Host mute yang tidak dapat diangkat oleh peserta</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/rooms/{roomId}/close</code></td>
+<td>JWT</td>
+<td>Menutup ruangan (khusus kreator)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-room">Buat sebuah ruangan</h3>
+<p><code>POST /rooms</code></p>
+<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 10 }
+</code></pre>
+<p>Pengembalian a <code>VoiceRoomDto</code>.</p>
+<h3 id="room-shape">Bentuk ruangan</h3>
+<p><code>GET /rooms?conversationId=&lt;guid&gt;</code> → <code>VoiceRoomDto[]</code>; <code>GET /rooms/{roomId}</code> → <code>VoiceRoomDto</code>:</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "conversationId": "&lt;guid&gt;",
+  "creatorUserId": "&lt;guid&gt;",
+  "codec": "opus",
+  "status": "Active",
+  "maxParticipants": 10,
+  "createdAt": "2026-07-22T07:00:00Z",
+  "participants": [
+    {
+      "userId": "&lt;guid&gt;",
+      "username": "alice",
+      "isMuted": false,
+      "isConnected": true,
+      "joinedAt": "2026-07-22T07:01:00Z"
+    }
+  ]
+}
+</code></pre>
+<h3 id="join-leave-mute-close">Bergabunglah, keluar, bisu, tutup</h3>
+<p><code>POST /rooms/{roomId}/join</code> → <code>VoiceRoomDto</code>. Gabungan REST ini adalah <strong>diperlukan</strong> sebelum membuka WebSocket; menghubungkan tanpa itu kembali <code>403</code>. Bergabung kembali akan menghapus milik peserta <strong>memiliki</strong> bisu (<code>isMuted</code>); milik tuan rumah <code>isServerMuted</code> selamat meninggalkan dan menyambung kembali.</p>
+<p><code>POST /rooms/{roomId}/leave</code> → <code>204</code>.</p>
+<p><code>POST /rooms/{roomId}/mute</code> dengan <code>{ "muted": true }</code> → <code>204</code>. Ini adalah bisu yang dilakukan peserta dan tidak dapat menghapus bisu host.</p>
+<p><code>POST /rooms/{roomId}/participants/{userId}/server-mute</code> dengan <code>{ "muted": true }</code> → <code>204</code> (khusus pencipta). Audio akan hilang jika salah satu mode bisu disetel.</p>
+<p><code>POST /rooms/{roomId}/close</code> → <code>204</code> (khusus pencipta).</p>
+<p>Nyatakan bisu Anda saat terhubung daripada mewarisi apa pun yang diingat baris tersebut.</p>
+<h2 id="websocket-wsv1voice">Soket Web: <code>ws/v1/voice</code></h2>
+<p>Hubungkan ke <code>wss://api.starhermit.com/ws/v1/voice?roomId=&lt;guid&gt;</code> dengan JWT melalui <code>Authorization</code> tajuk, <code>?ticket=</code>, atau <code>?access_token=</code>. REST sebelumnya <code>join</code> diperlukan.</p>
+<p>Protokolnya beragam:</p>
+<h3 id="binary-frames--audio">Bingkai biner — audio</h3>
+<p>Bingkai biner membawa audio (misalnya Opus). Server menyampaikan setiap frame ke peserta lain sebagai:</p>
+<pre><code>[16-byte senderUserId][audio…]
+</code></pre>
+<p>Server mengawali <strong>diautentikasi</strong> id pengirim dan tidak pernah mempercayai pengirim yang disediakan klien. Audio dari pengguna yang dibisukan akan dihilangkan. Batasan: 100 paket/detik per pengguna, bingkai maksimal 4000 byte.</p>
+<h3 id="text-frames--client--server-control">Bingkai teks — klien → kontrol server</h3>
+<pre><code class="language-json">{ "type": "mute", "muted": true }
+</code></pre>
+<pre><code class="language-json">{ "type": "speaking", "speaking": true }
+</code></pre>
+<pre><code class="language-json">{ "type": "rtc", "to": "&lt;guid&gt;", "payload": { } }
+</code></pre>
+<pre><code class="language-json">{ "type": "deafen", "deafened": true }
+</code></pre>
+<p><code>rtc</code> muatan adalah sinyal WebRTC buram, diteruskan ke peserta yang dituju.
+<code>deafen</code> menekan audio biner yang masuk untuk soket ini; itu tidak otomatis dimatikan
+audio keluar atau koneksi rekan terpisah. Terapkan secara lokal ketika pemain memilih Deafen.</p>
+<p>Bentuk peserta REST menampilkan bisunya sendiri, bukan bisu host. Daftar suara awal dan acara bergabung
+termasuk <code>serverMuted</code>; tidak ada acara push perubahan bisu host yang terpisah. Jika game Anda menggunakan P2P
+audio, sinyal dan penegakannya harus menjadi bagian dari integrasi media Anda sendiri.</p>
+<p>Ketika soket suara terakhir terputus, keanggotaan ruang suara berakhir. Hubungi REST <code>join</code> lagi sebelumnya
+menyambungkan kembali dan memulihkan bisu yang diinginkan sebelum mengirim audio.</p>
+<h3 id="server--client-events">Server → acara klien</h3>
+<p>Amplop: <code>{ "event": "&lt;name&gt;", "data": { } }</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Peristiwa</th>
+<th><code>data</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>voice.roster</code></td>
+<td><code>{ "roomId", "participants": [{ "userId", "muted", "serverMuted" }] }</code> — dikirim ke pendatang baru</td>
+</tr>
+<tr>
+<td><code>voice.participant_joined</code></td>
+<td><code>{ "roomId", "userId", "muted", "serverMuted" }</code></td>
+</tr>
+<tr>
+<td><code>voice.participant_left</code></td>
+<td><code>{ "roomId", "userId" }</code></td>
+</tr>
+<tr>
+<td><code>voice.mute_changed</code></td>
+<td><code>{ "roomId", "userId", "muted" }</code></td>
+</tr>
+<tr>
+<td><code>voice.deafened</code></td>
+<td>`{ "ID kamar", "ID pengguna", "tuli" }</td>
+</tr>
+<tr>
+<td><code>voice.speaking</code></td>
+<td><code>{ "roomId", "userId", "speaking" }</code></td>
+</tr>
+<tr>
+<td><code>voice.rtc</code></td>
+<td><code>{ "roomId", "from", "payload" }</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="example-integration-pattern-from-the-chess-reference-implementation">Contoh pola integrasi (dari implementasi referensi catur)</h2>
+<p>Suara diikutsertakan per sesi permainan. Klien yang khas <code>enable()</code> mengalir:</p>
+<ol>
+<li><code>GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;</code> untuk menemukan ruangan yang ada, lain-lain <code>POST /api/v1/voice/rooms</code> untuk membuatnya.</li>
+<li><code>POST /api/v1/voice/rooms/{roomId}/join</code>.</li>
+<li>Membuka <code>ws/v1/voice?roomId=&lt;guid&gt;</code>.</li>
+</ol>
+<p>Di <a href="/id/docs/tutorials/chess-walkthrough.html">implementasi referensi catur</a>, audio dijalankan melalui WebRTC P2P dengan negosiasi sempurna; sinyal dipertukarkan melalui <code>rtc</code> pesan kontrol (<code>{ "sdp": … }</code> / <code>{ "ice": … }</code> payloads), dengan jalur biner Opus yang dikirimkan ke server sebagai cadangan.</p>
+<p>Token peluncuran dalam lingkup game <strong>mungkin</strong> gunakan suara REST dan WebSocket untuk ruangan yang terhubung dengan sesi permainannya sendiri.</p>
+<h2 id="see-also">Lihat juga</h2>
+<ul>
+<li><a href="/id/docs/tutorials/audio-options.html">Pilihan audio</a> — kontrol volume dasar, mikrofon, dan push-to-talk,
+dengan batas pemutaran yang terdeteksi secara otomatis</li>
+<li><a href="/id/docs/api/chat.html">Mengobrol</a> — ruangan yang menjadi tempat percakapan; sesi permainan terungkap <code>chatConversationId</code></li>
+<li><a href="/id/docs/api/games.html">Pertandingan</a> — sesi permainan dan token peluncuran</li>
+<li><a href="/id/docs/api/relay.html">Menyampaikan</a> — penyebaran byte untuk netcode game</li>
+</ul>
+<p>Melihat <a href="/id/docs/credentials.html">kompatibilitas kredensial</a> Dan <a href="/id/docs/api/contracts.html">kontrak yang dapat dibaca mesin</a>.</p>
+
+{% endraw %}

@@ -1,0 +1,473 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "游戏脚本"
+source_url: "/docs/api/game-scripts.html"
+source_path: "docs/api/game-scripts.md"
+source_hash: "cd6edb40d369c5c960591888b2d4bcb941948f0cd0a801d320fe8ae34ab69966"
+translation: "machine"
+permalink: "/zh-CN/docs/api/game-scripts.html"
+---
+{% raw %}
+<h1 id="game-scripts">游戏脚本</h1>
+<p>StarHermit 权威游戏可以由 <strong>单个 JavaScript 文件</strong> 在沙盒中的服务器端执行 <a href="https://github.com/sebastienros/jint">金特</a> 引擎。该脚本是该游戏规则的唯一权威：它验证每个玩家命令、改变状态、决定每个客户端可以看到的内容、计算 Elo 并结束游戏。客户的权限为零。该页面记录了 JavaScript 运行时；需要另一种语言的游戏可能会实现 <a href="/zh-CN/docs/api/container-games.html">容器游戏服务器</a> 协议。两者都使用相同的面向玩家的 <a href="/zh-CN/docs/api/games.html">游戏API</a>。贯穿始终的工作示例是国际象棋——参考实现位于 <a href="https://github.com/HypeDriven/starhermit-chess">HypeDriven/明星隐士国际象棋</a>.</p>
+<h2 id="execution-model">执行模型</h2>
+<ul>
+<li>每个游戏一个 JS 文件，在 <strong>每次调用新鲜的沙盒 Jint 引擎</strong>。在调用之间，内存中不会保留任何内容——所有状态都存在于您返回的文档中。</li>
+<li>无环境 <code>Date</code> 或者 <code>Math.random</code>。时间和随机性提供为： <code>ctx.now</code> （纪元女士）和 <code>ctx.random</code> （漂浮在 <code>[0, 1)</code>).</li>
+<li>当玩家发送持久命令、创建会话以及定期时，平台会调用脚本 <code>onTick</code> 扫掠（参见 <a href="/zh-CN/docs/api/games.html#runtime-timing">游戏 API — 运行时计时</a>）。即时的 <code>{type:"input", realtime:true}</code> 帧是例外：它们被缓冲最新胜利并作为批次传递到下一个报价。</li>
+</ul>
+<h2 id="entry-points">切入点</h2>
+<p>公开处理程序 <code>globalThis.game</code>。六种可选 <strong>静止的</strong> 声明与它们并排放置：
+<code>tickRateHz</code> 询问平台调用频率 <code>onTick</code> — 如果你的游戏依赖于
+勾选，因为没有任何内容的游戏每四秒勾选一次（请参阅 <a href="#tick-rate">滴答率</a>),
+<code>achievements</code> 注册游戏的成就（参见 <a href="#achievements">成就</a>), <code>replays</code>
+要求平台保留您已完成的会话（请参阅 <a href="#replays">重播</a>), <code>persistent</code> 停顿
+会议，而不是在每个人都离开时结束会议（请参阅 <a href="#persistent-sessions">持续会话</a>),
+<code>linkedAchievements</code> 列出您在其中获得解锁的其他游戏 <code>ctx.linkedAchievements</code> （看
+<a href="/zh-CN/docs/api/achievements.html#achievements-from-other-games">其他游戏的成就</a>）， 和 <code>queues</code> 宣称
+匹配匹配接受的形状（参见 <a href="/zh-CN/docs/api/games.html#matchmaking">游戏 — 对接会</a>）。一场比赛
+声明没有队列有一个隐式 1v1：</p>
+<pre><code class="language-js">globalThis.game = {
+  tickRateHz: 0, // turn-based: opt out of periodic ticks
+  replays: true, // keep finished sessions as replays
+  queues: [{ key: "duos", teams: 2, teamSize: 2 }],
+  achievements: [
+    { key: "first-win", name: "First Win", description: "Win a match.", points: 10 }
+  ],
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<p>通过评估您的脚本来读取声明 <strong>游戏发布或更新时</strong>,
+不是在每次调用时 - 所以它们必须是静态值 <code>game</code> 目的。发布更新
+应用更改。</p>
+<ul>
+<li><code>createSession(ctx)</code> — 创建会话时调用（匹配、接受邀请、AI 练习或实时房间启动 — 请参阅 <a href="#room-bound-sessions">房间内的会议</a>).</li>
+<li><code>onPlayerMessage(ctx)</code> — 要求通过游戏 WebSocket 接收持久的客户端命令。输入明确标记 <code>realtime:true</code> 绕过这个入口点。</li>
+<li><code>onMembershipChange(ctx)</code> - 选修的。当玩家加入或离开正在运行的会话时调用（ <a href="/zh-CN/docs/api/realtime.html">正在进行中的加入室</a>，或一个 <a href="/zh-CN/docs/api/games.html#inviting-a-friend-into-a-game-in-progress">邀请参加正在进行的游戏</a>). <code>ctx.players</code> 已经反映了变化，并且 <code>ctx.membership</code> 是 <code>{ change: "joined" | "left", userId, name, team, slot }</code>。返回 <code>{ ok: false }</code> 拒绝加入；没有此钩子的脚本会拒绝每个连接。无论您返回，休假都是最终决定。成就和分数可能取决于结果；一个 <code>sessionState</code> 被忽略。</li>
+<li><code>onTick(ctx)</code> — 由平台的计时器服务以有效滴答率调用；最新的实时输入可在 <code>ctx.inputs</code>。分辨率为 0 Hz 的游戏不会收到定期调用，但该函数仍应存在以满足脚本契约。</li>
+</ul>
+<h2 id="context-object">上下文对象</h2>
+<pre><code class="language-js">ctx = {
+  now: 1721473200000,              // ms epoch, from the host clock
+  random: 0.7231,                  // float in [0, 1), from the host RNG
+  sessionId: "0f8fad5b-...",       // current session id
+  pausedMs: 0,                     // persistent games only: total ms this session has spent paused
+  players: [                       // session participants
+    { id: "7c9e6679-...", name: "alice" },
+    { id: "00000000-0000-4000-8000-00000000a1a1", name: "The House", ai: true }
+  ],
+  sessionState: { /* ... */ },     // this script's session document, or null
+  playerStates: {                  // per-player documents (elo, history), or null
+    "7c9e6679-...": { elo: 1200, wins: 4, losses: 2, draws: 1, /* ... */ }
+  },
+  message: {                       // onPlayerMessage only
+    from: "7c9e6679-...",          // the authenticated user id — trusted
+    data: { type: "move", from: "e2", to: "e4" }  // client payload — untrusted (example: a chess move)
+  },
+  inputs: [                        // onTick only; omitted when none are pending
+    { from: "7c9e6679-...",        // authenticated sender id — trusted
+      data: { type: "input", seq: 42, mx: 0.7, mz: -0.2 } }
+  ]
+}
+</code></pre>
+<ul>
+<li>AI 席位（如果存在）标记为 <code>ai: true</code> 在其玩家条目上。</li>
+<li>一款游戏宣告 <code>linkedAchievements</code> 还得到 <code>ctx.linkedAchievements</code>: <code>{ &lt;playerId&gt;: { &lt;otherSlug&gt;: [unlocked keys] } }</code>，在每次调用时重新读取。看 <a href="/zh-CN/docs/api/achievements.html#achievements-from-other-games">其他游戏的成就</a>.</li>
+<li>房间绑定会话（从实时房间开始）获得两个额外的 ctx 字段， <code>ctx.room</code> 和 <code>ctx.presence</code>， 在 <strong>每一个</strong> 调用——参见 <a href="#room-bound-sessions">房间内的会议</a>.</li>
+<li><strong>不信任任何来自 <code>ctx.message.data</code> 或者 <code>ctx.inputs[].data</code>.</strong> 可信身份对应的是 <code>from</code>，服务器从经过身份验证的连接附加它 - 客户端永远无法提供或欺骗它。</li>
+<li>输入选择批处理 <code>{type:"input", realtime:true, ...}</code>。未标记 <code>input</code> 命令保持持久 <code>onPlayerMessage</code> 要求向后兼容。实时输入对每个发送者使用一个待处理槽：移动是最新获胜，而 <code>pass</code>, <code>shoot</code>， 和 <code>tackle</code> 动作边缘被合并，因此后续移动样本无法在下一个刻度之前擦除它们。脚本在使用批次时必须限制并验证每个值。</li>
+</ul>
+<h2 id="tick-rate">滴答率</h2>
+<p>平台运行 <code>onTick</code> 以可配置的速率扫描每个活动会话。 <strong>您的脚本要求它想要的速率</strong> 通过声明静态 <code>tickRateHz</code> 在游戏对象上的入口点旁边：</p>
+<pre><code class="language-js">globalThis.game = {
+  tickRateHz: 15,          // ask the platform to tick this game 15x/second
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<ul>
+<li>声明已读 <strong>当您的游戏发布或更新时</strong>，不是在每个刻度上。更改后发布更新。</li>
+<li><strong>声明无速率的游戏以 0.25 Hz 为刻度</strong> ——每四秒一次。这已经足够了
+裁决移动时钟或超时，平台几乎不花费任何成本，但速度太慢
+对于您的游戏玩法所依赖的任何内容。如果 <code>onTick</code> 驱动您的游戏，声明您需要的速率。</li>
+<li>请求被限制在平台最大值（<strong>30赫兹</strong> 默认情况下），因此游戏可以要求更少
+超出平台允许的范围，但绝不会超过。询问 <strong>0</strong> 完全禁用游戏的刻度
+只对玩家的命令做出反应。</li>
+<li>价格可能是 <strong>分数</strong>: <code>0.5</code> 是每两秒一次。最小的非零利率是
+<code>0.01</code> Hz — 向其提出一个较小的正数，而不是将其视为选择退出，因为
+小分数是一个缓慢的游戏。勾选仅关闭 <code>0</code> 或负利率。缺失或
+不可用的声明（字符串， <code>null</code>, <code>NaN</code>) 采用默认值 0.25 Hz。</li>
+<li>操作员可以在任一方向上覆盖特定游戏的费率。</li>
+<li>实时输入是报价之间的最新胜利，而离散动作边缘保持有序。速度慢的接收者可以跳过过时的快照，但不能延迟模拟或其他接收者。</li>
+</ul>
+<h2 id="replays">重播</h2>
+<p>当会话结束时，平台可以保留其最终结果 <code>sessionState</code> 作为 <strong>重播</strong> — 的
+文件送达者 <code>GET /api/v1/games/{slug}/replays/{sessionId}</code> （看
+<a href="/zh-CN/docs/api/games.html#replays">游戏 API — 重播</a>）。重播的存储时间与比赛记录一样长
+是，所以 <strong>只有当你的游戏提出要求时，你的游戏才会得到一个</strong>:</p>
+<pre><code class="language-js">globalThis.game = {
+  replays: true,           // keep finished sessions as replays
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<ul>
+<li>声明必须是文字 <code>true</code> 或者 <code>false</code> — 其他任何内容都被视为没有声明，并且
+没有声明任何内容的游戏没有重播。</li>
+<li>已读 <strong>当您的游戏发布或更新时</strong>。更改后发布更新。</li>
+<li>平台运营商可以以任何一种方式回答特定游戏，因此声明是一个请求
+而不是保证。 <code>GET /api/v1/games/{slug}</code> 将答案报告为 <code>replaysEnabled</code> —
+将您的重播 UI 分支到此，而不是您的脚本要求的内容。</li>
+<li>重播关闭后没有其他任何变化：您的会话状态仍然被存储并仍然返回给
+每次调用都作为 <code>ctx.sessionState</code>，并且仍然是崩溃恢复点。什么游戏啊
+没有重播不会得到比会话寿命更长的副本，因此它的重播端点答案
+<code>404</code>.</li>
+<li>设计最终作品 <code>sessionState</code> 值得重播——移动日志，或者您的客户需要的任何内容
+重建比赛。国际象棋参考实现保留 <code>state.game.moves</code> 并踩它
+通过平台执行的相同规则模块。</li>
+</ul>
+<h2 id="persistent-sessions">持续会话</h2>
+<p>一款游戏宣告 <code>persistent: true</code> 当每个玩家离开时，会话仍保持不变。约15
+最后一次断开会话后的秒数 <strong>暂停</strong> - 不 <code>onTick</code> 来电——以及第一个
+播放器重新连接即可恢复。断开连接或不活动会暂停会话，而不是放弃它。游戏结果，楼主
+操作、明确的最终成员离开、配置的保留到期或终端恢复失败都可以
+还是结束吧。看 <a href="/zh-CN/docs/session-lifecycle.html">会话生命周期</a>.</p>
+<pre><code class="language-js">globalThis.game = {
+  persistent: true,        // pause empty sessions instead of ending them
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<ul>
+<li>必须是字面意思 <code>true</code> 或者 <code>false</code>。已读 <strong>当您的游戏发布或更新时</strong>.</li>
+<li><code>ctx.now</code> 保持挂钟。持久会话也得到 <code>ctx.pausedMs</code>，花费的总时间
+暂停了，所以 <code>ctx.now - ctx.pausedMs</code> 是一个无人在场时静止不动的时钟。</li>
+<li>暂停的会话会计入每个玩家的会话上限，因此请给玩家一个结束会话的命令
+世界有一个 <code>result</code>.</li>
+</ul>
+<p>请参阅 <a href="/zh-CN/docs/tutorials/persistent-sessions.html">持久会话教程</a> 一个有效的例子和客户流程。</p>
+<h2 id="matchmaking-seat-layout">对接会座位布局</h2>
+<p>新的匹配会话收到 <code>ctx.matchmaking</code> 在 <strong>每一个</strong> 调用（创建、命令和勾选）。
+即使稍后重新部署游戏，它也会保留队列形状和座位：</p>
+<pre><code class="language-js">ctx.matchmaking = {
+  queue: "ffa", teams: 4, teamSize: 1,
+  seats: [
+    { id: "human-uuid", name: "Alice", team: 0, slot: 0, ai: false },
+    { id: "synthetic-ai-uuid", name: "AI 2-1", team: 1, slot: 0, ai: true },
+    { id: null, name: null, team: 2, slot: 0, ai: false },
+    { id: null, name: null, team: 3, slot: 0, ai: false }
+  ]
+};
+</code></pre>
+<p><code>ctx.players</code> 仅包含占用的座位， <code>team</code> 和 <code>ai:true</code> 对于人工智能。团队/槽位索引为
+零基础。 AI ID 在此会话中保持稳定，并且不是 StarHermit 帐户 ID。只有人类
+拥有会话/聊天会员资格，可以接收帐户玩家状态、评级或成就写入。
+保持AI状态 <code>sessionState</code>。将客户需要的名册字段复制到游戏状态中
+或广播。较旧的会话和非匹配会话可以省略 <code>ctx.matchmaking</code>.</p>
+<p>声明开始截止日期和最大 AI 数量
+<a href="/zh-CN/docs/starhermit-txt.html#starting-matchmaking-before-every-human-seat-is-filled"><code>starhermit.txt</code></a>。
+与AI计数 <code>0</code>，空位依然空着。相同的上下文被传递到容器服务器。</p>
+<h2 id="room-bound-sessions">房间内的会议</h2>
+<p>一个会话可以是 <strong>绑定到实时房间</strong>：当一个 <a href="/zh-CN/docs/api/realtime.html">实时房间</a> 对于一个游戏 <code>server=</code> 脚本开始，平台为房间创建一个 N 玩家会话 <strong>人类</strong> 参与者（AI 席位仅存在于面向脚本的名册中）。这就是服务器权威的实时游戏（例如足球）的运行方式：房间提供大厅/匹配，脚本运行比赛。看 <a href="/zh-CN/docs/api/realtime.html#room-bound-sessions">实时房间——桥梁</a> 对于房间侧的生命周期。</p>
+<p>每次调用 (<code>createSession</code>, <code>onPlayerMessage</code>, <code>onTick</code>) 的房间绑定会话接收两个额外的 ctx 字段：</p>
+<pre><code class="language-js">ctx.room = {
+  roomId: "0f8fad5b-...",
+  metadata: { /* ... */ },        // the room's opaque config.metadata blob
+  roster: [                       // frozen match roster, humans AND AI seats,
+    { userId: "7c9e6679-...",     //   ordered by team then slot
+      name: "alice", team: 0, slot: 0, ai: false },
+    { userId: null,               // AI seat — never a session player
+      name: "Rafa Vento", team: 0, slot: 1, ai: true }
+  ]
+};
+ctx.presence = {                  // every user who is or was a human participant
+  "7c9e6679-...": { online: true, left: false }
+};
+</code></pre>
+<ul>
+<li><code>presence.online</code> — 用户在任一连接注册表上都有一个实时套接字（实时房间 <strong>或者</strong> <code>ws/v1/games</code>).</li>
+<li><code>presence.left</code> — 用户不再拥有活跃席位：他们明确离开，他们的席位被转换为 AI 参与者。 <code>left</code> 是永久的； <code>online</code> 可能会扑动。该脚本预计将驱动 AI 从这些标志接管/重新加入逻辑。</li>
+<li>每次调用时都会重新读取名册，因此座位转换（人类→人工智能）会在发生时显示出来。</li>
+</ul>
+<p>当房间绑定的脚本返回时 <code>result</code>，平台结束会话， <strong>将结果存储在房间中，并关闭房间</strong> ——不涉及主办方提交的结果。</p>
+<p>反之则不然： <strong>房间关闭并没有结束其会话。</strong> 如果房间首先关闭（例如，因为最后一个人在没有加入的情况下离开了房间 - 不仅仅是因为主机离线，这只会在会话处于活动状态时移动主机角色），会话将继续运行， <code>ctx.room.roster</code> 变得空虚，每个人都表现出来 <code>left: true</code>。返回 <code>result</code> 那么比赛是否应该以房间结束。看 <a href="/zh-CN/docs/api/realtime.html#the-60-second-host-rule-and-room-bound-sessions">实时房间 — 60 秒的主持人规则和房间限制会话</a>.</p>
+<h2 id="return-shape">返回形状</h2>
+<p>每个入口点返回相同的形状（所有字段都是可选的，除了 <code>ok</code>):</p>
+<pre><code class="language-js">return {
+  ok: true,                        // false on failure
+  error: "Illegal move",           // goes only to the sender (as a WS "error" frame)
+  sessionState: { /* ... */ },     // REPLACES the stored session document
+  playerStates: {                  // REPLACES stored per-player documents
+    "7c9e6679-...": { elo: 1216, /* ... */ }
+  },
+  broadcast: [                     // only these messages ever reach clients
+    { to: "all", data: { type: "moved", /* ... */ } },
+    { to: ["9b2f8c1a-..."], data: { type: "state", /* ... */ } }
+  ],
+  eloUpdates: {                    // published to the game's leaderboard by the host
+    "7c9e6679-...": 1216,
+    "9b2f8c1a-...": 1184
+  },
+  achievements: {                  // server-authoritative unlocks, by player id
+    "7c9e6679-...": ["first-win", "flawless"]
+  },
+  scores: {                        // to your game's own leaderboards, by board key
+    "high-score": { "7c9e6679-...": 4200 }
+  },
+  result: { kind: "white-win", reason: "checkmate" }  // ends the session (example: a chess result)
+};
+</code></pre>
+<p>关键规则：</p>
+<ul>
+<li><code>sessionState</code> 和每个条目 <code>playerStates</code> <strong>代替</strong> 存储的文档 - 始终返回完整的文档，从不差异。</li>
+<li>仅列出的消息 <code>broadcast</code> 发送给客户端，每个地址都指向明确的玩家 ID 或 <code>"all"</code>。没有其他泄漏。</li>
+<li><code>eloUpdates</code> 是评级改变的唯一方式。数值是每个玩家的 <strong>新的绝对评级</strong>，按发送时应用 - 平台不会限制每场比赛的更改，因此请自行限制（请参阅 <a href="/zh-CN/docs/api/games.html#elo-per-match">每场比赛 Elo</a>）。主机使用它们进行匹配并将其发布到游戏排行榜；客户永远不能直接提交分数（请参阅 <a href="/zh-CN/docs/api/leaderboards.html">排行榜</a>）。保留评级 <code>playerStates[id].elo</code> 所以一个业主的 <a href="/zh-CN/docs/api/leaderboards.html#resetting-a-players-rating">评级重置</a> 也到达您的副本。</li>
+<li><code>achievements</code> 这是授予成就的唯一途径。密钥根据游戏的成就进行解析（由其所有者声明或创建）并由平台保留；看 <a href="#achievements">成就</a>.</li>
+<li><code>scores</code> 是你的游戏自己的排行榜发生变化的唯一方式 - 请参阅 <a href="#leaderboards">排行榜</a>.</li>
+<li>结束游戏通过 <code>result</code>。然后主持人结束会议，并进行游戏 <a href="#replays">重播</a> <strong>存档决赛 <code>sessionState</code></strong> 作为重播（由 <code>GET .../replays/{sessionId}</code> - 看 <a href="/zh-CN/docs/api/games.html#replays">游戏API</a>).</li>
+</ul>
+<h2 id="achievements">成就</h2>
+<p>你的脚本是 <strong>仅有的</strong> 可以解锁游戏成就的东西。没有客户
+他们的终点： <code>POST /api/v1/me/achievements/unlock</code> 完全拒绝游戏范围内的成就，
+并且发布者 CRUD 端点拒绝接触它们。游戏所有者可以添加成就
+所宣布的通过
+<a href="/zh-CN/docs/api/achievements.html#achievements-created-by-the-games-owner"><code>/me/github-games/{id}/achievements</code></a>;
+您的脚本以完全相同的方式通过密钥解锁这些内容。这使得作为服务器的成就-
+和游戏的其他部分一样权威，这就是机制 <strong>任何</strong> 游戏与 <code>server=</code> 脚本
+应该使用 - 包括其游戏玩法在其他地方运行的游戏（请参阅
+<a href="/zh-CN/docs/api/achievements.html#which-games-can-use-this">哪些游戏可以使用这个</a>).</p>
+<h3 id="declare">宣布</h3>
+<p>静态的 <code>achievements</code> 数组上的 <code>game</code> 目的。仅有的 <code>key</code> 是必须的：</p>
+<pre><code class="language-js">globalThis.game = {
+  achievements: [
+    { key: "first-win", name: "First Win", description: "Win a match.", points: 10 },
+    { key: "flawless",  name: "Flawless",  description: "Win without conceding.",
+      points: 50, secret: true, icon: "https://cdn.example/flawless.png" }
+  ],
+  // ...entry points
+};
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>场地</th>
+<th>类型</th>
+<th>笔记</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>key</code></td>
+<td>细绳</td>
+<td><strong>必需的。</strong> 稳定的id，≤128个字符，游戏内唯一。第一个之后的重复项将被忽略。</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>细绳</td>
+<td>默认为 <code>key</code>.</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>细绳</td>
+<td>默认为 <code>""</code>.</td>
+</tr>
+<tr>
+<td><code>icon</code></td>
+<td>细绳</td>
+<td>可选网址。</td>
+</tr>
+<tr>
+<td><code>secret</code></td>
+<td>布尔值</td>
+<td>对玩家隐藏直至 <em>他们</em> 解锁它。默认为 <code>false</code>.</td>
+</tr>
+<tr>
+<td><code>points</code></td>
+<td>数字</td>
+<td>限制在 0–10000。默认为 <code>0</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>该数组在游戏发布或更新时应用：</p>
+<ul>
+<li>定义匹配 <code>key</code> - 编辑名称、图标、点数或秘密标志会更新现有定义，并且每个已经获得它的人都会保留它。</li>
+<li>您停止声明的密钥已被删除 <strong>仅当没有人解锁时</strong>。赢得的历史永远不会被破坏，因此拥有该成就的玩家仍然可以看到已退役的成就。</li>
+<li>最多 <strong>100</strong> 每场比赛的成就；除此之外的额外内容将被删除。</li>
+<li>声明是 <strong>尽最大努力</strong>：跳过格式错误的条目。始终确认已发布的定义 <code>GET /api/v1/games/{slug}/achievements</code> 更新游戏后。</li>
+</ul>
+<h3 id="unlock">开锁</h3>
+<p>返回一个 <code>achievements</code> 地图来自 <strong>任何</strong> 入口点—— <code>createSession</code>, <code>onPlayerMessage</code>， 或者
+<code>onTick</code>:</p>
+<pre><code class="language-js">onTick(ctx) {
+  const state = JSON.parse(JSON.stringify(ctx.sessionState));
+  const unlocks = {};
+  for (const p of ctx.players) {
+    if (!p.ai &amp;&amp; state.scores[p.id] &gt;= 10) unlocks[p.id] = ["ten-points"];
+  }
+  return { ok: true, sessionState: state, achievements: unlocks };
+}
+</code></pre>
+<ul>
+<li>解锁有 <strong>幂等的</strong> - 重新断言玩家已经持有的密钥是无操作的，因此脚本可以安全地根据每次勾选时重新评估的条件进行奖励，而不是跟踪 "已经授予" 在它自己的状态下。</li>
+<li>未知的密钥（游戏所有者既未声明也未创建）、不是本次会话参与者的用户以及 AI 席位将被默默忽略。</li>
+<li>最多 <strong>32</strong> 每个玩家每次调用都接受密钥；同一数组中的其他键将被删除。</li>
+<li>行与调用的其余写入一起保留，因此解锁无法在调用失败后继续存在。</li>
+</ul>
+<h3 id="delivery">送货</h3>
+<p>每个新授予的解锁都会被推送给赚钱的玩家 <code>ws/v1/games</code> 作为一个独特的框架——
+这是平台真理，不是你的 <code>broadcast</code> 消息：</p>
+<pre><code class="language-json">{ "type": "achievement",
+  "data": { "key": "first-win", "name": "First Win", "description": "Win a match.",
+            "icon": null, "points": 10, "unlockedAt": "2026-07-25T09:14:02Z" } }
+</code></pre>
+<p>解锁授予自 <code>createSession</code> 在任何套接字存在之前着陆，因此它们到达时没有框架 -
+客户应该阅读 <code>GET /api/v1/games/{slug}/achievements</code> 加载并将框架视为
+实时更新路径。全表面在 <a href="/zh-CN/docs/api/achievements.html">成就</a>.</p>
+<h2 id="leaderboards">排行榜</h2>
+<p>除了 elo 板之外，您的游戏还可以拥有其所有者通过以下方式创建的排行榜
+<a href="/zh-CN/docs/api/leaderboards.html#your-games-own-leaderboards"><code>POST /api/v1/me/github-games/{id}/leaderboards</code></a>,
+每个都有一个 <code>key</code>。通过返回发布给他们 <code>scores</code> 从任意入口点 — 棋盘钥匙 → 玩家 ID →
+数量：</p>
+<pre><code class="language-js">onPlayerMessage(ctx) {
+  var s = ctx.sessionState;
+  if (ctx.message.data.type === "finish-run") {
+    var scores = { "high-score": {}, "fastest-run": {} };
+    scores["high-score"][ctx.message.from] = s.points[ctx.message.from];
+    scores["fastest-run"][ctx.message.from] = ctx.now - s.startedAt;   // a time-ms board
+    return { ok: true, sessionState: s, scores: scores };
+  }
+  /* ... */
+}
+</code></pre>
+<ul>
+<li>每个玩家都保留自己的 <strong>最好的</strong> 每个板上的分数，按板的排序方向，因此报告
+每一个结果——更糟糕的结果都会被忽略。</li>
+<li>仅会话参与者计数。未知或不活动的键，以及超出棋盘规则的分数，
+都被默默地丢弃了。每次返回最多 16 个板。</li>
+<li>不像 <code>eloUpdates</code>，没有任何内容发布到 <code>playerStates</code> — 保留您自己的副本
+<code>playerStates</code> 如果比赛需要回读个人最好成绩。</li>
+</ul>
+<h2 id="where-your-script-runs">你的脚本运行的地方</h2>
+<p>无限制地递归、耗尽内存或超出其时间预算的脚本会失败
+调用。其失败结果不被应用。命令或刻度报告以下之一：</p>
+<ul>
+<li><code>Game script error: the script crashed its runtime (for example, by recursing without limit).</code></li>
+<li><code>Game script error: the script exceeded its memory budget.</code></li>
+<li><code>Game script error: the script exceeded its time budget.</code></li>
+</ul>
+<h2 id="your-games-share-of-the-server">您的游戏在服务器中的份额</h2>
+<ul>
+<li><strong>脚本时间。</strong> 游戏的所有会话共享脚本时间预算，即每秒 2000 毫秒
+默认情况下，根据每次调用实际花费的时间来收费。超过其份额的游戏被拒绝
+比排队：跳过一个刻度，用以下命令应答命令 "该游戏的使用量超过了其份额
+现在的服务器；稍后再试。"，并创建会话返回 <code>429</code>.</li>
+<li><strong>命令。</strong> 每个玩家在每个会话中每秒可以发送 20 个持久命令（带有短突发）
+津贴）；除此之外，命令的响应是 <code>error</code> 框架， "命令太多；减速。" 该帧不包含 HTTP 状态。实时输入受到单独限制。</li>
+<li><strong>结果。</strong> 会话结束的结果最多可能是 64 KB；较大的被拒绝
+<code>422</code>.</li>
+<li><strong>脚本大小。</strong> A <code>server=</code> 脚本最多可为 2 MB；较大的被拒绝 <code>422</code> 之前
+它被存储或解析。</li>
+</ul>
+<p>运营商可以针对单个游戏提高或降低其中的每一项。</p>
+<h2 id="budgets">预算</h2>
+<p>脚本在这些资源预算下运行：</p>
+<ul>
+<li>每次调用约 250 毫秒 CPU</li>
+<li>32MB内存</li>
+<li>每次调用的语句上限</li>
+<li>每个玩家的状态字节预算 - 所有状态文档必须保持可序列化且较小</li>
+<li>当值变成文本时，最多嵌套 64 层。入口点返回的任何内容，每个
+声明， <code>JSON.stringify</code>， 和 <code>Array.prototype.join</code>/<code>toString</code>/<code>toLocaleString</code> 拒绝一个
+更深层次的价值 <code>RangeError</code> （返回的调用失败： "嵌套超过 64 层
+深"). <code>JSON.parse</code> 已经停在 64 处，因此更深的值永远无法往返。 <code>flat</code>
+展平最多 64 层，如果数组嵌套更深，则抛出异常 — 包括包含以下内容的数组
+本身。</li>
+<li>一次调用分配的内存不能超过内存预算。 <code>repeat</code>, <code>padStart</code>/<code>padEnd</code>, <code>concat</code> 和
+<code>replace</code>/<code>replaceAll</code> 扔 <code>RangeError: Invalid string length</code> 当结果可能超过一半时
+以字符为单位的预算（默认为 32 MB，为 16M；正则表达式替换是有限的，就好像每个
+位置匹配，仅影响大约一百万个字符或更多的字符串）。
+<code>ArrayBuffer</code> 和类型化数组抛出 <code>RangeError</code> 超出了以字节为单位的预算，并且超出了数组
+预算/8 项被拒绝。预算也会在您的钩子返回后进行检查，因此
+超出预算的最终语句使调用失败而不是成功。</li>
+</ul>
+<p>国际象棋参考脚本故意保持其文档较小——作为保持在预算之内的一个例子，它的每个玩家文档是</p>
+<pre><code class="language-js">{
+  elo: 1200,
+  wins: 0, losses: 0, draws: 0,
+  lastColorVs: "9b2f8c1a-...",        // for color alternation on rematch
+  lastColorOrder: "w",
+  recentGames: [ /* up to 30 summaries */ ]
+}
+</code></pre>
+<p>默认情况下，每个玩家的并发会话上限为 20 个。</p>
+<h2 id="the-platform-readable-window">平台可读窗口</h2>
+<p>一切都在 <code>sessionState</code> 对平台不透明 <strong>除了</strong> 一个字段：</p>
+<pre><code class="language-js">sessionState.summary = {
+  turnPlayerId: "7c9e6679-...",
+  deadline: 1784642591000,
+  status: "active",
+  moveCount: 41
+};
+</code></pre>
+<p><code>deadline</code> 是一个整数 Unix 时间戳 <strong>毫秒</strong>，或在没有截止日期时省略。
+无法识别 ISO 日期字符串。 <code>turnPlayerId</code> 是玩家的 UUID。</p>
+<p><code>GET /api/v1/games/{slug}/sessions/mine</code> 读 <code>summary</code> 计算 <code>myTurn</code> 和 <code>deadline</code> 对于来电者。保持每次状态变化的准确性；将其他所有内容保留在您的脚本喜欢的地方。</p>
+<h2 id="worked-example-the-chess-script">工作示例：国际象棋脚本</h2>
+<p>本节中的所有内容均特定于国际象棋参考实现 - 状态形状、棋盘编码、命令集、游戏结束原因、Elo 常数、AI 和下面的超时是国际象棋自己的选择，在其脚本中定义。这些都不是平台行为；你的游戏定义了它自己的等价物。</p>
+<p>会话状态：</p>
+<pre><code class="language-js">{
+  white: "7c9e6679-...",
+  black: "9b2f8c1a-...",
+  aiId: "00000000-0000-4000-8000-00000000a1a1",   // present in AI games
+  game: {
+    board: "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr", // 64 chars
+    turn: "w",
+    castling: { K: true, Q: true, k: true, q: true },
+    epSquare: null,
+    halfmoveClock: 0,
+    fullmove: 1,
+    moves: [ { from: "e2", to: "e4", promo: null, san: "e4", at: 1721473200000 } ],
+    positionCounts: { /* fen-key: count, for threefold repetition */ },
+    status: "active"
+  },
+  createdAt: 1721473200000,
+  deadline: 1721559600000,
+  result: null,
+  drawOfferBy: null,
+  summary: { turnPlayerId: "...", deadline: "...", status: "active", moveCount: 1 }
+}
+</code></pre>
+<p>板编码：64 个字符的字符串，其中 <code>index = rank * 8 + file</code> 和 <code>a1</code> 是索引 0。 <code>PNBRQK</code> 是白色的碎片， <code>pnbrqk</code> 黑色的， <code>.</code> 是一个空的正方形。</p>
+<p>处理的命令 <code>onPlayerMessage</code>: <code>sync</code>, <code>move</code>, <code>resign</code>, <code>offer-draw</code>, <code>accept-draw</code>, <code>decline-draw</code> （线形状在 <a href="/zh-CN/docs/api/games.html#example-chess-command-shapes">游戏API</a>).</p>
+<p>游戏结束 <code>reason</code> 价值观： <code>checkmate</code>, <code>stalemate</code>, <code>threefold-repetition</code>, <code>fifty-move-rule</code>, <code>insufficient-material</code>, <code>resignation</code>, <code>agreement</code>, <code>timeout</code>, <code>timeout-no-moves</code>.</p>
+<p>其他国际象棋细节：</p>
+<ul>
+<li><strong>埃洛</strong> 使用 K=32，计算公式为 <code>finishGame</code> 当游戏结束时，并通过返回 <code>eloUpdates</code>.</li>
+<li><strong>人工智能玩法：</strong> 当AI座椅移动时， <code>aiReply</code> 戏剧 <strong>"哈尔"</strong> - 贪婪的材料捕获引擎 - 在同一个调用中。没有外部机器人。</li>
+<li><strong>超时：</strong> <code>onTick</code> 判定 24 小时移动时钟 — 如果没有进行任何移动，则游戏为 <code>timeout-no-moves</code> 画;否则移动的玩家将输掉 <code>timeout</code>.</li>
+</ul>
+<h2 id="deployment">部署</h2>
+<p>在您的游戏存储库中声明脚本 <code>starhermit.txt</code> 显现：</p>
+<pre><code>server=server.js
+</code></pre>
+<p>通过 GitHub 集成进行发布流程 — 请参阅 <a href="/zh-CN/docs/api/github-games.html">GitHub 游戏</a>。平台在记录的预算内执行脚本。不要合并 <code>server=</code> 和 <code>container.image=</code>;使用 <a href="/zh-CN/docs/api/container-games.html">容器运行时</a> 相反，在传送图像时。</p>
+<h2 id="best-practices">最佳实践</h2>
+<ul>
+<li><strong>验证每个命令。</strong> 对待 <code>ctx.message.data</code> 作为敌对：在触摸状态之前检查类型、范围、回合顺序和游戏状态。</li>
+<li><strong>保持调用快，状态小。</strong> 每个玩家文档有大约 250 毫秒和字节预算；国际象棋参考脚本，例如 caps <code>recentGames</code> 因此，有 30 个条目。</li>
+<li><strong>使用 <code>ctx.now</code> / <code>ctx.random</code> 仅有的。</strong> 不 <code>Date</code>， 不 <code>Math.random</code> — 主持人拥有时钟和骰子。</li>
+<li><strong>设计 <code>broadcast</code> 消息作为唯一的客户端合约。</strong> 客户端必须能够根据脚本发送的内容渲染整个游戏；任何不广播的东西对他们来说都不存在。</li>
+<li><strong>一个锉刀，两个表面。</strong> 同一文件可以通过单独的导出兼作客户端规则：例如，国际象棋参考实现公开了 <code>globalThis.chessRules</code> 对于浏览器（移动预览、验证提示）和 <code>globalThis.game</code> 对于主机。一种真相来源，对客户零权威。</li>
+<li><strong>始终通过以下方式结束游戏 <code>result</code></strong> 因此，当您的游戏出现问题时，平台会发布 Elo 更新并存档重播 <a href="#replays">重播</a>.</li>
+</ul>
+<p>请参阅 <a href="/zh-CN/docs/tutorials/chess-walkthrough.html">国际象棋演练</a> 逐条游览，以及 <a href="/zh-CN/docs/tutorials/ai-prompts.html">人工智能提示</a> 帮助生成您自己的脚本。</p>
+<p>共享 <a href="/zh-CN/docs/api/conventions.html">API约定</a> 描述响应解析、时间戳、分页和重试。</p>
+<p>看 <a href="/zh-CN/docs/credentials.html">凭证兼容性</a> 和 <a href="/zh-CN/docs/api/contracts.html">机器可读的合同</a>.</p>
+
+{% endraw %}

@@ -1,0 +1,111 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "构建您的第一个托管浏览器游戏"
+source_url: "/docs/tutorials/browser-quickstart.html"
+source_path: "docs/tutorials/browser-quickstart.md"
+source_hash: "41cf9fbedb43c0236d904fb42d9467a521861df09572f995e085dda2e06c1d23"
+translation: "machine"
+permalink: "/zh-CN/docs/tutorials/browser-quickstart.html"
+---
+{% raw %}
+<h1 id="build-your-first-hosted-browser-game">构建您的第一个托管浏览器游戏</h1>
+<p><a href="/docs/examples/browser-quickstart.zip">下载明星收藏家</a>，一个完整的小游戏，有两个入口
+选项：云保存的帐户游戏，以及进度仅保存在内存中的单人游戏。
+<a href="/docs/examples/browser-quickstart/index.html">尝试无签名游戏</a> 在这个维基上；账户登录变成
+在 StarHermit 上发布您自己的副本后即可使用。</p>
+<p>您需要一个 StarHermit 帐户才能发布。游戏本身不需要服务器后端、依赖
+安装、构建步骤或发布者组织。</p>
+<h2 id="1-unzip-and-play-locally">1.解压并本地播放</h2>
+<p>该 ZIP 包含 <code>index.html</code>, <code>app.js</code>, <code>style.css</code>, <code>starhermit.txt</code>，以及两个帮助文件。
+使用本地静态服务器提供提取的文件夹，例如：</p>
+<pre><code class="language-bash">python3 -m http.server 8000 --directory star-collector
+</code></pre>
+<p>这里 <code>star-collector</code> 是您解压到的文件夹。打开 <code>http://localhost:8000</code> 并选择
+<strong>玩单人游戏（不保存进度）</strong>。单击星星。返回起点或重新加载
+开始新的未跟踪运行。此模式既不写入本地进度，也不写入帐户进度。</p>
+<h2 id="2-publish-the-distributable-folder">2. 发布可分发文件夹</h2>
+<p>清单已位于文件夹根目录中：</p>
+<pre><code class="language-ini">name=Star Collector Quickstart
+launch=index.html
+description=A small single-player game with account saves or untracked play.
+</code></pre>
+<p>在StarHermit的游戏发布UI中，将此文件夹添加为新游戏。整个选定的文件夹是
+发布的构建。仅保留您打算提供的文件。 API 等效项打包文件
+下 <code>client/</code> 并发送原始 gzip 存档：</p>
+<pre><code class="language-bash">mkdir -p bundle/client
+cp -R star-collector/. bundle/client/
+cp star-collector/starhermit.txt bundle/starhermit.txt
+# Write the archive outside bundle so it cannot include itself.
+tar -C bundle -czf star-collector.tar.gz .
+
+curl --fail-with-body -X POST https://api.starhermit.com/api/v1/me/github-games/upload \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H 'Content-Type: application/gzip' \
+  --data-binary @star-collector.tar.gz
+</code></pre>
+<p><code>ACCESS_TOKEN</code> 是您明确接受当前条款后的完整帐户令牌。响应的
+<code>game.id</code>, <code>game.gameSlug</code>和托管子域标识您的游戏。打开返回的托管 URL。
+对于后续版本，请使用该游戏的 <a href="/zh-CN/docs/api/github-games.html#push-a-game-bundle">捆绑端点</a>
+而不是创建另一个列表。看 <a href="/zh-CN/docs/tutorials/ci-cd-build-upload.html">CI出版</a> 当准备好时。</p>
+<h2 id="3-try-the-two-account-entry-paths">3.尝试两种账号进入路径</h2>
+<p><strong>从 StarHermit 启动：</strong> 发射器供应 <code>#game_token=&lt;jwt&gt;</code>。助手抓住它并
+在游戏模块运行之前将其从 URL 中删除。选择 <strong>继续使用您的 StarHermit 帐户</strong>.</p>
+<p><strong>直接打开托管 URL：</strong> 选择 <strong>使用 StarHermit 登录</strong>。提供商选择器让
+玩家使用现有帐户登录或创建一个。它直接返回到这个游戏，并带有范围
+<code>#access_token=&lt;jwt&gt;</code>;不会向游戏发送任何帐户范围的凭据。</p>
+<p>仅当玩家选择帐户玩时游戏才会加载进度。如果当前条款需要接受，
+它将文档显示为文本并提供 <strong>接受并继续</strong>。接受仅发送哈希值
+显示的修订版本。更改的修订版将重新显示以供另一个明确的决定。</p>
+<h2 id="4-check-progress-and-failures">4. 检查进度和失败</h2>
+<p>在帐户模式中收集几颗星星，等待 <strong>已保存</strong>，然后重新加载。选择后返回计数
+账号玩。在相同的已保存计数上打开第二个选项卡：保存在一个选项卡中，然后收集在另一个选项卡中。的
+第二必须显示冲突并提供 <strong>加载最新云进度</strong> 而不是覆盖它。</p>
+<p>保存的文档是 <code>{ version: 1, points: &lt;non-negative integer&gt; }</code>。游戏加载并验证
+在写入之前，使用加载的 ETag 进行条件更新，并在读取失败后阻止写入。
+它在每次收集时保存并标记仅在确认后保存的数据。看
+<a href="/zh-CN/docs/tutorials/cloud-save-sync.html">节省的秘诀</a> 适用于格式、迁移和更大的文档。</p>
+<p>选择未跟踪的游戏会丢弃游戏的玩家令牌并停止后台更新。没有云
+保存、成就、排行榜或本地进度写入发生。再次选择帐户玩使用
+登录以获得新令牌。</p>
+<h2 id="5-adapt-it-to-your-game">5. 使其适应您的游戏</h2>
+<p>将星形按钮和进度模式替换为您的游戏玩法。保留条目选择、令牌
+捕获、明确条款接受、保存前加载规则、错误处理和保存状态。
+在清单中声明键盘操作并读取 <a href="/zh-CN/docs/api/games.html#per-player-control-bindings">控制API</a>
+当您的游戏需要重新绑定时。将音量和图形首选项放入 <a href="/zh-CN/docs/api/games.html#per-player-game-settings">设置</a>.</p>
+<p>对于多人游戏或经过验证的竞争结果，请添加 <a href="/zh-CN/docs/choosing-an-integration.html">脚本或容器</a>。
+本快速入门的云计数器是客户拥有的进度，而不是合法分数的证明。</p>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>目的</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index.html</code>, <code>style.css</code></td>
+<td>可访问的条目、术语、游戏玩法和状态 UI</td>
+</tr>
+<tr>
+<td><code>app.js</code></td>
+<td>进入模式、明确同意、进度验证、检查点、冲突</td>
+</tr>
+<tr>
+<td><code>starhermit-sdk.js</code></td>
+<td>启动令牌捕获、托管登录、令牌更新</td>
+</tr>
+<tr>
+<td><code>cloud-save-store.js</code></td>
+<td>原始 JSON 加载/条件保存配方</td>
+</tr>
+<tr>
+<td><code>starhermit.txt</code></td>
+<td>公开发布元数据</td>
+</tr>
+</tbody>
+</table>
+<p>看 <a href="/zh-CN/docs/credentials.html">证书</a>, <a href="/zh-CN/docs/api/conventions.html">API约定</a>， 和
+<a href="/zh-CN/docs/troubleshooting.html">故障排除</a> 当请求的行为与预期不同时。</p>
+
+{% endraw %}

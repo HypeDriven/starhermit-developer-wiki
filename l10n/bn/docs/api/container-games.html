@@ -1,0 +1,434 @@
+---
+layout: "wiki"
+lang: "bn"
+title: "কন্টেইনার-হোস্টেড গেম সার্ভার"
+source_url: "/docs/api/container-games.html"
+source_path: "docs/api/container-games.md"
+source_hash: "1236c6a7fd9205e65079aaa8684a472e45c363e0314f51528484e44c183f19c1"
+translation: "machine"
+permalink: "/bn/docs/api/container-games.html"
+---
+{% raw %}
+<h1 id="container-hosted-game-servers">কন্টেইনার-হোস্টেড গেম সার্ভার</h1>
+<p>একটি StarHermit গেম একটি এর পরিবর্তে একটি কন্টেইনার ইমেজ হিসাবে তার প্রামাণিক সার্ভার লজিক পাঠাতে পারে
+স্যান্ডবক্সযুক্ত জাভাস্ক্রিপ্ট ফাইল। এটি সার্ভারকে Rust, Go, C++ বা অন্য যেকোন রানটাইম ব্যবহার করতে দেয়
+HTTP এবং WebSockets পরিবেশন করুন। ব্রাউজার-মুখী <a href="/bn/docs/api/games.html">গেম API</a> একই থাকে: ক্লায়েন্ট এখনও
+গেম-স্কোপড লঞ্চ টোকেন, REST সেশন এবং ব্যবহার করুন <code>ws/v1/games</code> JSON ফ্রেম।</p>
+<p>starhermit.com-এ যে কোনো সাইন-ইন করা ব্যবহারকারীর জন্য কন্টেইনার হোস্টিং উন্মুক্ত। একটি স্ব-হোস্টেড স্থাপনা করতে পারেন
+এটি একটি অপারেটর অনুমোদিত তালিকার মধ্যে সীমাবদ্ধ করুন; একটি অনির্ধারিত অনুমোদিত তালিকা সেখানে সকলের পরিবর্তে কাউকেই স্বীকার করে না।
+এটি একটি রেজিস্ট্রি চিত্র এবং একটি আপলোডের ক্ষেত্রে সমানভাবে প্রযোজ্য <code>server/image.tar</code>, তাই কোন রুট নেই
+অন্যের চেয়ে শান্তভাবে বেশি অনুমতিপ্রাপ্ত।</p>
+<p>প্রাথমিক গেম রেজিস্ট্রেশনের পর, ডেভেলপাররাও একটি বিল্ট পুশ করতে পারে <code>.tar.gz</code> ধারণকারী
+<code>server/image.tar</code> (<code>docker save</code> আউটপুট) মাধ্যমে
+<code>POST /api/v1/me/github-games/{id}/bundle</code>. প্ল্যাটফর্মটি ছবি এবং সারিগুলিকে লোড করে এবং ডাইজেস্ট-পিন করে৷
+একটি স্থাপনা পুনঃসূচনা। দেখুন <a href="/bn/docs/api/github-games.html#push-a-game-bundle">গিটহাব গেমস - একটি গেম বান্ডিল পুশ করুন</a>
+এবং <a href="/bn/docs/tutorials/dedicated-server-onboarding.html">ডেডিকেটেড-সার্ভার টিউটোরিয়াল</a>.</p>
+<p>আপনি এটির চারপাশে একটি রিলিজ পাইপলাইন তৈরি করার আগে সেই পুশ সম্পর্কে এই বিশদগুলি জানার মতো:</p>
+<ul>
+<li><strong>একটি বড় <code>docker save</code> CDN এর ~100 MB রিকোয়েস্ট-বডি ক্যাপ অতিক্রম করতে পারে</strong>, যা a দিয়ে উত্তর দেয় <code>413</code>
+প্ল্যাটফর্ম কখনই দেখে না - না <code>limitBytes</code>, কোন লগ আপনি পড়তে পারেন কিছুই. সংরক্ষণাগার উপর ধাক্কা
+<a href="/bn/docs/api/github-games.html#upload-over-a-websocket"><code>ws/v1/game-upload</code></a> পরিবর্তে; একই সংরক্ষণাগার, একই
+ভাতা, একই উত্তর।</li>
+<li><strong>আপনি যে ছবিটি আপলোড করেন তা নিজেই ঘোষণা।</strong> একটি গেম যার ব্যাকএন্ড এখনও নেই — একটি থেকে একটি যোগ করা হয়েছে৷
+আপলোড করা ফোল্ডার যা কোনোটিই ঘোষণা করে না — ডাইজেস্ট থেকে এর ধারক সংজ্ঞা বিধান করে
+শুধু লোড আপনি একটি প্রয়োজন নেই <code>container.image=</code> প্রথম প্রকাশে।</li>
+<li><strong>একটি পুনঃ ধাক্কা তার ম্যানিফেস্ট ঘোষণা করা knobs প্রয়োগ করে এবং এটি বাদ দেওয়া হয়.</strong> পরিবর্তন হচ্ছে
+<code>container.port</code> এবং পুনরায় আপলোড করা এখন সেই পোর্টে স্থাপনার স্থানান্তরিত হয়; ম্যানিফেস্ট ছেড়ে
+বান্ডিল এর ইমেজ ছাড়া আর কিছুই পরিবর্তন করে না।</li>
+<li><strong>একটি আপলোড করা ছবি ম্যানিফেস্টে জয়লাভ করে৷</strong>, সহ <code>server=</code> লাইন, এবং একটি ম্যানিফেস্ট
+উভয় ঘোষণা <code>server=</code> এবং <code>container.image=</code> কিছু লোড করার আগে প্রত্যাখ্যান করা হয়.</li>
+<li><strong>আপনার স্থানীয় চিত্র ট্যাগ স্থাপন করা সংস্করণ নির্বাচন করে না।</strong> একটি আপলোড করা ছবি তার দ্বারা পিন করা হয়
+বিষয়বস্তু ডাইজেস্ট। আপনি চাইলে স্থানীয়ভাবে ট্যাগ করতে পারেন; আপলোড করা ডাইজেস্ট এবং স্থাপনা যাচাই করুন
+প্রকাশের পরে অবস্থা।</li>
+<li><strong><code>?mode=merge</code> প্যাচ ক্লায়েন্ট ফাইল শুধুমাত্র.</strong> A <code>server/image.tar</code> একটি মার্জ হিসাবে ঠিক লোড করা হয়
+একটি প্রতিস্থাপন - একটি চিত্র অর্ধ-আপডেট করা যাবে না. দেখুন
+<a href="/bn/docs/api/github-games.html#partial-updates-modemerge">আংশিক আপডেট</a>.</li>
+</ul>
+<h2 id="manifest">উদ্ভাসিত</h2>
+<p>সংগ্রহস্থল এর মধ্যে ইমেজ ঘোষণা <code>starhermit.txt</code>:</p>
+<pre><code class="language-ini">name=Void Marshals
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+
+container.image=ghcr.io/octocat/vm-server@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+container.port=8080
+container.health=/health
+container.memory_mb=1024
+container.cpu=1.0
+container.env.LOG_LEVEL=info
+</code></pre>
+<p>শুধুমাত্র <code>container.image</code> প্রয়োজন হয় পোর্ট এবং স্বাস্থ্য পাথ ডিফল্ট <code>8080</code> এবং <code>/health</code>.
+মেমরি এবং CPU হল অনুরোধ, গ্যারান্টি নয়; প্ল্যাটফর্ম তাদের অপারেটর সীমাবদ্ধ করে।</p>
+<p>আপনার ছবির একটি সাইজ সিলিং আছে: 2 GiB আনকম্প্রেসড যদি না অপারেটর আপনার গেমটি অন্য সেট না করে থাকে এবং
+একটি রেজিস্ট্রি টান পাঁচ মিনিট আছে. একটি টান যা সিলিং পেরিয়ে যায় তা আংশিকভাবে পরিত্যক্ত হয়, একটি আপলোড করা হয়
+<code>image.tar</code> এটা দিয়ে প্রত্যাখ্যান করা হয় উপর <code>413</code>, এবং একটি ইমেজ যা একবার আনকম্প্রেস করা হলে বড় হয়ে যায়
+আবার সরানো হয়েছে।
+<code>container.env.*</code> শুধুমাত্র অ-গোপন কনফিগারেশনের জন্য।</p>
+<p>একটি জমা প্রত্যাখ্যান করা হয় যদি না:</p>
+<ul>
+<li>ইমেজ হিসাবে ডাইজেস্ট-পিন করা হয় <code>name@sha256:&lt;64 lowercase hex&gt;</code>. পরিবর্তনযোগ্য ট্যাগ গ্রহণ করা হয় না.</li>
+<li>রেজিস্ট্রি অনুমোদিত তালিকাভুক্ত এবং ছবিটি যাচাইকৃত সংগ্রহস্থলের মালিকের নামস্থানের অধীনে রয়েছে;
+বর্তমানে এর মানে <code>ghcr.io/&lt;github-owner&gt;/...</code>.</li>
+<li>ম্যানিফেস্ট ঠিক একটি সার্ভার রানটাইম ঘোষণা করে। <code>server=</code> এবং <code>container.image=</code> পারস্পরিক হয়
+একচেটিয়া</li>
+<li>পরিবেশের নাম বৈধ এবং সংরক্ষিত দিয়ে শুরু হয় না <code>STARHERMIT_</code> উপসর্গ</li>
+</ul>
+<p>কখনই শংসাপত্র রাখবেন না <code>starhermit.txt</code>; এটি একটি পাবলিক রিপোজিটরি ফাইল।</p>
+<h2 id="protocol-v1">প্রোটোকল v1</h2>
+<p>ধারকটি HTTP/1.1 চালু করে <code>container.port</code>. প্রতিটি প্ল্যাটফর্ম HTTP অনুরোধ এবং WebSocket আপগ্রেড অন্তর্ভুক্ত <code>X-Starhermit-Invoke-Key</code>, যার মান
+ইনজেকশনের সাথে মেলে <code>STARHERMIT_INVOKE_KEY</code>; অনুপস্থিত বা ভুল হলে একটি অনুরোধ প্রত্যাখ্যান করুন।</p>
+<table>
+<thead>
+<tr>
+<th>শেষবিন্দু</th>
+<th>উদ্দেশ্য</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET &lt;container.health&gt;</code></td>
+<td>প্রত্যাবর্তন <code>200</code> যখন সার্ভার প্রস্তুত হয়</td>
+</tr>
+<tr>
+<td><code>GET /describe</code></td>
+<td>প্রোটোকল সংস্করণ, টিক রেট, ক্ষমতা এবং অর্জন ঘোষণা করুন</td>
+</tr>
+<tr>
+<td><code>POST /sessions</code></td>
+<td>একটি অধিবেশন শুরু করুন, অথবা যখন এটি পুনরুদ্ধার করুন <code>snapshot</code> বর্তমান</td>
+</tr>
+<tr>
+<td><code>GET /sessions/{sessionId}/snapshot</code></td>
+<td>বর্তমান টেকসই অবস্থা ফিরিয়ে দিন</td>
+</tr>
+<tr>
+<td><code>DELETE /sessions/{sessionId}</code></td>
+<td>একটি অধিবেশন ছিঁড়ে</td>
+</tr>
+<tr>
+<td><code>POST /sessions/{sessionId}/members</code></td>
+<td><em>ঐচ্ছিক:</em> একজন খেলোয়াড় একটি চলমান অধিবেশনে যোগ দিচ্ছে বা ছেড়ে যাচ্ছে</td>
+</tr>
+<tr>
+<td><code>WS /control</code></td>
+<td>ডিপ্লয়মেন্ট-ওয়াইড আউটবাউন্ড কন্ট্রোল চ্যানেল</td>
+</tr>
+<tr>
+<td><code>WS /stream</code></td>
+<td>উভয় দিকে গেমপ্লে ফ্রেম</td>
+</tr>
+</tbody>
+</table>
+<p>একটি ধারক একটি গেমের জন্য সমস্ত লাইভ সেশন হোস্ট করে৷ দ্বারা চাবিকাঠি অধিবেশন অবস্থা রাখুন <code>sessionId</code> এবং করবেন
+অনুমান করবেন না প্রক্রিয়াটি একটি ম্যাচের জীবনের জন্য বেঁচে থাকবে।</p>
+<h3 id="get-describe"><code>GET /describe</code></h3>
+<pre><code class="language-json">{
+  "protocol": 1,
+  "tickRateHz": 20,
+  "maxSessions": 48,
+  "replays": true,
+  "persistent": false,
+  "achievements": [
+    { "key": "first-blood", "name": "First Blood", "description": "Score first.", "points": 10 }
+  ]
+}
+</code></pre>
+<p><code>protocol</code> হতে হবে <code>1</code>. <code>tickRateHz</code> এবং <code>maxSessions</code> অনুরোধ এবং আটকানো হতে পারে. প্ল্যাটফর্ম
+একটি ধারক এর লুপ পদক্ষেপ না, তাই <code>tickRateHz</code> আপনার খেলা কত দ্রুত এটা বলে <em>চলে</em> বরং কিভাবে
+এটি চালানোর জন্য দ্রুত: এটি প্ল্যাটফর্মটি আপনার গেম তৈরির চেয়ে দ্রুত স্ন্যাপশটগুলির জন্য জিজ্ঞাসা করা বন্ধ করে দেয়
+নতুন রাষ্ট্র। আপনার লুপ আসলে যে হারে চলে তা ঘোষণা করুন। ভগ্নাংশ হার গ্রহণ করা হয় (<code>0.5</code> এক
+প্রতি দুই সেকেন্ডে টিক দিন) এবং স্ন্যাপশট অনুরোধের মধ্যে ব্যবধানকে ধীর গতিতে প্রসারিত করে —
+যা একটি ক্র্যাশ খরচ কত খেলা. একটি ধারক যা কিছুই ঘোষণা করে না চেকপয়েন্ট ছেড়ে যায়
+স্ন্যাপশট খরচ একা. কৃতিত্ব এন্ট্রি একই ক্ষেত্র এবং সীমা ব্যবহার করে
+<a href="/bn/docs/api/game-scripts.html#declare">স্ক্রিপ্ট-ঘোষিত অর্জন</a>. ঘোষিত এবং মালিক দ্বারা তৈরি কীগুলি পরে মঞ্জুর করা যেতে পারে।</p>
+<p><code>replays</code> প্ল্যাটফর্মকে প্রতিটি সমাপ্ত সেশনের শেষ অবস্থা a হিসাবে রাখতে বলে <strong>রিপ্লে</strong>, দ্বারা পরিবেশিত
+<code>GET /api/v1/games/{slug}/replays/{sessionId}</code> (দেখুন <a href="/bn/docs/api/games.html#replays">গেম API - রিপ্লে</a>) এটা আবশ্যক
+একটি আক্ষরিক হতে <code>true</code> বা <code>false</code>; একটি খেলা যা ঘোষণা করে যে কিছুই নেই তার কোন রিপ্লে নেই এবং এর রিপ্লে শেষ পয়েন্ট
+উত্তর <code>404</code>. টিক রেট এর মত এটি একটি অনুরোধ - একটি অপারেটর একটি নির্দিষ্ট গেমের জন্য উত্তর দিতে পারে
+যেভাবেই হোক - তাই আপনার ক্লায়েন্টকে ব্রাঞ্চ করুন <code>replaysEnabled</code> থেকে <code>GET /api/v1/games/{slug}</code> এর পরিবর্তে
+আপনি যা ঘোষণা করেছেন। স্ন্যাপশটগুলি যে কোনওভাবেই প্রভাবিত নয়: একটি লাইভ সেশনের একটি পুনরুদ্ধার পয়েন্ট প্রয়োজন কিনা
+বা এর শেষটি রাখা হয় না।</p>
+<p><code>persistent</code> (আক্ষরিক <code>true</code>/<code>false</code>) সেশনের জন্য জিজ্ঞাসা করে যে <strong>শেষ করার পরিবর্তে বিরতি দিন</strong> যখন প্রতিটি
+খেলোয়াড় চলে গেছে। একটি বিরতি সেশনটিকে পার্ক করে: প্ল্যাটফর্মটি একটি চূড়ান্ত স্ন্যাপশট নেয়, এটি সংরক্ষণ করে এবং
+কল <code>DELETE /sessions/{id}</code>; যোগদানের পরবর্তী খেলোয়াড় এটিকে ফিরিয়ে আনে <code>POST /sessions</code> সঙ্গে
+যে <code>snapshot</code>, ঠিক ক্র্যাশ পুনরুদ্ধারের মতো কিন্তু রিস্টার্ট বাজেট বা পাঠানো ছাড়াই
+<code>resumed</code>. পুনরুদ্ধার অবিরাম সেশন এছাড়াও বহন <code>pausedMs</code>, থেমে থাকা মোট সময়। দেখুন
+<a href="/bn/docs/tutorials/persistent-sessions.html">ক্রমাগত সেশন টিউটোরিয়াল</a>.</p>
+<p><code>linkedAchievements</code> (অন্যান্য 8টি পর্যন্ত গেমের স্লাগগুলির একটি অ্যারে) সেগুলিতে খেলোয়াড়দের আনলক রাখে
+এর ctx এ গেমস <code>POST /sessions</code>, তৈরি করুন এবং পুনরুদ্ধার করুন। দেখুন
+<a href="/bn/docs/api/achievements.html#achievements-from-other-games">অন্যান্য গেম থেকে অর্জন</a>.</p>
+<p>স্রোত <code>/describe</code> পাঠক একটি আমদানি করে না <code>queues</code> সম্পত্তি ধারক গেম তাই ব্যবহার
+অন্তর্নিহিত <code>default</code> 1v1 ম্যাচমেকিং সারি; এখানে আকার যোগ করা বড় মিল সক্রিয় করে না।
+চেক করুন <code>GET /api/v1/games/{slug}/queues</code> কার্যকর আকৃতির জন্য। ম্যানিফেস্টের সময়সীমা শুরু হয় এবং এআই-সিট
+সীমা এখনও সেই আকারের মধ্যে প্রযোজ্য; দেখুন <a href="/bn/docs/api/games.html#matchmaking">ম্যাচমেকিং</a>.</p>
+<h3 id="post-sessions"><code>POST /sessions</code></h3>
+<p>অনুরোধটি জাভাস্ক্রিপ্ট গেম প্রাপ্ত একই প্রসঙ্গ আকার:</p>
+<pre><code class="language-json">{
+  "now": 1769500000000,
+  "random": 0.418,
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [
+    { "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "name": "alice" }
+  ],
+  "sessionState": null,
+  "playerStates": {
+    "7c9e6679-7425-40de-944b-e07fc1f90ae7": null
+  }
+}
+</code></pre>
+<p>ক্ষেত্রের শব্দার্থ মেলে <a href="/bn/docs/api/game-scripts.html#context-object">স্ক্রিপ্ট প্রসঙ্গ</a>, সহ
+<a href="/bn/docs/api/game-scripts.html#matchmaking-seat-layout">ম্যাচমেকিং আসন, এআই পতাকা এবং খালি আসন</a> গেমের জন্য
+যে একটি শুরুর সময়সীমা কনফিগার করে <code>starhermit.txt</code>. সঙ্গে সাড়া
+আদর্শ ফলাফল খাম, উদাহরণস্বরূপ:</p>
+<pre><code class="language-json">{ "ok": true, "sessionState": { "round": 1 } }
+</code></pre>
+<p>পুনরুদ্ধারের উপর অনুরোধ এছাড়াও রয়েছে <code>snapshot</code>, প্ল্যাটফর্মের শেষ অবস্থা ধরে রাখা,
+এবং <code>restoredFrom</code>, একটি ইউনিক্স-মিলিসেকেন্ড টাইমস্ট্যাম্প। স্ন্যাপশট থেকে একটি খেলার যোগ্য সেশন পুনর্গঠন করুন।
+ক্রমাগত গেমগুলি একইভাবে পুনরুদ্ধার করা হয় যখন একজন খেলোয়াড় একটি বিরতি দেওয়া সেশনে পুনরায় যোগ দেয়, এর সাথে <code>pausedMs</code>
+শরীরের মধ্যে</p>
+<h3 id="get-sessionssessionidsnapshot"><code>GET /sessions/{sessionId}/snapshot</code></h3>
+<p>একটি সম্পূর্ণ সহ স্ট্যান্ডার্ড খাম ফেরত দিন <code>sessionState</code> পুনরুদ্ধার পয়েন্ট:</p>
+<pre><code class="language-json">{ "ok": true, "sessionState": { "round": 3, "scores": [2, 1] } }
+</code></pre>
+<p>প্ল্যাটফর্ম চেকপয়েন্ট পর্যায়ক্রমে সক্রিয় সেশন. একটি স্ন্যাপশট প্রতিক্রিয়া অন্তর্ভুক্ত হতে পারে
+<code>playerStates</code>, <code>eloUpdates</code>, <code>achievements</code>, <code>scores</code>, বা <code>result</code>; তারা একই বৈধতা মাধ্যমে পাস এবং
+একটি স্ক্রিপ্ট ফলাফল হিসাবে অধ্যবসায় নিয়ম. সঙ্গে একটি খেলা জন্য <a href="#get-describe">রিপ্লে</a>, শেষ অবস্থা ক
+প্ল্যাটফর্মটি তার রিপ্লে হিসাবে যা রাখে তা সমাপ্ত সেশনে পৌঁছেছে — তাই সেই অবস্থা তৈরি করুন
+পুনর্গঠনযোগ্য, শুধু পুনঃস্থাপনযোগ্য নয়।</p>
+<h3 id="post-sessionssessionidmembers"><code>POST /sessions/{sessionId}/members</code></h3>
+<p>ঐচ্ছিক। খেলোয়াড়রা পারে <strong>একটি সেশনে যোগ দিন</strong>, একটি মাধ্যমে <a href="/bn/docs/api/realtime.html">রিয়েলটাইম রুম</a> যে অনুমতি দেয়
+এটি বা বন্ধুর গ্রহণ করে <a href="/bn/docs/api/games.html#inviting-a-friend-into-a-game-in-progress">তারা যে অধিবেশন খেলছে তাতে আমন্ত্রণ জানান</a>,
+এবং কক্ষগুলি একজন খেলোয়াড়কে তাদের আসন ছেড়ে দিতে দেয় যাতে AI এটি গ্রহণ না করে। প্ল্যাটফর্ম আপনার ধারক জিজ্ঞাসা
+পরিবর্তন চূড়ান্ত হওয়ার আগে। শরীরের সাধারণ ctx, সঙ্গে <code>players</code> ইতিমধ্যে প্রতিফলিত
+পরিবর্তন, প্লাস <code>membership</code>:</p>
+<pre><code class="language-json">{
+  "now": 1769500000000,
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [
+    { "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "name": "alice" },
+    { "id": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol" }
+  ],
+  "membership": { "change": "joined", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol", "team": 0, "slot": 1 }
+}
+</code></pre>
+<p><code>change</code> হয় <code>joined</code> বা <code>left</code>. স্ট্যান্ডার্ড খামের সাথে উত্তর দিন:</p>
+<ul>
+<li><strong>একটি যোগদান প্রত্যাখ্যান করা যেতে পারে.</strong> <code>{"ok": false, "error": "This world is full."}</code> খেলোয়াড়কে দূরে সরিয়ে দেয়,
+আসন ফিরে দেওয়া হয় এবং কিছুই রেকর্ড করা হয় না; একটি আমন্ত্রণ উত্তর গ্রহণ <code>409</code> এবং আমন্ত্রণ থাকে
+মুলতুবি আপনি যদি শেষবিন্দু বাস্তবায়ন না করেন, প্রতিটি যোগদান প্রত্যাখ্যান করা হয়: <code>404</code>, <code>405</code> এবং <code>501</code> মানে
+"এই গেমটি খেলোয়াড়দের ম্যাচের মাঝখানে নেয় না", তাই একটি নির্দিষ্ট রোস্টারের জন্য লেখা একটি গেমের কখনই একটি থাকে না
+অপরিচিত ব্যক্তি এতে নেমে পড়ে।</li>
+<li><strong>একটি ছুটি চূড়ান্ত</strong> আপনি যাই উত্তর দিন।</li>
+<li>উত্তর বহন করতে পারে <code>achievements</code> এবং <code>scores</code>. A <code>sessionState</code> উপেক্ষা করা হয়: একটি পাঠান <code>snapshot</code>
+ওভার <a href="#control-channel"><code>/control</code></a> পরিবর্তন একটি চেকপয়েন্ট মূল্য যদি.</li>
+</ul>
+<p>যোগদানের পর, নতুন প্লেয়ারের কমান্ড আসতে শুরু করে <code>/stream</code> এবং তারা আছে <code>players</code> প্রতি
+পরে পুনরুদ্ধার করুন। ছুটির পরে, তাদের ফ্রেম বন্ধ হয়ে যায় এবং তাদের সকেট বন্ধ হয়ে যায়। প্রতিটি সংযুক্ত ক্লায়েন্ট
+পায় a <a href="/bn/docs/api/games.html#server--client"><code>membership</code> ফ্রেম</a> যেভাবেই হোক, এবং সেশন চ্যাট লাভ বা হারায়
+সদস্য</p>
+<p>A <a href="/bn/docs/tutorials/persistent-sessions.html">স্থায়ী অধিবেশন বিরতি</a> জিজ্ঞাসা করা হয় না, কারণ এটি চলছে না। যে পুনরুদ্ধার
+পুনরায় শুরু করে এটি কারেন্ট বহন করে <code>players</code>, তাই এমন একজন খেলোয়াড়ের সাথে আচরণ করুন যা আপনি আগে পুনরুদ্ধারে দেখেননি
+যোগদান করেছে</p>
+<h2 id="gameplay-stream">গেমপ্লে স্ট্রীম</h2>
+<p><code>WS /stream</code> উভয় দিকে বাইনারি বার্তা ব্যবহার করে:</p>
+<pre><code class="language-text">[1 byte type][16 byte sessionId][16 byte userId][payload...]
+</code></pre>
+<p>GUID গুলি তাদের 16-বাইট .NET তারের উপস্থাপনা ব্যবহার করে।</p>
+<ul>
+<li><strong>টাইপ 1, প্ল্যাটফর্ম → ধারক:</strong> প্লেয়ার কমান্ড। প্ল্যাটফর্মটি প্রমাণীকৃত ব্যবহারকারী আইডি স্ট্যাম্প করে;
+পেলোড হল ক্লায়েন্টের থেকে পাওয়া JSON মান <code>cmd.data</code>.</li>
+<li><strong>টাইপ 2, ধারক → প্ল্যাটফর্ম:</strong> গেম পেলোড। একজন অংশগ্রহণকারীকে তাদের ব্যবহারকারী আইডি দিয়ে ঠিকানা দিন, অথবা ব্যবহার করুন
+সম্প্রচারের জন্য একটি অল-জিরো ইউজার আইডি। পেলোড অবশ্যই বৈধ JSON হতে হবে; ক্লায়েন্টরা এটি ভিতরে গ্রহণ করে
+<code>{"type":"game","data":...}</code>.</li>
+</ul>
+<p>অর্ডার সংরক্ষণের জন্য স্ট্রিম সংযোগে সেশনগুলি পিন করা হয়৷ কখনোই প্লেয়ার গ্রহণ বা প্রাপ্ত করবেন না
+JSON কমান্ড থেকে পরিচয়—প্রমাণিত শিরোনামটি প্রামাণিক।</p>
+<h2 id="control-channel">নিয়ন্ত্রণ চ্যানেল</h2>
+<p>JSON পাঠ্য বার্তা পাঠান চালু করুন৷ <code>WS /control</code> টেকসই প্রভাব জন্য:</p>
+<pre><code class="language-json">{ "type": "snapshot",     "sessionId": "...", "state": { "round": 3 } }
+{ "type": "achievements", "sessionId": "...", "unlocks": { "&lt;userId&gt;": ["first-blood"] } }
+{ "type": "elo",          "sessionId": "...", "updates": { "&lt;userId&gt;": 1312 } }   // absolute ratings, not deltas — see games.md#elo-per-match
+{ "type": "scores",       "sessionId": "...", "scores": { "&lt;boardKey&gt;": { "&lt;userId&gt;": 4200 } } }
+{ "type": "result",       "sessionId": "...", "result": { "kind": "win", "winner": "..." } }
+{ "type": "backpressure", "load": 0.75 }
+</code></pre>
+<p>প্ল্যাটফর্ম শুধুমাত্র এই স্থাপনার জন্য রাউট করা সেশনের জন্য প্রভাব গ্রহণ করে, প্রাপকদের ফিল্টার করে
+সেশনের অংশগ্রহণকারীরা, কৃতিত্বের কীগুলিকে গেমের অর্জনগুলিতে সীমাবদ্ধ করে (ঘোষিত, বা দ্বারা তৈরি
+এর মালিক), সীমা <code>scores</code> খেলার নিজস্ব
+<a href="/bn/docs/api/leaderboards.html#your-games-own-leaderboards">মালিকের তৈরি লিডারবোর্ড</a> - প্রতিটি খেলোয়াড় তাদের রাখে
+সর্বোত্তম — এবং রাষ্ট্রীয় বাজেট প্রযোজ্য।
+<code>result</code> অধিবেশন শেষ হয়; যে সেশনের জন্য পরবর্তী প্রভাব উপেক্ষা করা হয়. <code>backpressure.load</code> হয়
+আটকানো <code>0..1</code> এবং বর্তমান স্থাপনার লোডের জন্য প্ল্যাটফর্ম অ্যাকাউন্টে সাহায্য করে।</p>
+<p>শব্দার্থগতভাবে গুরুত্বপূর্ণ ইভেন্টের পরে একটি স্ন্যাপশট পুশ করুন, যেমন একটি লক্ষ্য বা রাউন্ড ট্রানজিশন, বরং
+শুধুমাত্র পর্যায়ক্রমিক চেকপয়েন্টের উপর নির্ভর করার চেয়ে।</p>
+<h2 id="container-environment-and-server-api">ধারক পরিবেশ এবং সার্ভার API</h2>
+<table>
+<thead>
+<tr>
+<th>পরিবর্তনশীল</th>
+<th>অর্থ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>STARHERMIT_PROTOCOL</code></td>
+<td>প্রোটোকল সংস্করণ (<code>1</code>)</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_GAME_SLUG</code></td>
+<td>এই গেম এর স্লগ</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_INVOKE_KEY</code></td>
+<td>গোপন প্রত্যাশিত <code>X-Starhermit-Invoke-Key</code>; আপনার পাত্রে প্ল্যাটফর্মকে প্রমাণীকরণ করে</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_REFRESH_KEY</code></td>
+<td>পৃথক গোপন শুধুমাত্র সার্ভার টোকেন পুনর্নবীকরণ ব্যবহৃত</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_API_BASE</code></td>
+<td>বিচ্ছিন্ন নেটওয়ার্ক থেকে প্ল্যাটফর্ম API বেস URL পৌঁছানো যায়</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_SERVER_TOKEN</code></td>
+<td>সংকীর্ণ সার্ভার-টু-সার্ভার API-এর জন্য মেয়াদ শেষ হচ্ছে বাহক টোকেন৷</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_SERVER_TOKEN_EXPIRES_IN</code></td>
+<td>ইনজেকশন সার্ভার টোকেনের লাইফটাইম, সেকেন্ডে</td>
+</tr>
+<tr>
+<td><code>PORT</code></td>
+<td>পোর্ট যার উপর কন্টেইনার শুনতে হবে</td>
+</tr>
+</tbody>
+</table>
+<p>একটি সার্ভার টোকেনের কোনো প্লেয়ার পরিচয় নেই এবং অ্যাকাউন্ট বা প্লেয়ার অ্যাকশন ব্যবহার করতে পারে না। এটা পড়তে পারে
+<code>GET /api/v1/time</code>, এর নিজস্ব সেশনগুলি সমন্বয় করুন এবং সার্ভার-সমর্থিত কল করুন
+<a href="/bn/docs/api/moderation.html#callers-and-routes">সংযম রুট</a> নিজের খেলার জন্য। প্রজন্মের রুট হয়
+<a href="/bn/docs/availability.html#reserved-generation-routes">সংরক্ষিত এবং অনুপলব্ধ</a>.</p>
+<h3 id="renew-the-server-token">সার্ভার টোকেন পুনর্নবীকরণ করুন</h3>
+<p>ইনজেকশন সার্ভার টোকেন মেয়াদ শেষ হয় (ডিফল্টরূপে 24 ঘন্টা)। আগে ভালো করে রিফ্রেশ করুন
+<code>STARHERMIT_SERVER_TOKEN_EXPIRES_IN</code> অতিবাহিত:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/server/token
+X-Starhermit-Refresh-Key: &lt;STARHERMIT_REFRESH_KEY&gt;
+</code></pre>
+<pre><code class="language-json">{ "token": "eyJhbGciOi...", "expiresInSeconds": 86400 }
+</code></pre>
+<p>মেয়াদ উত্তীর্ণ বিয়ারার টোকেন ছাড়াই ইচ্ছাকৃতভাবে এই এন্ডপয়েন্টকে ডাকা হয়। ডেডিকেটেড রিফ্রেশ কী
+লাইভ স্থাপনার সাথে তুলনা করা হয় এবং পুরানো টোকেনের মেয়াদ শেষ হওয়ার পরেও কাজ করে। এটা স্বতন্ত্র
+থেকে <code>STARHERMIT_INVOKE_KEY</code>: ইনভোক কী আপনার প্রক্রিয়ার প্ল্যাটফর্ম কলগুলিকে প্রমাণীকরণ করে, যখন
+রিফ্রেশ কী প্ল্যাটফর্মে আপনার প্রক্রিয়াকে প্রমাণীকরণ করে। যখনই পাত্রটি শুরু হয় তখন উভয়ই ঘোরে।
+রিপোর্ট করা জীবনকালের প্রায় অর্ধেক সময়ে পুনর্নবীকরণের সময়সূচী করুন এবং টোকেনটি পারমাণবিকভাবে প্রতিস্থাপন করুন।</p>
+<p>"যখনই পাত্র শুরু হয়" একটি স্থাপনার চেয়ে বেশি অন্তর্ভুক্ত। একটি নিষ্ক্রিয় স্থাপনা একটি পরে বন্ধ করা হয়
+কোনো সেশন ছাড়াই শান্ত বানান (ডিফল্টরূপে 15 মিনিট) এবং পরবর্তী খেলোয়াড়ের দ্বারা আবার শুরু হয়। একটি বিধ্বস্ত কন্টেইনার হয়
+পুনরায় আরম্ভ প্রতিটি শুরু নতুন কী এবং একটি নতুন টোকেন সহ একটি নতুন ধারক, তাই থেকে তিনটিই পড়ুন
+চলমান প্রক্রিয়ার পরিবেশ। ছবি, একটি কনফিগারেশন ফাইল বা একটি স্ন্যাপশটে সেগুলি কখনই বেক করবেন না৷</p>
+<p>একটি শুরু সঙ্গে ব্যর্থ হলে <code>The game container returned 401 for GET /describe</code>, প্ল্যাটফর্মের চাবিকাঠি এবং
+আপনার প্রক্রিয়ার মূল অসম্মতি. পড়ুন <code>STARHERMIT_INVOKE_KEY</code> স্টার্টআপে এবং এটি অপরিবর্তিত তুলনা করুন। যদি বৈধতা এখনও ব্যর্থ হয়,
+গেম আইডি এবং স্যানিটাইজড স্টার্টআপ লগ রিপোর্ট করুন; চেক আলগা করবেন না।</p>
+<h3 id="reconcile-a-session">একটি অধিবেশন পুনর্মিলন</h3>
+<p><code>GET /api/v1/games/{slug}/server/sessions/{sessionId}</code> সঙ্গে
+<code>Authorization: Bearer &lt;STARHERMIT_SERVER_TOKEN&gt;</code> প্ল্যাটফর্মের বর্তমান সেশন ভিউ প্রদান করে:</p>
+<pre><code class="language-json">{
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "status": "active",
+  "players": [
+    { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" }
+  ],
+  "createdAt": "2026-07-27T16:00:00Z",
+  "finishedAt": null,
+  "chatConversationId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+  "result": null
+}
+</code></pre>
+<p>প্ল্যাটফর্ম এখনও বিবেচনা করে কিনা তা কনটেইনার নিশ্চিত করার প্রয়োজন হলে পুনরুদ্ধারের পরে এটি ব্যবহার করুন
+একটি সেশন সক্রিয়। অন্য গেমের জন্য একটি টোকেন বা প্লেয়ার লঞ্চ টোকেন নিষিদ্ধ৷</p>
+<h2 id="isolation">আলাদা করা</h2>
+<p>গেম কন্টেইনারে ইন্টারনেট অ্যাক্সেস নেই। এটি শুধুমাত্র StarHermit API এর মাধ্যমে পৌঁছাতে পারে
+<code>STARHERMIT_API_BASE</code>; এটি অন্য গেম, প্ল্যাটফর্ম পরিষেবা বা হোস্টে পৌঁছাতে পারে না। সব বিক্রেতা
+ছবিতে রানটাইম নির্ভরতা।</p>
+<p>রুট ফাইল সিস্টেম শুধুমাত্র পঠনযোগ্য, একটি ছোট ছাড়া <code>/tmp</code>; প্রক্রিয়া একটি বাধ্য অ-মূল হিসাবে সঞ্চালিত হয়
+কোন লিনাক্স ক্ষমতা, কোন ভলিউম, এবং CPU, মেমরি, এবং প্রক্রিয়া সীমা ছাড়া ব্যবহারকারী. ইন্সটল করবেন না
+স্টার্টআপের সময় প্যাকেজগুলি শুধুমাত্র স্থানীয় ডিস্কের সাথে মেলে।</p>
+<h2 id="failure-and-recovery">ব্যর্থতা এবং পুনরুদ্ধার</h2>
+<p>প্রক্রিয়াটি মারা গেলে, প্ল্যাটফর্মটি স্থাপনা পুনরায় চালু করে এবং তাদের থেকে তার লাইভ সেশনগুলি পুনরায় তৈরি করে
+শেষ স্ন্যাপশট সংযুক্ত খেলোয়াড়রা একটি প্ল্যাটফর্ম ফ্রেম পায়:</p>
+<pre><code class="language-json">{ "type": "resumed", "sessionId": "...", "lostMs": 750 }
+</code></pre>
+<p>ক্লায়েন্টদের স্থানীয় ভবিষ্যদ্বাণী বাতিল করা উচিত এবং গেমের স্বাভাবিক ফুল-স্টেট পেলোডের জন্য অপেক্ষা করা উচিত। একটি অধিবেশন
+কোনো ব্যবহারযোগ্য স্ন্যাপশট না থাকলে, এটি অনেক পুরানো, অথবা সেশনটি থাকলে পুনরুদ্ধারের পরিবর্তে পরিত্যক্ত হয়
+খুব ঘন ঘন পুনঃসূচনা। প্ল্যাটফর্মটি বিজয়ী বা এলো পরিবর্তন ছাড়াই এটি শেষ করে এবং পাঠায়:</p>
+<pre><code class="language-json">{ "type": "abandoned", "sessionId": "...", "reason": "server_failure" }
+</code></pre>
+<p><code>reason</code> হয় <code>server_failure</code> যখন পুনরুদ্ধার অনিরাপদ হয় বা প্রতিস্থাপন কখনই শুরু হয় না, এবং
+<code>restore_failed</code> যখন সেশনটি পুনরায় তৈরি করা ব্যর্থ হয়। একটি নতুন ছবি প্রকাশ করা লাইভ সেশনগুলি পুনরুদ্ধার করে৷
+প্রতিস্থাপনে (অথবা খুব বাসি ত্যাগ করে)। একটি শুরু যা ব্যর্থ হয় — টানার সময় শেষ,
+কন্টেইনার প্রস্থান করা হয়েছে, বা এটি কখনই তার স্বাস্থ্য পরীক্ষার উত্তর দেয়নি - একটি ব্যাকঅফ দিয়ে পুনরায় চেষ্টা করা হয়, যেমন
+ক্র্যাশ দশ মিনিটের মধ্যে তিনটি ব্যর্থ প্রচেষ্টা (অপারেটর-টিউনযোগ্য) স্থাপনা নিষ্ক্রিয় করে (<code>failed</code>),
+এবং এটা হয় <strong>না</strong> প্লেয়ার চাহিদা দ্বারা জাগ্রত. গেমের ব্যর্থতা ভাতা ব্যয় না করে অস্থায়ী হোস্টিং বাধাগুলি পুনরায় চেষ্টা করা যেতে পারে।</p>
+<p>15 মিনিট নিষ্ক্রিয় থাকার পরে কোনও লাইভ সেশন ছাড়াই একটি স্থাপনা বন্ধ হয়ে যায় (অপারেটর আপনার গেমটিকে একটি ভিন্ন উইন্ডো সেট করতে পারে)।
+বিরতি দেওয়া হয়েছে <a href="#get-describe">অবিরাম</a> সেশনগুলি পাত্রের বাইরে পার্ক করা হয় এবং এটি রাখা হয় না।
+এর বিরুদ্ধে পরবর্তী অধিবেশনের অনুরোধ ক <code>stopped</code> স্থাপনা এটা জাগিয়ে তোলে (<code>pending</code> → স্বাস্থ্য গেট →
+<code>running</code>); হারানো যে জাতি হয় <code>503</code> বলছে খেলা শুরু হচ্ছে। শুধুমাত্র <code>stopped</code> এই জাগ্রত হয়
+উপায় - কখনই না <code>failed</code>.</p>
+<p>ডিজাইন <code>POST /sessions</code> পুনরুদ্ধার এবং স্ন্যাপশট ক্যাডেন্স গেম প্রোটোকলের অংশ হিসাবে, একটি হিসাবে নয়
+ঐচ্ছিক অপ্টিমাইজেশান।</p>
+<p>গেমের মালিক আটকে থাকা সেশনগুলি তালিকাভুক্ত করতে এবং শেষ করতে পারেন:
+<code>GET</code>/<code>DELETE /api/v1/me/github-games/{id}/sessions[/{sessionId}]</code>.</p>
+<h2 id="your-servers-output-and-crash-reports">আপনার সার্ভারের আউটপুট এবং ক্র্যাশ রিপোর্ট</h2>
+<p>গেমের মালিক হিসাবে আপনি পড়তে পারেন আপনার সার্ভার কি প্রিন্ট করেছে এবং এটি ডাউন হয়ে গেলে কী হয়েছিল:</p>
+<table>
+<thead>
+<tr>
+<th>পদ্ধতি</th>
+<th>পথ</th>
+<th>বর্ণনা</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>পান</td>
+<td><code>/api/v1/me/github-games/{id}/container/logs?tail=N</code></td>
+<td>সাম্প্রতিক আউটপুট: <code>{ source, deploymentStatus, capturedAt, truncated, logs }</code></td>
+</tr>
+<tr>
+<td>পান</td>
+<td><code>/api/v1/me/github-games/{id}/container/crashes?page=&amp;pageSize=</code></td>
+<td>ক্র্যাশ রেকর্ড, নতুন প্রথম</td>
+</tr>
+<tr>
+<td>পান</td>
+<td><code>/api/v1/me/github-games/{id}/container/crashes/{crashId}</code></td>
+<td>আউটপুট ক্যাপচার সহ একটি ক্র্যাশ রেকর্ড</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>লগ</strong> চলমান সার্ভার থেকে সরাসরি আসা (<code>source: "live"</code>), নতুন রাখা, 500 লাইন পর্যন্ত এবং
+ডিফল্টরূপে 256 KiB। যখন কিছুই চলছে না আপনি শেষ ক্র্যাশে আউটপুট ক্যাপচার পান
+(<code>source: "last_crash"</code>) একটি খেলা যার ব্যাকএন্ড একটি স্ক্রিপ্ট, বা যার কিছুই নেই, পায়৷ <code>409</code>.</li>
+<li><strong>একটি ক্র্যাশ রেকর্ড</strong> লেখা হয় যখনই আপনার সার্ভার ক্র্যাশ হয়, উত্তর দেওয়া বন্ধ করে, সময় শেষ হয়
+স্টার্টআপ বা শুরু করতে ব্যর্থ হয় — ধারকটি সরানোর আগে। এটি এই ধরনের, প্রস্থান কোড বহন করে,
+ইমেজ ডাইজেস্ট, গণনা পুনঃসূচনা, প্রভাবিত সেশন, এবং আপনার সার্ভারের শেষ 64 KiB আউটপুট। দ
+50টি সাম্প্রতিক রাখা হয়েছে, 30 দিনের জন্য।</li>
+<li><strong>গোপনীয়তা সংশোধন করা হয়.</strong> আপনার সার্ভারের ইনভোক কী, রিফ্রেশ কী এবং যেকোনো সার্ভার টোকেন হিসেবে প্রদর্শিত হবে
+<code>[redacted]</code>. আপনার নিজের <code>container.env.*</code> মানগুলি মুদ্রিত হিসাবে উপস্থিত হয় - আপনি যা করতে চান না তা লগ করবেন না
+সংরক্ষণ করতে চান।</li>
+</ul>
+<p>অপারেটররা গেম প্রতি সেই সীমাগুলির প্রতিটি পরিবর্তন করতে পারে।</p>
+<h2 id="see-also">এছাড়াও দেখুন</h2>
+<ul>
+<li><a href="/bn/docs/api/github-games.html">গিটহাব গেমস</a> — সংগ্রহস্থল নিবন্ধন এবং স্থাপনা</li>
+<li><a href="/bn/docs/api/games.html">গেম API</a> — অপরিবর্তিত প্লেয়ার-মুখী REST এবং WebSocket পৃষ্ঠ</li>
+<li><a href="/bn/docs/api/game-scripts.html">খেলা স্ক্রিপ্ট</a> — বিকল্প জাভাস্ক্রিপ্ট রানটাইম এবং শেয়ার করা প্রসঙ্গ/ফলাফল আকার</li>
+<li><a href="/bn/docs/api/achievements.html">অর্জন</a> — প্লেয়ার-মুখী কৃতিত্ব পড়া এবং বিজ্ঞপ্তি</li>
+</ul>
+<p>শেয়ার করা হয়েছে <a href="/bn/docs/api/conventions.html">এপিআই কনভেনশন</a> রেসপন্স পার্সিং, টাইমস্ট্যাম্প, পেজিনেশন এবং পুনঃপ্রচেষ্টা বর্ণনা করুন।</p>
+<p>দেখুন <a href="/bn/docs/credentials.html">শংসাপত্রের সামঞ্জস্য</a> এবং <a href="/bn/docs/api/contracts.html">মেশিন-পাঠযোগ্য চুক্তি</a>.</p>
+
+{% endraw %}

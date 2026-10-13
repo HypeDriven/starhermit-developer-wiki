@@ -1,0 +1,250 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "Réclamez un jeu ajouté par quelqu'un d'autre"
+source_url: "/docs/tutorials/claim-existing-game.html"
+source_path: "docs/tutorials/claim-existing-game.md"
+source_hash: "fc2b52c67cda7e6fd24b0791208c1511aafea7d1f6e61e1cf9b61cc9d6eb1003"
+translation: "machine"
+permalink: "/fr/docs/tutorials/claim-existing-game.html"
+---
+{% raw %}
+<h1 id="claim-a-game-someone-else-added">Réclamez un jeu ajouté par quelqu'un d'autre</h1>
+<p>Si quelqu'un a déjà ajouté votre jeu GitHub public à StarHermit, vous n'avez pas besoin de créer un
+deuxième inscription. Réclamez la fiche existante pour devenir son propriétaire vérifié et gérer ses métadonnées,
+hébergement, déploiement, backend du serveur et transferts futurs.</p>
+<p>La revendication est protégée par le contrôle du référentiel. Connaître l'ID du jeu ou l'URL du référentiel ne suffit pas.
+Vous devez prouver le contrôle de l’une des deux manières suivantes&#160;:</p>
+<ol>
+<li>Liez le compte GitHub personnel propriétaire du référentiel&#160;; ou</li>
+<li>Validez votre identifiant utilisateur StarHermit immuable en tant que <code>owner=</code> dans le dépôt <code>starhermit.txt</code>.</li>
+</ol>
+<p>La deuxième méthode est particulièrement utile pour les référentiels appartenant à l'organisation, car la version actuelle
+La vérification de connexion GitHub correspond aux propriétaires de référentiels personnels et ne déduit pas l'appartenance à une organisation.</p>
+<h2 id="what-claiming-changes">Quels changements dans les revendications</h2>
+<p>Une réclamation réussie&#160;:</p>
+<ul>
+<li>conserve l'ID de jeu/liste existant et son historique accumulé&#160;;</li>
+<li>remplace l'utilisateur StarHermit gérant de l'annonce par vous&#160;;</li>
+<li>marque la liste comme <code>isVerifiedOwner: true</code>;</li>
+<li>actualise les métadonnées et les contrôles fiables de <code>starhermit.txt</code> le cas échéant&#160;;</li>
+<li>provisionne ou actualise un backend de script/conteneur déclaré&#160;;</li>
+<li>permet l'hébergement de la plate-forme lorsqu'elle est disponible et met en file d'attente le déploiement au fur et à mesure <code>pending</code>;</li>
+<li>supprime l'accès à la gestion de la personne qui a initialement soumis cette annonce.</li>
+</ul>
+<p>La réclamation ne donne pas au demandeur précédent l'accès à votre compte GitHub et ne fusionne pas
+Comptes utilisateurs StarHermit. Il transfère la gestion de cette annonce spécifique.</p>
+<h2 id="before-you-begin">Avant de commencer</h2>
+<p>Il vous faut&#160;:</p>
+<ul>
+<li>Un compte StarHermit et un jeton d'accès utilisateur complet, et non un jeton de lancement limité au jeu.</li>
+<li>Accès en écriture au référentiel si vous utilisez le <code>owner=</code> méthode de preuve.</li>
+<li>L'identifiant de liste StarHermit existant.</li>
+<li>Pour un jeu de référentiel cloné, un valide <code>starhermit.txt</code> à la racine du référentiel.</li>
+</ul>
+<p>Seulement <code>github.com/&lt;owner&gt;/&lt;repo&gt;</code> les référentiels et leurs sites GitHub Pages participent à cette réclamation
+couler. Une URL hébergée arbitraire n'a aucune propriété du référentiel GitHub à prouver et ne peut pas être revendiquée.
+manière.</p>
+<p>Exemples d'utilisation ci-dessous&#160;:</p>
+<pre><code class="language-bash">API=https://api.starhermit.com
+ACCESS_TOKEN='your-full-user-access-token'
+OWNER='your-github-login'
+REPO='your-game-repository'
+</code></pre>
+<p>Les jetons d'accès durent 15 minutes. Actualisez le vôtre avant de commencer s’il est presque expiré.</p>
+<h2 id="step-1-find-the-existing-listing">Étape 1 : trouver l'annonce existante</h2>
+<p>Liste des jeux partagés&#160;:</p>
+<pre><code class="language-bash">curl -sS "$API/api/v1/github-games" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>Chaque élément comprend la liste immuable <code>id</code>, normalisé <code>repoUrl</code>, <code>ownerLogin</code>, <code>repoName</code>, le
+Soumissionnaire actuel et statut de propriétaire&#160;:</p>
+<pre><code class="language-json">{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "repoUrl": "https://github.com/octocat/orbit-league",
+  "ownerLogin": "octocat",
+  "repoName": "orbit-league",
+  "displayName": "Orbit League",
+  "isVerifiedOwner": false,
+  "submittedByUserId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "submittedByUsername": "someone-else"
+}
+</code></pre>
+<p>Correspond aux deux <code>ownerLogin</code> et <code>repoName</code>; ne sélectionnez pas un jeu uniquement parce que son nom d'affichage est
+similaire. Avec <code>jq</code>:</p>
+<pre><code class="language-bash">GAME_ID=$(
+  curl -sS "$API/api/v1/github-games" \
+    -H "Authorization: Bearer $ACCESS_TOKEN" |
+  jq -r --arg owner "$OWNER" --arg repo "$REPO" \
+    '.[] | select((.ownerLogin | ascii_downcase) == ($owner | ascii_downcase)
+               and (.repoName | ascii_downcase) == ($repo | ascii_downcase)) | .id' |
+  head -n1
+)
+
+printf 'Listing ID: %s\n' "$GAME_ID"
+</code></pre>
+<p>Arrêtez si le résultat est vide. N'appelez pas de réclamation avec un identifiant copié à partir d'une annonce sans rapport.</p>
+<h2 id="step-2-choose-how-to-prove-ownership">Étape 2&#160;: choisissez comment prouver la propriété</h2>
+<h3 id="option-a-link-the-repository-owners-github-account">Option A&#160;: lier le compte GitHub du propriétaire du référentiel</h3>
+<p>Utilisez-le lorsque le référentiel appartient directement à votre connexion GitHub personnelle.</p>
+<p>À partir du flux de compte/paramètres de StarHermit, démarrez GitHub OAuth dans <strong>lien</strong> mode lorsque vous êtes connecté au
+Compte StarHermit qui devrait gérer le jeu. La création de liens est différente de la création accidentelle d'un
+deuxième compte StarHermit avec connexion GitHub.</p>
+<p>Le flux API commence à&#160;:</p>
+<pre><code class="language-text">GET /api/v1/auth/oauth/github/authorize?link=true
+</code></pre>
+<p>Il est piloté par le navigateur et utilise un cookie d'état de courte durée. La liaison nécessite un StarHermit récent
+authentification. Terminez l'autorisation GitHub dans la même session de navigateur qui l'a démarré.</p>
+<p>Vérifiez le résultat&#160;:</p>
+<pre><code class="language-bash">curl -sS "$API/api/v1/me/github" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>Attendu:</p>
+<pre><code class="language-json">{ "linked": true, "login": "octocat" }
+</code></pre>
+<p>Le login renvoyé doit correspondre à celui de la liste existante <code>ownerLogin</code>, sans tenir compte de la casse. Un personnel
+La connexion à GitHub ne prouve pas l'appartenance à une organisation propriétaire du référentiel. Pour un
+référentiel appartenant à l’organisation, utilisez l’option B.</p>
+<h3 id="option-b-add-owner-to-starhermittxt">Option B&#160;: ajouter <code>owner=</code> à <code>starhermit.txt</code></h3>
+<p>Cela prouve le contrôle car seule une personne capable de publier le contenu du référentiel peut ajouter de la valeur.
+Ensemble <code>owner</code> à votre identifiant utilisateur StarHermit immuable (UUID), <strong>pas</strong> votre nom d'utilisateur ou votre pseudo.</p>
+<p>Obtenez votre pièce d'identité&#160;:</p>
+<pre><code class="language-bash">STARHERMIT_USER_ID=$(
+  curl -sS "$API/api/v1/me" \
+    -H "Authorization: Bearer $ACCESS_TOKEN" |
+  jq -r '.id'
+)
+</code></pre>
+<p>À la racine du référentiel, créez ou mettez à jour <code>starhermit.txt</code>:</p>
+<pre><code class="language-ini">name=Orbit League
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6
+</code></pre>
+<p>Remplacez l'exemple de propriétaire par <code>STARHERMIT_USER_ID</code>. Ne mettez pas votre nom d'utilisateur ou votre pseudo ici ;
+ceux-ci peuvent changer, tandis que l'ID utilisateur est l'identifiant de propriété stable.</p>
+<p>Pour un jeu faisant autorité, conservez exactement une déclaration backend&#160;:</p>
+<pre><code class="language-ini"># JavaScript runtime:
+server=server.js
+
+# OR container runtime, never both:
+# container.image=ghcr.io/your-org/orbit-server@sha256:&lt;64-lowercase-hex&gt;
+</code></pre>
+<p>Valider et envoyer le manifeste vers le référentiel/version StarHermit peut lire&#160;:</p>
+<pre><code class="language-bash">git add starhermit.txt
+git commit -m "Declare StarHermit game ownership"
+git push
+</code></pre>
+<p>Avant de réclamer, ouvrez le fichier brut du référentiel <code>starhermit.txt</code> URL dans un navigateur non authentifié et
+confirmez que la nouvelle valeur est lisible publiquement. La revendication lit le référentiel au moment de la demande&#160;; un
+un changement local non poussé ne peut rien prouver.</p>
+<h2 id="step-3-validate-the-manifest">Étape 3 : valider le manifeste</h2>
+<p>Pour un jeu de référentiel cloné normal, la revendication nécessite&#160;:</p>
+<ul>
+<li><code>starhermit.txt</code> à la racine du référentiel&#160;;</li>
+<li>non vide <code>name=</code>;</li>
+<li><code>launch=</code> pointant vers un référentiel relatif <code>.html</code> ou <code>.htm</code> déposer;</li>
+<li>un facultatif valide <code>server=</code> chemin se terminant par <code>.js</code>/<code>.mjs</code>, ou un valide <code>container.image=</code> déclaration;</li>
+<li>jamais les deux environnements d'exécution du serveur à la fois.</li>
+</ul>
+<p>Une liste de pages GitHub conserve son URL hébergée comme cible de lancement et ne nécessite pas de manifeste
+lorsque la propriété personnelle de GitHub est prouvée, bien qu'un nom de manifeste valide puisse toujours mettre à jour son
+nom d’affichage.</p>
+<p>Si le jeu déclare un conteneur, son image doit satisfaire au registre, à l'espace de noms du propriétaire et au résumé.
+règles dans <a href="/fr/docs/api/container-games.html">Serveurs de jeux hébergés par des conteneurs</a>. L'hébergement de conteneurs peut également être
+restreinte par l’exploitant de la plateforme.</p>
+<h2 id="step-4-claim-the-listing">Étape 4&#160;: revendiquer la fiche</h2>
+<p>La demande de réclamation n'a pas de corps&#160;:</p>
+<pre><code class="language-bash">curl -sS -X POST \
+  "$API/api/v1/me/github-games/$GAME_ID/claim" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>Un succès <code>200</code> renvoie le jeu mis à jour&#160;:</p>
+<pre><code class="language-json">{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "repoUrl": "https://github.com/octocat/orbit-league",
+  "ownerLogin": "octocat",
+  "repoName": "orbit-league",
+  "displayName": "Orbit League",
+  "launchPath": "index.html",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "isVerifiedOwner": true,
+  "metadataSource": "starhermit.txt",
+  "hosting": {
+    "hostingEnabled": true,
+    "deployStatus": "pending"
+  }
+}
+</code></pre>
+<p>L'ID doit être le même que celui trouvé à l'étape 1. Ne créez pas de nouvelle annonce après une réclamation réussie.</p>
+<p>Revendiquer une annonce que vous gérez déjà est intentionnellement autorisé. Il relit le manifeste,
+réapprovisionne le backend et remet l'hébergement en file d'attente, de sorte que le même appel puisse être utilisé pour resynchroniser un
+jeu géré par le propriétaire après les modifications du référentiel.</p>
+<h2 id="step-5-verify-takeover-and-deployment">Étape 5&#160;: vérifier la reprise et le déploiement</h2>
+<p>Confirmez que le jeu apparaît désormais dans votre liste gérée&#160;:</p>
+<pre><code class="language-bash">curl -sS "$API/api/v1/me/github-games" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" |
+jq --arg id "$GAME_ID" '.[] | select(.id == $id)'
+</code></pre>
+<p>Vérifiez l'état du déploiement&#160;:</p>
+<pre><code class="language-bash">curl -sS \
+  "$API/api/v1/me/github-games/$GAME_ID/deployment" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>Une revendication met généralement un déploiement en file d'attente, donc <code>pending</code> immédiatement après la réclamation est normal. Sondage avec
+reculer jusqu'à ce qu'il atteigne l'état actif/succès de l'environnement ou qu'il expose <code>deployError</code>.</p>
+<p>Après la prise de contrôle, les points de terminaison de gestion à votre disposition incluent&#160;:</p>
+<pre><code class="language-text">PUT    /api/v1/me/github-games/{id}/deployment  pin a commit/branch and redeploy
+POST   /api/v1/me/github-games/{id}/bundle      upload built client/container output
+PUT    /api/v1/me/github-games/{id}/hosting     requeue hosting where supported
+POST   /api/v1/me/github-games/{id}/transfer    transfer management deliberately
+DELETE /api/v1/me/github-games/{id}             remove the game
+</code></pre>
+<p>L'auteur de l'envoi d'origine ne voit plus cette liste sous <code>GET /api/v1/me/github-games</code> et ne peut pas
+utilisez pour cela ces points de terminaison de gestion limités au propriétaire.</p>
+<h2 id="troubleshooting">Dépannage</h2>
+<h3 id="403-link-the-repository-owner-or-add-owner"><code>403</code>&#160;: lier le propriétaire du référentiel ou ajouter <code>owner=</code></h3>
+<p>La connexion GitHub liée ne correspond pas <code>ownerLogin</code>, ou le manifeste <code>owner</code> ne correspond pas exactement
+votre identifiant StarHermit.</p>
+<ul>
+<li>Vérifier <code>GET /api/v1/me/github</code>.</li>
+<li>Vérifiez l'exact <code>ownerLogin</code> renvoyé par la liste publique.</li>
+<li>Pour les référentiels d'organisation, utilisez <code>owner=&lt;your StarHermit user ID&gt;</code> dans le dépôt.</li>
+<li>Confirmez que vous avez envoyé le manifeste et que son URL brute est lisible publiquement.</li>
+</ul>
+<h3 id="404-no-shared-game-with-that-id"><code>404</code>: pas de jeu partagé avec cet identifiant</h3>
+<p>L'identifiant est erroné ou la fiche a été supprimée. Répétez l'étape 1. Les annonces supprimées ne peuvent pas être réclamées.</p>
+<h3 id="400-missing-or-invalid-starhermittxt"><code>400</code>: manquant ou invalide <code>starhermit.txt</code></h3>
+<p>Pour un référentiel cloné, assurez-vous que le manifeste racine est valide <code>name</code> et HTML <code>launch</code> valeurs. Aussi
+valider les déclarations facultatives de script/conteneur. La revendication ne fait pas confiance aux métadonnées à l'origine
+inscrit par un non-propriétaire&#160;; il le remplace par des métadonnées contrôlées par le référentiel.</p>
+<h3 id="claim-fails-around-the-slugbackend">La réclamation échoue autour du slug/backend</h3>
+<p>Le script n'est peut-être pas valide ou l'hébergement de conteneurs n'est peut-être pas disponible. Vérifiez l'erreur renvoyée et
+la déclaration backend, puis appelez à nouveau Claim. La plateforme attribue l'UUID du jeu comme slug&#160;;
+il n’y a pas de problème manifeste à choisir ou à résoudre.</p>
+<h3 id="github-was-linked-but-the-wrong-starhermit-account-owns-the-link">GitHub était lié mais le mauvais compte StarHermit possède le lien</h3>
+<p>Connectez-vous au compte StarHermit prévu et complétez le OAuth <strong>lien</strong> y couler. Ne réclamez pas
+à partir d'un deuxième compte StarHermit temporaire, puis comptez sur la fusion de comptes&#160;; le jeu des transferts API
+gestion, pas les identités des utilisateurs.</p>
+<h2 id="security-notes">Notes de sécurité</h2>
+<ul>
+<li>N’acceptez jamais un lien de réclamation ou un identifiant d’annonce comme preuve de propriété du référentiel.</li>
+<li>Ne placez pas de jetons d'accès GitHub, d'informations d'identification de conteneur ou d'autres secrets dans <code>starhermit.txt</code>.</li>
+<li>Utilisez toujours l'ID utilisateur StarHermit immuable dans <code>owner=</code>; n'utilisez pas de nom d'utilisateur ou de surnom.</li>
+<li>Examinez la liste existante et l'URL du référentiel avant de réclamer&#160;; les noms d’affichage ne sont pas uniques.</li>
+<li>Si vous transférez le jeu ultérieurement, le destinataire devient le manager mais le statut de propriétaire vérifié est
+réinitialiser. Ils doivent exécuter eux-mêmes le flux de réclamations s’ils contrôlent le référentiel.</li>
+</ul>
+<h2 id="reference-pages">Pages de référence</h2>
+<ul>
+<li><a href="/fr/docs/api/github-games.html">API de jeux GitHub</a></li>
+<li><a href="/fr/docs/api/auth.html#oauth">Authentification et GitHub OAuth</a></li>
+<li><a href="/fr/docs/api/game-scripts.html">Scripts de jeu</a></li>
+<li><a href="/fr/docs/api/container-games.html">Serveurs de jeux hébergés par des conteneurs</a></li>
+<li><a href="/fr/docs/tutorials/dedicated-server-onboarding.html">Publication sur serveur dédié</a></li>
+</ul>
+
+{% endraw %}

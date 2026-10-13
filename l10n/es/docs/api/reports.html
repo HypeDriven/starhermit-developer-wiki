@@ -1,0 +1,185 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Informes de fallos y errores"
+source_url: "/docs/api/reports.html"
+source_path: "docs/api/reports.md"
+source_hash: "6d28d99eae2ec0d57e0611ea1d1db48136d4f38dacbb270fd4242dbfd0f0e97a"
+translation: "machine"
+permalink: "/es/docs/api/reports.html"
+---
+{% raw %}
+<h1 id="crash-and-bug-reports">Informes de fallos y errores</h1>
+<p>Los jugadores pueden informar un fallo o un error desde dentro de cualquier juego que tenga un slug (juegos solo para navegador).
+incluido: usando el token de inicio del juego o un token de usuario completo. El propietario del juego lee, clasifica y
+los elimina a través de <code>/api/v1/me/github-games/{id}/reports</code>.</p>
+<p>Para conocer la salida del servidor propio y los registros de fallas de un juego contenedor, consulte
+<a href="/es/docs/api/container-games.html#your-servers-output-and-crash-reports">Servidores de juegos alojados en contenedores: informes de resultados y fallos de su servidor</a>.</p>
+<h2 id="endpoints">Puntos finales</h2>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Camino</th>
+<th>autenticación</th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/games/{slug}/reports</code></td>
+<td>Token de inicio para ese juego, o JWT</td>
+<td>Presentar un informe de fallo o error</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/games/{slug}/reports/mine</code></td>
+<td>Token de inicio para ese juego, o JWT</td>
+<td>Tus 50 informes más recientes para este juego, con su estado.</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/me/github-games/{id}/reports</code></td>
+<td>JWT (propietario)</td>
+<td>Informes de lista: <code>?kind=crash|bug&amp;status=open|acknowledged|resolved&amp;page=&amp;pageSize=</code> (≤100)</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (propietario)</td>
+<td>Un informe, con su lista de archivos adjuntos.</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}/attachments/{attachmentId}</code></td>
+<td>JWT (propietario)</td>
+<td>Un archivo adjunto, siempre como descarga</td>
+</tr>
+<tr>
+<td>PARCHE</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (propietario)</td>
+<td>Colocar <code>status</code></td>
+</tr>
+<tr>
+<td>BORRAR</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (propietario)</td>
+<td>Eliminar un informe → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="file-a-report">Presentar un informe</h2>
+<pre><code class="language-http">POST /api/v1/games/{slug}/reports
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  "kind": "crash",
+  "title": "Crash entering the second level",
+  "description": "TypeError: cannot read properties of undefined (reading 'tiles')\n    at loadLevel (game.js:812)",
+  "clientVersion": "1.4.2",
+  "platform": "web",
+  "buildId": "a1b2c3d",
+  "sessionId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "attachments": [
+    { "fileName": "console.log", "contentType": "text/plain", "dataBase64": "…" }
+  ]
+}
+</code></pre>
+<ul>
+<li><code>kind</code> es <code>crash</code> o <code>bug</code>; <code>title</code> es obligatorio (≤200 caracteres).</li>
+<li>Todo lo demás es opcional. <code>userAgent</code> por defecto es el de la solicitud <code>User-Agent</code> encabezamiento.</li>
+<li>Respuesta: <code>201 { "id", "kind", "status": "open", "createdAt" }</code>.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Estado</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td>Mal formado: desconocido <code>kind</code>, desaparecido <code>title</code>, base64 no válida o no JSON</td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>Juego desconocido o eliminado</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>Descripción, recuento de archivos adjuntos o bytes de archivos adjuntos que superan los límites del juego</td>
+</tr>
+<tr>
+<td><code>429</code></td>
+<td>Por encima del límite de informes diarios para este juego; ver <code>Retry-After</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="limits">Límites</h2>
+<p>Los operadores pueden cambiar cada uno de estos para toda la plataforma y para juegos individuales; el límite diario
+También se puede configurar para un jugador.</p>
+<table>
+<thead>
+<tr>
+<th>Límite</th>
+<th>Por defecto</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Informes por jugador por juego por día</td>
+<td>20</td>
+</tr>
+<tr>
+<td>Descripción longitud</td>
+<td>20.000 caracteres</td>
+</tr>
+<tr>
+<td>Adjuntos por informe</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Bytes de archivos adjuntos por informe</td>
+<td>2 MB</td>
+</tr>
+<tr>
+<td>Informes mantenidos por juego.</td>
+<td>2,000</td>
+</tr>
+<tr>
+<td>Bytes guardados por juego</td>
+<td>256 MB</td>
+</tr>
+<tr>
+<td>Retención</td>
+<td>90 dias</td>
+</tr>
+</tbody>
+</table>
+<p>Cuando un juego alcanza su límite de almacenamiento, los informes más antiguos (los resueltos primero) se eliminan para
+hacer espacio. Un único informe mayor que el límite total de bytes por juego se rechaza con <code>413</code>.</p>
+<h2 id="triage-reports-game-owner">Informes de clasificación (propietario del juego)</h2>
+<p>La lista regresa <code>{ "items", "total", "page", "pageSize" }</code>; cada artículo lleva el nombre del periodista,
+<code>kind</code>, <code>status</code>, <code>title</code>, detalles del cliente y su recuento de archivos adjuntos. Mover un informe a través
+<code>open</code> → <code>acknowledged</code> → <code>resolved</code> con:</p>
+<pre><code class="language-http">PATCH /api/v1/me/github-games/{id}/reports/{reportId}
+Content-Type: application/json
+
+{ "status": "resolved" }
+</code></pre>
+<p>Los archivos adjuntos se sirven como descargas (<code>Content-Disposition: attachment</code>, <code>nosniff</code>, una zona de pruebas
+CSP). Sólo los tipos inertes mantienen su tipo de contenido declarado: texto, JSON, PNG, JPEG, WebP, GIF, zip y
+zip; cualquier otra cosa, incluido el marcado, se sirve como <code>application/octet-stream</code>.</p>
+<h2 id="from-the-javascript-sdk">Desde el SDK de JavaScript</h2>
+<pre><code class="language-js">StarHermit.reportBug('Score did not save', 'Finished level 3, score shows 0', { clientVersion: '1.4.2' });
+StarHermit.captureCrashes({ clientVersion: '1.4.2' });   // opt-in: uncaught errors become crash reports
+</code></pre>
+<p>Ver el <a href="/es/docs/sdk/javascript.html#crash-and-bug-reports">SDK de JavaScript</a>.</p>
+<p>Compartido <a href="/es/docs/api/conventions.html">Convenciones API</a> Describe el análisis de respuestas, las marcas de tiempo, la paginación y los reintentos.</p>
+<p>Ver <a href="/es/docs/credentials.html">compatibilidad de credenciales</a> y <a href="/es/docs/api/contracts.html">contratos legibles por máquina</a>.</p>
+
+{% endraw %}

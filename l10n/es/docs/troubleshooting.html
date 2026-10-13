@@ -1,0 +1,245 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Solucionar problemas de una integración"
+source_url: "/docs/troubleshooting.html"
+source_path: "docs/troubleshooting.md"
+source_hash: "90e68e1757a4a8c75ac94bd580f2ff54e378593f19cbd554a1bba1ba70d4ebc2"
+translation: "machine"
+permalink: "/es/docs/troubleshooting.html"
+---
+{% raw %}
+<h1 id="troubleshoot-an-integration">Solucionar problemas de una integración</h1>
+<p>Comience con el estado HTTP, el punto final y la familia de credenciales. Reproduzca la solicitud más pequeña usando
+el mismo ID de juego y credencial, luego verifique el estado actual del recurso. Mantener fichas y jugador.
+guarde datos de registros e informes de soporte.</p>
+<h2 id="sign-in-and-access">Regístrate y accede</h2>
+<table>
+<thead>
+<tr>
+<th>Síntoma</th>
+<th>Controlar</th>
+<th>Siguiente acción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>401</code> en DESCANSO</td>
+<td>Caducidad del token y si es una cuenta o un token de lanzamiento</td>
+<td>Actualizar una sesión de cuenta una vez; renovar un token de lanzamiento aún válido o iniciar sesión para un nuevo lanzamiento</td>
+</tr>
+<tr>
+<td><code>403 terms_acceptance_required</code></td>
+<td>documento actual de <code>/api/v1/terms</code></td>
+<td>Muéstralo y acepta su hash sólo en la acción del jugador; Los tokens de lanzamiento de cuenta y jugador funcionan.</td>
+</tr>
+<tr>
+<td><code>403</code> enfocado a otro juego</td>
+<td><code>game_scope</code> versus el juego/sala/guardado solicitado</td>
+<td>Utilice su propio UUID del juego y el exacto <code>game:&lt;gameId&gt;</code> clave para guardar en la nube</td>
+</tr>
+<tr>
+<td><code>403</code> en <code>/me/game-invites</code> de un juego</td>
+<td>El token de inicio no puede leer la bandeja de entrada de toda la cuenta</td>
+<td>Encuesta <code>/games/{slug}/invites</code> y <code>/realtime/rooms/invites</code></td>
+</tr>
+<tr>
+<td><code>403 oauth_session_required</code></td>
+<td>La acción cambia las credenciales de la cuenta.</td>
+<td>Inicie sesión a través de un proveedor en vivo; una sesión de clave pública puede revocar sólo su propia clave</td>
+</tr>
+<tr>
+<td><code>403</code> por una cuenta suspendida</td>
+<td>Mensaje devuelto</td>
+<td>Detener los reintentos automáticos de inicio de sesión/actualización; dirigir al jugador al soporte de cuentas</td>
+</tr>
+<tr>
+<td>Devoluciones de inicio de sesión directo <code>400</code></td>
+<td><code>returnUrl</code> debe ser HTTPS exactamente en el origen alojado del juego</td>
+<td>Utilice la URL del juego alojado; una URL de desarrollo local no es un destino de retorno permitido</td>
+</tr>
+<tr>
+<td>El inicio de sesión falla intermitentemente con <code>Invalid signature.</code></td>
+<td>Serialización de desafíos, especialmente <code>+</code> en un momento</td>
+<td>Usa el exacto <a href="/es/docs/tutorials/public-key-onboarding.html#3-sign-in-with-the-key">bytes de firma de clave pública</a></td>
+</tr>
+<tr>
+<td>Devoluciones de inscripciones <code>429</code></td>
+<td>Asignación de registro de correo electrónico/IP</td>
+<td>Honor <code>Retry-After</code>; Confirme el correo electrónico antes de enviar otro registro.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="game-setup-and-storage">Configuración y almacenamiento del juego</h2>
+<table>
+<thead>
+<tr>
+<th>Síntoma</th>
+<th>Controlar</th>
+<th>Siguiente acción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/games/{slug}</code> regresa <code>404</code>, pero la configuración funciona</td>
+<td>¿El juego tiene un script o un contenedor?</td>
+<td>Los juegos solo para navegador tienen configuraciones y tokens de inicio, pero no tienen una superficie de sesión/información del juego autorizada.</td>
+</tr>
+<tr>
+<td>Los controles regresan <code>404</code></td>
+<td>Válido <code>control.*</code> líneas en el manifiesto publicado</td>
+<td>Publicar la declaración; las escrituras no pueden crear acciones no declaradas</td>
+</tr>
+<tr>
+<td>Volver a vincular una clave restablece otras</td>
+<td>Controles <code>PUT</code> reemplaza todas las anulaciones</td>
+<td>Envíe el mapa de anulación completo o utilice el SDK <code>setControl()</code> que preserva el mapa efectivo</td>
+</tr>
+<tr>
+<td>La configuración desapareció después <code>PUT</code></td>
+<td>Recopilación <code>PUT</code> reemplaza todo el mapa</td>
+<td>Usar <code>PATCH</code> para claves de nivel superior modificadas; un objeto anidado se reemplaza como un valor</td>
+</tr>
+<tr>
+<td>Vuelve el guardado en la nube del nuevo jugador <code>404</code></td>
+<td>Aún no existe ningún guardado para ese espacio</td>
+<td>Empiece de nuevo sólo para obtener este resultado; otras fallas deben bloquear las cargas</td>
+</tr>
+<tr>
+<td>Guardar devoluciones de escritura <code>412</code></td>
+<td>Otro dispositivo escribió una nueva versión.</td>
+<td>Recargar, validar y fusionar/adoptar antes de otra escritura condicional</td>
+</tr>
+<tr>
+<td>Guardar devoluciones <code>413</code>, <code>409</code>, o <code>507</code></td>
+<td>Tamaño de ahorro, número de espacios o cuota de cuenta</td>
+<td>Inspeccionar lo devuelto <code>code</code> y <code>limit</code>; reducir tamaño o resolver capacidad</td>
+</tr>
+<tr>
+<td>Falta fecha límite en la lista de sesiones</td>
+<td><code>summary.deadline</code> tipo</td>
+<td>Devuelve una marca de tiempo Unix entera en milisegundos, no una cadena ISO</td>
+</tr>
+<tr>
+<td>La puntuación/logro no apareció</td>
+<td>Clave, definición activa, participante, límites de valor.</td>
+<td>Verificar las definiciones y la salida del servidor; se ignoran las escrituras no válidas; Los informes de los clientes no son prueba.</td>
+</tr>
+<tr>
+<td>Vuelve el emparejamiento <code>404</code> después de un partido</td>
+<td>Es posible que la sesión igualada haya finalizado</td>
+<td>Regrese al lobby y comience una nueva búsqueda en lugar de reabrir el ticket anterior.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="websockets">WebSockets</h2>
+<p>La actualización fallida de un navegador suele aparecer como código de cierre <code>1006</code>, ocultando la respuesta HTTP.
+Antes de volver a intentarlo, realice una llamada REST al mismo juego/sesión/sala para distinguir la autenticación,
+términos, membresía, sesión finalizada y fallas temporales de inicio del servidor. Verifique la compatibilidad de compilación
+a través de la información del juego cuando suministras <code>?build=</code>. Obtenga un boleto de conexión nuevo para cada actualización.</p>
+<table>
+<thead>
+<tr>
+<th>Cerrar/resultado</th>
+<th>Significado</th>
+<th>Acción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>1000</code></td>
+<td>Cierre normal</td>
+<td>Detener a menos que el reproductor inicie explícitamente otra conexión</td>
+</tr>
+<tr>
+<td><code>1001</code> más error de reanudación</td>
+<td>El mundo no pudo reanudarse aún</td>
+<td>Vuelva a conectarse con el retroceso después de verificar el estado de la sesión</td>
+</tr>
+<tr>
+<td><code>1006</code></td>
+<td>Pérdida de red o actualización rechazada</td>
+<td>Verifique el estado REST y las credenciales actuales; reintentos enlazados</td>
+</tr>
+<tr>
+<td><code>1008</code></td>
+<td>Violación de política o conexión reemplazada</td>
+<td>Detener la reconexión automática; ofrecer una reconexión deliberada después de solucionar la causa</td>
+</tr>
+<tr>
+<td><code>1009</code></td>
+<td>Mensaje demasiado grande</td>
+<td>Reduzca el tamaño del marco antes de volver a conectarse</td>
+</tr>
+<tr>
+<td>HTTP <code>409 build_mismatch</code></td>
+<td>La compilación del cliente/servidor no coincide</td>
+<td>Vuelva a cargar una compilación compatible; no inventes un valor de construcción coincidente</td>
+</tr>
+<tr>
+<td>HTTP <code>410 session_not_active</code></td>
+<td>Sesión terminada</td>
+<td>Regresar al lobby o reproducir; dejar de reconectar</td>
+</tr>
+<tr>
+<td><code>error: "Too many commands; slow down."</code></td>
+<td>Asignación de comando duradero de script</td>
+<td>Comandos discretos de ritmo; poner entradas continuas dentro <code>data</code> con <code>type: "input", realtime: true</code></td>
+</tr>
+</tbody>
+</table>
+<p>Solicitar un estado de juego completo después de volver a conectarse; No repitas ciegamente movimientos u otros movimientos no idempotentes.
+comandos. <code>resumed</code> significa descartar la predicción y resincronizar. <code>abandoned</code> es terminal.
+Ver <a href="/es/docs/api/contracts.html#websocket-contracts">Contratos WebSocket</a>.</p>
+<h2 id="publishing-and-container-startup">Publicación y puesta en marcha de contenedores.</h2>
+<table>
+<thead>
+<tr>
+<th>Síntoma</th>
+<th>Controlar</th>
+<th>Siguiente acción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Subir <code>413</code> con <code>limitBytes</code></td>
+<td>Asignación efectiva de carga/alojamiento</td>
+<td>Reducir el paquete o el árbol fusionado resultante</td>
+</tr>
+<tr>
+<td>Carga HTTP grande <code>413</code> sin campos de error de plataforma</td>
+<td>Límite de cuerpo de solicitud antes de la API</td>
+<td>Usar <code>ws/v1/game-upload</code>; enviar <code>complete</code> después de todos los bytes</td>
+</tr>
+<tr>
+<td>Subir <code>422</code></td>
+<td>Diseño de archivo, archivo de inicio, seguridad de ruta, manifiesto</td>
+<td>Corrija el error nombrado; la API espera raw <code>.tar.gz</code>, no multiparte</td>
+</tr>
+<tr>
+<td>La carga se realizó correctamente pero el servidor no está disponible</td>
+<td>Preparación para la implementación</td>
+<td>Despliegue de encuestas; los bytes aceptados no significan que el contenedor esté listo</td>
+</tr>
+<tr>
+<td>El inicio de la sala de contenedores regresa temporalmente <code>503</code></td>
+<td>El servidor puede estar despertando</td>
+<td>Mantenga el lobby y vuelva a intentarlo con retroceso; no recurrir a una simulación de cliente</td>
+</tr>
+<tr>
+<td>Las solicitudes de contenedor fallan en la validación de la clave de invocación</td>
+<td>Entorno de inicio y comparación exacta de encabezados</td>
+<td>Leer la clave de invocación inyectada actual; informar fallas persistentes con la identificación del juego y los registros desinfectados</td>
+</tr>
+<tr>
+<td>Error de implementación persistente</td>
+<td>Estado de implementación y registros/fallos visibles para el propietario</td>
+<td>Corrija la compilación o configuración y publique una nueva versión funcional</td>
+</tr>
+</tbody>
+</table>
+<p>Para obtener un informe de soporte útil, incluya ID del juego, versión del cliente/compilación, punto final y método, estado/código,
+hora UTC aproximada, pasos de reproducción y registros desinfectados relevantes. Los ID de sesión/sala ayudan a localizar
+el recurso. No adjunte credenciales, claves privadas ni la partida guardada completa de un jugador sin su consentimiento.</p>
+
+{% endraw %}

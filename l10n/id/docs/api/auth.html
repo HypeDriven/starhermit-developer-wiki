@@ -1,0 +1,550 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Otentikasi"
+source_url: "/docs/api/auth.html"
+source_path: "docs/api/auth.md"
+source_hash: "7c5d28fbaf648ef5811fa8660eb49076563e9f4b439f256cf9632e72ae1130ed"
+translation: "machine"
+permalink: "/id/docs/api/auth.html"
+---
+{% raw %}
+<h1 id="authentication">Otentikasi</h1>
+<p>StarHermit punya <strong>tidak ada otentikasi kata sandi</strong>. Ada dua alur masuk: autentikasi kunci publik (Ed25519, ECDSA-P256, atau RSA-PSS, dengan registrasi terverifikasi email) dan OAuth. Semua rute autentikasi berada di bawah <code>api/v1/auth</code> dan anonim kecuali dinyatakan lain. Halaman ini juga mencakup siklus hidup token, token peluncuran cakupan game, dan tiket koneksi WebSocket.</p>
+<p>Badan kesalahan bervariasi; melihat <a href="/id/docs/api/conventions.html#requests-and-responses">konvensi API</a>.</p>
+<h2 id="endpoints">Titik akhir</h2>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/auth/public-key/register</code></td>
+<td>Anonim</td>
+<td>Mulai registrasi kunci publik; mengirimkan email verifikasi</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/auth/public-key/verify</code></td>
+<td>Token satu kali yang dikirim melalui email</td>
+<td>Halaman email verifikasi terbuka; tidak mengubah apa pun</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/auth/public-key/verify</code></td>
+<td>Token satu kali yang dikirim melalui email</td>
+<td>Pendaftaran lengkap</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/auth/public-key/challenge</code></td>
+<td>Anonim</td>
+<td>Minta tantangan login untuk ditandatangani</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/auth/public-key/complete</code></td>
+<td>Anonim</td>
+<td>Kirim tantangan yang ditandatangani untuk masuk</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/auth/refresh</code></td>
+<td>Anonim</td>
+<td>Memutar token penyegaran untuk pasangan token baru</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/auth/logout</code></td>
+<td>Anonim</td>
+<td>Cabut token penyegaran</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/auth/public-key/revoke-request</code></td>
+<td>Anonim</td>
+<td>Kirimkan tautan melalui email yang mencabut setiap kunci aktif pada akun yang cocok</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/auth/public-key/revoke/confirm</code></td>
+<td>Token satu kali yang dikirim melalui email</td>
+<td>Halaman email pencabutan terbuka; tidak mengubah apa pun</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/auth/public-key/revoke/confirm</code></td>
+<td>Token satu kali yang dikirim melalui email</td>
+<td>Konfirmasikan pencabutan itu; tidak ada sesi</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/auth/games/{gameId}/sign-in</code></td>
+<td>Anonim</td>
+<td>Masuk atau buat akun, lalu langsung kembali ke game yang dihosting</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/auth/oauth/providers</code></td>
+<td>Anonim</td>
+<td>Penyedia OAuth langsung yang menerapkan penerapan ini benar-benar dapat membuat orang masuk</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/auth/oauth/{provider}/authorize</code></td>
+<td>Anonim</td>
+<td>Alihkan ke penyedia OAuth</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/auth/oauth/{provider}/callback</code></td>
+<td>Anonim</td>
+<td>panggilan balik OAuth; dialihkan ke frontend dengan token</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/auth/oauth/link/confirm</code></td>
+<td>Token satu kali yang dikirim melalui email</td>
+<td>Halaman email tautan identitas terbuka; tidak mengubah apa pun</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/auth/oauth/link/confirm</code></td>
+<td>Token satu kali yang dikirim melalui email</td>
+<td>Konfirmasikan tautan identitas yang disimpan untuk persetujuan pemilik akun</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/games/{slug}/launch-token</code></td>
+<td>JWT</td>
+<td>Buat token peluncuran cakupan game (lihat di bawah)</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/realtime/connection-tickets</code></td>
+<td>JWT</td>
+<td>Tiket satu kali untuk pembukaan a <code>/ws/**</code> stopkontak</td>
+</tr>
+</tbody>
+</table>
+<h2 id="after-sign-in-current-terms">Setelah masuk: persyaratan saat ini</h2>
+<p>Proses masuk yang berhasil tidak berarti izin untuk menggunakan API yang dilindungi. Pemegang akun harus
+<a href="/id/docs/api/profile.html#terms-acceptance">menerima persyaratan StarHermit saat ini</a> sebelum panggilan REST yang dilindungi atau
+Peningkatan WebSocket berhasil. Klien akun dapat memeriksa <code>GET /api/v1/me</code>, mengambil <code>GET /api/v1/terms</code>,
+dan catat penerimaan eksplisit dengan <code>POST /api/v1/me/terms/accept</code>. Baik OAuth dan kunci publik
+sesi akun mendukung aliran ini. Menyegarkan kredensial tidak menyelesaikan penerimaan yang tertunda.</p>
+<p>Game browser yang dibuka secara langsung dapat menerima token cakupan sebelum akun diterima.
+Jika panggilan permainan kembali <code>403</code> dengan <code>error: "terms_acceptance_required"</code>, mengambil <code>GET /api/v1/terms</code>,
+menampilkan teksnya, dan menawarkan tindakan Terima yang eksplisit. Token peluncuran pemain dapat mengirimkan yang ditampilkan
+hash ke <code>POST /api/v1/me/terms/accept</code>; coba lagi permintaan asli setelah diterima. Jangan perlakukan ini
+respons sebagai loop masuk token yang kedaluwarsa.</p>
+<h2 id="public-key-registration">Registrasi kunci publik</h2>
+<p>Langkah demi langkah, dengan kode klien yang diuji: <a href="/id/docs/tutorials/public-key-onboarding.html">Tutorial: pemain onboard dengan kunci publik</a>.</p>
+<table>
+<thead>
+<tr>
+<th><code>keyType</code></th>
+<th><code>keyData</code> (standar Base64)</th>
+<th>Tanda tangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Ed25519</code></td>
+<td>Kunci publik mentah 32 byte</td>
+<td>Tanda tangan Ed25519 64-byte mentah</td>
+</tr>
+<tr>
+<td><code>ECDSA-P256</code></td>
+<td>Titik publik, 65-byte tidak terkompresi atau 33-byte terkompresi</td>
+<td>ECDSA-SHA256, ASN.1 DER (tidak mentah <code>r‖s</code>)</td>
+</tr>
+<tr>
+<td><code>RSA-PSS</code></td>
+<td><code>SubjectPublicKeyInfo</code> DER, 2048–8192 bit, eksponen ≤ 32 bit</td>
+<td>RSASSA-PSS, SHA-256, MGF1-SHA-256, garam 32-byte</td>
+</tr>
+</tbody>
+</table>
+<h3 id="post-apiv1authpublic-keyregister"><code>POST /api/v1/auth/public-key/register</code></h3>
+<p>Memulai pendaftaran kunci publik dan mengirimkan email verifikasi. Catatan pendaftaran yang tertunda akan kedaluwarsa setelah 4 jam. Jika <code>userId</code> sudah diatur, email harus cocok dengan akun itu. Dibatasi menjadi 1 email per alamat dan per IP per 24 jam — saat dibatasi, responsnya adalah 429 dengan <code>Retry-After</code> tajuk.</p>
+<p>Kapan <code>userId</code> sudah diatur dan pasangan tidak check out, responnya <code>403</code> dengan satu pesan
+terlepas dari <em>Mengapa</em>: akun tidak dikenal dan alamat salah menjawab sama. Titik akhir ini membutuhkan
+tidak ada kredensial — harus demikian, karena begitulah cara kunci baru dipasang — jadi membedakannya adalah hal yang perlu dilakukan
+jadikan itu Oracle yang memiliki id pengguna dan kemudian alamatnya. Seorang penelepon yang memiliki
+akun sudah tahu yang mana di antara keduanya yang salah.</p>
+<p>Meminta:</p>
+<pre><code class="language-json">{
+  "email": "dev@example.com",
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;",
+  "userId": null
+}
+</code></pre>
+<p>Tanggapan — 202:</p>
+<pre><code class="language-json">{
+  "registrationId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "email": "dev@example.com",
+  "emailSent": true,
+  "deferralReason": null,
+  "message": "A verification email has been sent. The key will be attached once you confirm."
+}
+</code></pre>
+<p><code>emailSent: false</code> berarti email tersebut antri untuk dicoba lagi (<code>deferralReason</code> mengatakan alasannya); pendaftaran
+masih diterima. Email atau materi kunci tidak valid <code>400</code>.</p>
+<h3 id="get--post-apiv1authpublic-keyverifytoken"><code>GET</code> / <code>POST /api/v1/auth/public-key/verify?token=</code></h3>
+<p><strong>Membuka tautan yang dikirim melalui email tidak mengubah apa pun.</strong> <code>GET</code> menunjukkan halaman yang menyatakan apa yang akan dilakukan konfirmasi —
+membuat akun, atau <strong>tambahkan kunci ke akun yang ada</strong> yang sudah menggunakan alamat — dengan a
+Tombol konfirmasi. Pemindai email mengambil tautan untuk mempratinjaunya, sehingga tautan dikirim melalui email yang bertindak <code>GET</code>
+akan ditebus dengan apa pun yang memindainya. Hal yang sama berlaku untuk
+<a href="#emailed-key-revocation">pencabutan</a> Dan <a href="#get-apiv1authoauthproviderauthorizelinkclient">tautan identitas</a>
+konfirmasi di bawah ini.</p>
+<p><code>POST</code> ke URL yang sama menebusnya: melampirkan kunci, membuat pengguna (nama pengguna <code>pk-&lt;hex12&gt;</code>, peran
+<code>User</code>) kecuali akun sudah menggunakan alamat email tersebut, dalam hal ini kuncinya akan bergabung dengan akun tersebut.
+Email ditandai terverifikasi. Tautan ini sekali pakai dan habis masa berlakunya setelah 4 jam; yang tidak diketahui, digunakan atau
+token kadaluwarsa adalah <code>400</code>, begitu pula tautan yang alamatnya bukan lagi milik akun — itu terbukti
+kontrol atas kotak masuk tujuan pengirimannya, dan hanya selama alamat tersebut masih menjadi milik akun.</p>
+<p>Saat pemain menekan Konfirmasi di halaman dan penerapan ditetapkan
+<code>PublicKeyAuth:VerificationSuccessRedirectUri</code> — starhermit.com melakukannya, ke dasbor — memang benar
+dikirim ke sana dengan token di dalam fragmen
+(<code>#access_token=…&amp;refresh_token=…&amp;token_type=Bearer&amp;expires_in=900</code>), masuk ke dasbor. SEBUAH
+oleh karena itu klien asli tidak menerima token ini; itu masuk dengan kuncinya setelah pemain melakukannya
+dikonfirmasi. Klien API itu <code>POST</code>s URL itu sendiri mendapat JSON:</p>
+<pre><code class="language-json">{
+  "userId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "keyId": "9b2f5c74-1d2e-4a6b-8c0d-1e2f3a4b5c6d",
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "dGhpcyBpcyBh..."
+}
+</code></pre>
+<h2 id="public-key-login">Login kunci publik</h2>
+<h3 id="post-apiv1authpublic-keychallenge"><code>POST /api/v1/auth/public-key/challenge</code></h3>
+<p>Mengeluarkan tantangan login, berlaku selama 5 menit dan sekali pakai.</p>
+<p><strong>Tanda tangan mencakup serialisasi server itu sendiri <code>payload</code>, bukan JSON yang Anda terima:</strong>
+kompak, nama PascalCase dalam urutan <code>ChallengeId</code>, <code>Fingerprint</code>, <code>Issuer</code>, <code>Audience</code>, <code>Expiry</code>,
+<code>Nonce</code>, <code>ClientTimestamp</code>, nilai disalin persis seperti yang disajikan, dan setiap <code>+</code> di nonce ditulis sebagai
+<code>\u002B</code> (tanggal tetap sesuai <code>+</code>). Lihat
+<a href="/id/docs/tutorials/public-key-onboarding.html#3-sign-in-with-the-key">contoh yang berhasil</a>.</p>
+<p>Meminta:</p>
+<pre><code class="language-json">{
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;"
+}
+</code></pre>
+<p>Tanggapan:</p>
+<pre><code class="language-json">{
+  "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "payload": {
+    "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "fingerprint": "4d9f3c...",
+    "issuer": "starhermit",
+    "audience": "starhermit",
+    "expiry": "2026-07-22T07:24:44.1234567+00:00",
+    "nonce": "NmL+tgMum6HXU/pa3T9xjQ==",
+    "clientTimestamp": "2026-07-22T07:19:44.1235521+00:00"
+  },
+  "expiresIn": 300
+}
+</code></pre>
+<h3 id="post-apiv1authpublic-keycomplete"><code>POST /api/v1/auth/public-key/complete</code></h3>
+<p>Memverifikasi tanda tangan terhadap kunci terdaftar yang tidak dicabut dan mengembalikan pasangan token. Sebuah kegagalan adalah
+<code>401</code>: <code>"Public key not registered or revoked."</code> (termasuk kunci yang link emailnya belum ada
+belum dibuka), <code>"Invalid signature."</code>, atau <code>"Challenge not found or expired."</code>. Tantang dan selesaikan
+berbagi batas 60 permintaan per menit per IP (<code>429</code>).</p>
+<p>Meminta:</p>
+<pre><code class="language-json">{
+  "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "signature": "base64-signature...",
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;"
+}
+</code></pre>
+<p>Tanggapan:</p>
+<pre><code class="language-json">{
+  "userId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "dGhpcyBpcyBh..."
+}
+</code></pre>
+<h2 id="token-lifecycle">Siklus hidup token</h2>
+<h3 id="post-apiv1authrefresh"><code>POST /api/v1/auth/refresh</code></h3>
+<p>Penyegaran bergilir: token lama dicabut dan diganti. Penggunaan kembali token penyegaran yang dicabut akan mencabut seluruh rangkaian token.</p>
+<p>Meminta:</p>
+<pre><code class="language-json">{ "refreshToken": "dGhpcyBpcyBh..." }
+</code></pre>
+<p>Tanggapan:</p>
+<pre><code class="language-json">{
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "bmV3IHJlZnJlc2g..."
+}
+</code></pre>
+<h4 id="when-refresh-stops-working">Saat penyegaran berhenti bekerja</h4>
+<p>Token penyegaran mencatat status akun tempat token tersebut diterbitkan, dan penyegaran memeriksanya. Dua jawaban
+klien Anda harus menanganinya daripada mencoba lagi:</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Arti</th>
+<th>Apa yang harus dilakukan klien</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>401</code></td>
+<td>Sesi ini dicabut di sisi platform — a "keluar di mana-mana", atau respons kompromi. Seluruh keluarga token dibakar, termasuk token yang baru saja disajikan.</td>
+<td>Buang kedua token dan mulai proses masuk baru.</td>
+</tr>
+<tr>
+<td><code>403</code></td>
+<td>Akunnya adalah <strong>tergantung</strong>.</td>
+<td>Berhenti. Masuk lagi tidak akan membantu; sama <code>403</code> kembali dari setiap rute masuk hingga penangguhan dicabut.</td>
+</tr>
+</tbody>
+</table>
+<p>Itu <code>403</code> sengaja dibedakan dari <code>401</code>, karena keduanya membutuhkan reaksi yang berlawanan: yang satu artinya
+"autentikasi lagi", cara lainnya "mengautentikasi lagi tidak ada gunanya". Akun yang ditangguhkan adalah
+ditolak oleh <em>setiap</em> rute pembuatan kredensial — penyegaran, penyelesaian kunci publik, panggilan balik OAuth,
+dan token peluncuran game — tidak hanya dengan penyegaran.</p>
+<h3 id="post-apiv1authlogout"><code>POST /api/v1/auth/logout</code></h3>
+<p>Mencabut token penyegaran yang diberikan. Mengembalikan 200.</p>
+<pre><code class="language-json">{ "refreshToken": "dGhpcyBpcyBh..." }
+</code></pre>
+<h2 id="oauth">OAuth</h2>
+<p>Platform ini mengirimkan tujuh penyedia: <code>google</code>, <code>github</code>, <code>discord</code>, <code>twitch</code>, <code>gitlab</code>, <code>linkedin</code>,
+<code>bitbucket</code>. <strong>Hanya penyedia yang memiliki kredensial penerapan ini yang aktif.</strong> Seorang klien tidak boleh
+membuat kode keras pada daftarnya.</p>
+<h3 id="get-apiv1authoauthproviders"><code>GET /api/v1/auth/oauth/providers</code></h3>
+<p>Anonim. Mengembalikan penyedia langsung sesuai urutan penawarannya:</p>
+<pre><code class="language-json">{
+  "providers": [
+    {
+      "provider": "google",
+      "displayName": "Google",
+      "authorizeUrl": "/api/v1/auth/oauth/google/authorize",
+      "linksExistingAccountsByEmail": true
+    }
+  ]
+}
+</code></pre>
+<p><code>linksExistingAccountsByEmail</code> adalah apakah login pada penyedia tersebut dapat menemukan akun orang tersebut
+sudah memilikinya (pengaturan kepercayaan operator untuk penyedia tersebut). Meminta untuk mengotorisasi nama yang tidak
+hidup adalah <code>404</code>, bukan pengalihan ke laman kesalahan milik penyedia.</p>
+<h3 id="get-apiv1authoauthproviderauthorizelinkclient"><code>GET /api/v1/auth/oauth/{provider}/authorize?link=&amp;client=</code></h3>
+<p>Mengembalikan pengalihan 302 ke penyedia dan menetapkan <code>oauth_state</code> cookie (HttpOnly, SameSite=Lax, 10
+menit). <code>link=true</code> mulai menghubungkan identitas ke pengguna yang sedang masuk; menghubungkan membutuhkan
+otentikasi terbaru (dalam 5 menit). <code>client</code> memilih pengalihan klien yang didukung. Untuk a
+langsung buka gamenya, pakai <code>gameId</code> dan opsional <code>returnUrl</code> alih-alih; melihat
+<a href="#sign-in-from-a-directly-opened-browser-game">Masuk dari game browser yang langsung dibuka</a>.</p>
+<h3 id="get-apiv1authoauthprovidercallbackcodestate"><code>GET /api/v1/auth/oauth/{provider}/callback?code=&amp;state=</code></h3>
+<p>Untuk proses masuk akun biasa, mengembalikan pengalihan 302 ke URL frontend dengan token di dalamnya
+fragment (login game mengembalikan token cakupan langsung ke game, seperti dijelaskan di bawah):</p>
+<pre><code>#access_token=…&amp;refresh_token=…&amp;token_type=Bearer&amp;expires_in=900
+</code></pre>
+<p>Jika penyedia menolak pertukaran token, panggilan balik akan menjawab <code>409</code> penamaan kesalahan penyedia
+<strong>kode</strong> (deskripsinya tetap ada di log server).</p>
+<p>Proses masuk normal menemukan atau membuat pengguna (nama pengguna <code>oauth-{provider}-{guid}</code>, peran <code>User</code>) dan itu
+catatan sesi baru <code>auth_method=oauth</code>. Masuk yang <code>(provider, providerUserId)</code> tidak diketahui adalah
+<strong>diadopsi ke akun yang sudah ada</strong> hanya jika pernyataan penyedia dipercaya, tepat satu
+akun sudah menyimpan email terverifikasi tersebut, dan akun tersebut belum memiliki identitas dari penyedia ini.
+Yang lainnya menyediakan akun terpisah. Adopsi mengirim email ke akun yang memberi nama penyedia.</p>
+<p>Ini penting karena hanya sesi yang diautentikasi OAuth
+dapat melakukan perubahan kredensial berdampak besar:</p>
+<ul>
+<li>menambah atau mencabut kunci publik akun;</li>
+<li>ubah email akun;</li>
+<li>menghapus identitas yang dikelola OAuth.</li>
+</ul>
+<p>Token dalam cakupan game tidak akan pernah dapat melakukan operasi ini. Token penyegaran mempertahankan yang asli
+metode autentikasi sesi, jadi menyegarkan sesi OAuth tidak menghilangkan kemampuan ini dan
+menyegarkan sesi kunci publik tidak menambahkannya.</p>
+<p>Kapan <code>link=true</code>, panggilan balik tidak secara otomatis mempromosikan sesi hanya karena sesi tersebut dikunjungi
+penyedia OAuth. Tautan yang dimulai dari sesi OAuth segera dilampirkan. Tautan dimulai dari
+sesi kunci publik, verifikasi email, atau warisan diadakan hingga pemilik akun membukanya
+konfirmasi dikirim ke email terverifikasi akun; laporan fragmen pengalihan
+<code>link=pending_email_confirmation</code>. Email satu kali terbuka <code>GET /api/v1/auth/oauth/link/confirm?token=…</code>,
+halaman dengan nama akun penyedia yang tidak mengubah apa pun; tombol Konfirmasinya <code>POST</code>itu URL yang sama,
+yang menciptakan identitas (<code>{ "provider", "linked": true }</code> ke klien API). Tautan yang alamatnya
+tidak lagi akunnya ditolak. Hal ini mencegah kunci publik yang dicuri untuk menghubungkan
+akun penyedia penyerang dan mengubahnya menjadi proses masuk OAuth permanen.</p>
+<p>Penyimpanan metadata identitas GitHub <code>{"login":"…"}</code> — ini digunakan untuk pemeriksaan kepemilikan repositori
+<a href="/id/docs/api/github-games.html">Permainan GitHub</a>.</p>
+<h3 id="oauth-enrolled-public-keys-for-automation">Kunci publik yang terdaftar di OAuth untuk otomatisasi</h3>
+<p>Sesi OAuth dapat menelepon <code>POST /api/v1/me/public-keys</code> untuk segera memasang kunci mesin berlabel.
+Kemudian, CI menandatangani tantangan kunci publik normal dan menggunakan token akses berumur pendek untuk mengunggah
+bundel permainan yang dimiliki; kunci pribadi tidak pernah meninggalkan penyimpanan rahasia CI. Melihat
+<a href="/id/docs/tutorials/ci-cd-build-upload.html">tutorial pengunggahan build CI/CD</a> untuk pengaturan, pembantu penandatanganan, dan
+alur kerja Tindakan GitHub.</p>
+<h2 id="tokens">Token</h2>
+<ul>
+<li><strong>Token akses</strong> — JWT, seumur hidup 15 menit (<code>expires_in=900</code>). Klaim meliputi <code>sub</code> (id pengguna) plus <code>permission</code> dan klaim peran. Pencabutan berlaku segera.</li>
+<li><strong>Segarkan token</strong> — Token berputar buram dengan masa pakai 7 hari. Setiap penyegaran mengeluarkan token penyegaran baru dan mencabut yang lama; menggunakan kembali token yang dicabut akan mencabut seluruh keluarga token.</li>
+</ul>
+<h2 id="sign-in-from-a-directly-opened-browser-game">Masuk dari game browser yang langsung dibuka</h2>
+<p>Game yang dihosting yang dibuka di luar dasbor dapat menampilkan a <strong>Masuk</strong> tombol yang menghubungkan ke:</p>
+<pre><code class="language-text">https://api.starhermit.com/api/v1/auth/games/{gameId}/sign-in
+</code></pre>
+<p><code>gameId</code> adalah UUID game yang tidak dapat diubah (subdomain di <code>{gameId}.starhermit.com</code>). pertapa bintang
+menunjukkan penyedia masuk yang diaktifkan. Melanjutkan masuk ke pemain yang sudah ada atau membuat yang baru
+akun menggunakan aturan pencocokan akun OAuth normal, lalu dialihkan <strong>langsung kembali ke
+permainan</strong>, tanpa mengunjungi dasbor.</p>
+<p>Opsional <code>returnUrl</code> mempertahankan halaman game tertentu, string kueri, atau rute hash. Itu pasti
+URL HTTPS absolut yang berasal dari host game tersebut; permainan lain, host eksternal,
+kredensial di URL dan port alternatif ditolak <code>400</code>. Abaikan untuk kembali ke
+file peluncuran yang diterbitkan. Game yang tidak dikenal, dihapus, tidak dihosting, atau tidak pernah dipublikasikan kembali <code>404</code>. Keduanya
+penerapan repositori dan game yang diunggah didukung; URL eksternal/lokal sewenang-wenang tidak.</p>
+<p>Arahkan browser ke <strong>asal API publik</strong> di atas, daripada mengambil halaman atau memulai
+melalui permainan itu <code>/api</code> proksi. Cookie status OAuth dan panggilan balik penyedia harus menggunakan hal yang sama
+tuan rumah API. Gunakan alur ini ketika game tidak memiliki token valid yang disediakan peluncur atau diperoleh sebelumnya.</p>
+<h3 id="button-and-return-token-example">Contoh tombol dan token kembali</h3>
+<pre><code class="language-html">&lt;button id="starhermit-sign-in"&gt;Sign in&lt;/button&gt;
+&lt;script type="module"&gt;
+const api = 'https://api.starhermit.com';
+const gameId = 'YOUR_GAME_UID';
+const signIn = document.querySelector('#starhermit-sign-in');
+let gameToken = null; // Or your existing launcher-provided game token.
+
+// Read this before your game router or third-party scripts consume the fragment.
+const auth = new URLSearchParams(location.hash.slice(1));
+if (auth.has('access_token')) {
+  gameToken = auth.get('access_token');
+  const originalHash = auth.get('game_fragment');
+  history.replaceState(null, '', location.pathname + location.search +
+    (originalHash ? '#' + originalHash : ''));
+}
+signIn.hidden = Boolean(gameToken);
+signIn.addEventListener('click', () =&gt; {
+  const url = new URL(`/api/v1/auth/games/${gameId}/sign-in`, api);
+  url.searchParams.set('returnUrl', location.href);
+  location.assign(url.href);
+});
+
+// Pass gameToken to your game's API client as Authorization: Bearer &lt;gameToken&gt;.
+// This example keeps it in memory; a reload can require sign-in again.
+&lt;/script&gt;
+</code></pre>
+<p>Fragmen yang dikembalikan adalah:</p>
+<pre><code class="language-text">#access_token=…&amp;token_type=Bearer&amp;expires_in=3600
+</code></pre>
+<p><code>access_token</code> adalah a <strong>token peluncuran cakupan game</strong>, bukan token akses seluruh akun. Tidak ada token penyegaran
+dikeluarkan. <code>expires_in</code> menggunakan masa pakai token peluncuran yang dikonfigurasi penerapannya (default 3600
+detik). Fragmen URL pengembalian asli dikodekan dalam opsional <code>game_fragment</code> bidang;
+pulihkan setelah mengambil token dan menghapus data autentikasi dari riwayat browser.
+Jangan mencatat atau meneruskan token.</p>
+<p>Perpanjang sebelum habis masa berlakunya <code>POST /api/v1/games/{gameId}/launch-token</code> dengan token saat ini sebagai
+Kuasa Pembawa, kemudian diganti dengan yang dikembalikan <code>token</code>. Plafon rantai pembaruan yang biasa
+berlaku (default 12 jam). Jika token kedaluwarsa atau perpanjangan ditolak, hapus token dan tampilkan Masuk
+lagi. Melihat <a href="#game-launch-tokens">Token peluncuran game</a>.</p>
+<h3 id="choosing-a-provider-yourself">Memilih penyedia sendiri</h3>
+<p>Game malah bisa dibaca <code>GET /api/v1/auth/oauth/providers</code> dan arahkan ke yang ditawarkan <code>authorizeUrl</code>
+pada asal API publik, menambahkan <code>gameId</code> dan opsional <code>returnUrl</code>. Langkah otorisasi
+memvalidasi dan menyimpan target dalam status OAuth sepuluh menit yang ada; parameter kueri panggilan balik
+tidak dapat mengubahnya. Cookie browser yang memulai masih diperlukan, dan permainan diperiksa kembali
+sebelum mengeluarkan token. Akun yang ditangguhkan tidak dapat menerima token.</p>
+<p>Jangan gabungkan login game dengan <code>client</code> atau <code>link</code> (<code>400</code>). A <code>returnUrl</code> tanpa <code>gameId</code> juga
+<code>400</code>. Masuk dasbor dan desktop normal terus menggunakan tujuan frontend yang dikonfigurasi
+dan pasangan token akun biasa.</p>
+<h2 id="game-launch-tokens">Token peluncuran game</h2>
+<p><code>POST /api/v1/games/{slug}/launch-token</code> (JWT) mencetak JWT dengan cakupan permainan:</p>
+<pre><code class="language-json">{
+  "token": "eyJhbGciOi...",
+  "expiresInSeconds": 3600
+}
+</code></pre>
+<p>Token tersebut membawa a <code>game_scope</code> klaim dan default untuk seumur hidup 60 menit. Salinan pembaruan a
+<code>launch_chain</code> waktu mulai maju; perpanjangan 12 jam terakhir (default) adalah <code>403</code> dan pemegangnya harus pergi
+kembali ke sesi akun penuh. Detail selengkapnya ada di <a href="/id/docs/api/games.html">Pertandingan</a>.</p>
+<p><strong>Menyambungkan kembali soket.</strong> Soket dibuka dengan token peluncuran (<code>?access_token=</code> pada <code>ws/v1/games</code>,
+<code>ws/v1/realtime</code>, <code>ws/v1/voice</code>) membawa token itu di URL-nya, dan jabat tangan dengan token yang sudah habis masa berlakunya
+ditolak dengan <code>401</code> sebelum pemutakhiran — browser hanya melaporkan kode tutup <code>1006</code>, sama dengan a
+penurunan jaringan. Perlakukan koneksi ulang yang gagal sebagai kemungkinan kegagalan autentikasi: sebelum dibuka kembali, perbarui
+<code>POST /api/v1/games/{slug}/launch-token</code> (hanya mungkin selama token saat ini masih valid dan
+dalam waktu 12 jam sejak peluncuran awal) dan buat URL dengan token baru. Setelah pembaruan dilakukan
+menolak, mengirim pemain kembali ke peluncur, atau melalui
+<a href="#sign-in-from-a-directly-opened-browser-game">masuk permainan</a> jika begitulah permainannya dibuka.
+Mencoba kembali URL yang sama tidak akan pernah bisa pulih.</p>
+<h3 id="game-scope-fencing">Anggar lingkup permainan</h3>
+<p>Token dalam cakupan permainan hanya dapat menjangkau:</p>
+<ul>
+<li>miliknya sendiri <code>/api/v1/games/{scope}</code> pohon,</li>
+<li><code>/ws/v1/games</code>,</li>
+<li><a href="/id/docs/api/realtime.html">ruang waktu nyata</a> Rute REST dan <code>/ws/v1/realtime</code> untuk permainannya sendiri, termasuk tiket koneksi,</li>
+<li><code>GET /api/v1/time</code> Dan <code>GET /api/v1/terms</code>,</li>
+<li><code>POST /api/v1/me/terms/accept</code> untuk persetujuan eksplisit pemain yang diautentikasi,</li>
+<li><code>GET /api/v1/me/friends</code>,</li>
+<li><code>GET /api/v1/users/{id}/avatar</code> Dan <code>GET /api/v1/users/{id}/profile</code>,</li>
+<li>papan peringkat permainannya,</li>
+<li>milik pemain <a href="/id/docs/api/catalog.html#saving-from-inside-a-game-launch-token">penyimpanan awan</a> untuk permainannya sendiri (<code>/api/v1/me/cloud-saves/game:&lt;scope&gt;</code> dan itu <code>/info</code>) — tidak ada kunci lain,</li>
+<li>titik akhir obrolan/suara REST dan WebSocket yang dilampirkan ke sesi permainannya sendiri,</li>
+<li><code>GET /api/v1/github-games/{id}/icon</code> Dan <code>/cover</code> untuk game apa pun (keduanya bersifat publik),</li>
+<li><code>POST /api/v1/me/heartbeat</code>, yang hanya menandai pemain online,</li>
+<li><code>GET /api/v1/github-games/{id}/release-notes</code> untuk permainannya sendiri,</li>
+<li><a href="/id/docs/api/relay.html">menyampaikan</a> rute, untuk relai yang terikat pada salah satu sesi atau ruangan permainannya sendiri.</li>
+</ul>
+<p><code>/ws/v1/chat</code> diblokir untuk token peluncuran. Segala sesuatu yang lain mengembalikan 403.</p>
+<h2 id="typical-login-flow-curl">Alur login yang umum (ikal)</h2>
+<p>Login kunci publik, dari tantangan hingga panggilan terotentikasi:</p>
+<pre><code class="language-bash"># 1. Request a challenge
+curl -s -X POST https://api.starhermit.com/api/v1/auth/public-key/challenge \
+  -H "Content-Type: application/json" \
+  -d '{"keyType":"Ed25519","keyData":"&lt;base64-raw-32-byte-public-key&gt;"}'
+# → { "challengeId": "...", "payload": { ... }, "expiresIn": 300 }
+
+# 2. Sign the serialized payload JSON with your private key, then complete
+curl -s -X POST https://api.starhermit.com/api/v1/auth/public-key/complete \
+  -H "Content-Type: application/json" \
+  -d '{"challengeId":"...","signature":"base64-signature...","keyType":"Ed25519","keyData":"&lt;base64-raw-32-byte-public-key&gt;"}'
+# → { "userId": "...", "accessToken": "...", "refreshToken": "..." }
+
+# 3. Call the API with the access token
+curl -s https://api.starhermit.com/api/v1/me \
+  -H "Authorization: Bearer eyJhbGciOi..."
+
+# 4. When the access token expires (after 15 min), rotate the refresh token
+curl -s -X POST https://api.starhermit.com/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"dGhpcyBpcyBh..."}'
+
+# 5. On logout, revoke the refresh token
+curl -s -X POST https://api.starhermit.com/api/v1/auth/logout \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"dGhpcyBpcyBh..."}'
+</code></pre>
+<p>Login OAuth digerakkan oleh browser: baca <code>GET /api/v1/auth/oauth/providers</code>, buka penyedia langsung
+<code>authorizeUrl</code>, persetujuan penuh, dan panggilan balik membawa pengguna ke frontend
+<code>#access_token=…&amp;refresh_token=…</code> dalam fragmen URL.</p>
+<h2 id="emailed-key-revocation">Pencabutan kunci melalui email</h2>
+<p>Untuk pemilik yang tidak dapat menjangkau <code>DELETE /me/public-keys</code> (tidak ada sesi OAuth, atau dikunci oleh orang yang dicuri
+kunci). <code>POST /api/v1/auth/public-key/revoke-request</code> dengan <code>{ "email": "…" }</code> memegang permintaan dan
+mengirim tautan melalui email. Membukanya (<code>GET /api/v1/auth/public-key/revoke/confirm?token=…</code>) menunjukkan halaman itu
+tidak mengubah apa pun; tombol Konfirmasinya <code>POST</code>Itu URL yang sama, yang dicabut <strong>setiap</strong> kunci aktif itu
+akun dan mengakhiri sesi yang mereka autentikasi. Keduanya tidak diautentikasi dan <strong>masalah no
+sesi</strong>. Permintaan itu selalu dijawab <code>202</code> dengan tubuh yang sama, apapun yang ditemukannya; satu permintaan per
+akun per 15 menit, dan tautan kedaluwarsa setelah 4 jam. Mengkonfirmasi <code>POST</code> jawaban <code>200</code>
+<code>{ "revoked": &lt;count&gt;, "sessionsEnded": &lt;count&gt; }</code> ke klien API, atau <code>400</code> untuk yang tidak diketahui, digunakan atau
+token kadaluwarsa, atau token yang alamatnya bukan lagi milik akun.</p>
+<h2 id="websocket-connection-tickets">Tiket koneksi WebSocket</h2>
+<p><code>POST /api/v1/realtime/connection-tickets</code> menukarkan token pembawa penelepon dengan tiket satu kali
+berlaku sekitar 30 detik. Sebarkan sebagai <code>?ticket=</code> pada apa pun <code>/ws/v1/*</code> jabat tangan. Ini membawa si penelepon
+klaim kata demi kata (termasuk <code>game_scope</code> Dan <code>pk</code>), ditolak pada REST, dan dihabiskan pada penggunaan pertama.
+Setiap penelepon yang diautentikasi mungkin bertanya, termasuk token peluncuran cakupan game. <code>?access_token=</code> masih berfungsi
+sampai klien sudah pindah.</p>
+<p><strong>Soket terbuka berakhir ketika kredensialnya dicabut.</strong> Mencabut kunci publik yang membukanya berakhir
+segera; penangguhan atau keluar di mana-mana akan mengakhirinya dalam waktu sekitar 30 detik. Kedaluwarsa token
+tidak mengakhiri soket yang terbuka — segarkan sebelum menyambungkan kembali.</p>
+<h2 id="embedded-onboarding-for-nativestorefront-games">Orientasi tersemat untuk game asli/etalase</h2>
+<p>Klien Steam, Epic, GOG, atau mandiri dapat membuat kunci di perangkat pemain dan menyajikannya
+alur pendaftaran kunci publik di dalam UI-nya sendiri, menghindari OAuth dan kunjungan ke StarHermit
+dasbor. Pendaftaran tidak tinggal diam: pemain harus menyetujui, memberikan email, dan mengikuti
+tautan verifikasi satu kali. Token server game tidak dapat membuat atau meniru identitas pemain. Melihat
+<a href="/id/docs/tutorials/public-key-onboarding.html">Tutorial: pemain onboard dengan kunci publik</a>, dan itu
+<a href="/id/docs/tutorials/dedicated-server-onboarding.html">tutorial server khusus</a> untuk game yang juga mengirimkan server.</p>
+<p>Melihat <a href="/id/docs/credentials.html">kompatibilitas kredensial</a> Dan <a href="/id/docs/api/contracts.html">kontrak yang dapat dibaca mesin</a>.</p>
+
+{% endraw %}

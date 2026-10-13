@@ -1,0 +1,365 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "软件目录"
+source_url: "/docs/api/catalog.html"
+source_path: "docs/api/catalog.md"
+source_hash: "0dc7378c084cb717711091cd651d3fc514625f8737814c055edb6ab2fe19467a"
+translation: "machine"
+permalink: "/zh-CN/docs/api/catalog.html"
+---
+{% raw %}
+<h1 id="software-catalog">软件目录</h1>
+<p>该软件目录涵盖浏览和声明标题、列表版本、下载、云保存、愿望清单和评级。读取是匿名的；写入需要 JWT。</p>
+<p>基本网址： <code>https://api.starhermit.com</code>。所有路线均在 <code>/api/v1/...</code>.</p>
+<h2 id="browsing-and-claiming-titles">浏览和认领标题</h2>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/software</code></td>
+<td>匿名的</td>
+<td>搜索并分页目录</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/software/{id}</code></td>
+<td>匿名的</td>
+<td>获取一个标题，或 404</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/software/{id}/builds?page=&amp;pageSize=</code></td>
+<td>匿名的</td>
+<td>标题构建的分页列表</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/software/{id}/claim</code></td>
+<td>智威汤逊</td>
+<td>自我主张免费头衔，授予权利</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/software/{id}/launch</code></td>
+<td>智威汤逊</td>
+<td>启动启动会话（需要权利）</td>
+</tr>
+</tbody>
+</table>
+<p><code>GET /api/v1/software</code> 接受查询参数 <code>q</code> （全文）， <code>category</code>, <code>tag</code>, <code>publisherId</code>, <code>platform</code>, <code>releaseStatus</code>, <code>sort</code>, <code>page</code>， 和 <code>pageSize</code>。有效的 <code>sort</code> 价值观： <code>name</code>, <code>name_desc</code>, <code>created</code>, <code>created_desc</code>, <code>updated</code>, <code>updated_desc</code>。它返回一个 <code>PagedResult</code>:</p>
+<pre><code class="language-json">{
+  "items": [
+    {
+      "id": "…",
+      "name": "…",
+      "description": "…",
+      "publisherId": "…",
+      "category": "…",
+      "platform": "…",
+      "releaseStatus": "…",
+      "tags": ["…"],
+      "priceCents": 0,
+      "createdAt": "…",
+      "updatedAt": "…"
+    }
+  ],
+  "totalCount": 1,
+  "page": 1,
+  "pageSize": 20
+}
+</code></pre>
+<p><code>GET /api/v1/software/{id}/builds</code> 返回一个 <code>PagedResult</code> 的 <code>SoftwareBuild</code>:</p>
+<pre><code class="language-json">{
+  "items": [
+    {
+      "id": "…",
+      "titleId": "…",
+      "version": "…",
+      "releaseDate": "…",
+      "releaseNotes": "…",
+      "metadata": "…",
+      "createdAt": "…",
+      "updatedAt": "…"
+    }
+  ],
+  "totalCount": 1,
+  "page": 1,
+  "pageSize": 20
+}
+</code></pre>
+<p><code>POST /api/v1/software/{id}/claim</code> 仅适用于免费游戏（<code>priceCents == 0</code>）；它向调用者授予权利并返回 204。对于付费游戏，它返回 402，其中：</p>
+<pre><code class="language-json">{"error": "purchasing is not available yet"}
+</code></pre>
+<p><code>POST /api/v1/software/{id}/launch</code> 需要一个权利（否则为 403）并返回 <code>LaunchSession</code>:</p>
+<pre><code class="language-json">{
+  "launchId": "…",
+  "startTime": "…"
+}
+</code></pre>
+<p>它记录启动活动，如果用户的隐私设置如此，则该活动将被隐藏（请参阅 <a href="/zh-CN/docs/api/profile.html">profile.md</a>）。结束会话 <code>POST /api/v1/activity/launches/{id}/end</code> - 看 <a href="/zh-CN/docs/api/activity.html">activity.md</a>。用户的权利通过以下方式列出 <code>GET /api/v1/me/entitlements</code> （看 <a href="/zh-CN/docs/api/profile.html">profile.md</a>).</p>
+<h2 id="downloads">下载</h2>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/software/{id}/download</code></td>
+<td>智威汤逊</td>
+<td>获取签名的下载 URL（需要授权）</td>
+</tr>
+</tbody>
+</table>
+<p>需要权利（否则为 403）。返回：</p>
+<pre><code class="language-json">{
+  "downloadUrl": "…"
+}
+</code></pre>
+<p>该 URL 针对最新版本的第一个可下载资产。呼叫记录下载活动。
+Catalog 二进制分发版当前为预览版；返回的 URL 不保证生产
+下载。看 <a href="/zh-CN/docs/availability.html">功能可用性</a> 在依赖此发布流程之前。</p>
+<h2 id="cloud-saves">云存档</h2>
+<p>每场比赛一个槽位，最后写入者获胜。所有路由都需要 JWT——完整的用户令牌，或者游戏的令牌
+该游戏自己的插槽的启动令牌（如下）。</p>
+<p>10 MB 上限（10,485,760 字节）适用于 <strong>解码保存</strong>，而不是请求。 <code>PUT</code> 采取
+以 JSON 形式保存 base64 编码，因此正文大约比保存的大三分之一 — 大约 14 MB
+上限——API 接受这一点。</p>
+<table>
+<thead>
+<tr>
+<th>限额（每个账户）</th>
+<th>默认</th>
+<th>拒绝</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>一次保存，解码</td>
+<td>10MB</td>
+<td><code>413 cloud_save_too_large</code></td>
+</tr>
+<tr>
+<td>有保存功能的游戏</td>
+<td>200</td>
+<td><code>409 cloud_save_slots_exhausted</code> （新游戏的保存）</td>
+</tr>
+<tr>
+<td>全部一起保存</td>
+<td>1GB</td>
+<td><code>507 cloud_save_quota_exceeded</code>， 和 <code>used</code></td>
+</tr>
+<tr>
+<td>上传</td>
+<td>一分钟30个</td>
+<td><code>429</code>， 和 <code>Retry-After</code></td>
+</tr>
+</tbody>
+</table>
+<p>每次拒绝将有效号码命名为 <code>limit</code>。总额是根据账户的 <em>其他</em>
+保存，因此插槽总是可以被不更大的东西覆盖。运营商可以更改任何
+这些是一个帐户的。</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}/info</code></td>
+<td>智威汤逊</td>
+<td>保存元数据： <code>{ exists, sizeBytes, updatedAt? }</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}</code></td>
+<td>智威汤逊</td>
+<td><code>application/zip</code> 字节，如果没有则为 404</td>
+</tr>
+<tr>
+<td>放</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}</code></td>
+<td>智威汤逊</td>
+<td>上传保存（解码保存≤ 10 MB， <code>gameKey</code> ≤ 300 个字符）</td>
+</tr>
+</tbody>
+</table>
+<p>放置主体：</p>
+<pre><code class="language-json">{
+  "dataBase64": "…"
+}
+</code></pre>
+<p>放置响应：</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "sizeBytes": 0,
+  "updatedAt": "…"
+}
+</code></pre>
+<h3 id="saving-from-inside-a-game-launch-token">从游戏内部保存（启动令牌）</h3>
+<p>使用其启动令牌运行的游戏可以读取和写入玩家的保存 <strong>那场比赛</strong>。
+您的游戏无论在何处运行都会自行保存 - 浏览器或运行的 StarHermit 桌面应用程序
+也在浏览器中托管游戏 - 因此保存会跟随玩家之间的情况。</p>
+<p>关键是 <code>game:&lt;gameId&gt;</code>， 在哪里 <code>&lt;gameId&gt;</code> 是你的游戏的 id — 与它的 slug 值相同，它的
+<code>&lt;gameId&gt;.starhermit.com</code> 地址，以及 <code>game_scope</code> 启动令牌的声明：</p>
+<pre><code class="language-js">const key = `game:${gameScope}`;            // e.g. "game:3fa85f64-5717-4562-b3fc-2c963f66afa6"
+
+// Load on startup — 404 means no save yet.
+const res = await fetch(`/api/v1/me/cloud-saves/${key}`, { headers: { Authorization: `Bearer ${launchToken}` } });
+if (res.status !== 404 &amp;&amp; !res.ok) throw new Error(`Save load failed: ${res.status}`);
+const save = res.status === 404 ? null : new Uint8Array(await res.arrayBuffer());
+const etag = res.headers.get("ETag");
+if (save &amp;&amp; !etag) throw new Error("Save version unavailable; do not overwrite it.");
+// Validate/decode your own save format before adopting it or enabling uploads.
+
+// Save at checkpoints, not every frame.
+const written = await fetch(`/api/v1/me/cloud-saves/${key}`, {
+  method: "PUT",
+  headers: {
+    Authorization: `Bearer ${launchToken}`, "Content-Type": "application/json",
+    ...(etag ? { "If-Match": etag } : { "If-None-Match": "*" }),
+  },
+  body: JSON.stringify({ dataBase64: base64(zipBytes) }), // Your ZIP encoder and bytes.
+});
+if (written.status === 412) throw new Error("Another device saved. Reload before writing again.");
+if (!written.ok) throw new Error(`Save write failed: ${written.status}`);
+const acknowledgement = await written.json(); // Retain acknowledgement.etag for your next write.
+</code></pre>
+<ul>
+<li><strong>只有那个确切的钥匙。</strong> 任何其他键 - 另一个游戏的、商店游戏的或不同的拼写
+你的（大写，裸id） - 是 <code>403</code> 作为启动令牌。这包括 <code>github:&lt;gameId&gt;</code>,
+当玩家同步游戏的本地保存文件夹时桌面应用程序使用的单独插槽，因此
+该同步永远不会覆盖您的游戏写入的保存。</li>
+<li><strong>任何格式。</strong> 平台从不打开存档；存储您的游戏可以读回的任何内容（它是
+担任 <code>application/zip</code> 不管）。最大 10 MB。</li>
+<li><strong>无条件写入是最后写入获胜</strong>，没有历史记录。使用条件写入来检测
+一次保存两个选项卡/设备。启动时加载并在前台检查点保存。页面退出
+尽最大努力上传，并有浏览器正文大小限制；看 <a href="/zh-CN/docs/tutorials/cloud-save-sync.html">安全保存秘诀</a>.</li>
+<li><strong>每个保存都有一个版本。</strong> 它是 <code>ETag</code> 正在下载，在 <code>/info</code> （也如 <code>etag</code>）以及
+的 <code>PUT</code> 回复。将其发回为 <code>If-Match</code> 仅当没有人保存时才会进行写入
+自从；否则 <code>412 {"error":"precondition_failed","etag":"&lt;current&gt;"}</code> 告诉你版本
+负载。 <code>If-Match: *</code> 需要现有的保存； <code>If-None-Match: *</code> 仅当没有时才写入。
+没有任何一个标题 <code>PUT</code> 是无条件的——最后写入获胜。一个 <code>GET</code> 和
+<code>If-None-Match: &lt;etag&gt;</code> 答案 <code>304</code> 当你已经持有最新的保存时。</li>
+<li>没有托管列表的游戏（运营商提供的游戏）没有插槽。</li>
+</ul>
+<p>小的、经常变化的偏好属于 <a href="/zh-CN/docs/api/games.html#per-player-game-settings">每个玩家的设置</a>
+反而;它们也可以通过启动令牌访问并支持部分更新。</p>
+<h2 id="wishlist">愿望清单</h2>
+<p>所有路由都需要 JWT。</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/wishlist</code></td>
+<td>智威汤逊</td>
+<td><code>{ titleIds: guid[] }</code></td>
+</tr>
+<tr>
+<td>放</td>
+<td><code>/api/v1/me/wishlist/{titleId}</code></td>
+<td>智威汤逊</td>
+<td>添加到愿望清单，204（幂等）</td>
+</tr>
+<tr>
+<td>删除</td>
+<td><code>/api/v1/me/wishlist/{titleId}</code></td>
+<td>智威汤逊</td>
+<td>从愿望清单中删除，204</td>
+</tr>
+</tbody>
+</table>
+<h2 id="ratings">评级</h2>
+<p>所有路由都需要 JWT。统一的游戏密钥是目录指南，或者 <code>"provider:externalId"</code> 对于外部游戏（参见 <a href="/zh-CN/docs/api/external-libraries.html">external-libraries.md</a>).</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>放</td>
+<td><code>/api/v1/me/ratings</code></td>
+<td>智威汤逊</td>
+<td>更新我对游戏的评分</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/ratings/query</code></td>
+<td>智威汤逊</td>
+<td>批量获取评级摘要</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/ratings/reviews?key=&amp;top=</code></td>
+<td>智威汤逊</td>
+<td>游戏评论（<code>top</code> 默认10)</td>
+</tr>
+</tbody>
+</table>
+<p>放置主体：</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "stars": 4,
+  "review": "…"
+}
+</code></pre>
+<p><code>stars</code> 是 0–5； <code>review</code> 是可选的。响应是 <code>RatingSummaryDto</code>:</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "average": 4.5,
+  "count": 12,
+  "myStars": 4
+}
+</code></pre>
+<p><code>POST /api/v1/ratings/query</code> 正文和响应：</p>
+<pre><code class="language-json">{
+  "keys": ["…", "…"]
+}
+</code></pre>
+<p>回报 <code>RatingSummaryDto[]</code>. <code>GET /api/v1/ratings/reviews</code> 回报 <code>GameReviewDto[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "userId": "…",
+    "username": "…",
+    "stars": 4,
+    "review": "…",
+    "timestamp": "…"
+  }
+]
+</code></pre>
+<p>看 <a href="/zh-CN/docs/api/conventions.html#requests-and-responses">API约定</a> 用于错误解析。有关的： <a href="/zh-CN/docs/api/achievements.html">achievements.md</a>, <a href="/zh-CN/docs/api/leaderboards.html">leaderboards.md</a>.</p>
+<p>看 <a href="/zh-CN/docs/credentials.html">凭证兼容性</a> 和 <a href="/zh-CN/docs/api/contracts.html">机器可读的合同</a>.</p>
+
+{% endraw %}

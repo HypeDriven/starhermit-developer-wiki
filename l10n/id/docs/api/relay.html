@@ -1,0 +1,230 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Menyampaikan"
+source_url: "/docs/api/relay.html"
+source_path: "docs/api/relay.md"
+source_hash: "fee2406e9c32c62019b48f6c4c765d18672bef89ea5233e883180fc2a451396c"
+translation: "machine"
+permalink: "/id/docs/api/relay.html"
+---
+{% raw %}
+<h1 id="relay">Menyampaikan</h1>
+<p>Relai menyediakan fan-out byte buram untuk netcode game: REST API (<code>api/v1/relay</code>) mengelola
+sesi, dan <code>ws/v1/relay</code> meneruskan bingkai biner kata demi kata antar peserta. Setiap relai adalah
+terikat pada tepat satu kecocokan yang ada—a <a href="/id/docs/api/games.html">sesi permainan</a> atau a <a href="/id/docs/api/realtime.html">ruang waktu nyata</a>—dan
+menggunakan daftar pertandingan itu untuk otorisasi.</p>
+<p>Semua titik akhir REST memerlukan autentikasi — token pengguna penuh, atau token peluncuran game untuk relai
+terikat pada sesi dan ruangan permainan itu sendiri: daftar hanya menampilkan sesi dan ruangan tersebut, dan jawaban relai lainnya
+<code>404</code> (atau <code>403</code> untuk membuatnya). Relai token peluncuran diperlukan <strong>id permainannya sendiri sebagai <code>titleId</code></strong> —
+cairan di dalamnya <code>game_scope</code> klaim — dan hak milik lainnya ditolak <code>403</code>, karena per judul
+batas sesi diperhitungkan olehnya. Kesalahan dikembalikan sebagai <code>{"error":"..."}</code>: <code>403</code> ketika penelepon itu
+tidak dalam pertandingan terikat atau estafet milik permainan lain, <code>404</code> untuk relai yang tidak diketahui, <code>409</code> untuk a
+menyatakan yang menolak permintaan (tidak terikat, penuh, tertutup, sudah bergabung, atau pada batas sesi), dan
+<code>503</code> saat relai dimatikan.</p>
+<h2 id="rest-endpoints">titik akhir REST</h2>
+<p>Basis: <code>https://api.starhermit.com/api/v1/relay</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/?titleId=</code></td>
+<td>JWT</td>
+<td>Cantumkan sesi relai aktif untuk judul ini yang kecocokan terikatnya mencakup pemanggil</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/</code></td>
+<td>JWT</td>
+<td>Buat relai yang terikat pada satu pertandingan</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/{sessionId}</code></td>
+<td>JWT</td>
+<td>Dapatkan sesi estafet — hanya dapat dilihat oleh anggota pertandingan terikatnya (<code>404</code> jika tidak)</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/{sessionId}/join</code></td>
+<td>JWT</td>
+<td>Bergabunglah dengan estafet; penelepon harus dalam kecocokan terikatnya</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/{sessionId}/close</code></td>
+<td>JWT</td>
+<td>Menutup relai (khusus pembuat)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="match-binding">Ikatan yang cocok</h2>
+<p>Keanggotaan estafet bukanlah lobi yang independen dan terbuka. Daftar pertandingan adalah sumber kebenarannya:</p>
+<ul>
+<li>Sebuah relay memiliki keduanya <code>gameSessionId</code> atau <code>realtimeRoomId</code>, tidak pernah keduanya dan tidak pernah keduanya.</li>
+<li>Pencipta harus menjadi bagian dari sesi permainan tersebut atau memegang kursi non-kiri yang aktif dalam waktu nyata tersebut
+kamar.</li>
+<li>Setiap bergabung kemudian diperiksa terhadap daftar yang sama.</li>
+<li>Membuka WebSocket memerlukan baris peserta relai aktif dan keanggotaan saat ini di
+pertandingan terikat. Oleh karena itu, meninggalkan ruang waktu nyata mencegah koneksi relai selanjutnya/pengganti.</li>
+<li>Daftar oleh <code>titleId</code> hanya mengembalikan relai yang terikat untuk mencocokkan milik pemanggil; itu bukan sebuah
+direktori setiap pertandingan langsung untuk gelar itu.</li>
+</ul>
+<p>Ini adalah perubahan bentuk permintaan yang diperlukan. Baris relai lama yang tidak terikat tidak dapat mengotorisasi soket; buat
+sebagai gantinya, relai terikat baru.</p>
+<h2 id="create-a-session">Buat sesi</h2>
+<p><code>POST /api/v1/relay</code></p>
+<p>Ikat ke sesi permainan resmi:</p>
+<pre><code class="language-json">{
+  "titleId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "maxParticipants": 8,
+  "gameSessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "realtimeRoomId": null
+}
+</code></pre>
+<p>Atau ikat ke ruang waktu nyata:</p>
+<pre><code class="language-json">{
+  "titleId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "maxParticipants": 8,
+  "gameSessionId": null,
+  "realtimeRoomId": "b1d2c3e4-5f60-4a71-8b92-c3d4e5f60718"
+}
+</code></pre>
+<p><code>maxParticipants</code> defaultnya adalah <code>8</code>. Maksimal lima sesi estafet aktif per judul per judul
+bawaan. Panggilan ditolak jika jumlah pengikatan tidak tepat satu atau penelepon tidak ada di dalam
+pertandingan yang dipilih.</p>
+<p>Relai tidak membuat sesi permainan atau ruangan. Buat/gabung dengan pertandingan itu melalui
+<a href="/id/docs/api/games.html">API Permainan</a> atau <a href="/id/docs/api/realtime.html">API Ruangan Waktu Nyata</a> pertama, lalu berikan ID-nya di sini.</p>
+<h2 id="session-shape">Bentuk sesi</h2>
+<pre><code class="language-json">{
+  "id": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+  "titleId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "creatorUserId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "gameSessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "realtimeRoomId": null,
+  "isBound": true,
+  "maxParticipants": 8,
+  "currentParticipantCount": 1,
+  "status": "Active",
+  "createdAt": "2026-07-28T11:30:00Z",
+  "closedAt": null,
+  "participants": [
+    {
+      "id": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+      "sessionId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+      "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "connectionId": null,
+      "joinedAt": "2026-07-28T11:30:01Z",
+      "leftAt": null,
+      "status": "Connected"
+    }
+  ]
+}
+</code></pre>
+<p>Tepatnya satu ID pengikatan adalah bukan nol dan <code>isBound</code> Oleh karena itu <code>true</code>. Sidang <code>status</code> adalah
+<code>"Active"</code> atau <code>"Closed"</code>; <code>closedAt</code>, <code>connectionId</code>, Dan <code>leftAt</code> mungkin tidak ada atau nol.</p>
+<h2 id="join-and-close">Bergabunglah dan tutup</h2>
+<p><code>POST /api/v1/relay/{sessionId}/join</code> mengembalikan yang diperbarui <code>RelaySession</code>. Gabungan REST ini diperlukan
+sebelum membuka WebSocket. Slot relay gratis saja tidak cukup: penelepon harus tetap menjadi anggota
+pertandingan terikat.</p>
+<p><code>POST /api/v1/relay/{sessionId}/close</code> kembali <code>204</code> dan hanya untuk pencipta.</p>
+<h2 id="websocket-wsv1relay">Soket Web: <code>ws/v1/relay</code></h2>
+<p>Hubungkan ke:</p>
+<pre><code class="language-text">wss://api.starhermit.com/ws/v1/relay?sessionId=&lt;relay-id&gt;&amp;titleId=&lt;title-id&gt;
+</code></pre>
+<p>Otentikasi dengan <code>Authorization: Bearer &lt;token&gt;</code> tajuk, <code>?ticket=</code>, atau <code>?access_token=</code> parameter kueri.
+Jabat tangan kembali terjadi <code>403</code> kecuali pengguna bergabung dengan relai dan masih diberi wewenang oleh ikatannya
+pertandingan.</p>
+<p>Soketnya adalah byte fan-out buram. Setiap frame biner diteruskan tanpa perubahan ke frame lainnya
+peserta yang terhubung. Tidak ada pembingkaian JSON dan platform tidak menafsirkan data game.
+Ukuran pesan maksimum adalah 4 KiB secara default.</p>
+<h3 id="tick-rate-aware-rate-limit">Batas tarif yang sadar akan tingkat tick</h3>
+<blockquote>
+<p><strong>Aturan pemutusan koneksi:</strong> jika klien mengirimkan perintah/frame relai lebih cepat dari kecepatan yang diizinkan,
+StarHermit menutup WebSocket relai klien tersebut dengan <code>PolicyViolation</code>. Ini bukan antrian atau a
+penurunan bingkai upaya terbaik—koneksi klien dihentikan dan harus tersambung kembali.</p>
+</blockquote>
+<p>Interval minimum setiap pengirim diperoleh dari kecepatan kecepatan kecocokan terikat:</p>
+<pre><code class="language-text">minimum interval ms = (1000 / max(pacingRateHz, 1)) × 0.90
+</code></pre>
+<p>Ruang kepala 10% memungkinkan pengatur waktu biasa dan jitter jaringan. Tarifnya tidak pernah diambil di bawah ini <strong>1Hz</strong>,
+jadi batasnya tidak pernah meminta keheningan lebih dari ~900 ms antara dua frame betapapun lambatnya permainan
+kutu. Contoh:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align:right">Tarif efektif</th>
+<th style="text-align:right">Interval pengirim minimum</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right">20Hz</td>
+<td style="text-align:right">45 ms</td>
+</tr>
+<tr>
+<td style="text-align:right">30Hz</td>
+<td style="text-align:right">30 ms</td>
+</tr>
+<tr>
+<td style="text-align:right">60Hz</td>
+<td style="text-align:right">15 ms</td>
+</tr>
+<tr>
+<td style="text-align:right">120Hz</td>
+<td style="text-align:right">7,5 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Untuk sesi permainan, tarifnya berasal dari definisi permainannya. Untuk ruangan real-time, ruangan itu
+<code>gameSlug</code> diselesaikan dengan definisi permainan. Prioritas tingkat efektif normal berlaku:
+penggantian operator, lalu tarif yang diminta permainan. Apa yang dilakukan batas relai <strong>bukan</strong> mengikuti adalah a
+tingkat yang tidak menjelaskan apa pun tentang seberapa sering pemain berbicara satu sama lain: jika tidak ada definisi yang bisa diberikan
+terselesaikan, jika game memilih keluar dari server dicentang <code>0</code>, atau jika tidak meminta tarif sama sekali dan sebagainya
+mengambil default platform yang lambat, sebagai gantinya ukuran batasnya diambil dari nilai tukar global. Sebuah permainan tidak pernah ada
+dibatasi menjadi satu pesan setiap beberapa detik karena tidak ada yang menulis nomor dalam kode servernya. Tarif
+dibatasi oleh langit-langit platform.</p>
+<p>Klien harus mengatur kecepatan perintah ke interval ini atau lebih lambat. Mengirim dua perintah/frame lebih berdekatan
+daripada interval minimum dianggap sebagai banjir: StarHermit memutuskan koneksi klien tersebut
+menutup WebSocket relainya dengan <code>PolicyViolation</code>. Pengirim dibatasi secara mandiri, jadi satu
+pelanggaran klien tidak memutuskan hubungan dengan pemain lain.</p>
+<h2 id="recommended-client-flow">Alur klien yang direkomendasikan</h2>
+<ol>
+<li>Membuat atau bergabung dengan sesi permainan/ruang waktu nyata yang sebenarnya.</li>
+<li>Mintalah satu anggota pertandingan membuat relai dengan ID pertandingan itu.</li>
+<li>Bagikan ID relai yang dikembalikan hanya melalui pesan status atau daftar nama pertandingan yang diautentikasi.</li>
+<li>Setiap anggota pertandingan lainnya memanggil <code>POST /api/v1/relay/{relayId}/join</code>.</li>
+<li>Setiap anggota membuka <code>ws/v1/relay</code> dan menyesuaikan frame dengan tick rate efektif game; mengirim
+lebih cepat memutuskan koneksi WebSocket klien tersebut.</li>
+<li>Pencipta menutup estafet ketika pertandingan berakhir.</li>
+</ol>
+<p>Jangan gunakan ID relai sebagai rahasia otorisasi. Platform memberi otorisasi terhadap daftar yang terikat;
+ID hanya mengidentifikasi sumber daya.</p>
+<h2 id="positioning">Penentuan posisi</h2>
+<p>Gunakan relai untuk game bertempo cepat yang membutuhkan peer fan-out dengan overhead rendah. Ini sengaja dibuat bodoh
+transport: mengikat mengamankan siapa yang dapat berpartisipasi, tetapi platform masih belum menguraikan atau memvalidasi
+muatan, memilih rekan yang berwibawa, atau menyelesaikan kecurangan.</p>
+<p>Untuk aturan dan status yang diterapkan server, gunakan <a href="/id/docs/api/games.html">API Permainan</a> dengan skrip kotak pasir atau
+<a href="/id/docs/api/container-games.html">bagian belakang kontainer</a>. Ruang waktu nyata menyediakan lobi, tempat duduk, perjodohan, dan
+perutean sadar host; relai sekarang dapat mengikat ke salah satu ruangan tersebut alih-alih menduplikasi daftarnya.</p>
+<p>Konfirmasikan ketersediaan relai sebelum mengirimkan fitur yang bergantung padanya.</p>
+<h2 id="see-also">Lihat juga</h2>
+<ul>
+<li><a href="/id/docs/api/realtime.html">Ruangan Waktu Nyata</a> — lobi, perjodohan, pemain AI, dan perutean yang sadar peran</li>
+<li><a href="/id/docs/api/games.html">Pertandingan</a> — sesi otoritatif dan tick rate yang efektif</li>
+<li><a href="/id/docs/api/container-games.html">Server Game Kontainer</a> — server otoritatif dalam bahasa lain</li>
+<li><a href="/id/docs/api/game-scripts.html">Skrip Permainan</a> — logika server sandbox dan tingkat tick yang diminta</li>
+<li><a href="/id/docs/api/voice.html">Suara</a> — ruang suara untuk audio dalam game</li>
+</ul>
+<p>Dibagikan <a href="/id/docs/api/conventions.html">konvensi API</a> menjelaskan penguraian respons, stempel waktu, penomoran halaman, dan percobaan ulang.</p>
+<p>Melihat <a href="/id/docs/credentials.html">kompatibilitas kredensial</a> Dan <a href="/id/docs/api/contracts.html">kontrak yang dapat dibaca mesin</a>.</p>
+
+{% endraw %}

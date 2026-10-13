@@ -1,0 +1,254 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "教程：向游戏添加控件"
+source_url: "/docs/tutorials/game-controls.html"
+source_path: "docs/tutorials/game-controls.md"
+source_hash: "e0d2b7612fbd90ee6e1e21734aca934295d32197bc56b43449da00dd637601bf"
+translation: "machine"
+permalink: "/zh-CN/docs/tutorials/game-controls.html"
+---
+{% raw %}
+<h1 id="tutorial-add-controls-to-your-game">教程：向游戏添加控件</h1>
+<p>星隐者可以存储 <strong>键绑定</strong> 对于您的游戏：您声明操作及其默认键，
+每个玩家都可以重新绑定它们。他们的选择会跟随他们登录的任何机器。你的游戏
+从控件 API 读取玩家的绑定并可以提供自己的 "重新绑定按键" 屏幕。</p>
+<p>如果您的游戏调用控件 API 并得到以下信息：</p>
+<pre><code class="language-text">404 {"error":"This game declares no controls."}
+</code></pre>
+<p>该平台有 <strong>没有宣布的行动</strong> 对于它所服务的构建。您发送到 API 的任何内容都不能
+解决这个问题：控件在您的游戏中声明 <a href="/zh-CN/docs/starhermit-txt.html"><code>starhermit.txt</code></a> 并在何时阅读
+游戏发布。此页面展示了如何声明它们、发布它们、检查它们是否到达、
+并从您的客户那里使用它们。</p>
+<ol>
+<li><a href="#1-declare-the-actions">宣布行动</a></li>
+<li><a href="#2-publish-them">发布它们</a></li>
+<li><a href="#3-check-they-arrived">检查他们是否到达</a></li>
+<li><a href="#4-use-them-in-your-game">在你的游戏中使用它们</a></li>
+<li><a href="#troubleshooting">故障排除</a></li>
+</ol>
+<h2 id="1-declare-the-actions">1. 声明行动</h2>
+<p>添加一个 <code>control.&lt;action&gt;=</code> 每个动作行 <code>starhermit.txt</code>:</p>
+<pre><code class="language-text">name=Space Hopper
+launch=index.html
+
+control.left=KeyA+ArrowLeft | Move left
+control.right=KeyD+ArrowRight | Move right
+control.jump=Space+KeyW | Jump
+control.fire=KeyJ | Fire
+control.pause=Escape | Pause
+</code></pre>
+<p>每行由三部分组成：</p>
+<pre><code class="language-text">control.&lt;action&gt;=&lt;code&gt;[+&lt;code&gt;...][ | &lt;label&gt;]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>部分</th>
+<th>规则</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;action&gt;</code></td>
+<td>您的游戏操作名称：1–32 个小写字母、数字和 <code>_</code> (<code>move_left</code>， 不是 <code>move-left</code>）。每个清单都是唯一的。</td>
+</tr>
+<tr>
+<td><code>&lt;code&gt;</code></td>
+<td>A <a href="https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_code_values"><code>KeyboardEvent.code</code></a> 值，例如 <code>KeyA</code>, <code>ArrowLeft</code>, <code>Space</code>, <code>Digit1</code>, <code>ShiftLeft</code>, <code>Enter</code> 或者 <code>Escape</code>。将 1-4 个代码连接起来以执行相同的操作 <code>+</code>.</td>
+</tr>
+<tr>
+<td><code>&lt;label&gt;</code></td>
+<td>选修的。显示在重新绑定屏幕中；最多 64 个字符。默认为操作名称。</td>
+</tr>
+</tbody>
+</table>
+<p>要知道的事情：</p>
+<ul>
+<li><strong>使用 <code>code</code>， 不是 <code>key</code>.</strong> 写 <code>KeyA</code>， 不是 <code>a</code>， 和 <code>Space</code>， 不是 <code>" "</code>。代码命名物理
+键，因此绑定适用于任何键盘布局。平台仅检查代码是否为1-32
+字母和数字，所以 <code>a</code> 或者 <code>space</code> 被接受，但没有密钥产生它。拼写和大小写
+必须完全匹配。</li>
+<li><strong>一把钥匙属于一个动作。</strong> 前一行已使用的代码将生成后一行
+无效。</li>
+<li><strong>最多 32 个操作</strong> 每场比赛。第 32 行之后的行将被忽略。</li>
+<li><strong>订单被保留。</strong> 操作按清单顺序从 API 返回，因此请按以下方式列出它们
+您的设置屏幕应该显示它们。</li>
+<li><strong>无效行将被静默跳过。</strong> 游戏仍然发布。如果每一行都无效，
+游戏没有控件和 API 答案 <code>404</code>. <a href="#3-check-they-arrived">发布后检查</a>.</li>
+</ul>
+<h2 id="2-publish-them">2. 发布它们</h2>
+<p>声明已读 <strong>当游戏发布时</strong>。编辑 <code>starhermit.txt</code> 在你的存储库中
+或者在磁盘上不进行任何更改，直到您发布包含它的构建：</p>
+<table>
+<thead>
+<tr>
+<th>您的游戏如何发布</th>
+<th>是什么让新控件生效</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>来自 GitHub 存储库</td>
+<td>您的下一次部署。推送更改，然后部署最新版本（<strong>更新部署版本</strong> 在仪表板中，或 <code>PUT /api/v1/me/github-games/{id}/deployment</code>).</td>
+</tr>
+<tr>
+<td>上传的文件夹或包</td>
+<td>上传新版本（<code>POST /api/v1/me/github-games/{id}/bundle</code>， 或者 <code>ws/v1/game-upload</code>) 谁的 <code>starhermit.txt</code> 有线条。</td>
+</tr>
+<tr>
+<td>添加新游戏</td>
+<td>第一次上传或提交会立即读取它们。</td>
+</tr>
+</tbody>
+</table>
+<p>替换上传会根据其自己的清单重申您的控件。删除每个 <code>control.*</code> 线和
+游戏没有。一个 <a href="/zh-CN/docs/api/github-games.html#partial-updates-modemerge"><code>?mode=merge</code></a> 修补那个
+没有携带 <code>starhermit.txt</code> 保持当前的控制。</p>
+<p><strong>玩家自己的重新绑定在新构建中仍然存在。</strong> 玩家保存的动作绑定
+存在时间较长的将被忽略。</p>
+<h2 id="3-check-they-arrived">3. 检查他们是否到达</h2>
+<p>下面的每个端点都使用完整的用户令牌或游戏的启动令牌。 <code>{slug}</code> 是你的
+游戏的 slug：启动令牌 <code>game_scope</code> 索赔，或 <code>gameSlug</code> 在
+<code>GET /api/v1/me/github-games</code>.</p>
+<pre><code class="language-bash">curl -s "https://api.starhermit.com/api/v1/games/$SLUG/controls" \
+  -H "Authorization: Bearer $TOKEN" | jq
+</code></pre>
+<pre><code class="language-json">{
+  "actions": [
+    { "action": "left",  "label": "Move left",  "defaultCodes": ["KeyA", "ArrowLeft"],  "codes": ["KeyA", "ArrowLeft"] },
+    { "action": "right", "label": "Move right", "defaultCodes": ["KeyD", "ArrowRight"], "codes": ["KeyD", "ArrowRight"] },
+    { "action": "jump",  "label": "Jump",       "defaultCodes": ["Space", "KeyW"],      "codes": ["Space", "KeyW"] },
+    { "action": "fire",  "label": "Fire",       "defaultCodes": ["KeyJ"],               "codes": ["KeyJ"] },
+    { "action": "pause", "label": "Pause",      "defaultCodes": ["Escape"],             "codes": ["Escape"] }
+  ]
+}
+</code></pre>
+<p>缺少动作意味着他们的台词无效；将它们与上述规则进行比较。一个 <code>404</code>
+意味着没有幸存，或者声明它们的构建尚未发布。</p>
+<h2 id="4-use-them-in-your-game">4. 在你的游戏中使用它们</h2>
+<p><code>codes</code> 是玩家的有效绑定：如果设置了则覆盖，否则为默认值。
+从中构建查找并匹配 <code>event.code</code>:</p>
+<pre><code class="language-js">const auth = { Authorization: `Bearer ${launchToken}` };
+
+// Your built-in defaults, in the same shape the API returns.
+const DEFAULT_ACTIONS = [
+  { action: "left", label: "Move left", codes: ["KeyA", "ArrowLeft"] },
+  { action: "jump", label: "Jump", codes: ["Space", "KeyW"] },
+  /* ... */
+];
+
+function toControls(actions) {
+  const byCode = new Map();
+  for (const a of actions) for (const code of a.codes) byCode.set(code, a.action);
+  return { actions, byCode };
+}
+
+async function loadControls(slug) {
+  try {
+    const res = await fetch(`/api/v1/games/${slug}/controls`, { headers: auth });
+    if (res.ok) return toControls((await res.json()).actions);
+  } catch { /* offline: fall through */ }
+  return toControls(DEFAULT_ACTIONS);                   // 404, error, or outside StarHermit
+}
+
+let controls = await loadControls(gameScope);
+
+window.addEventListener("keydown", (e) =&gt; {
+  const action = controls.byCode.get(e.code);   // e.code, never e.key
+  if (action) { e.preventDefault(); onAction(action, true); }
+});
+window.addEventListener("keyup", (e) =&gt; {
+  const action = controls.byCode.get(e.code);
+  if (action) onAction(action, false);
+});
+</code></pre>
+<p>内置默认设置使游戏可以在 StarHermit 之外离线玩，或者如果控件
+请求失败。让他们与您保持同步 <code>control.*</code> 线。</p>
+<p><strong>重新绑定屏幕。</strong> 列表 <code>actions</code> 与他们的 <code>label</code>。保留完整的覆盖图，或者
+在更改一项操作之前读取并保留当前有效地图：</p>
+<pre><code class="language-js">async function saveBinding(slug, action, codes) {
+  const current = await fetch(`/api/v1/games/${slug}/controls`, { headers: auth });
+  if (!current.ok) throw new Error(`Controls read failed: ${current.status}`);
+  const bindings = Object.fromEntries((await current.json()).actions.map(a =&gt; [a.action, a.codes]));
+  bindings[action] = codes;
+  const res = await fetch(`/api/v1/games/${slug}/controls`, {
+    method: "PUT",
+    headers: { ...auth, "Content-Type": "application/json" },
+    body: JSON.stringify({ bindings }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error);   // e.g. a key already in use
+  return res.json();                                         // the new effective map
+}
+</code></pre>
+<p><code>PUT</code> 用您发送的操作替换玩家的覆盖，因此包括玩家的每个操作
+已经改变了，而不仅仅是最新的。其余的保留默认值。 <code>DELETE</code> 在同一条路上
+将所有内容重置为默认值。</p>
+<p>从屏幕上序列化更改；两个同时读/写仍然可以互相覆盖。
+浏览器 SDK <code>setControl()</code> 序列化自己的更改并保留当前有效的映射。
+发送有效地图将这些值固定为覆盖；使用 <code>DELETE</code> 返回清单默认值。</p>
+<p>平台拒绝保存（<code>400</code>）这将在两个操作上留下一个键 <strong>后</strong> 玩家的
+更改将与您的默认值合并。例如，绑定 <code>jump</code> 到 <code>KeyJ</code> 尽管 <code>fire</code> 仍然
+使用其默认值 <code>KeyJ</code> 被拒绝。显示错误，或将冲突的操作移至同一操作中
+保存。</p>
+<h2 id="troubleshooting">故障排除</h2>
+<table>
+<thead>
+<tr>
+<th>回复</th>
+<th>原因</th>
+<th>使固定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>404</code> "该游戏声明没有控件。"</td>
+<td>无效 <code>control.*</code> 线在 <strong>发表</strong> 建造。</td>
+<td>添加行至 <code>starhermit.txt</code>，检查它们 <a href="#1-declare-the-actions">规则</a>， 和 <a href="#2-publish-them">发布新版本</a>.</td>
+</tr>
+<tr>
+<td><code>404</code> "与那只蛞蝓没有游戏可言。"</td>
+<td>slug 错误，或者游戏没有 slug。</td>
+<td>使用启动令牌 <code>game_scope</code> 或者 <code>gameSlug</code> 从 <code>GET /me/github-games</code>。从本地文件夹添加的每个游戏以及经过验证的所有者添加的每个存储库游戏都有一个 slug，无论是否仅限浏览器。只有所有者未经验证的存储库提交才没有任何内容； <a href="/zh-CN/docs/tutorials/claim-existing-game.html">声称它</a> 得到一个。</td>
+</tr>
+<tr>
+<td><code>403</code> "该令牌的范围为游戏“...”。"</td>
+<td>与另一个游戏的 slug 一起使用的启动令牌。</td>
+<td>使用令牌中的 slug 进行调用 <code>game_scope</code>.</td>
+</tr>
+<tr>
+<td><code>400</code> "未知动作“…”——未在游戏清单中声明。"</td>
+<td><code>PUT</code> 命名清单未声明的操作。</td>
+<td>使用 <code>action</code> 值来自 <code>GET …/controls</code>.</td>
+</tr>
+<tr>
+<td><code>400</code> "'...' 绑定到 '...' 和 '...'。"</td>
+<td>与默认值合并后，一个键将触发两个操作。</td>
+<td>将其他动作移至同一位置 <code>PUT</code>，或选择另一个键。</td>
+</tr>
+<tr>
+<td><code>400</code> "“…”不是有效的 KeyboardEvent.code 值。"</td>
+<td>带有空格或标点符号的代码。</td>
+<td>发送 <code>event.code</code> 价值观。</td>
+</tr>
+<tr>
+<td><code>400</code> "操作“...”必须绑定 1-4 个代码。"</td>
+<td>一个空列表，或者超过四个。</td>
+<td>发送 1–4 个代码； <code>DELETE</code> 重置。</td>
+</tr>
+<tr>
+<td>响应中缺少操作</td>
+<td>它的行无效：大写字母或 <code>-</code> 在动作名称中， <code>,</code> 而不是 <code>+</code>、超过 4 个代码、已使用的代码或超过第 32 个操作的代码。</td>
+<td>修复线路并再次发布。</td>
+</tr>
+<tr>
+<td>绑定永远不会触发</td>
+<td>代码被接受，但没有密钥生成它，例如 <code>a</code> 或者 <code>space</code>.</td>
+<td>使用精确的 <code>KeyboardEvent.code</code> 拼写： <code>KeyA</code>, <code>Space</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>参见： <a href="/zh-CN/docs/api/games.html#per-player-control-bindings">游戏 API — 每个玩家的控制绑定</a>,
+<a href="/zh-CN/docs/starhermit-txt.html#controls"><code>starhermit.txt</code></a>.</p>
+
+{% endraw %}

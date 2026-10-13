@@ -1,0 +1,466 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Use IA para conectar o StarHermit ao seu jogo"
+source_url: "/docs/tutorials/ai-prompts.html"
+source_path: "docs/tutorials/ai-prompts.md"
+source_hash: "30198ba803fa65609553b448e28bdaa5ab39bde9f0e0fd96be515ff530d80104"
+translation: "machine"
+permalink: "/pt/docs/tutorials/ai-prompts.html"
+---
+{% raw %}
+<h1 id="use-ai-to-wire-starhermit-into-your-game">Use IA para conectar o StarHermit ao seu jogo</h1>
+<p>Esta página é um conjunto de prompts que podem ser copiados e colados para um assistente de codificação de IA – Kimi Code, Claude Code, Copilot Chat ou similar – funcionando <strong>dentro do seu próprio repositório de jogos</strong>. Cada prompt pressupõe que a IA pode ler sua base de código, para que possa corresponder à sua linguagem, estrutura e layout de arquivo, em vez de produzir trechos genéricos.</p>
+<p>Como usá-los:</p>
+<ul>
+<li>Substitua o <code>[bracketed]</code> espaços reservados com seus próprios valores.</li>
+<li>Trabalhe uma seção de cada vez, aproximadamente na ordem listada.</li>
+<li><strong>Dê à IA a página wiki relevante como contexto.</strong> Cada seção nomeia a página; cole seu conteúdo na conversa ou aponte a ferramenta para o arquivo. Os prompts fazem referência a pontos de extremidade exatos e as páginas de referência são a fonte da verdade para nomes de campos.</li>
+<li>Verifique cada recurso em relação à API pública em <code>https://api.starhermit.com</code> antes de prosseguir — veja as dicas no final.</li>
+</ul>
+<p>Essas instruções funcionam para qualquer jogo. Para código de referência, aponte a IA para a implementação de referência do xadrez – <a href="https://github.com/HypeDriven/starhermit-chess">HypeDriven/starhermit-chess</a> - um exemplo completo de cada padrão nesta página.</p>
+<h2 id="1-project-bootstrap-manifest--same-origin-net-layer">1. Bootstrap do projeto: manifesto + camada de rede de mesma origem</h2>
+<p>Página de contexto: <a href="/pt/docs/api/github-games.html">github-games.md</a>, <a href="/pt/docs/api/auth.html">auth.md</a>, <a href="/pt/docs/api/games.html">games.md</a>.</p>
+<pre><code class="language-text">Read docs/api/github-games.md and docs/api/auth.md (pasted below), then:
+
+1. Create a starhermit.txt manifest at the build root with name and
+   launch=index.html. There is no slug key: the platform assigns the UID.
+   For a repository claim, owner is my StarHermit user UUID. Add
+   either server=server.js for section 4 or container.image=... for section
+   4b; never declare both.
+2. Create a net module (match this repo's language/module style) that:
+   - Reads the JWT from the URL hash fragment #game_token=&lt;jwt&gt; exactly once,
+     then strips it from the URL with history.replaceState. Also parse an
+     optional &amp;session_id=&lt;guid&gt; from the same hash.
+   - Decodes the JWT payload (base64url, no signature verification) and
+     exposes the `sub` claim (user id) and `game_scope` claim (game slug).
+   - Builds all API URLs as same-origin relative paths:
+     /api/v1/games/&lt;slug&gt; + suffix. Never hard-code the slug; always use
+     the game_scope claim.
+   - Attaches `Authorization: Bearer &lt;token&gt;` to every request.
+   - Also supports direct browser sign-in as documented in auth.md: navigate
+     to the public API's /api/v1/auth/games/&lt;gameId&gt;/sign-in when no token
+     exists, parse #access_token on return, restore game_fragment and scrub
+     credentials. Configure the game UID for this initial sign-in link.
+   - Renews before the returned expiresInSeconds elapses via
+     POST /api/v1/games/&lt;slug&gt;/launch-token. Respect the renewal-chain limit
+     (default 12 hours); require sign-in when renewal is no longer allowed.
+   - Handles 403 terms_acceptance_required by displaying GET /api/v1/terms
+     and offering explicit acceptance. POST the displayed hash to
+     /api/v1/me/terms/accept with the player token, then retry. Never silently
+     accept terms or use token refresh as a substitute for consent.
+   - Opens sockets with a fresh one-use ?ticket= obtained from
+     POST /api/v1/realtime/connection-tickets, choosing wss over HTTPS.
+     ?access_token= remains supported; never log either credential.
+
+The game will be served at &lt;slug&gt;.starhermit.com with /api and /ws proxied
+same-origin, so there is no CORS handling and no API-base configuration.
+</code></pre>
+<h2 id="2-matchmaking-flow">2. Fluxo de matchmaking</h2>
+<p>Página de contexto: <a href="/pt/docs/api/games.html">games.md</a>.</p>
+<pre><code class="language-text">Read docs/api/games.md (pasted below). Implement a "Find match" button in
+[my lobby screen] that uses the net module's game-path helper:
+
+1. POST /api/v1/games/&lt;slug&gt;/matchmaking.
+2. If the response is { status: "matched", sessionId }, navigate straight
+   to the session screen for that sessionId.
+3. If it is { ticketId, status: "queued" }, show a "searching…" state and
+   poll GET /api/v1/games/&lt;slug&gt;/matchmaking every 3 seconds until it
+   reports matched, then navigate. Stop on cancelled/expired; treat 404
+   as no joinable ticket. Read /queues to offer allowed queue subsets.
+4. A cancel button sends DELETE /api/v1/games/&lt;slug&gt;/matchmaking and
+   returns to the idle state. Also cancel on page unload.
+5. After 30 seconds still unmatched, reveal a "Play against the AI" button
+   that calls POST /api/v1/games/&lt;slug&gt;/sessions/ai, cancels the
+   matchmaking ticket, and navigates to the returned sessionId.
+
+Handle 4xx responses by returning to the idle state with an error message.
+This flow uses Games API matchmaking, invite-accept, or sessions/ai.
+For a lobby or party flow, use the separate realtime rooms API.
+</code></pre>
+<h2 id="3-gameplay-socket">3. Soquete de jogo</h2>
+<p>Página de contexto: <a href="/pt/docs/api/games.html">games.md</a>, <a href="/pt/docs/api/game-scripts.html">game-scripts.md</a>.</p>
+<pre><code class="language-text">Read docs/api/games.md and docs/api/game-scripts.md (pasted below).
+Implement a GameController module for [my game screen]:
+
+1. On entering a session, GET /api/v1/games/&lt;slug&gt;/sessions/{sessionId}
+   and keep the response (it includes chatConversationId for later).
+2. Connect to ws(s)://&lt;host&gt;/ws/v1/games?sessionId=&lt;id&gt;&amp;ticket=&lt;fresh-ticket&gt;.
+   If using build compatibility checks, pass the client buildId as &amp;build=.
+3. Every frame is a JSON envelope. Outgoing: {"type":"cmd","data":&lt;command&gt;}.
+   Incoming: {"type":"game","data":…}, {"type":"error","error":…}, and
+   {"type":"presence","userId","online"}.
+4. On every socket open, immediately send
+   {"type":"cmd","data":{"type":"sync"}} — the server answers with a full
+   state broadcast. Never assume local state survives a reconnect.
+5. On close, reconnect with exponential backoff starting at 1 second,
+   doubling up to a 30-second ceiling, and re-send the sync on each open.
+   Stop on authorization/policy rejection or finished sessions; resolve terms
+   acceptance through REST and reload on build_mismatch. Acquire a new ticket
+   for each connection attempt.
+6. Route incoming frames: "game" frames go to a state handler that updates
+   the UI, "error" frames to a toast/log, "presence" frames to an
+   online/offline indicator for the opponent. On resumed, discard prediction
+   and resync; on abandoned, stop play and show the reason.
+7. Do not put any user id in outgoing commands — the platform passes the
+   authenticated sender to the server script; payloads are never trusted
+   for identity.
+
+Wire it to [my existing board/UI component] with a minimal render of the
+latest state broadcast.
+</code></pre>
+<h2 id="4-authoring-the-server-script">4. Criação do script do servidor</h2>
+<p>Página de contexto: <a href="/pt/docs/api/game-scripts.html">game-scripts.md</a> — este é obrigatório; o contrato mora lá.</p>
+<pre><code class="language-text">Read docs/api/game-scripts.md (pasted below) carefully — it defines the
+exact script contract. Write server.js for my game, which is [one-paragraph
+description of your game's rules]. The script runs in the platform's Jint
+host (JavaScript, no Node APIs, no imports, no network, no clock):
+
+1. Expose globalThis.game with createSession, onPlayerMessage, and onTick,
+   matching the signatures in game-scripts.md.
+2. Set globalThis.game.tickRateHz deliberately: 0 for a turn-based game
+   that needs no periodic work, or the lowest rate that meets this game's
+   realtime/timer needs (fractional rates are allowed — 0.5 is a tick every
+   two seconds). Explain the choice. A game that declares nothing is ticked
+   at 0.25 Hz, and the platform may clamp a request to its configured
+   maximum.
+3. Use ONLY ctx.now for time and ctx.random for randomness. These are
+   numeric context values, not functions. Never use Date, Math.random, or any ambient API.
+4. Every handler returns an object shaped per the contract:
+   { ok, error, sessionState, playerStates, broadcast, eloUpdates, result }.
+   Validate every command against the current state and the sender; reject
+   illegal input with { ok: false, error: "…" }.
+5. Define the command set the client may send (the "data" of cmd frames)
+   and the broadcast set the client will receive. Treat these as the
+   client contract and document them in a comment at the top of the file.
+6. Maintain a summary object { turnPlayerId, deadline, status, moveCount }
+   so the platform's sessions list can show whose turn it is.
+7. When the game ends, return a result object and eloUpdates for the rated
+   players. If I want finished sessions kept as replays, also declare
+   globalThis.game.replays = true and make the final sessionState
+   reconstructable — replays are off unless a game asks for them.
+8. Also expose the pure rules functions as globalThis.[myGame]Rules so the
+   browser client can reuse this same file for rendering and replays —
+   one file, one source of truth, zero rules authority on the client.
+</code></pre>
+<h3 id="4b-alternative-authoring-a-container-game-server">4b. Alternativa: criar um servidor de jogo contêiner</h3>
+<p>Use isto em vez da seção 4 quando o servidor autoritativo precisar de Rust, Go, C++ ou outro
+tempo de execução. A hospedagem em contêiner está aberta a qualquer usuário conectado em starhermit.com.</p>
+<p>Página de contexto: <a href="/pt/docs/api/container-games.html">container-games.md</a> — este protocolo é obrigatório.</p>
+<pre><code class="language-text">Read docs/api/container-games.md (pasted below) carefully. Implement a
+StarHermit game protocol v1 server for [one-paragraph game description] in
+[this repository's language]:
+
+1. Add a digest-pinned container.image to starhermit.txt plus only the
+   resource requests the server needs. Do not add server= or any secrets.
+2. Implement authenticated /health, /describe, POST /sessions,
+   GET /sessions/{id}/snapshot, DELETE /sessions/{id}, WS /control, and a
+   small WS /stream pool. Reject requests whose X-Starhermit-Invoke-Key
+   does not match STARHERMIT_INVOKE_KEY.
+3. Keep every live session keyed by session id. Validate the type-1 binary
+   frame's platform-stamped user id as the command sender and emit only
+   valid JSON payloads in type-2 frames.
+4. Declare protocol, tickRateHz, maxSessions, achievements and replays
+   from /describe (tickRateHz should be the rate my own loop runs at — the
+   platform does not step a container, it uses the rate to avoid asking for
+   snapshots faster than my game produces state; replays: true only if I want
+   finished sessions kept, they are off unless a game asks). Use control
+   messages for snapshots,
+   achievement grants, elo, and terminal results. Never trust a client
+   payload for identity.
+5. Make POST /sessions restore fully from snapshot and make snapshots
+   frequent enough to bound crash rewind. Handle finished sessions as
+   terminal and idempotent.
+6. Build for a read-only, non-root, network-isolated container: vendor all
+   dependencies, write only to /tmp, and call the platform only through
+   STARHERMIT_API_BASE with STARHERMIT_SERVER_TOKEN.
+7. Add protocol tests covering frame byte layout, bad invoke keys,
+   snapshot/restore equivalence, undeclared achievements, duplicate
+   results, malformed payloads, and graceful session teardown.
+</code></pre>
+<h2 id="5-friend-invites">5. Convites de amigos</h2>
+<p>Página de contexto: <a href="/pt/docs/api/friends.html">friends.md</a>, <a href="/pt/docs/api/games.html">games.md</a>.</p>
+<pre><code class="language-text">Read docs/api/friends.md and docs/api/games.md (pasted below). Add an
+"Invite a friend" dialog to [my lobby screen]:
+
+1. GET /api/v1/me/friends to list friends — this endpoint is allowed for
+   game-scoped tokens. Render nicknames (see the profiles prompt).
+2. Selecting a friend sends POST /api/v1/games/&lt;slug&gt;/invites with body
+   { "toUserId": "&lt;friend user id&gt;" }. Show "invite sent" state.
+3. Poll GET /api/v1/games/&lt;slug&gt;/invites on the lobby screen to show
+   incoming invites with accept/decline buttons:
+   POST /api/v1/games/&lt;slug&gt;/invites/{id}/accept returns a sessionId —
+   navigate to it. POST …/invites/{id}/decline returns 204.
+4. On startup, if the launch hash contained &amp;session_id=&lt;guid&gt;, skip the
+   lobby and navigate straight to that session — that is how accepted
+   invite deep-links arrive.
+</code></pre>
+<h2 id="6-in-game-chat">6. Bate-papo no jogo</h2>
+<p>Página de contexto: <a href="/pt/docs/api/chat.html">chat.md</a>.</p>
+<pre><code class="language-text">Read docs/api/chat.md (pasted below). Add a chat panel to [my game screen]
+using the chatConversationId from the session response:
+
+1. Load history with
+   GET /api/v1/chat/conversations/{id}/messages?page=1&amp;pageSize=50.
+2. Send with POST /api/v1/chat/conversations/{id}/messages and body
+   { "content": "&lt;text&gt;" }.
+3. Poll the GET endpoint every 5 seconds for new messages. Do NOT use
+   the ws/v1/chat socket — it is blocked for game-scoped tokens.
+4. The session conversation is type "game" with both players as
+   participants, so chat works between non-friends with no extra setup.
+5. Render messages with sender nicknames resolved via the profile helper,
+   and keep the input disabled while a send is in flight.
+</code></pre>
+<h2 id="7-voice-chat">7. Bate-papo por voz</h2>
+<p>Página de contexto: <a href="/pt/docs/api/voice.html">voice.md</a>.</p>
+<pre><code class="language-text">Read docs/api/voice.md (pasted below). Add an opt-in voice toggle (default
+OFF) to [my game screen], disabled entirely when the game state marks the
+session as an AI game:
+
+1. On enable: GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;;
+   if no room exists, POST /api/v1/voice/rooms with
+   { "conversationId": "&lt;chatConversationId&gt;" }. Then
+   POST /api/v1/voice/rooms/{roomId}/join.
+2. Connect ws(s)://&lt;host&gt;/ws/v1/voice?roomId=&lt;id&gt;&amp;access_token=&lt;token&gt;.
+3. Media is WebRTC peer-to-peer with perfect negotiation. Exchange
+   signaling over the socket as
+   {"type":"rtc","to":&lt;userId&gt;,"payload":{"sdp":…}} and
+   {"type":"rtc","to":&lt;userId&gt;,"payload":{"ice":…}}; incoming signaling
+   arrives as voice.rtc events.
+4. Send {"type":"mute","muted":…} and {"type":"speaking","speaking":…}
+   for local state; render voice.roster, voice.participant_joined,
+   voice.participant_left, voice.mute_changed, and voice.speaking events
+   as the participant list with mute/speaking indicators.
+5. If P2P connection fails, fall back to server-relayed opus binary
+   frames: [16-byte sender id][audio payload].
+6. On disable or leaving the session: close peer connections, leave the
+   room, and close the socket.
+</code></pre>
+<h2 id="8-leaderboard--stats">8. Tabela de classificação &amp; estatísticas</h2>
+<p>Página de contexto: <a href="/pt/docs/api/leaderboards.html">leaderboards.md</a>, <a href="/pt/docs/api/games.html">games.md</a>.</p>
+<pre><code class="language-text">Read docs/api/leaderboards.md (pasted below). Add a leaderboard panel and
+a player-stats card to [my lobby screen]:
+
+1. GET /api/v1/games/&lt;slug&gt; and read leaderboardId, plus the me object:
+   { userId, elo, wins, losses, draws, activeSessionCount }. Render the
+   stats card from me — that is all the stats the game exposes.
+2. GET /api/v1/leaderboards/{leaderboardId}/entries?friendsOnly=true&amp;page=1&amp;pageSize=10
+   for a friends leaderboard; add a toggle to the same endpoint without
+   friendsOnly for the global board, with prev/next paging.
+3. Never write scores from the client — entries are published by the
+   platform from the server script's eloUpdates. This panel is read-only.
+4. Resolve each entry's user id to a nickname via the profile helper.
+</code></pre>
+<h3 id="8b-your-games-own-leaderboards-games-with-a-server-backend">8b. As próprias tabelas de classificação do seu jogo (jogos com back-end de servidor)</h3>
+<p>Páginas de contexto: <a href="/pt/docs/api/leaderboards.html">leaderboards.md</a>, <a href="/pt/docs/api/game-scripts.html">game-scripts.md</a>,
+e o <a href="/pt/docs/tutorials/game-leaderboards-achievements.html">tutorial de tabelas de classificação e conquistas</a>.</p>
+<pre><code class="language-text">Read docs/api/leaderboards.md and docs/api/game-scripts.md (pasted below).
+My game's owner has created leaderboards with these keys:
+[high-score: integer, desc], [fastest-lap: time-ms, asc].
+
+1. In server.js, when a run or match ends, return
+   scores: { "&lt;key&gt;": { "&lt;userId&gt;": &lt;number&gt; } } alongside sessionState.
+   Compute every score from the authoritative session state, never from
+   a number the client sent. Report every result — the platform keeps
+   each player's best, so do not compare against previous scores.
+2. In the client, GET /api/v1/games/&lt;slug&gt;/leaderboards with the launch
+   token and pick boards by key (never hard-code board ids). Render each
+   with GET /api/v1/leaderboards/{id}/entries?page=&amp;pageSize=, plus a
+   friendsOnly=true toggle. Format time-ms scores as m:ss.cc.
+3. Never POST to /leaderboards/{id}/submit — it refuses these boards.
+</code></pre>
+<h2 id="9-replays">9. Repetições</h2>
+<p>Página de contexto: <a href="/pt/docs/api/games.html">games.md</a>.</p>
+<pre><code class="language-text">Read docs/api/games.md (pasted below). Build a replay viewer:
+
+1. Read replaysEnabled from GET /api/v1/games/&lt;slug&gt; and hide the whole
+   replay screen when it is false — replays are off unless a game asks
+   for them, and the endpoints below answer 404 for a game without them.
+   Then list my recent games with
+   GET /api/v1/games/&lt;slug&gt;/replays/mine?limit=10.
+2. Opening one calls GET /api/v1/games/&lt;slug&gt;/replays/{sessionId}, which
+   returns { sessionId, players, finishedAt, result, state } — the
+   shapes of result and state are defined by my game's script.
+3. Step through my game's move log from state one move at a time (the
+   chess reference implementation stores it at state.game.moves; my
+   script defines its own shape), applying each to the shared rules
+   module from server.js running
+   client-side. Preserve the rules version for old replays when gameplay
+   rules change; current code alone does not guarantee historical playback. Add first/prev/next/last controls and
+   auto-play.
+4. Show the result block as a header (outcome, reason, and whatever
+   else my script's result object carries — the chess reference
+   implementation, for example, includes elo before/after).
+5. The viewer is entirely local after the initial GET — no per-move
+   requests.
+</code></pre>
+<h2 id="10-profiles">10. Perfis</h2>
+<p>Página de contexto: <a href="/pt/docs/api/profile.html">profile.md</a>.</p>
+<pre><code class="language-text">Read docs/api/profile.md (pasted below). Add a profile helper module used
+everywhere a user id is rendered:
+
+1. GET /api/v1/users/{id}/profile returns { id, username, nickname }.
+2. GET /api/v1/users/{id}/avatar returns image/png or 404.
+3. Display NICKNAMES, never usernames. If the profile is missing or the
+   nickname is empty, fall back to "Player " + id.slice(0, 8).
+4. Cache profiles and avatars in memory (and avatars as object URLs) for
+   the session so repeated renders of the same opponent don't refetch.
+5. Apply the helper everywhere user ids appear: session lists, leaderboard,
+   chat messages, replay headers, presence indicators.
+</code></pre>
+<h2 id="10b-per-player-game-settings">10b. Configurações de jogo por jogador</h2>
+<p>Página de contexto: <a href="/pt/docs/api/games.html#per-player-game-settings">games.md</a>.</p>
+<pre><code class="language-text">Read docs/api/games.md (pasted below). Make my options screen persist
+per-player, so a player's settings follow them to any machine:
+
+1. On boot, GET /api/v1/games/{slug}/settings with the launch token. Merge
+   the returned `settings` object over my built-in defaults — a key that
+   isn't there means "never changed", not "off".
+2. When the player changes one option, PATCH /api/v1/games/{slug}/settings
+   with just that key. Do NOT re-PUT the whole map: PUT deletes every key
+   the body omits, and two screens saving concurrently would erase each
+   other's work. Debounce continuous controls like sliders.
+3. "Reset to defaults" for one option = PATCH with that key set to null,
+   which removes it. For all of them, DELETE the collection.
+4. Namespace keys by area — audio.master, graphics.detail — and keep
+   values small JSON. Read limits.maxTotalBytes from the GET response
+   rather than hard-coding it; it is an operator setting.
+5. Handle 413 by telling the player their settings are full instead of
+   silently dropping the write, and never store save-game progress here —
+   that is what cloud saves are for.
+</code></pre>
+<h2 id="11-cloud-saves-non-scripted--external-games">11. Salvamentos na nuvem (jogos sem script/externos)</h2>
+<p>Página de contexto: <a href="/pt/docs/api/catalog.html#saving-from-inside-a-game-launch-token">catalog.md</a>. Pule esta seção se o seu jogo for totalmente baseado em script de servidor – o estado da sessão já existe na plataforma.</p>
+<pre><code class="language-text">Read docs/api/catalog.md (pasted below). Add save syncing to [my game],
+which runs its own logic client-side:
+
+0. The gameKey is `game:&lt;game_scope&gt;` — my launch token's game_scope
+   claim — and the launch token works for it; no other key is allowed.
+1. Load and validate before any upload. GET the slot on startup; 404 alone
+   means no save. Block writes on other errors or unsupported save formats.
+2. Keep the ETag of the loaded bytes. Serialize/base64-encode the save and
+   PUT with If-Match: &lt;etag&gt;, or If-None-Match: * for a confirmed empty slot.
+   Decoded bytes must fit the effective limit (10 MiB default).
+3. On 412, preserve local progress, load the current version, and offer
+   adopt/merge. Never retry unconditionally. Serialize writes, save at
+   foreground checkpoints, and treat page-exit uploads as best effort.
+4. Surface loading/saving/saved/failed/conflict; never mark saved before
+   acknowledgement. Unsigned single-player play keeps progress in memory
+   and makes no save or platform score requests.
+</code></pre>
+<h2 id="12-achievements">12. Conquistas</h2>
+<p>Páginas de contexto: <a href="/pt/docs/api/achievements.html">achievements.md</a>, <a href="/pt/docs/api/game-scripts.html">game-scripts.md</a>.
+Usar <strong>12a</strong> se o seu jogo tiver um <code>server=</code> script (com script, em tempo real vinculado à sala ou roteado por host com um
+script vinculado à autoridade) — esse é o caminho autoritativo do servidor e o preferido. Usar <strong>12b</strong>
+apenas para um título distribuído por catálogo sem script de servidor, onde o cliente é o único observador.</p>
+<h3 id="12a-server-authoritative-achievements-any-game-with-a-server-script">12h. Conquistas autorizadas pelo servidor (qualquer jogo com script de servidor)</h3>
+<pre><code class="language-text">Read docs/api/achievements.md and docs/api/game-scripts.md (pasted below).
+Wire server-authoritative achievements into [my game]:
+
+1. In server.js, add a static game.achievements array declaring each
+   achievement as { key, name, description, points, secret?, icon? }.
+   Keys are stable ids (&lt;=128 chars, unique, max 100 per game). Keep the
+   array next to the entry points so it is obvious it is static — it is
+   read once when the game is provisioned, not per invocation.
+2. Grant them from the script by returning
+   achievements: { "&lt;userId&gt;": ["&lt;key&gt;", ...] } from createSession,
+   onPlayerMessage, or onTick, alongside the usual sessionState. Unlocks
+   are idempotent, so evaluate the condition from the authoritative state
+   and re-assert it freely rather than tracking "already awarded" flags.
+   Never award from the client — there is no client unlock for these.
+3. In the client, render the achievement screen from
+   GET /api/v1/games/&lt;slug&gt;/achievements (returns locked and unlocked,
+   with unlocked/unlockedAt, secrets hidden until earned).
+4. Handle the {"type":"achievement","data":{...}} frame on ws/v1/games as
+   the live-unlock signal — show a toast with data.name/description/points.
+   Unlocks granted in createSession arrive with no frame, so always do the
+   GET on load too.
+5. After changing the declaration, publish a new build or redeploy the
+   existing game, then confirm with the GET that the definitions changed.
+   Do not register the same repository again.
+</code></pre>
+<h3 id="12b-client-claimed-achievements-catalog-titles-only">12b. Conquistas reivindicadas pelo cliente (somente títulos de catálogo)</h3>
+<pre><code class="language-text">Read docs/api/achievements.md (pasted below). Wire catalog-title
+achievements into [my game]:
+
+1. Unlock with POST /api/v1/me/achievements/unlock at the moment each
+   achievement's condition is met; treat "already unlocked" responses as
+   success, and queue retries offline if the call fails. This works only
+   for achievements owned by a catalog title the player is entitled to —
+   the endpoint rejects any achievement owned by a scripted game.
+2. Read definitions from GET /api/v1/software/&lt;titleId&gt;/achievements and
+   the player's unlocks from GET /api/v1/me/achievements?titleId=&lt;titleId&gt;.
+   Join by achievementDefinitionId to render locked and unlocked entries.
+3. Keep the achievement definitions (ids, names, descriptions) in one
+   config module so the unlock call sites stay readable.
+</code></pre>
+<h2 id="13-the-all-together-mega-prompt">13. O mega-prompt completo</h2>
+<p>Quando você quiser que o assistente conecte todo o fluxo em uma sessão, use isto - mas ainda espere que ele funcione recurso por recurso e faça checkpoint (executar e verificar) após cada um:</p>
+<pre><code class="language-text">You are working in my game repository. I am integrating it with the
+StarHermit platform. I have pasted these reference pages below:
+docs/api/games.md, docs/api/game-scripts.md, docs/api/chat.md,
+docs/api/voice.md, docs/api/auth.md, and docs/starhermit-txt.md. They are the source of truth for every endpoint path
+and field name — do not invent API surface beyond them.
+
+Build the complete loop, in this order, stopping for me to verify each
+step before continuing:
+
+1. Bootstrap: starhermit.txt manifest (name/launch/server; optional owner UUID
+   for repository claims, no slug key) and
+   a net module — read #game_token once and strip it with
+   history.replaceState, decode sub + game_scope, same-origin relative
+   /api/v1/games/&lt;slug&gt; paths, Authorization headers, renewal before expiry
+   via POST …/launch-token within the renewal-chain limit, one-use WS tickets.
+   Support direct-browser sign-in and #access_token as auth.md describes.
+   Handle terms_acceptance_required by displaying the current terms and
+   accepting the displayed hash only on the player's explicit action.
+2. Lobby: GET /api/v1/games/&lt;slug&gt; (leaderboardId + me stats),
+   GET …/sessions/mine (render myTurn/deadline), friends leaderboard via
+   GET /api/v1/leaderboards/{id}/entries?friendsOnly=true, recent replays
+   via GET …/replays/mine?limit=10, pending invites via GET …/invites.
+3. Matchmaking: POST …/matchmaking, poll GET every 3 s, DELETE to cancel,
+   handle cancelled/expired and 404, optional queue subsets and the game
+   manifest deadline/AI policy; offer practice through POST …/sessions/ai.
+4. Friend invites: GET /api/v1/me/friends, POST …/invites { toUserId },
+   accept/decline, and &amp;session_id= deep-link handling from the launch
+   hash.
+5. Gameplay: ws(s)://&lt;host&gt;/ws/v1/games?sessionId=…&amp;ticket=… with
+   the cmd/sync pattern, 1s→30s exponential-backoff reconnect with re-sync,
+   fresh tickets per attempt, game/error/presence/resumed/abandoned routing.
+   Stop on policy/auth rejection, recover terms via REST, and reload on
+   build_mismatch when opting into the build check.
+6. Server script: globalThis.game per game-scripts.md implementing
+   [my game's rules], an intentional tickRateHz (0 for no periodic ticks;
+   declaring none means a slow 0.25 Hz platform default),
+   replays: true if I want finished sessions kept, ctx.now/ctx.random only,
+   summary object, result + eloUpdates on game end, shared rules exposed
+   client-side.
+7. Chat: session conversation via chatConversationId, REST GET/POST
+   messages with 5 s polling (ws/v1/chat is blocked for scoped tokens).
+8. Voice: opt-in toggle, rooms REST + /ws/v1/voice, WebRTC perfect
+   negotiation over rtc messages, mute/speaking, roster events, disabled
+   for AI games.
+9. Replays: gated on replaysEnabled from GET /api/v1/games/&lt;slug&gt;, then
+   GET …/replays/mine and GET …/replays/{sessionId}, stepped locally
+   through the shared rules.
+10. Profiles: nickname/avatar resolution with caching and the
+    "Player &lt;id8&gt;" fallback, applied everywhere.
+11. Options screen: per-player settings via GET …/settings on boot merged
+    over my defaults, PATCH per changed key (never PUT the whole map),
+    null to reset one key, DELETE for all.
+
+Constraints: no build step beyond what this repo already has; no client
+rules authority; no score submission from clients; match my existing code
+style. After each numbered step, give me a curl command or small test page
+to verify it against https://api.starhermit.com.
+</code></pre>
+<h2 id="practical-tips">Dicas práticas</h2>
+<ul>
+<li><strong>Mantenha os prompts com escopo para um recurso.</strong> O mega-prompt funciona, mas os prompts de um recurso com uma etapa de verificação entre eles falham menos e são mais fáceis de depurar quando isso acontece.</li>
+<li><strong>Sempre entregue à IA a página wiki exata.</strong> Os prompts fazem referência a caminhos de endpoint, mas as páginas de referência carregam os nomes dos campos e formas de erro. Cole a página ou aponte a ferramenta para o arquivo – não parafraseie-o de memória.</li>
+<li><strong>Solicite um artefato de verificação por recurso.</strong> Uma pequena página de teste descartável ou um script curl exercido contra <code>https://api.starhermit.com</code> detecta erros de integração imediatamente.</li>
+<li><strong>Use o tempo de vida do token retornado.</strong> O padrão é 60 minutos, mas renove usando <code>expiresInSeconds</code> e respeitar o teto da cadeia de renovação. A aceitação dos termos pendentes requer uma ação na conta, não outra atualização.</li>
+</ul>
+<p>Para a versão narrativa de como essas peças se encaixam em um jogo enviado, consulte o <a href="/pt/docs/tutorials/chess-walkthrough.html">passo a passo de xadrez</a> — o exemplo de referência; para a primeira implantação, o <a href="/pt/docs/getting-started.html">guia de primeiros passos</a>.</p>
+
+{% endraw %}

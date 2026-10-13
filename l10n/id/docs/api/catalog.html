@@ -1,0 +1,365 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Katalog Perangkat Lunak"
+source_url: "/docs/api/catalog.html"
+source_path: "docs/api/catalog.md"
+source_hash: "0dc7378c084cb717711091cd651d3fc514625f8737814c055edb6ab2fe19467a"
+translation: "machine"
+permalink: "/id/docs/api/catalog.html"
+---
+{% raw %}
+<h1 id="software-catalog">Katalog Perangkat Lunak</h1>
+<p>Katalog perangkat lunak mencakup penjelajahan dan mengklaim judul, pembuatan daftar, pengunduhan, penyimpanan di cloud, daftar keinginan, dan peringkat. Bacaan bersifat anonim; menulis membutuhkan JWT.</p>
+<p>URL Dasar: <code>https://api.starhermit.com</code>. Semua rute berada di bawah <code>/api/v1/...</code>.</p>
+<h2 id="browsing-and-claiming-titles">Menjelajah dan mengklaim judul</h2>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/software</code></td>
+<td>Anonim</td>
+<td>Cari dan halaman katalog</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/software/{id}</code></td>
+<td>Anonim</td>
+<td>Dapatkan satu gelar, atau 404</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/software/{id}/builds?page=&amp;pageSize=</code></td>
+<td>Anonim</td>
+<td>Daftar halaman build untuk sebuah judul</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/software/{id}/claim</code></td>
+<td>JWT</td>
+<td>Klaim sendiri hak milik gratis, berikan hak</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/software/{id}/launch</code></td>
+<td>JWT</td>
+<td>Memulai sesi peluncuran (memerlukan hak)</td>
+</tr>
+</tbody>
+</table>
+<p><code>GET /api/v1/software</code> menerima parameter kueri <code>q</code> (teks lengkap), <code>category</code>, <code>tag</code>, <code>publisherId</code>, <code>platform</code>, <code>releaseStatus</code>, <code>sort</code>, <code>page</code>, Dan <code>pageSize</code>. Sah <code>sort</code> nilai: <code>name</code>, <code>name_desc</code>, <code>created</code>, <code>created_desc</code>, <code>updated</code>, <code>updated_desc</code>. Ini mengembalikan a <code>PagedResult</code>:</p>
+<pre><code class="language-json">{
+  "items": [
+    {
+      "id": "…",
+      "name": "…",
+      "description": "…",
+      "publisherId": "…",
+      "category": "…",
+      "platform": "…",
+      "releaseStatus": "…",
+      "tags": ["…"],
+      "priceCents": 0,
+      "createdAt": "…",
+      "updatedAt": "…"
+    }
+  ],
+  "totalCount": 1,
+  "page": 1,
+  "pageSize": 20
+}
+</code></pre>
+<p><code>GET /api/v1/software/{id}/builds</code> mengembalikan a <code>PagedResult</code> dari <code>SoftwareBuild</code>:</p>
+<pre><code class="language-json">{
+  "items": [
+    {
+      "id": "…",
+      "titleId": "…",
+      "version": "…",
+      "releaseDate": "…",
+      "releaseNotes": "…",
+      "metadata": "…",
+      "createdAt": "…",
+      "updatedAt": "…"
+    }
+  ],
+  "totalCount": 1,
+  "page": 1,
+  "pageSize": 20
+}
+</code></pre>
+<p><code>POST /api/v1/software/{id}/claim</code> hanya berfungsi untuk judul gratis (<code>priceCents == 0</code>); itu memberi penelepon hak dan mengembalikan 204. Untuk judul berbayar, ia mengembalikan 402 dengan:</p>
+<pre><code class="language-json">{"error": "purchasing is not available yet"}
+</code></pre>
+<p><code>POST /api/v1/software/{id}/launch</code> membutuhkan hak (403 sebaliknya) dan mengembalikan a <code>LaunchSession</code>:</p>
+<pre><code class="language-json">{
+  "launchId": "…",
+  "startTime": "…"
+}
+</code></pre>
+<p>Ini mencatat aktivitas peluncuran, yang disembunyikan jika pengaturan privasi pengguna menyatakan demikian (lihat <a href="/id/docs/api/profile.html">profile.md</a>). Akhiri sesi dengan <code>POST /api/v1/activity/launches/{id}/end</code> - melihat <a href="/id/docs/api/activity.html">activity.md</a>. Hak pengguna dicantumkan melalui <code>GET /api/v1/me/entitlements</code> (melihat <a href="/id/docs/api/profile.html">profile.md</a>).</p>
+<h2 id="downloads">Unduhan</h2>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/software/{id}/download</code></td>
+<td>JWT</td>
+<td>Dapatkan URL unduhan yang ditandatangani (memerlukan hak)</td>
+</tr>
+</tbody>
+</table>
+<p>Membutuhkan hak (403 sebaliknya). Pengembalian:</p>
+<pre><code class="language-json">{
+  "downloadUrl": "…"
+}
+</code></pre>
+<p>URL ini menargetkan aset pertama yang dapat diunduh dari versi terbaru. Panggilan tersebut mencatat aktivitas pengunduhan.
+Distribusi biner katalog saat ini sedang dalam pratinjau; URL yang dikembalikan tidak dijamin produksinya
+unduhan. Melihat <a href="/id/docs/availability.html">ketersediaan fitur</a> sebelum mengandalkan alur penerbitan ini.</p>
+<h2 id="cloud-saves">Simpanan cloud</h2>
+<p>Satu slot per game, penulisan terakhir menang. Semua rute memerlukan JWT — token pengguna penuh, atau token game
+meluncurkan token untuk slot game itu sendiri (di bawah).</p>
+<p>Batas 10 MB (10.485.760 byte) berlaku untuk <strong>simpan yang diterjemahkan</strong>, bukan permintaannya. <code>PUT</code> mengambil
+simpanan yang dikodekan base64 dalam JSON, jadi ukurannya sekitar sepertiga lebih besar dari simpanan — kira-kira berukuran 14 MB
+batasnya — dan API menerimanya.</p>
+<table>
+<thead>
+<tr>
+<th>Batas (per akun)</th>
+<th>Bawaan</th>
+<th>Penolakan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Satu simpanan, diterjemahkan</td>
+<td>10 MB</td>
+<td><code>413 cloud_save_too_large</code></td>
+</tr>
+<tr>
+<td>Game dengan penyelamatan</td>
+<td>200</td>
+<td><code>409 cloud_save_slots_exhausted</code> (simpanan untuk permainan baru)</td>
+</tr>
+<tr>
+<td>Semua menghemat bersama-sama</td>
+<td>1 GB</td>
+<td><code>507 cloud_save_quota_exceeded</code>, dengan <code>used</code></td>
+</tr>
+<tr>
+<td>Unggahan</td>
+<td>30 menit</td>
+<td><code>429</code>, dengan <code>Retry-After</code></td>
+</tr>
+</tbody>
+</table>
+<p>Setiap penolakan menyebutkan nomor yang berlaku sebagai <code>limit</code>. Totalnya diukur berdasarkan akun <em>lainnya</em>
+menyimpan, sehingga slot selalu dapat ditimpa dengan sesuatu yang tidak lebih besar. Operator dapat mengubah apa pun
+ini untuk satu akun.</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}/info</code></td>
+<td>JWT</td>
+<td>Simpan metadata: <code>{ exists, sizeBytes, updatedAt? }</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}</code></td>
+<td>JWT</td>
+<td><code>application/zip</code> byte, 404 jika tidak ada</td>
+</tr>
+<tr>
+<td>MELETAKKAN</td>
+<td><code>/api/v1/me/cloud-saves/{gameKey}</code></td>
+<td>JWT</td>
+<td>Unggah simpanan (simpan yang diterjemahkan ≤ 10 MB, <code>gameKey</code> ≤ 300 karakter)</td>
+</tr>
+</tbody>
+</table>
+<p>MENEMPATKAN tubuh:</p>
+<pre><code class="language-json">{
+  "dataBase64": "…"
+}
+</code></pre>
+<p>Tanggapan PUT:</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "sizeBytes": 0,
+  "updatedAt": "…"
+}
+</code></pre>
+<h3 id="saving-from-inside-a-game-launch-token">Menyimpan dari dalam game (token peluncuran)</h3>
+<p>Game yang berjalan dengan token peluncurannya dapat membaca dan menulis simpanan pemain <strong>permainan itu</strong>.
+Game Anda menyimpan dirinya sendiri di mana pun ia dijalankan — browser, atau aplikasi desktop StarHermit, yang dijalankan
+game juga dihosting di browser — jadi penyimpanannya mengikuti pemain di antara game-game tersebut.</p>
+<p>Kuncinya adalah <code>game:&lt;gameId&gt;</code>, Di mana <code>&lt;gameId&gt;</code> adalah id game Anda — nilainya sama dengan slug-nya, nya
+<code>&lt;gameId&gt;.starhermit.com</code> alamat, dan <code>game_scope</code> klaim token peluncuran:</p>
+<pre><code class="language-js">const key = `game:${gameScope}`;            // e.g. "game:3fa85f64-5717-4562-b3fc-2c963f66afa6"
+
+// Load on startup — 404 means no save yet.
+const res = await fetch(`/api/v1/me/cloud-saves/${key}`, { headers: { Authorization: `Bearer ${launchToken}` } });
+if (res.status !== 404 &amp;&amp; !res.ok) throw new Error(`Save load failed: ${res.status}`);
+const save = res.status === 404 ? null : new Uint8Array(await res.arrayBuffer());
+const etag = res.headers.get("ETag");
+if (save &amp;&amp; !etag) throw new Error("Save version unavailable; do not overwrite it.");
+// Validate/decode your own save format before adopting it or enabling uploads.
+
+// Save at checkpoints, not every frame.
+const written = await fetch(`/api/v1/me/cloud-saves/${key}`, {
+  method: "PUT",
+  headers: {
+    Authorization: `Bearer ${launchToken}`, "Content-Type": "application/json",
+    ...(etag ? { "If-Match": etag } : { "If-None-Match": "*" }),
+  },
+  body: JSON.stringify({ dataBase64: base64(zipBytes) }), // Your ZIP encoder and bytes.
+});
+if (written.status === 412) throw new Error("Another device saved. Reload before writing again.");
+if (!written.ok) throw new Error(`Save write failed: ${written.status}`);
+const acknowledgement = await written.json(); // Retain acknowledgement.etag for your next write.
+</code></pre>
+<ul>
+<li><strong>Hanya kunci persisnya itu.</strong> Kunci lainnya — permainan lain, permainan toko, atau ejaan lain
+milik Anda (huruf besar, id kosong) — adalah <code>403</code> untuk token peluncuran. Itu termasuk <code>github:&lt;gameId&gt;</code>,
+slot terpisah yang digunakan aplikasi desktop saat pemain menyinkronkan folder penyimpanan lokal untuk game Anda, jadi
+sinkronisasi itu tidak akan pernah bisa menimpa tulisan save game Anda.</li>
+<li><strong>Format apa pun.</strong> Platform tidak pernah membuka penyimpanan; simpan apa pun yang dapat dibaca kembali oleh game Anda (itu
+disajikan sebagai <code>application/zip</code> tanpa memedulikan). Hingga 10MB.</li>
+<li><strong>Penulisan tanpa syarat adalah kemenangan penulisan terakhir</strong>, tanpa sejarah. Gunakan penulisan bersyarat untuk mendeteksi
+menyimpan dua tab/perangkat sekaligus. Muat saat mulai dan simpan di pos pemeriksaan latar depan. Keluar dari halaman
+pengunggahan merupakan upaya terbaik dan memiliki batasan ukuran badan browser; melihat <a href="/id/docs/tutorials/cloud-save-sync.html">resep hemat yang aman</a>.</li>
+<li><strong>Setiap penyimpanan memiliki versinya.</strong> Dia <code>ETag</code> sedang diunduh, aktif <code>/info</code> (juga sebagai <code>etag</code>) dan seterusnya
+itu <code>PUT</code> tanggapan. Kirim kembali sebagai <code>If-Match</code> dan penulisan hanya terjadi jika tidak ada yang menyimpan
+sejak; jika tidak <code>412 {"error":"precondition_failed","etag":"&lt;current&gt;"}</code> memberitahu Anda versinya
+memuat. <code>If-Match: *</code> membutuhkan penyimpanan yang sudah ada; <code>If-None-Match: *</code> menulis hanya ketika tidak ada.
+Tanpa tajuk a <code>PUT</code> tidak bersyarat — penulisan terakhir menang. A <code>GET</code> dengan
+<code>If-None-Match: &lt;etag&gt;</code> jawaban <code>304</code> ketika Anda sudah memegang simpanan terbaru.</li>
+<li>Game tanpa daftar yang dihosting (game yang disediakan operator) tidak memiliki slot.</li>
+</ul>
+<p>Preferensi kecil yang sering berubah termasuk di dalamnya <a href="/id/docs/api/games.html#per-player-game-settings">pengaturan per pemain</a>
+alih-alih; mereka juga dapat dijangkau dengan token peluncuran dan mendukung pembaruan parsial.</p>
+<h2 id="wishlist">Daftar Keinginan</h2>
+<p>Semua rute memerlukan JWT.</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/wishlist</code></td>
+<td>JWT</td>
+<td><code>{ titleIds: guid[] }</code></td>
+</tr>
+<tr>
+<td>MELETAKKAN</td>
+<td><code>/api/v1/me/wishlist/{titleId}</code></td>
+<td>JWT</td>
+<td>Tambahkan ke wishlist, 204 (idempoten)</td>
+</tr>
+<tr>
+<td>MENGHAPUS</td>
+<td><code>/api/v1/me/wishlist/{titleId}</code></td>
+<td>JWT</td>
+<td>Hapus dari daftar keinginan, 204</td>
+</tr>
+</tbody>
+</table>
+<h2 id="ratings">Peringkat</h2>
+<p>Semua rute memerlukan JWT. Kunci permainan seragam adalah panduan katalog, atau <code>"provider:externalId"</code> untuk permainan eksternal (lihat <a href="/id/docs/api/external-libraries.html">external-libraries.md</a>).</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MELETAKKAN</td>
+<td><code>/api/v1/me/ratings</code></td>
+<td>JWT</td>
+<td>Tingkatkan peringkat saya untuk sebuah game</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/ratings/query</code></td>
+<td>JWT</td>
+<td>Ringkasan pemeringkatan pengambilan batch</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/ratings/reviews?key=&amp;top=</code></td>
+<td>JWT</td>
+<td>Ulasan untuk sebuah game (<code>top</code> bawaan 10)</td>
+</tr>
+</tbody>
+</table>
+<p>MENEMPATKAN tubuh:</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "stars": 4,
+  "review": "…"
+}
+</code></pre>
+<p><code>stars</code> adalah 0–5; <code>review</code> adalah opsional. Respon adalah a <code>RatingSummaryDto</code>:</p>
+<pre><code class="language-json">{
+  "gameKey": "…",
+  "average": 4.5,
+  "count": 12,
+  "myStars": 4
+}
+</code></pre>
+<p><code>POST /api/v1/ratings/query</code> tubuh dan respons:</p>
+<pre><code class="language-json">{
+  "keys": ["…", "…"]
+}
+</code></pre>
+<p>kembali <code>RatingSummaryDto[]</code>. <code>GET /api/v1/ratings/reviews</code> kembali <code>GameReviewDto[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "userId": "…",
+    "username": "…",
+    "stars": 4,
+    "review": "…",
+    "timestamp": "…"
+  }
+]
+</code></pre>
+<p>Melihat <a href="/id/docs/api/conventions.html#requests-and-responses">konvensi API</a> untuk penguraian kesalahan. Terkait: <a href="/id/docs/api/achievements.html">achievements.md</a>, <a href="/id/docs/api/leaderboards.html">leaderboards.md</a>.</p>
+<p>Melihat <a href="/id/docs/credentials.html">kompatibilitas kredensial</a> Dan <a href="/id/docs/api/contracts.html">kontrak yang dapat dibaca mesin</a>.</p>
+
+{% endraw %}

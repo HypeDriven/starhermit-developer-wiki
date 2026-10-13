@@ -1,0 +1,550 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "验证"
+source_url: "/docs/api/auth.html"
+source_path: "docs/api/auth.md"
+source_hash: "7c5d28fbaf648ef5811fa8660eb49076563e9f4b439f256cf9632e72ae1130ed"
+translation: "machine"
+permalink: "/zh-CN/docs/api/auth.html"
+---
+{% raw %}
+<h1 id="authentication">验证</h1>
+<p>星隐者有 <strong>没有密码验证</strong>。有两种登录流程：公钥身份验证（Ed25519、ECDSA-P256 或 RSA-PSS，通过电子邮件验证注册）和 OAuth。所有身份验证路由都位于 <code>api/v1/auth</code> 除非另有说明，否则均为匿名。此页面还涵盖令牌生命周期、游戏范围的启动令牌和 WebSocket 连接票证。</p>
+<p>错误体各不相同；看 <a href="/zh-CN/docs/api/conventions.html#requests-and-responses">API约定</a>.</p>
+<h2 id="endpoints">端点</h2>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/auth/public-key/register</code></td>
+<td>匿名的</td>
+<td>开始公钥注册；发送验证电子邮件</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/auth/public-key/verify</code></td>
+<td>通过电子邮件发送一次性令牌</td>
+<td>验证邮件打开的页面；没有改变任何东西</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/auth/public-key/verify</code></td>
+<td>通过电子邮件发送一次性令牌</td>
+<td>完成注册</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/auth/public-key/challenge</code></td>
+<td>匿名的</td>
+<td>请求登录挑战以进行签名</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/auth/public-key/complete</code></td>
+<td>匿名的</td>
+<td>提交签名挑战以登录</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/auth/refresh</code></td>
+<td>匿名的</td>
+<td>轮换刷新令牌以获得新令牌对</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/auth/logout</code></td>
+<td>匿名的</td>
+<td>撤销刷新令牌</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/auth/public-key/revoke-request</code></td>
+<td>匿名的</td>
+<td>通过电子邮件发送撤销匹配帐户上每个活动密钥的链接</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/auth/public-key/revoke/confirm</code></td>
+<td>通过电子邮件发送一次性令牌</td>
+<td>撤销电子邮件打开的页面；没有改变任何东西</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/auth/public-key/revoke/confirm</code></td>
+<td>通过电子邮件发送一次性令牌</td>
+<td>确认撤销；没有会话问题</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/auth/games/{gameId}/sign-in</code></td>
+<td>匿名的</td>
+<td>登录或创建帐户，然后直接返回托管游戏</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/auth/oauth/providers</code></td>
+<td>匿名的</td>
+<td>此部署的实时 OAuth 提供商实际上可以让人们登录</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/auth/oauth/{provider}/authorize</code></td>
+<td>匿名的</td>
+<td>重定向到 OAuth 提供商</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/auth/oauth/{provider}/callback</code></td>
+<td>匿名的</td>
+<td>OAuth 回调；使用令牌重定向到前端</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/auth/oauth/link/confirm</code></td>
+<td>通过电子邮件发送一次性令牌</td>
+<td>身份链接电子邮件打开的页面；没有改变任何东西</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/auth/oauth/link/confirm</code></td>
+<td>通过电子邮件发送一次性令牌</td>
+<td>确认为帐户所有者批准而持有的身份链接</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/games/{slug}/launch-token</code></td>
+<td>智威汤逊</td>
+<td>铸造游戏范围的启动令牌（见下文）</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/realtime/connection-tickets</code></td>
+<td>智威汤逊</td>
+<td>开店一次性门票 <code>/ws/**</code> 插座</td>
+</tr>
+</tbody>
+</table>
+<h2 id="after-sign-in-current-terms">登录后：当前条款</h2>
+<p>成功登录并不意味着有权使用受保护的 API。账户持有人必须
+<a href="/zh-CN/docs/api/profile.html#terms-acceptance">接受当前的星隐者条款</a> 在受保护的 REST 调用之前或
+WebSocket升级成功。账户客户可以查看 <code>GET /api/v1/me</code>， 拿来 <code>GET /api/v1/terms</code>,
+并记录明确接受 <code>POST /api/v1/me/terms/accept</code>。 OAuth 和公钥
+帐户会话支持此流程。刷新凭证并不能解决等待接受的问题。</p>
+<p>直接打开的浏览器游戏可以在帐户接受之前接收范围令牌。
+如果游戏调用返回 <code>403</code> 和 <code>error: "terms_acceptance_required"</code>， 拿来 <code>GET /api/v1/terms</code>,
+显示其文本，并提供明确的接受操作。玩家启动令牌可以提交显示的
+散列到 <code>POST /api/v1/me/terms/accept</code>;接受后重试原始请求。不要治疗这个
+作为过期令牌登录循环的响应。</p>
+<h2 id="public-key-registration">公钥注册</h2>
+<p>一步一步，使用经过测试的客户端代码： <a href="/zh-CN/docs/tutorials/public-key-onboarding.html">教程：使用公钥加入玩家</a>.</p>
+<table>
+<thead>
+<tr>
+<th><code>keyType</code></th>
+<th><code>keyData</code> （标准 Base64）</th>
+<th>签名</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Ed25519</code></td>
+<td>原始 32 字节公钥</td>
+<td>原始 64 字节 Ed25519 签名</td>
+</tr>
+<tr>
+<td><code>ECDSA-P256</code></td>
+<td>公共点，65字节未压缩或33字节压缩</td>
+<td>ECDSA-SHA256、ASN.1 DER（非原始 <code>r‖s</code>)</td>
+</tr>
+<tr>
+<td><code>RSA-PSS</code></td>
+<td><code>SubjectPublicKeyInfo</code> DER，2048–8192 位，指数 ≤ 32 位</td>
+<td>RSASSA-PSS、SHA-256、MGF1-SHA-256、32 字节盐</td>
+</tr>
+</tbody>
+</table>
+<h3 id="post-apiv1authpublic-keyregister"><code>POST /api/v1/auth/public-key/register</code></h3>
+<p>开始公钥注册并发送验证电子邮件。待处理的注册记录将在 4 小时后过期。如果 <code>userId</code> 设置后，电子邮件必须与该帐户匹配。每 24 小时每个地址和每个 IP 限制为 1 封电子邮件 — 限制后，响应为 429，并带有 <code>Retry-After</code> 标头。</p>
+<p>什么时候 <code>userId</code> 已设置并且该对未签出，响应为 <code>403</code> 一条消息
+不管 <em>为什么</em>：未知帐户和错误地址的答案相同。该端点需要
+没有凭证——它必须如此，因为这是附加新密钥的方式——所以区分它们会
+使其成为存在用户 ID 和地址的预言机。呼叫者拥有
+帐户已经知道他们错了两者中的哪一个。</p>
+<p>要求：</p>
+<pre><code class="language-json">{
+  "email": "dev@example.com",
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;",
+  "userId": null
+}
+</code></pre>
+<p>响应 — 202：</p>
+<pre><code class="language-json">{
+  "registrationId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "email": "dev@example.com",
+  "emailSent": true,
+  "deferralReason": null,
+  "message": "A verification email has been sent. The key will be attached once you confirm."
+}
+</code></pre>
+<p><code>emailSent: false</code> 表示电子邮件已排队等待重试（<code>deferralReason</code> 说出原因）；登记
+仍然被接受。电子邮件或密钥材料无效 <code>400</code>.</p>
+<h3 id="get--post-apiv1authpublic-keyverifytoken"><code>GET</code> / <code>POST /api/v1/auth/public-key/verify?token=</code></h3>
+<p><strong>打开通过电子邮件发送的链接不会改变任何情况。</strong> <code>GET</code> 显示一个页面，说明确认会做什么 -
+创建一个帐户，或者 <strong>向现有帐户添加密钥</strong> 已经使用该地址 - 带有
+确认按钮。邮件扫描仪获取链接以预览它们，因此作用于的电子邮件链接 <code>GET</code>
+任何扫描它的东西都会被赎回。这同样适用于
+<a href="#emailed-key-revocation">撤销</a> 和 <a href="#get-apiv1authoauthproviderauthorizelinkclient">身份链接</a>
+以下确认。</p>
+<p><code>POST</code> 到相同的 URL 兑换它：附加密钥，创建用户（用户名 <code>pk-&lt;hex12&gt;</code>， 角色
+<code>User</code>) 除非帐户已使用该电子邮件地址，在这种情况下，密钥会加入该帐户。
+该电子邮件已标记为已验证。该链接是一次性的，4小时后失效；未知的、使用过的或
+过期的令牌是 <code>400</code>，地址不再是该帐户的链接也是如此——这证明了
+控制其发送到的收件箱，并且仅当该地址仍然是该帐户的地址时。</p>
+<p>当玩家按下页面上的“确认”后，部署设置
+<code>PublicKeyAuth:VerificationSuccessRedirectUri</code> — starhermit.com 确实如此，在仪表板上 — 他们是
+与片段中的令牌一起发送到那里
+（<code>#access_token=…&amp;refresh_token=…&amp;token_type=Bearer&amp;expires_in=900</code>)，登录到仪表板。一个
+因此本机客户端不会收到这些令牌；一旦玩家登录，它就会用密钥登录
+已确认。一个 API 客户端 <code>POST</code>URL 本身获取 JSON：</p>
+<pre><code class="language-json">{
+  "userId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "keyId": "9b2f5c74-1d2e-4a6b-8c0d-1e2f3a4b5c6d",
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "dGhpcyBpcyBh..."
+}
+</code></pre>
+<h2 id="public-key-login">公钥登录</h2>
+<h3 id="post-apiv1authpublic-keychallenge"><code>POST /api/v1/auth/public-key/challenge</code></h3>
+<p>发出登录挑战，有效期为 5 分钟且一次性使用。</p>
+<p><strong>签名覆盖了服务器自己的序列化 <code>payload</code>，不是您收到的 JSON：</strong>
+紧凑、PascalCase 名称的顺序 <code>ChallengeId</code>, <code>Fingerprint</code>, <code>Issuer</code>, <code>Audience</code>, <code>Expiry</code>,
+<code>Nonce</code>, <code>ClientTimestamp</code>，值完全按照所提供的方式复制，并且每个 <code>+</code> 在随机数中写为
+<code>\u002B</code> （日期保留其 <code>+</code>）。请参阅
+<a href="/zh-CN/docs/tutorials/public-key-onboarding.html#3-sign-in-with-the-key">工作示例</a>.</p>
+<p>要求：</p>
+<pre><code class="language-json">{
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;"
+}
+</code></pre>
+<p>回复：</p>
+<pre><code class="language-json">{
+  "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "payload": {
+    "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "fingerprint": "4d9f3c...",
+    "issuer": "starhermit",
+    "audience": "starhermit",
+    "expiry": "2026-07-22T07:24:44.1234567+00:00",
+    "nonce": "NmL+tgMum6HXU/pa3T9xjQ==",
+    "clientTimestamp": "2026-07-22T07:19:44.1235521+00:00"
+  },
+  "expiresIn": 300
+}
+</code></pre>
+<h3 id="post-apiv1authpublic-keycomplete"><code>POST /api/v1/auth/public-key/complete</code></h3>
+<p>根据注册的、未撤销的密钥验证签名并返回令牌对。失败是
+<code>401</code>: <code>"Public key not registered or revoked."</code> （包括未通过电子邮件发送链接的密钥
+还没开）， <code>"Invalid signature."</code>， 或者 <code>"Challenge not found or expired."</code>。挑战并完成
+每个 IP 每分钟共享 60 个请求的限制（<code>429</code>).</p>
+<p>要求：</p>
+<pre><code class="language-json">{
+  "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "signature": "base64-signature...",
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;"
+}
+</code></pre>
+<p>回复：</p>
+<pre><code class="language-json">{
+  "userId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "dGhpcyBpcyBh..."
+}
+</code></pre>
+<h2 id="token-lifecycle">代币生命周期</h2>
+<h3 id="post-apiv1authrefresh"><code>POST /api/v1/auth/refresh</code></h3>
+<p>轮换刷新：旧令牌被撤销并替换。重复使用已撤销的刷新令牌会撤销整个令牌系列。</p>
+<p>要求：</p>
+<pre><code class="language-json">{ "refreshToken": "dGhpcyBpcyBh..." }
+</code></pre>
+<p>回复：</p>
+<pre><code class="language-json">{
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "bmV3IHJlZnJlc2g..."
+}
+</code></pre>
+<h4 id="when-refresh-stops-working">当刷新停止工作时</h4>
+<p>刷新令牌记录其发出时的帐户状态，并刷新对其进行检查。两个答案
+您的客户端必须处理而不是重试：</p>
+<table>
+<thead>
+<tr>
+<th>地位</th>
+<th>意义</th>
+<th>客户应该做什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>401</code></td>
+<td>该会话被平台端撤销——a "到处注销"，或妥协的回应。整个代币家族都被烧毁，包括刚刚提交的代币。</td>
+<td>丢弃这两个令牌并开始新的登录。</td>
+</tr>
+<tr>
+<td><code>403</code></td>
+<td>该帐户是 <strong>暂停</strong>.</td>
+<td>停止。再次登录也无济于事；相同 <code>403</code> 从每个登录路线返回，直到解除暂停。</td>
+</tr>
+</tbody>
+</table>
+<p>这 <code>403</code> 是故意区别于 <code>401</code>，因为两者需要相反的反应：一个意味着
+"再次验证",另一种意思是 "再次验证是没有意义的"。被暂停的帐户是
+被拒绝 <em>每一个</em> 凭证创建路由 — 刷新、公钥完成、OAuth 回调、
+和游戏启动令牌——不仅仅是通过刷新。</p>
+<h3 id="post-apiv1authlogout"><code>POST /api/v1/auth/logout</code></h3>
+<p>撤销给定的刷新令牌。返回 200。</p>
+<pre><code class="language-json">{ "refreshToken": "dGhpcyBpcyBh..." }
+</code></pre>
+<h2 id="oauth">开放认证</h2>
+<p>该平台提供七个提供商： <code>google</code>, <code>github</code>, <code>discord</code>, <code>twitch</code>, <code>gitlab</code>, <code>linkedin</code>,
+<code>bitbucket</code>. <strong>只有此部署具有凭据的提供商才是活动的。</strong> 客户不得
+对列表进行硬编码。</p>
+<h3 id="get-apiv1authoauthproviders"><code>GET /api/v1/auth/oauth/providers</code></h3>
+<p>匿名的。按应提供的顺序返回实时提供程序：</p>
+<pre><code class="language-json">{
+  "providers": [
+    {
+      "provider": "google",
+      "displayName": "Google",
+      "authorizeUrl": "/api/v1/auth/oauth/google/authorize",
+      "linksExistingAccountsByEmail": true
+    }
+  ]
+}
+</code></pre>
+<p><code>linksExistingAccountsByEmail</code> 是在该提供商处登录是否可以找到此人的帐户
+已经有（运营商对该提供商的信任设置）。请求授权不属于该名称的名称
+住的是 <code>404</code>，而不是重定向到提供商自己的错误页面。</p>
+<h3 id="get-apiv1authoauthproviderauthorizelinkclient"><code>GET /api/v1/auth/oauth/{provider}/authorize?link=&amp;client=</code></h3>
+<p>返回 302 重定向到提供商并设置 <code>oauth_state</code> cookie（HttpOnly，SameSite=Lax，10
+分钟）。 <code>link=true</code> 开始将身份链接到当前登录的用户；链接需要
+最近的身份验证（5 分钟内）。 <code>client</code> 选择支持的客户端重定向。对于一个
+直接打开游戏，使用 <code>gameId</code> 和可选的 <code>returnUrl</code> 反而;看
+<a href="#sign-in-from-a-directly-opened-browser-game">从直接打开的浏览器游戏登录</a>.</p>
+<h3 id="get-apiv1authoauthprovidercallbackcodestate"><code>GET /api/v1/auth/oauth/{provider}/callback?code=&amp;state=</code></h3>
+<p>对于普通帐户登录，返回 302 重定向到前端 URL，其中包含令牌
+片段（游戏登录直接将范围令牌返回到游戏，如下所述）：</p>
+<pre><code>#access_token=…&amp;refresh_token=…&amp;token_type=Bearer&amp;expires_in=900
+</code></pre>
+<p>如果提供商拒绝令牌交换，则回调应答 <code>409</code> 命名提供者的错误
+<strong>代码</strong> （描述保留在服务器日志中）。</p>
+<p>正常登录会查找或创建用户（用户名 <code>oauth-{provider}-{guid}</code>， 角色 <code>User</code>）和
+新会话记录 <code>auth_method=oauth</code>。一个登录名 <code>(provider, providerUserId)</code> 未知的是
+<strong>转入现有账户</strong> 仅当提供者的断言可信时，恰好有一个
+帐户已持有该经过验证的电子邮件，并且该帐户尚未获得该提供商的身份。
+其他任何事情都需要一个单独的帐户。收养通过电子邮件向帐户发送指定提供者的信息。</p>
+<p>这很重要，因为只有经过 OAuth 验证的会话
+可能会执行影响较大的凭证更改：</p>
+<ul>
+<li>添加或撤销账户公钥；</li>
+<li>更改帐户电子邮件；</li>
+<li>删除 OAuth 管理的身份。</li>
+</ul>
+<p>游戏范围的代币永远无法执行这些操作。刷新令牌保留原始令牌
+会话的身份验证方法，因此刷新 OAuth 会话不会删除此功能，并且
+刷新公钥会话不会添加它。</p>
+<p>什么时候 <code>link=true</code>，回调不会仅仅因为访问过而自动提升会话
+OAuth 提供商。从 OAuth 会话启动的链接会立即附加。链接始于
+公钥、电子邮件验证或旧会话将一直保留，直到帐户所有者打开
+确认信息发送至帐户的经过验证的电子邮件；重定向片段报告
+<code>link=pending_email_confirmation</code>。一次性电子邮件打开 <code>GET /api/v1/auth/oauth/link/confirm?token=…</code>,
+命名提供者帐户的页面不会改变任何内容；它的确认按钮 <code>POST</code>是相同的 URL，
+这创建了身份（<code>{ "provider", "linked": true }</code> 到 API 客户端）。一个链接，其地址
+不再是该帐户的被拒绝。这可以防止被盗的公钥链接到
+攻击者的提供商帐户并将其转变为永久 OAuth 登录。</p>
+<p>GitHub 身份元数据存储 <code>{"login":"…"}</code> — 这用于存储库所有权检查
+<a href="/zh-CN/docs/api/github-games.html">GitHub 游戏</a>.</p>
+<h3 id="oauth-enrolled-public-keys-for-automation">用于自动化的 OAuth 注册公钥</h3>
+<p>OAuth 会话可以调用 <code>POST /api/v1/me/public-keys</code> 立即附上贴有标签的机器钥匙。
+随后，CI 签署正常的公钥质询并使用其短期访问令牌上传
+拥有的游戏捆绑包；私钥永远不会离开 CI 秘密存储。看
+<a href="/zh-CN/docs/tutorials/ci-cd-build-upload.html">CI/CD 构建上传教程</a> 用于设置、签名助手和
+GitHub Actions 工作流程。</p>
+<h2 id="tokens">代币</h2>
+<ul>
+<li><strong>访问令牌</strong> — JWT，15 分钟生命周期（<code>expires_in=900</code>）。索赔包括 <code>sub</code> （用户 ID）加上 <code>permission</code> 和角色主张。撤销立即生效。</li>
+<li><strong>刷新令牌</strong> — 具有 7 天生命周期的不透明旋转代币。每次刷新都会发出一个新的刷新令牌并撤销旧的刷新令牌；重用已撤销的令牌会撤销整个令牌系列。</li>
+</ul>
+<h2 id="sign-in-from-a-directly-opened-browser-game">从直接打开的浏览器游戏登录</h2>
+<p>在仪表板外部打开的托管游戏可以显示 <strong>登入</strong> 按钮链接到：</p>
+<pre><code class="language-text">https://api.starhermit.com/api/v1/auth/games/{gameId}/sign-in
+</code></pre>
+<p><code>gameId</code> 是游戏的不可变 UUID（子域 <code>{gameId}.starhermit.com</code>）。星隐士
+显示其启用的登录提供程序。继续签入现有球员或创建新球员
+使用普通 OAuth 帐户匹配规则的帐户，然后重定向 <strong>直接回到
+游戏</strong>，无需访问仪表板。</p>
+<p>可选的 <code>returnUrl</code> 保留特定的游戏页面、查询字符串或哈希路由。一定是
+位于该游戏托管源的绝对 HTTPS URL；其他游戏、外部主机、
+URL 和备用端口中的凭据被拒绝 <code>400</code>。省略它返回
+发布的启动文件。未知、已删除、未托管或从未发布的游戏回归 <code>404</code>。两者都
+支持存储库部署和上传游戏；任意外部/本地 URL 都不是。</p>
+<p>将浏览器导航至 <strong>公共API来源</strong> 上面，而不是获取页面或启动
+通过游戏的 <code>/api</code> 代理人。 OAuth 状态 cookie 和提供者回调必须使用相同的
+API 主机。当游戏没有有效的启动器提供的或之前获得的令牌时，请使用此流程。</p>
+<h3 id="button-and-return-token-example">按钮和返回令牌示例</h3>
+<pre><code class="language-html">&lt;button id="starhermit-sign-in"&gt;Sign in&lt;/button&gt;
+&lt;script type="module"&gt;
+const api = 'https://api.starhermit.com';
+const gameId = 'YOUR_GAME_UID';
+const signIn = document.querySelector('#starhermit-sign-in');
+let gameToken = null; // Or your existing launcher-provided game token.
+
+// Read this before your game router or third-party scripts consume the fragment.
+const auth = new URLSearchParams(location.hash.slice(1));
+if (auth.has('access_token')) {
+  gameToken = auth.get('access_token');
+  const originalHash = auth.get('game_fragment');
+  history.replaceState(null, '', location.pathname + location.search +
+    (originalHash ? '#' + originalHash : ''));
+}
+signIn.hidden = Boolean(gameToken);
+signIn.addEventListener('click', () =&gt; {
+  const url = new URL(`/api/v1/auth/games/${gameId}/sign-in`, api);
+  url.searchParams.set('returnUrl', location.href);
+  location.assign(url.href);
+});
+
+// Pass gameToken to your game's API client as Authorization: Bearer &lt;gameToken&gt;.
+// This example keeps it in memory; a reload can require sign-in again.
+&lt;/script&gt;
+</code></pre>
+<p>返回片段为：</p>
+<pre><code class="language-text">#access_token=…&amp;token_type=Bearer&amp;expires_in=3600
+</code></pre>
+<p><code>access_token</code> 是一个 <strong>游戏范围的启动令牌</strong>，不是帐户范围的访问令牌。没有刷新令牌
+已发出。 <code>expires_in</code> 使用部署配置的启动令牌生命周期（默认 3600
+秒）。原始返回 URL 片段被编码在可选的 <code>game_fragment</code> 场地;
+捕获令牌并从浏览器历史记录中删除身份验证数据后恢复它。
+不要记录或转发令牌。</p>
+<p>到期前续订使用 <code>POST /api/v1/games/{gameId}/launch-token</code> 当前令牌为
+承载授权，然后替换为返回的 <code>token</code>。通常的更新链上限
+适用（默认 12 小时）。如果令牌过期或续订被拒绝，请将其清除并显示登录
+再次。看 <a href="#game-launch-tokens">游戏启动代币</a>.</p>
+<h3 id="choosing-a-provider-yourself">自己选择提供商</h3>
+<p>游戏可以代替阅读 <code>GET /api/v1/auth/oauth/providers</code> 并导航到提供的 <code>authorizeUrl</code>
+在公共 API 源上，添加 <code>gameId</code> 以及可选的 <code>returnUrl</code>。授权步骤
+验证目标并将其存储在现有的十分钟 OAuth 状态中；回调查询参数
+无法改变它。仍然需要发起浏览器的 cookie，并再次检查游戏
+在发行令牌之前。暂停的帐户无法接收令牌。</p>
+<p>不要将游戏登录与 <code>client</code> 或者 <code>link</code> (<code>400</code>). A <code>returnUrl</code> 没有 <code>gameId</code> 也是
+<code>400</code>。正常仪表板和桌面登录继续使用其配置的前端目标
+和普通账户代币对。</p>
+<h2 id="game-launch-tokens">游戏启动代币</h2>
+<p><code>POST /api/v1/games/{slug}/launch-token</code> (JWT) 铸造一个游戏范围的 JWT：</p>
+<pre><code class="language-json">{
+  "token": "eyJhbGciOi...",
+  "expiresInSeconds": 3600
+}
+</code></pre>
+<p>该令牌带有一个 <code>game_scope</code> 声明并默认为 60 分钟的生命周期。续订副本
+<code>launch_chain</code> 开始时间向前；过去 12 小时（默认）续订是 <code>403</code> 持有者必须离开
+返回到完整的帐户会话。完整详细信息位于 <a href="/zh-CN/docs/api/games.html">游戏</a>.</p>
+<p><strong>重新连接插座。</strong> 使用启动令牌打开的套接字（<code>?access_token=</code> 在 <code>ws/v1/games</code>,
+<code>ws/v1/realtime</code>, <code>ws/v1/voice</code>) 在其 URL 中携带该令牌，并使用过期令牌进行握手
+被拒绝 <code>401</code> 升级之前 - 浏览器仅报告关闭代码 <code>1006</code>，与
+网络掉线。将失败的重新连接视为可能的身份验证失败：在重新打开之前，通过更新
+<code>POST /api/v1/games/{slug}/launch-token</code> （仅当当前令牌仍然有效并且
+最初启动后 12 小时内）并使用新令牌构建 URL。一旦续订
+拒绝，将玩家送回启动器，或通过
+<a href="#sign-in-from-a-directly-opened-browser-game">游戏登录</a> 如果这就是游戏的打开方式。
+重试相同的 URL 永远无法恢复。</p>
+<h3 id="game-scope-fencing">游戏范围击剑</h3>
+<p>游戏范围的代币只能达到：</p>
+<ul>
+<li>它自己的 <code>/api/v1/games/{scope}</code> 树，</li>
+<li><code>/ws/v1/games</code>,</li>
+<li><a href="/zh-CN/docs/api/realtime.html">实时房间</a> REST 路线和 <code>/ws/v1/realtime</code> 对于自己的游戏，包括连接门票，</li>
+<li><code>GET /api/v1/time</code> 和 <code>GET /api/v1/terms</code>,</li>
+<li><code>POST /api/v1/me/terms/accept</code> 经身份验证的玩家明确同意，</li>
+<li><code>GET /api/v1/me/friends</code>,</li>
+<li><code>GET /api/v1/users/{id}/avatar</code> 和 <code>GET /api/v1/users/{id}/profile</code>,</li>
+<li>它的游戏排行榜，</li>
+<li>玩家的 <a href="/zh-CN/docs/api/catalog.html#saving-from-inside-a-game-launch-token">云保存</a> 对于自己的游戏（<code>/api/v1/me/cloud-saves/game:&lt;scope&gt;</code> 和它的 <code>/info</code>) — 没有其他键，</li>
+<li>附加到其自己的游戏会话的聊天/语音 REST 和 WebSocket 端点，</li>
+<li><code>GET /api/v1/github-games/{id}/icon</code> 和 <code>/cover</code> 对于任何游戏（无论如何都是公开的），</li>
+<li><code>POST /api/v1/me/heartbeat</code>，仅标记玩家在线，</li>
+<li><code>GET /api/v1/github-games/{id}/release-notes</code> 为了自己的游戏，</li>
+<li><a href="/zh-CN/docs/api/relay.html">中继</a> 路线，用于绑定到其自己的游戏会话或房间之一的中继。</li>
+</ul>
+<p><code>/ws/v1/chat</code> 被阻止启动令牌。其他一切都返回 403。</p>
+<h2 id="typical-login-flow-curl">典型登录流程（curl）</h2>
+<p>公钥登录，从质询到经过身份验证的调用：</p>
+<pre><code class="language-bash"># 1. Request a challenge
+curl -s -X POST https://api.starhermit.com/api/v1/auth/public-key/challenge \
+  -H "Content-Type: application/json" \
+  -d '{"keyType":"Ed25519","keyData":"&lt;base64-raw-32-byte-public-key&gt;"}'
+# → { "challengeId": "...", "payload": { ... }, "expiresIn": 300 }
+
+# 2. Sign the serialized payload JSON with your private key, then complete
+curl -s -X POST https://api.starhermit.com/api/v1/auth/public-key/complete \
+  -H "Content-Type: application/json" \
+  -d '{"challengeId":"...","signature":"base64-signature...","keyType":"Ed25519","keyData":"&lt;base64-raw-32-byte-public-key&gt;"}'
+# → { "userId": "...", "accessToken": "...", "refreshToken": "..." }
+
+# 3. Call the API with the access token
+curl -s https://api.starhermit.com/api/v1/me \
+  -H "Authorization: Bearer eyJhbGciOi..."
+
+# 4. When the access token expires (after 15 min), rotate the refresh token
+curl -s -X POST https://api.starhermit.com/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"dGhpcyBpcyBh..."}'
+
+# 5. On logout, revoke the refresh token
+curl -s -X POST https://api.starhermit.com/api/v1/auth/logout \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"dGhpcyBpcyBh..."}'
+</code></pre>
+<p>OAuth 登录是浏览器驱动的：阅读 <code>GET /api/v1/auth/oauth/providers</code>, 打开一个实时提供者的
+<code>authorizeUrl</code>，完全同意，回调将用户带到前端
+<code>#access_token=…&amp;refresh_token=…</code> 在 URL 片段中。</p>
+<h2 id="emailed-key-revocation">通过电子邮件发送密钥撤销</h2>
+<p>对于无法到达的业主 <code>DELETE /me/public-keys</code> （没有 OAuth 会话，或者被盗的锁定
+键）。 <code>POST /api/v1/auth/public-key/revoke-request</code> 和 <code>{ "email": "…" }</code> 持有请求并且
+通过电子邮件发送链接。打开它（<code>GET /api/v1/auth/public-key/revoke/confirm?token=…</code>）显示一个页面
+没有改变任何东西；它的确认按钮 <code>POST</code>是相同的 URL，这会撤销 <strong>每一个</strong> 激活键
+帐户并结束他们验证的会话。两者均未经身份验证，并且 <strong>问题号
+会话</strong>。请求总会得到答复 <code>202</code> 无论它发现什么，都用同一个身体；每一个请求
+每 15 分钟帐户一次，链接在 4 小时后过期。确认的 <code>POST</code> 答案 <code>200</code>
+<code>{ "revoked": &lt;count&gt;, "sessionsEnded": &lt;count&gt; }</code> 到 API 客户端，或 <code>400</code> 对于未知的、使用过的或
+过期的令牌，或其地址不再是该帐户的令牌。</p>
+<h2 id="websocket-connection-tickets">WebSocket 连接票证</h2>
+<p><code>POST /api/v1/realtime/connection-tickets</code> 将呼叫者的不记名令牌交换为一次性门票
+有效时间约30秒。将其传递为 <code>?ticket=</code> 在任何 <code>/ws/v1/*</code> 握手。它携带呼叫者的
+逐字索赔（包括 <code>game_scope</code> 和 <code>pk</code>)，在 REST 上被拒绝，并在第一次使用时被花费。
+任何经过身份验证的调用者都可以询问，包括游戏范围的启动令牌。 <code>?access_token=</code> 仍然有效
+直到客户搬家。</p>
+<p><strong>当其凭证被撤销时，打开的套接字就会结束。</strong> 撤销打开它的公钥结束
+立即；任何地方的暂停或注销都会在大约 30 秒内结束。令牌到期
+不结束打开的套接字 - 在重新连接之前刷新。</p>
+<h2 id="embedded-onboarding-for-nativestorefront-games">原生/店面游戏的嵌入式入门</h2>
+<p>Steam、Epic、GOG 或独立客户端可以在玩家的设备上生成密钥并呈现
+公钥注册流程位于其自己的 UI 内，避免了 OAuth 和对 StarHermit 的访问
+仪表板。注册并非无声：玩家必须同意、提供电子邮件并遵循
+一次性验证链接。游戏服务器令牌无法创建或模拟玩家。看
+<a href="/zh-CN/docs/tutorials/public-key-onboarding.html">教程：使用公钥加入玩家</a>，以及
+<a href="/zh-CN/docs/tutorials/dedicated-server-onboarding.html">专用服务器教程</a> 对于还附带服务器的游戏。</p>
+<p>看 <a href="/zh-CN/docs/credentials.html">凭证兼容性</a> 和 <a href="/zh-CN/docs/api/contracts.html">机器可读的合同</a>.</p>
+
+{% endraw %}

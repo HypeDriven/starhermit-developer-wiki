@@ -1,0 +1,220 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Tutorial: opsi audio dengan batas suara yang terdeteksi otomatis"
+source_url: "/docs/tutorials/audio-options.html"
+source_path: "docs/tutorials/audio-options.md"
+source_hash: "f94d55a5fbdf452a7ffb1992ee0ddde65a728d25c497469cf233f4440ff666ea"
+translation: "machine"
+permalink: "/id/docs/tutorials/audio-options.html"
+---
+{% raw %}
+<h1 id="tutorial-audio-options-with-an-auto-detected-sound-limit">Tutorial: opsi audio dengan batas suara yang terdeteksi otomatis</h1>
+<p>Berikan permainan Anda sebuah <strong>Audio</strong> bagian di sampingnya <a href="/id/docs/tutorials/graphics-options.html">Grafik</a>, tersedia dari
+menu utama dan selama bermain. Mulailah dengan garis dasar di bawah ini, biarkan pemain mengambil alihnya, dan terapkan a
+jumlah maksimum instance pemutaran simultan untuk membatasi pekerjaan mixing dan spasialisasi.
+Ini adalah pengaturan default sisi game yang direkomendasikan, bukan pengaturan yang diterapkan platform.</p>
+<p><a href="/docs/sdk/audio-options.js"><code>audio-options.js</code></a> memasok pembantu bebas ketergantungan untuk kurva volume,
+validasi pengaturan dan batas suara Otomatis yang konservatif. Itu tidak menciptakan konteks audio, mikrofon
+capture, mixer, panel opsi atau koneksi jaringan; game Anda menghubungkan kontrol dan pemutaran.</p>
+<h2 id="1-baseline-controls">1. Kontrol dasar</h2>
+<table>
+<thead>
+<tr>
+<th>Kontrol</th>
+<th>Nilai awal yang direkomendasikan</th>
+<th>Perilaku</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Volume utama</td>
+<td>80%</td>
+<td>Mengontrol semua pemutaran game, termasuk suara yang diterima</td>
+</tr>
+<tr>
+<td>Volume musik</td>
+<td>70%</td>
+<td>Bus musik, dikalikan dengan Master</td>
+</tr>
+<tr>
+<td>Volume efek suara</td>
+<td>100%</td>
+<td>Bus efek gameplay, dikalikan dengan Master</td>
+</tr>
+<tr>
+<td>volume antarmuka pengguna</td>
+<td>80%</td>
+<td>Bus menu dan antarmuka, dikalikan dengan Master</td>
+</tr>
+<tr>
+<td>Volume suara</td>
+<td>100%</td>
+<td>Bus suara yang diterima, dikalikan dengan Master; tidak pernah mengubah penguatan mikrofon</td>
+</tr>
+<tr>
+<td>Suara serentak maksimum</td>
+<td>Mobil</td>
+<td>Menampilkan jumlah yang terdeteksi dan batas efektif; menawarkan tetap 16, 32, 64, 128 dan jumlah khusus yang divalidasi dalam batas permainan</td>
+</tr>
+<tr>
+<td>Obrolan suara</td>
+<td>Mati</td>
+<td>Keikutsertaan sesi eksplisit; menawarkan mikrofon Push-to-talk dan Open ketika suara didukung</td>
+</tr>
+<tr>
+<td>Mikrofon/perangkat keluaran</td>
+<td>Bawaan sistem</td>
+<td>Pilihan penawaran jika didukung; menjaga pengidentifikasi perangkat tetap lokal</td>
+</tr>
+<tr>
+<td>Pembatalan gema/penindasan kebisingan</td>
+<td>Aktif / Aktif</td>
+<td>Minta pemrosesan pengambilan yang didukung; menampilkan hasil yang efektif</td>
+</tr>
+<tr>
+<td>Penguatan mikrofon otomatis</td>
+<td>Mati</td>
+<td>Pemrosesan pengambilan opsional, tidak bergantung pada volume pemutaran</td>
+</tr>
+</tbody>
+</table>
+<p>Sembunyikan kontrol suara di game tanpa suara. Berikan setiap penggeser persentase yang terlihat, label yang dapat diakses,
+dukungan keyboard dan target sentuh yang dapat digunakan; biarkan panel bergulir di layar kecil. Sertakan yang eksplisit
+kontrol bisu yang mengingat level sebelumnya. Terapkan perubahan segera tanpa memuat ulang.
+Volume opsional per peserta dan bisu lokal membantu pemain menyeimbangkan ruang suara.</p>
+<p>Perlakukan posisi penggeser sebagai 0–1 dan gunakan <code>volumeGain(position)</code> (posisi potong dadu) untuk kurva persepsi.
+Hubungkan setiap bus melalui gain-nya sendiri, lalu gain Master, sehingga Master diterapkan tepat satu kali.
+Peningkatan peningkatan sekitar 20 mdtk untuk menghindari klik; nol harus diam. Normalisasi aset dan berikan output
+ruang kepala atau pembatas untuk mencegah kliping saat suara tumpang tindih. Buka kunci pemutaran browser dari pengguna
+memberi isyarat dan menangani konteks yang ditangguhkan; audio yang tidak tersedia harus membuat game dapat dimainkan.</p>
+<h2 id="2-auto-detect-a-sensible-concurrency-limit">2. Deteksi otomatis batas konkurensi yang masuk akal</h2>
+<p>Gunakan petunjuk CPU dan memori, terlepas dari preset grafis atau GPU. Kebijakan awalnya adalah:</p>
+<table>
+<thead>
+<tr>
+<th>Petunjuk yang tersedia (evaluasi dari atas ke bawah)</th>
+<th>Mulai menghitung</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Maksimal dua CPU logis, atau memori yang dilaporkan paling banyak 2 GB</td>
+<td>16</td>
+</tr>
+<tr>
+<td>Setidaknya empat CPU logis, tanpa batasan di atas</td>
+<td>64</td>
+</tr>
+<tr>
+<td>Kemampuan tidak diketahui, atau kurang dari empat CPU tanpa batasan di atas</td>
+<td>32</td>
+</tr>
+</tbody>
+</table>
+<p>Pembantu referensi membatasi jumlah ini pada batasan maksimum permainan, <strong>64 secara default</strong>, dan batas
+langit-langit khusus ke 1–256. Pengembang dapat mengizinkan 128 atau 256 secara manual setelah membuat profil game; Otomatis
+tidak memilih ini dari jumlah inti saja. Permainan yang lebih kecil dapat menetapkan batas atas 16 atau 32.
+Petunjuk yang hilang atau tidak valid masih belum diketahui. Angka-angka ini adalah heuristik awal, bukan perangkat keras yang diukur
+kapasitas: <a href="https://html.spec.whatwg.org/multipage/system-state.html#dom-navigator-hardwareconcurrency">jumlah CPU logis dapat dikurangi oleh browser</a>,
+Dan <a href="https://www.w3.org/TR/device-memory/">petunjuk memori merupakan perkiraan dan privasi dibatasi</a>.</p>
+<pre><code class="language-js">import { detectAudioSystem, resolveAudio, volumeGain } from './audio-options.js';
+
+const system = detectAudioSystem();
+const GAME_SOUND_CEILING = 64;
+let saved = {}; // Load your player's validated preferences; empty means defaults.
+
+function applyAudio() {
+  const settings = resolveAudio(saved, system, GAME_SOUND_CEILING);
+  // mixer is your own adapter, not a StarHermit SDK API.
+  mixer.setPlaybackLimit(settings.effectiveConcurrentSounds);
+  mixer.setBusGain('master', volumeGain(settings.master));
+  for (const bus of ['music', 'effects', 'ui', 'voice']) {
+    mixer.setBusGain(bus, volumeGain(settings[bus]));
+  }
+  return settings; // Show recommendedConcurrentSounds and effectiveConcurrentSounds.
+}
+
+function setSoundLimit(value) {
+  // A select supplies 'auto'; parse and validate the custom integer before calling.
+  saved = { ...saved, maxConcurrentSounds: value };
+  applyAudio();
+  // Persist the requested choice, including 'auto', through your settings store.
+}
+</code></pre>
+<p>Jalankan Otomatis lagi di setiap perangkat dan setelah perubahan format mixer/output yang relevan. Menyimpan <code>'auto'</code>, bukan itu
+nomor yang terdeteksi. Penghitungan manual tetap manual, tergantung pada batas atas game/backend. Tunjukkan penjelasannya
+ketika hitungan efektif berbeda dengan hitungan yang diminta.</p>
+<p>Untuk mixer berinstrumen, sempurnakan Otomatis dengan beban kerja representatif yang terbatas dan tidak terdengar: test
+pengambilan sampel ulang aktual, spasialisasi, dan rantai efek serta menargetkan maksimal 25% blok audio
+durasi pencampuran. Misalnya, blok 128-frame pada 48 kHz memberikan sekitar 0,67 ms untuk target tersebut.
+Jadwalkan pembuatan profil jauh dari gameplay aktif. Keuntungan diam-diam saja tidak menjamin keterwakilan
+berfungsi karena backend dapat mengoptimalkan keheningan. Audio Web Standar tidak memaparkan waktu CPU per grafik;
+gunakan petunjuk fallback kecuali backend Anda menyediakan waktu yang dapat diandalkan. Jangan menyimpulkan biaya CPU audio
+dari FPS atau jumlah saluran keluaran.</p>
+<p>Otomatis mungkin mundur untuk sesi pada kelebihan beban atau kekurangan yang diukur secara berkelanjutan, dengan histeresis
+hindari osilasi; jangan menimpa preferensi yang disimpan. Rekomendasi pengukuran cache secara lokal oleh
+backend, format, konfigurasi efek, dan versi kode. Evaluasi kembali setelah perubahan itu. Contoh
+memperhitungkan pekerjaan mixing yang terikat, namun decoding, pemrosesan mikrofon, dan jaringan memerlukan anggaran terpisah.</p>
+<h2 id="3-enforce-the-cap-in-playback">3. Terapkan pembatasan pemutaran</h2>
+<p>Menghitung <strong>setiap instance pemutaran aktif</strong> di seluruh musik, loop, efek, UI, dan suara yang diterima.
+Stereo adalah salah satu contohnya. Suara dijeda/dihentikan, pengambilan mikrofon, dan suara virtual tanpa aktif
+rendering tidak dihitung. Musik crossfade dan jumlah ekor rilis sampai selesai. Jadwalkan masa depan
+dimulai melalui pengalokasi yang sama dan juga mengikat antriannya yang tertunda.</p>
+<p>Gunakan satu pengalokasi terbatas untuk setiap jalur pemutaran, termasuk elemen media dan keluaran WebRTC:</p>
+<ol>
+<li>Cadangan sebagian dari total untuk musik, isyarat penting, dan peserta suara yang diharapkan. Reservasi
+bagikan tutupnya; mereka tidak menambahkan slot tambahan. Sesuaikan ketika ukuran atau batas ruangan berubah.</li>
+<li>Sesuai kapasitas, hilangkan efek prioritas rendah yang masuk atau ganti instans aktif dengan prioritas lebih rendah.
+Jarak, kemampuan mendengar, dan efek berulang dapat memutuskan ikatan prioritas. Hapus duplikat semburan dan batasi
+pemancar berulang sebelum membuat node audio atau mendekode buffer baru.</li>
+<li>Korban yang memudar masih menempati slotnya: antri penggantinya sampai berhenti, atau hentikan di brankas
+batas sebelum memulai penggantian. Jangan sekali-kali melampaui batas pemudaran untuk sementara waktu.</li>
+<li>Lepaskan dan putuskan sambungan sumber yang sudah berakhir. Mengurangi batas harus mendapatkan kembali slot, termasuk loop dan
+ekor, sebelum mengizinkan pemutaran baru. Loop tervirtualisasi hanya menyimpan data posisi/negara bagian yang murah;
+lepaskan juga pemrosesan mahal dan pembukuan instans virtual yang terikat.</li>
+</ol>
+<p>Lebih menyukai suara dan isyarat gameplay yang bermakna dibandingkan suasana. Trek WebRTC yang terhubung ke mixer harus
+menonaktifkan pemutaran elemen media langsung untuk mencegah duplikat audio dan pemutaran yang tidak terhitung.
+Membungkam perolehan saja tidak menghentikan penguraian kode atau spasialisasi; menekan, menjeda, atau memutuskan sambungan pekerjaan
+jika backend mengizinkannya. Mengekspos jumlah yang aktif, ditekan, dan tervirtualisasi dalam pengembangan
+diagnostik sehingga ikatan CPU dapat diverifikasi.</p>
+<h2 id="4-voice-chat-controls">4. Kontrol obrolan suara</h2>
+<p>Ikuti <a href="/id/docs/api/voice.html">API Suara</a> untuk keanggotaan percakapan, bergabung/keluar, memberi isyarat, membisukan sendiri
+dan tuan rumah bisu. Bergabunglah secara eksplisit dan minta akses mikrofon hanya setelah pemutar mengaktifkan pengambilan;
+mendengarkan tanpa mikrofon tetap tersedia. Diperlukan penangkapan browser
+<a href="https://www.w3.org/TR/mediacapture-streams/#dom-mediadevices-getusermedia">izin dan konteks yang aman</a>.
+Penolakan izin harus menunjukkan keadaan yang berguna dan membiarkan pemutaran dan obrolan teks dapat digunakan.</p>
+<p>Gunakan Push-to-talk sebagai mode yang disarankan saat mengaktifkan suara. Berikan kunci yang dapat diikat ulang dan a
+kontrol sentuh tekan dan tahan; lepaskan transmisi pada pelepasan kunci/penunjuk, input dibatalkan, buram dan
+transisi halaman tersembunyi. Mikrofon terbuka adalah alternatif yang jelas. Tampilkan izin mikrofon,
+tingkat input, status berbicara, bisu/tuli, dan bisu host apa pun. Tes mikrofon hanya berjalan berdasarkan permintaan.
+Bisu tuli menerima suara dan menekan transmisi lokal saat aktif.</p>
+<p>Gerbang audio keluar secara lokal serta memperbarui status bisu platform itu sendiri. Pada setiap bergabung atau
+menyambungkan kembali, memulihkan bisu yang diinginkan sebelum mengirim media: bergabung akan menghapus bisu peserta sendiri
+di API, sementara bisu host tetap ada. Media peer-to-peer juga harus menghormati host mute secara lokal; memberi isyarat
+tidak membiarkan platform memfilter aliran audio rekan langsung. Hentikan pengambilan trek dan tutup media
+koneksi saat suara dinonaktifkan atau sesi berakhir. Menyimpan mode pilihan tidak pernah secara diam-diam
+membuka kembali mikrofon pada peluncuran berikutnya.</p>
+<h2 id="5-save-and-verify">5. Simpan dan verifikasi</h2>
+<p>Simpan preferensi biasa di dalam game <a href="/id/docs/api/games.html#per-player-game-settings">pengaturan per pemain</a>,
+misalnya di bawah <code>audio</code> sebagai <code>{ saved: { master: 0.8, maxConcurrentSounds: 'auto', voiceMode: 'off' }, at: … }</code>.
+Simpan cache lokal dengan namespace untuk permainan mandiri. Baca sebelum menulis, rekonsiliasi stempel waktu, dan
+memblokir penulisan cloud setelah pembacaan gagal hingga percobaan ulang berhasil, seperti dalam tutorial grafis.
+Validasi pengaturan jarak jauh sebelum menerapkannya. Simpan ID perangkat, izin, hasil pembuatan profil,
+keanggotaan sesi dan aktivitas mikrofon lokal saat ini; simpan mode suara pilihan secara terpisah
+dari apakah pengambilan saat ini diaktifkan.</p>
+<ul>
+<li><code>node --test tests/audio-options.test.mjs</code> memeriksa helper yang dikirim tidak diketahui/terkendala/lebih kuat
+deteksi, plafon, pilihan manual, Otomatis di perangkat lain, batasan volume, dan default suara.</li>
+<li>Dalam game Anda, kendalikan kontrol sebenarnya dengan mouse, keyboard, dan sentuhan; periksa perubahan volume langsung,
+pemulihan bisu, persistensi dan peralihan otomatis/manual setelah memuat ulang.</li>
+<li>Memicu musik, efek, suara, pudar, dan suara terjadwal yang tumpang tindih melampaui batas. Konfirmasikan
+pemutaran aktif tidak pernah melampauinya, termasuk saat menurunkannya secara langsung, dan isyarat penting tetap ada.</li>
+<li>Uji izin mikrofon ditolak, pembatalan push-to-talk, sambungkan kembali bisu, bisu host, perangkat
+kehilangan dan meninggalkan suara. Tidak ada transmisi yang dapat dilanjutkan tanpa keikutsertaan sesi yang diinginkan.</li>
+</ul>
+<p>Lihat juga: <a href="/id/docs/tutorials/graphics-options.html">Opsi grafis</a> · <a href="/id/docs/sdk/javascript.html">SDK JavaScript</a> ·
+<a href="/id/docs/api/voice.html">API Suara</a>.</p>
+
+{% endraw %}

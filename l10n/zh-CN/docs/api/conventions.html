@@ -1,0 +1,192 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "API约定"
+source_url: "/docs/api/conventions.html"
+source_path: "docs/api/conventions.md"
+source_hash: "3772241b0e04e8e2f4e4ecf1c0ef8e2d956c065446a78c7df107b6205de258d6"
+translation: "machine"
+permalink: "/zh-CN/docs/api/conventions.html"
+---
+{% raw %}
+<h1 id="api-conventions">API约定</h1>
+<p>休息使用 <code>https://api.starhermit.com/api/v1/...</code>;插座使用 <code>wss://api.starhermit.com/ws/v1/...</code>。
+托管游戏可以调用 <code>/api/v1/...</code> 和 <code>/ws/v1/...</code> 就其本身的起源而言。本地客户端使用
+公共 API 起源。另一个源上的开发页面需要游戏上允许的 CORS 源
+主持人；单独设置 SDK 基本 URL 并不授权该来源。</p>
+<h2 id="requests-and-responses">请求和响应</h2>
+<p>发送 JSON 使用 <code>Content-Type: application/json</code>，除了原始 gzip 捆绑包上传。 JSON 成员名称
+都是驼峰式命名法。在 REST 中发送承载凭证 <code>Authorization</code> 标头。</p>
+<table>
+<thead>
+<tr>
+<th>回复</th>
+<th>如何阅读</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>200</code> / <code>201</code> JSON</td>
+<td>解析记录的对象或数组；容忍额外的字段</td>
+</tr>
+<tr>
+<td><code>204</code></td>
+<td>成功无身；不要打电话 <code>response.json()</code></td>
+</tr>
+<tr>
+<td><code>302</code></td>
+<td>浏览器登录/确认重定向；导航而不是获取 OAuth 页面</td>
+</tr>
+<tr>
+<td><code>304</code></td>
+<td>条件读取不变；保留您已持有的数据</td>
+</tr>
+<tr>
+<td>图片、附件、云保存</td>
+<td>使用响应内容类型和端点协定读取字节</td>
+</tr>
+<tr>
+<td>错误</td>
+<td>首先读取状态，然后防御性地解析正文</td>
+</tr>
+</tbody>
+</table>
+<p>常见的错误形式是 <code>{ "error": "...", "code": "..." }</code>，可选字段取决于
+终点。 <code>error</code> 通常是人类可读的； <code>code</code> 是一个稳定的鉴别器（如果提供的话）。
+术语和其他一些端点直接将鉴别器放入 <code>error</code>。一些端点返回纯文本
+文本、空正文或验证问题详细信息对象 <code>title</code>, <code>status</code> 和 <code>errors</code>。
+客户端不得假设每个不成功的响应都是 JSON 或具有相同的字段。</p>
+<pre><code class="language-js">export async function readResponse(response) {
+  if (response.status === 204 || response.status === 304) return null;
+  const text = await response.text();
+  let body;
+  try { body = text ? JSON.parse(text) : null; } catch { body = text || null; }
+  if (!response.ok) {
+    const message = (body &amp;&amp; typeof body === 'object' &amp;&amp; (body.error || body.message || body.title))
+      || (typeof body === 'string' &amp;&amp; body) || response.statusText;
+    throw Object.assign(new Error(message), {
+      status: response.status, code: body?.code, body,
+      retryAfter: response.headers.get('Retry-After'),
+    });
+  }
+  return body;
+}
+</code></pre>
+<h2 id="time-sizes-and-nulls">时间、大小和空值</h2>
+<ul>
+<li><code>createdAt</code>, <code>updatedAt</code>, <code>finishedAt</code>，类似的帐户/资源时间戳是 ISO 8601 字符串
+有偏移量。治疗缺席或 <code>null</code> 可选值不可用。</li>
+<li><code>ctx.now</code>, <code>summary.deadline</code>, 会话列表 <code>deadline</code>， 和 <code>/time.serverTime</code> 是整数 Unix
+<strong>毫秒</strong>。转换为 <code>new Date(value)</code>， 不是 <code>Date.parse(value)</code>.</li>
+<li>以字节为单位的限制值是字节，而不是 Base64 字符。 Base64 JSON 上传大于其
+解码的内容。使用端点报告的有效限制（如果可用）。</li>
+<li>省略， <code>null</code>，和空对象并不普遍等价。设置 <code>PATCH</code> 删除一个
+命名键与 <code>null</code>;单键设置 <code>PUT</code> 商店 <code>null</code> 作为一个值。收藏 <code>PUT</code> 取代
+整个地图。阅读每个端点的更新规则。</li>
+<li>设置补丁合并 <strong>顶级键</strong>。提供的对象值替换该键的值；
+它不会递归地合并嵌套属性。</li>
+</ul>
+<h2 id="pagination">分页</h2>
+<p>分页是基于一的，其中 <code>page</code>/<code>pageSize</code> 都支持。不同的API故意有不同的
+回复信封；不要重复使用采用单个计数字段名称的解析器。</p>
+<table>
+<thead>
+<tr>
+<th>区域</th>
+<th>集合形状</th>
+<th>默认/最大页面大小</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>软件标题和版本</td>
+<td><code>{ items, totalCount, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>聊天消息</td>
+<td><code>{ conversationId, items, totalCount, page, pageSize }</code></td>
+<td>50 / 100</td>
+</tr>
+<tr>
+<td>排行榜条目</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>外部软件</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20；请求较小的正页面大小</td>
+</tr>
+<tr>
+<td>报告、容器崩溃记录、审核列表</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>会话、好友、游戏列表、成就</td>
+<td>数组</td>
+<td>特定于端点的上限；没有通用的下一页光标</td>
+</tr>
+<tr>
+<td>适度戒断饲料</td>
+<td>基于光标</td>
+<td>保持返回的光标；从中恢复 <code>410</code> 据记录</td>
+</tr>
+</tbody>
+</table>
+<p>响应分页元数据反映了可用的服务页面。 <a href="/zh-CN/#api-reference">参考页</a>
+和 <a href="/zh-CN/docs/api/contracts.html">机器可读的合同</a> 描述端点特定的查询参数。</p>
+<h2 id="retry-and-concurrency">重试和并发</h2>
+<table>
+<thead>
+<tr>
+<th>情况</th>
+<th>行动</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>帐户访问令牌被拒绝 <code>401</code></td>
+<td>刷新一次，使用一个共享刷新请求；如果被拒绝则登录</td>
+</tr>
+<tr>
+<td>启动令牌已过期</td>
+<td>通过登录/启动器获取新令牌；过期的令牌无法自行更新</td>
+</tr>
+<tr>
+<td><code>403 terms_acceptance_required</code></td>
+<td>显示并明确接受当前条款，然后重试</td>
+</tr>
+<tr>
+<td>其他 <code>403</code></td>
+<td>解决范围、成员资格、权限或帐户状态；不要循环刷新</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>解决重复/状态/修订冲突；更改资源之前重读</td>
+</tr>
+<tr>
+<td>云保存 <code>412</code></td>
+<td>加载较新的版本并让游戏合并或采用它</td>
+</tr>
+<tr>
+<td><code>429</code> 或暂时的 <code>503</code></td>
+<td>荣誉 <code>Retry-After</code>，添加抖动，并绑定重试</td>
+</tr>
+<tr>
+<td>写入期间网络故障</td>
+<td>结果可能未知；在重复操作之前检查资源状态</td>
+</tr>
+</tbody>
+</table>
+<p><code>Retry-After</code> 可以是秒或 HTTP 日期。不要发明幂等标头：API 不会
+承诺一个通用的幂等性密钥机制。重试会话创建或邀请可以创建
+另一种资源或与第一种资源发生冲突。首选读取和显式幂等操作
+自动重试。分别刷新轮换、完成上传、条款同意和终端游戏结果
+有自己的规则。</p>
+<p>对于比较和交换写入，请使用云保存 ETag、room <code>expectedRevision</code>，或审核修订
+在支持的地方。成功的写入并不一定意味着容器部署完成；验证其
+将玩家发送到新版本之前的状态。看 <a href="/zh-CN/docs/troubleshooting.html">故障排除</a>.</p>
+
+{% endraw %}

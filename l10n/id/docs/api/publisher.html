@@ -1,0 +1,387 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Penerbit"
+source_url: "/docs/api/publisher.html"
+source_path: "docs/api/publisher.md"
+source_hash: "9e89984a9a4079848d8caad7471dca1a8215f68459ac2bf1078bd011cecfc2bf"
+translation: "machine"
+permalink: "/id/docs/api/publisher.html"
+---
+{% raw %}
+<h1 id="publisher">Penerbit</h1>
+<p>Permukaan penerbit: kelola organisasi dan anggota penerbit, buat dan unggah judul dan build perangkat lunak, serta kelola pencapaian, hak, dan definisi papan peringkat untuk judul Anda.</p>
+<blockquote>
+<p><strong>Menerbitkan game, bukan judul katalog?</strong> Anda tidak membutuhkan semua ini. Pemilik a
+game dengan skrip atau backend kontainer adalah penerbitnya dan mengelola papan peringkatnya dan
+prestasi di bawah <code>/api/v1/me/github-games/{id}/…</code> - melihat
+<a href="/id/docs/tutorials/game-leaderboards-achievements.html">Tutorial: papan peringkat dan pencapaian untuk game Anda</a>.</p>
+</blockquote>
+<p>URL Dasar: <code>https://api.starhermit.com</code>. Semua rute memerlukan JWT ditambah klaim izin yang tercantum. Peran: <code>PublisherMember</code>, <code>PublisherOwner</code>. Klaim izin diberikan melalui peran; token yang dicetak membawa klaim izin.</p>
+<h2 id="publishers-and-members">Penerbit dan anggota</h2>
+<p>Awalan rute: <code>api/v1/publisher</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/publisher</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code>)</td>
+<td>Buat penerbit; pencipta menjadi anggota dengan peran <code>"Owner"</code> → <code>201</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/publisher</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code>)</td>
+<td>Daftar penerbit → <code>Publisher[]</code></td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/publisher/{publisherId}/members</code></td>
+<td>JWT (<code>Permission-publisher.members.manage</code>) + <strong>peran <code>Owner</code></strong></td>
+<td>Tambahkan anggota → <code>204</code></td>
+</tr>
+<tr>
+<td>MENGHAPUS</td>
+<td><code>/api/v1/publisher/{publisherId}/members/{memberUserId}</code></td>
+<td>JWT (<code>Permission-publisher.members.manage</code>) + <strong>peran <code>Owner</code></strong></td>
+<td>Hapus anggota → <code>204</code> (pemilik tidak dapat dihapus)</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/publisher/{publisherId}/members/{memberUserId}</code></td>
+<td>JWT (<code>Permission-publisher.members.manage</code>) + <strong>keanggotaan penerbit itu</strong></td>
+<td>Dapatkan anggota → <code>PublisherMember</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="who-may-change-membership">Siapa yang dapat mengubah keanggotaan</h3>
+<p>Klaim izin menyatakan Anda dapat mengelola anggota penerbit di suatu tempat; tidak disebutkan <em>yang</em>
+penerbit. Oleh karena itu, kedua pemeriksaan tersebut berlaku:</p>
+<ul>
+<li><strong>Menambah dan menghapus anggota adalah <code>Owner</code>-hanya.</strong> Keanggotaan membawa otoritas pengelolaan konten
+setiap gelar penerbit, jadi anggota biasa yang dapat menambahkan anggota dapat mengabulkannya
+wewenang kepada siapa pun. Yang bukan pemilik mendapat <code>401</code>.</li>
+<li><strong>Membaca keanggotaan memerlukan kepemilikan penerbit itu.</strong> Seorang penelepon di luar mendapat hal yang sama
+<code>404</code> sebagai pengguna yang bukan anggota, sehingga titik akhir tidak mengungkapkan apa pun tentang penerbit yang bukan Anda
+bagian dari.</li>
+</ul>
+<h3 id="create-a-publisher">Buat penerbit</h3>
+<p><code>POST /api/v1/publisher</code></p>
+<pre><code class="language-json">{
+  "name": "HypeDriven",
+  "description": "..."
+}
+</code></pre>
+<p>Pencipta menjadi anggota yang mempunyai peran <code>"Owner"</code>.</p>
+<h3 id="add-a-member">Tambahkan anggota</h3>
+<p><code>POST /api/v1/publisher/{publisherId}/members</code></p>
+<pre><code class="language-json">{ "userId": "&lt;user id&gt;" }
+</code></pre>
+<h3 id="dtos">DTO</h3>
+<pre><code class="language-json">// Publisher
+{
+  "id": "...",
+  "name": "...",
+  "description": "...",
+  "ownerUserId": "...",
+  "createdAt": "...",
+  "updatedAt": "..."
+}
+</code></pre>
+<pre><code class="language-json">// PublisherMember
+{
+  "id": "...",
+  "publisherId": "...",
+  "userId": "...",
+  "role": "...",
+  "joinedAt": "..."
+}
+</code></pre>
+<h2 id="software-titles-and-builds">Judul dan build perangkat lunak</h2>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/publisher/software</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code>)</td>
+<td>Membuat/memperbarui judul perangkat lunak (isi = metadata judul; keanggotaan dalam penerbit sebenarnya dari judul tersebut diberlakukan)</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/publisher/software/upload</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code> <strong>+</strong> <code>Permission-publisher.binary.publish</code>)</td>
+<td>Dapatkan URL unggahan untuk sebuah judul → <code>UploadUrlInfo[]</code></td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/publisher/software/build/finalize</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code> <strong>+</strong> <code>Permission-publisher.binary.publish</code>)</td>
+<td>Selesaikan pembangunan dari aset yang diunggah → <code>204</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/publisher/analytics/downloads?publisherId=</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code>)</td>
+<td>Jumlah unduhan per judul</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/publisher/analytics/launches?publisherId=</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code>)</td>
+<td>Jumlah peluncuran per judul</td>
+</tr>
+</tbody>
+</table>
+<h3 id="publishing-a-build-needs-the-binary-publish-grant">Menerbitkan build memerlukan hibah penerbitan biner</h3>
+<p>Kedua titik akhir build memerlukan <strong><code>publisher.binary.publish</code></strong> di atas
+<code>publisher.content.manage</code> dan keanggotaan penerbit judul. Tanpa itu keduanya menjawab <code>403</code>,
+sementara setiap titik akhir lainnya di halaman ini tetap berfungsi — Anda dapat membuat dan mengedit judul, menentukannya
+prestasi dan papan peringkat, dan memberikan hak; Anda tidak bisa mengirimkan file yang dapat dieksekusi.</p>
+<p>Alasannya adalah apa itu build. Aset build diunduh oleh klien desktop dan dijalankan di
+mesin pemain dengan hak istimewa pemain, di luar kontrol Starhermit kotak pasir apa pun — tidak seperti a
+permainan browser, yang berjalan di browser. Jadi hak untuk mempublikasikan satu diberikan per akun oleh a
+Administrator Starhermit (the <code>BinaryPublisher</code> peran), tidak diperoleh dengan membuat penerbit. Tidak
+peran lain membawanya. <strong>Mintalah izin kepada administrator sebelum membuat alur pengunggahan
+titik akhir ini</strong>; itu juga dihapus ketika akun penerbit ditangguhkan.</p>
+<p>Game browser tidak memerlukan semua ini: <code>/api/v1/me/github-games</code> pengiriman, unggahan folder, dan bundel
+mendorong tetap melayani mandiri untuk akun apa pun yang masuk.</p>
+<h3 id="create-or-update-a-catalog-title">Membuat atau memperbarui judul katalog</h3>
+<p><code>POST /api/v1/publisher/software</code> menerima <code>id</code> (hilangkan untuk judul baru), <code>publisherId</code>, <code>name</code>,
+<code>description</code>, <code>category</code>, <code>platform</code>, <code>releaseStatus</code>, <code>tags</code>, Dan <code>priceCents</code>:</p>
+<pre><code class="language-json">{
+  "publisherId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "name": "Orbit League",
+  "description": "A space racing game.",
+  "category": "game",
+  "platform": "windows",
+  "releaseStatus": "released",
+  "tags": ["racing"],
+  "priceCents": 0
+}
+</code></pre>
+<p>Sukses adalah <code>201</code> dengan judul. Hanya metadata judul yang diterima; jangan kirim keanggotaan penerbit
+atau objek aset di sini. Membuat penerbit kembali <code>201</code> tanpa objek penerbit; daftar
+<code>GET /api/v1/publisher</code> untuk mendapatkan ID-nya.</p>
+<h3 id="get-upload-urls">Dapatkan URL unggahan</h3>
+<p><code>POST /api/v1/publisher/software/upload</code></p>
+<pre><code class="language-json">{ "titleId": "&lt;title id&gt;" }
+</code></pre>
+<p>Tanggapan - <code>UploadUrlInfo[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "type": "executable",
+    "uploadUrl": "...",
+    "fieldKey": "..."
+  }
+]
+</code></pre>
+<p><code>type</code> adalah salah satu dari <code>"executable"</code>, <code>"data"</code>, <code>"metadata"</code>.</p>
+<h3 id="finalize-a-build">Selesaikan pembangunan</h3>
+<p><code>POST /api/v1/publisher/software/build/finalize</code> → <code>204</code></p>
+<pre><code class="language-json">{
+  "titleId": "&lt;title id&gt;",
+  "buildId": "&lt;optional build id&gt;",
+  "version": "1.0.0",
+  "releaseNotes": "...",
+  "assets": [
+    { "type": "executable", "checksum": "...", "fieldKey": "..." }
+  ]
+}
+</code></pre>
+<p>Alur kerja pembuatan katalog saat ini berupa pratinjau dan tidak menyediakan pengiriman biner produksi
+atau jaminan verifikasi konten atau pemindaian malware. Jangan perlakukan bangunan atau aset yang diterima
+status sebagai bukti bahwa suatu executable aman. Melihat <a href="/id/docs/availability.html">ketersediaan fitur</a>.
+Penerbitan game yang dihosting menggunakan <a href="/id/docs/api/github-games.html">API pengunggahan game</a>.</p>
+<h3 id="analytics">Analisis</h3>
+<p>Kedua titik akhir mengembalikan id judul pemetaan objek JSON untuk dihitung:</p>
+<pre><code class="language-json">{ "&lt;titleId&gt;": 42 }
+</code></pre>
+<h2 id="achievements">Prestasi</h2>
+<p>Rute <code>api/v1/publisher</code>; semua rute manajemen pencapaian membutuhkan <code>Permission-publisher.content.manage</code>.</p>
+<p>Titik akhir ini dikelola <strong>judul katalog</strong> prestasi saja. Mereka juga mengharuskan penelepon menjadi a
+anggota penerbit yang memiliki judul tersebut, dan mereka <strong>gagal ditutup untuk pencapaian yang dimilikinya
+permainan yang berwibawa</strong> — hal tersebut dideklarasikan oleh skrip game atau backend container, namun tidak
+dikelola penerbit (lihat <a href="/id/docs/api/achievements.html">Prestasi</a>, <a href="/id/docs/api/game-scripts.html#achievements">Skrip Permainan</a>,
+Dan <a href="/id/docs/api/container-games.html#control-channel">Server Game Kontainer</a>).</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/publisher/titles/{titleId}/achievements</code></td>
+<td>JWT</td>
+<td>Ciptakan prestasi → <code>AchievementDto</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/publisher/titles/{titleId}/achievements</code></td>
+<td>JWT</td>
+<td>Buat daftar pencapaian sebuah judul → <code>AchievementDto[]</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/publisher/achievements/{id}</code></td>
+<td>JWT</td>
+<td>Dapatkan satu prestasi → <code>AchievementDto</code></td>
+</tr>
+<tr>
+<td>MELETAKKAN</td>
+<td><code>/api/v1/publisher/achievements/{id}</code></td>
+<td>JWT</td>
+<td>Perbarui (semua bidang dapat dibatalkan) → <code>AchievementDto</code></td>
+</tr>
+<tr>
+<td>MENGHAPUS</td>
+<td><code>/api/v1/publisher/achievements/{id}</code></td>
+<td>JWT</td>
+<td>Hapus → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-an-achievement">Ciptakan sebuah prestasi</h3>
+<p><code>POST /api/v1/publisher/titles/{titleId}/achievements</code></p>
+<pre><code class="language-json">{
+  "key": "first_win",
+  "name": "First Win",
+  "description": "Win your first game.",
+  "icon": "...",
+  "secret": false,
+  "points": 10,
+  "visibility": "...",
+  "criteria": "..."
+}
+</code></pre>
+<p><code>icon</code>, <code>visibility</code>, Dan <code>criteria</code> bersifat opsional. Pada <code>PUT</code>, semua bidang dapat dibatalkan. Melihat <a href="/id/docs/api/achievements.html">achievements.md</a> untuk permukaan yang menghadap pemain.</p>
+<h2 id="entitlements">Hak</h2>
+<p>Rute <code>api/v1/publisher/entitlements</code>; yang dibutuhkan kedua rute <code>Permission-publisher.content.manage</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/publisher/entitlements/grant</code></td>
+<td>JWT</td>
+<td>Berikan judul kepada pengguna → <code>204</code></td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/publisher/entitlements/revoke</code></td>
+<td>JWT</td>
+<td>Cabut judul dari pengguna → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<p>Tubuh untuk keduanya:</p>
+<pre><code class="language-json">{
+  "userId": "&lt;user id&gt;",
+  "softwareTitleId": "&lt;title id&gt;"
+}
+</code></pre>
+<h2 id="leaderboards">Papan peringkat</h2>
+<p>Rute <code>api/v1/publisher/leaderboards</code>; semua rute membutuhkan <code>Permission-publisher.content.manage</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/publisher/leaderboards/</code></td>
+<td>JWT</td>
+<td>Buat definisi papan peringkat → <code>LeaderboardDefinitionDto</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/publisher/leaderboards/{id}</code></td>
+<td>JWT</td>
+<td>Dapatkan definisi → <code>LeaderboardDefinitionDto</code></td>
+</tr>
+<tr>
+<td>MELETAKKAN</td>
+<td><code>/api/v1/publisher/leaderboards/{id}</code></td>
+<td>JWT</td>
+<td>Perbarui (semua bidang dapat dibatalkan) → <code>LeaderboardDefinitionDto</code></td>
+</tr>
+<tr>
+<td>MENGHAPUS</td>
+<td><code>/api/v1/publisher/leaderboards/{id}</code></td>
+<td>JWT</td>
+<td>Hapus → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-leaderboard">Buat papan peringkat</h3>
+<p><code>POST /api/v1/publisher/leaderboards/</code></p>
+<pre><code class="language-json">{
+  "name": "Global Elo",
+  "scoreType": "...",
+  "sortDirection": "...",
+  "resetSchedule": "...",
+  "minScore": 0,
+  "maxScore": 4000,
+  "scope": "...",
+  "region": "...",
+  "isActive": true,
+  "softwareTitleId": "&lt;optional title id&gt;"
+}
+</code></pre>
+<p><code>resetSchedule</code>, <code>minScore</code>, <code>maxScore</code>, <code>region</code>, Dan <code>softwareTitleId</code> bersifat opsional. Pada <code>PUT</code>, semua bidang dapat dibatalkan. <code>resetSchedule</code> adalah <code>daily</code>, <code>weekly</code>, <code>monthly</code> atau <code>never</code>; hal lain adalah a <code>400</code> - melihat <a href="/id/docs/api/leaderboards.html#reset-schedules">Atur ulang jadwal</a>. Melihat <a href="/id/docs/api/leaderboards.html">leaderboards.md</a> untuk permukaan yang menghadap pemain.</p>
+<h2 id="publish-a-build-flow">Publikasikan build: flow</h2>
+<ol start="0">
+<li><strong>Pegang hibah penerbitan biner</strong>: langkah 3 dan 5 diperlukan <code>publisher.binary.publish</code>, yang a
+Hibah administrator Starhermit per akun. Melihat
+<a href="#publishing-a-build-needs-the-binary-publish-grant">Menerbitkan build memerlukan hibah penerbitan biner</a>.</li>
+<li><strong>Buat penerbit</strong>: <code>POST /api/v1/publisher</code> dengan <code>{ name, description }</code>.</li>
+<li><strong>Buat judulnya</strong>: <code>POST /api/v1/publisher/software</code> dengan metadata judul di bawah.</li>
+<li><strong>Dapatkan URL unggahan</strong>: <code>POST /api/v1/publisher/software/upload</code> dengan <code>{ titleId }</code>.</li>
+<li><strong>Unggah file</strong> kepada yang kembali <code>uploadUrl</code>s.</li>
+<li><strong>Selesaikan pembangunan</strong>: <code>POST /api/v1/publisher/software/build/finalize</code> dengan aset yang diunggah' <code>{ type, checksum, fieldKey }</code> entri.</li>
+<li><strong>Periksa ketersediaan distribusi</strong>: pratinjau katalog saat ini tidak menjamin pengunduhan produksi terverifikasi atau pemindaian malware; melihat <a href="/id/docs/availability.html">tersedianya</a>.</li>
+<li><strong>Pengguna mengklaim dan mengunduh</strong> judul melalui katalog — lihat <a href="/id/docs/api/catalog.html">catalog.md</a>.</li>
+</ol>
+<p>Badan kesalahan bervariasi; melihat <a href="/id/docs/api/conventions.html#requests-and-responses">konvensi API</a>.</p>
+<h2 id="see-also">Lihat juga</h2>
+<ul>
+<li><a href="/id/docs/api/catalog.html">catalog.md</a> — cara pemain menelusuri, mengklaim, dan mengunduh judul</li>
+<li><a href="/id/docs/api/achievements.html">achievements.md</a> — pencapaian yang dihadapi pemain</li>
+<li><a href="/id/docs/api/leaderboards.html">leaderboards.md</a> — papan peringkat yang menghadap pemain</li>
+<li><a href="/id/docs/api/auth.html">auth.md</a> — JWT, peran, dan klaim izin</li>
+</ul>
+<p>Melihat <a href="/id/docs/credentials.html">kompatibilitas kredensial</a> Dan <a href="/id/docs/api/contracts.html">kontrak yang dapat dibaca mesin</a>.</p>
+
+{% endraw %}

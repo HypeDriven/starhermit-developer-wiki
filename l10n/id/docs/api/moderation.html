@@ -1,0 +1,303 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Moderasi konten"
+source_url: "/docs/api/moderation.html"
+source_path: "docs/api/moderation.md"
+source_hash: "74f2579a081e00899406ae9d3a8f7551387f487818070f44fd4616907fdae6fe"
+translation: "machine"
+permalink: "/id/docs/api/moderation.html"
+---
+{% raw %}
+<h1 id="content-moderation">Moderasi konten</h1>
+<p>Game memeriksa teks yang dibagikan, dokumen JSON, dan gambar PNG/JPEG/WebP sebelum menampilkannya kepada orang lain
+pemain. Hanya arus <code>allow</code> mengizinkan pembagian. <code>review</code>, <code>block</code>, tidak diketahui, tertunda, gagal,
+hasil kebijakan yang kedaluwarsa dan tidak kompatibel membuat konten tetap tersembunyi.</p>
+<p><strong>Pemeriksaan moderasi saat ini tidak tersedia pada penerapan publik.</strong> Baca penemuan sebelumnya
+mengaktifkan berbagi. Cek kembali <code>503 overloaded</code> dengan <code>Retry-After: 300</code>; ini tidak menjanjikan
+ketersediaan setelah lima menit. Biarkan konten tetap tersembunyi sampai Anda menerima keputusan izin saat ini.
+Generasi juga <a href="/id/docs/availability.html#reserved-generation-routes">tidak tersedia</a>.</p>
+<p>Kontrak di bawah menjelaskan panggilan moderasi yang didukung dan perilakunya jika tersedia. Hanya saja
+bukti yang dapat diakses dan disaring dikembalikan melalui API tinjauan pemilik.</p>
+<h2 id="callers-and-routes">Penelepon dan rute</h2>
+<p>Awalan pemain adalah <code>/api/v1/games/{slug}/moderation</code>. JWT dan token peluncuran membawa pemain;
+token peluncuran harus cocok dengan game ini. Token server kontainer langsung juga harus cocok dengan game. Asli
+klien menggunakan URL dasar API; game browser dapat menggunakan asal gamenya <code>/api</code> proksi.</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Akhiran</th>
+<th>Penelepon</th>
+<th>Hasil</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MENDAPATKAN</td>
+<td>(akar)</td>
+<td>Pemain atau server</td>
+<td>Ketersediaan, batasan efektif, konten yang didukung, dan kebijakan saat ini</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/check</code></td>
+<td>Pemain atau server</td>
+<td><code>200</code> kumpulan lengkap atau <code>202</code> pemeriksaan tertunda</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/checks/{checkId}</code></td>
+<td>Pemain yang diatribusikan atau membuat server game</td>
+<td><code>200</code> status; <code>410</code> setelah retensi hasil</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/decisions/lookup</code></td>
+<td>Pemain atau server</td>
+<td><code>200</code> hash memenuhi syarat yang diketahui/tidak diketahui</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/flags</code></td>
+<td>Pemain</td>
+<td><code>201</code> tanda terima bendera; server tidak dapat mengajukan tanda</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/removed?since=&amp;pageSize=</code></td>
+<td>Pemain atau server</td>
+<td>Penarikan halaman dan kursor berikutnya</td>
+</tr>
+</tbody>
+</table>
+<p>Pemain tidak dapat memeriksa sebagai pemain lain. Server biasanya mengirim <code>sessionId</code> Dan <code>participantUserId</code>;
+peserta harus berada dalam sesi aktif permainan ini, dan tarif ceknya dikenakan. Untuk a
+periksa ulang dunia yang gigih tanpa ada yang online, kirim <code>attribution: "game"</code> dan hilangkan kedua bidang.
+Ini menghabiskan tarif server terpisah dan anggaran permainan, tidak mencatat pemain dan mengizinkan pemungutan suara
+hanya dengan identitas server resmi game tersebut. Penyegaran token tidak mengubah identitas logis tersebut.</p>
+<h2 id="availability">Tersedianya</h2>
+<p><code>GET /api/v1/games/{slug}/moderation</code> kembali:</p>
+<pre><code class="language-json">{
+  "checksAvailable": false,
+  "contentReportingAvailable": false,
+  "disabledReason": "moderation_not_configured",
+  "policyVersion": "&lt;current effective version&gt;",
+  "supportedKinds": ["text", "image"],
+  "supportedContexts": ["chat", "name", "generated-content", "user-content"],
+  "limits": { "moderation.check.items": 20, "moderation.decision.allow_ttl_seconds": 3600 },
+  "acceptedPreviousPolicyVersion": null,
+  "previousPolicyValidUntil": null,
+  "deliveredContentGraceSeconds": 0
+}
+</code></pre>
+<p><code>limits</code> berisi nilai registri moderasi yang efektif, di luar dua yang diilustrasikan. Pemain
+nilai termasuk penggantian pemain tersebut; penemuan server mengungkapkan tunjangan permainan, tidak pernah yang lain
+milik pemain. Anggaran item game nol juga menonaktifkan pemeriksaan (<code>game_budget_disabled</code>). Gunakan nilai tumpang tindih kebijakan dan nilai tenggang yang dikembalikan; defaultnya tidak menyediakan keduanya.</p>
+<h2 id="check-exact-content">Periksa konten yang tepat</h2>
+<pre><code class="language-http">POST /api/v1/games/{slug}/moderation/check
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  "items": [
+    { "id": "story", "kind": "text", "context": "user-content", "text": "abc" }
+  ]
+}
+</code></pre>
+<p>ID item bersifat unik dalam satu batch dan maksimal 128 karakter. Hanya membawa teks <code>text</code>; gambar
+membawa <code>contentType</code> dan standar yang ketat empuk <code>dataBase64</code>, tanpa spasi. Gambar yang dideklarasikan
+jenis harus cocok dengan headernya, dan byte serta piksel dibatasi. WAV, Ogg Vorbis,
+Model dan font glTF tidak didukung (<code>415 unsupported_kind</code>); dukungan audio ditangguhkan.</p>
+<p>Hashnya adalah <code>sha256:</code> diikuti oleh 64 digit hex huruf kecil SHA-256 pada byte konten yang tepat:</p>
+<ul>
+<li>Untuk teks, dekodekan string dengan JSON dan enkodekan nilai skalar Unicode sebagai UTF-8 tanpa BOM.
+Pertahankan spasi putih, akhiran baris, dan normalisasi Unicode; menolak pengganti yang tidak berpasangan.</li>
+<li>Dokumen JSON yang dikirimkan sebagai teks di-hash sebagai string dokumen persisnya, tanpa penguraian,
+menyusun ulang atau melakukan serialisasi ulang.</li>
+<li>Untuk sebuah gambar, hashkan byte yang didekodekan sebelum mengubah ukuran, transcoding, atau perubahan metadata.</li>
+</ul>
+<p>Tiga byte ASCII <code>abc</code> hash ke
+<code>sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad</code>.
+Menambahkan baris baru akan mengubah hash. Amplop permintaan, ID item, konteks, jenis media, dan base64
+pengkodean bukan input hash. Platform menghitung hash yang dikirimkan; menerima permainan juga harus
+hash byte yang sebenarnya mereka simpan dan bandingkan pengidentifikasinya.</p>
+<p>Barang lengkap ada <code>status: "complete"</code>, <code>contentHash</code>, <code>decision</code>, kategori, revisi,
+<code>checkedAt</code> Dan <code>decisionPolicyVersion</code>. Hanya izin yang dibawa <code>validUntil</code>. Amplop tanggapan
+memiliki arus yang efektif <code>policyVersion</code>. Validasi menolak seluruh batch jika ada item
+salah format. Item yang diterima bisa gagal secara terpisah, dengan <code>status: "failed"</code>, kode dan tidak ada keputusan.</p>
+<p>Batas waktu sinkron defaultnya adalah dua detik. Barang yang belum selesai diproduksi <code>202</code> dengan <code>checkId</code>,
+<code>pollAfterSeconds</code>, <code>expiresAt</code> Dan <code>Retry-After</code>. Jajak pendapat cek; item yang tertunda tidak memiliki keputusan.
+Batas waktu latar belakang defaultnya adalah 60 detik, lalu item yang belum selesai gagal <code>timeout</code> dan
+masukan biasa terhapus. Hasil terminal tetap dapat dibaca selama satu jam secara default.</p>
+<p>Melakukan polling pada item yang telah selesai berkonsultasi dengan keputusan langsung yang memenuhi syarat, kebijakan saat ini, dan retensi.
+Cek yang lama tidak dapat memperbaharui persetujuan yang dicabut. Pemblokiran/ulasan saat ini dikembalikan seperti itu;
+keputusan yang basi, kadaluwarsa, atau tidak ada menghasilkan item yang gagal dan tidak ada validitas yang diperbarui.</p>
+<h2 id="lookup-and-withdrawal-recovery">Pemulihan pencarian dan penarikan</h2>
+<pre><code class="language-json">{
+  "hashes": ["sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"],
+  "kind": "text",
+  "context": "user-content"
+}
+</code></pre>
+<p>Kirim ini ke <code>/decisions/lookup</code>. Pencarian gambar juga nama <code>contentType</code>. Persetujuan memenuhi syarat oleh
+permainan, jenis, jenis dan konteks media yang divalidasi. Entrinya adalah <code>known</code> dengan keputusan, revisi,
+<code>decisionPolicyVersion</code> dan mengizinkan validitas, atau <code>unknown</code> dengan <code>not_checked</code>, <code>policy_changed</code> atau
+<code>expired</code>. Pemblokiran manusia tetap efektif setelah perubahan kebijakan dan retensi keputusan biasa.</p>
+<p>Izinkan default validitas menjadi satu jam dan dapat diturunkan oleh operator. Validasi ulang sebelum habis masa berlakunya;
+tidak ada masa tenggang yang diaktifkan untuk pemadaman dan tidak ada versi dasar sebelumnya yang diterima. Berubah
+kebijakan permainan segera membatalkan persetujuan sebelumnya. Izin manusia hanya bertahan setelah pemeriksaan ulang
+untuk temuan serupa yang masih melewati baseline saat ini berdasarkan kebijakan yang sama.</p>
+<p>Pemilihan <code>/removed</code> sebelum membagikan paket bersama dan secara teratur selama bermain. Sembunyikan hash yang cocok
+dan menghentikan distribusi pada saat penarikan; penghapusan mencakup pengesahan bendera dan reklasifikasi
+dari mengizinkan untuk meninjau/memblokir. Entri umpan mencakup kualifikasi, cakupan, keputusan, revisi, kebijakan,
+waktu penghapusan dan alasan aman. Kursor adalah penanda pemesanan yang buram; gunakan kursor yang dikembalikan daripada mengambilnya dari suatu waktu.</p>
+<p>Kursor yang kedaluwarsa kembali <code>410 cursor_expired</code>. Ambil kursor baru tanpa <code>since</code>, pencarian batch
+semua memuat hash bersama, dan melanjutkan hanya jika divalidasi. Absen dari feed tidak pernah berarti persetujuan.
+Salinan lokal yang disimpan tidak mengizinkan redistribusi. Umpan defaultnya adalah riwayat 90 hari;
+blok manusia yang tahan lama akan hidup lebih lama darinya.</p>
+<h2 id="flags-and-owner-review">Bendera dan ulasan pemilik</h2>
+<p>Seorang pemain mengirim <code>/flags</code> a <code>reason</code> (maksimal 64 karakter), opsional dibatasi <code>note</code>, dan konten,
+pemain target, atau keduanya. Bukti isi menggunakan bentuk barang yang sama dengan cek. Jika <code>contentHash</code>
+juga disediakan, platform menghitung ulangnya dan membutuhkan kesetaraan. Hash kosong bukanlah bukti;
+referensi pekerjaan/pemeriksaan tidak diterapkan. Bendera target pemain memerlukan a <code>sessionId</code> daftar siapa
+mencakup reporter dan target. Mengarsipkan bendera tidak mengubah keputusan atau secara otomatis
+memblokir siapa pun.</p>
+<p>Bukti konten dicadangkan dan disimpan di karantina sebelum klasifikasi untuk perutean. Tertunda,
+penyaringan yang gagal atau tidak tersedia tidak pernah membuka akses pemilik. Izin pemeriksaan yang aman bagi pemilik saat ini
+daftar/detail/unduh/triase. Temuan staf menyembunyikan tanda dan membatasi tanda dan tinjauan yang ada
+dari bukti yang sama. Tanpa pengklasifikasi, tanda konten akan kembali <code>403 content_reporting_disabled</code>
+tanpa saran percobaan ulang atau bukti yang disimpan; bendera khusus pemain tetap dapat digunakan.</p>
+<p>Rute pemilik memerlukan JWT penuh dan kepemilikan game, di bawah <code>/api/v1/me/github-games/{id}/moderation</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Akhiran</th>
+<th>Perilaku</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DAPATKAN / TEMPATKAN</td>
+<td><code>/policy</code></td>
+<td>Baca/atur peringkat dan ambang kategori yang lebih ketat dengan <code>expectedVersion</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/flags</code> / <code>/flags/{flagId}</code></td>
+<td>Metadata yang disaring dalam halaman / satu tanda yang dapat diakses</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/flags/{flagId}/evidence</code></td>
+<td>Pengunduhan terkontrol; <code>410</code> setelah bukti habis masa berlakunya</td>
+</tr>
+<tr>
+<td>tambalan</td>
+<td><code>/flags/{flagId}</code></td>
+<td><code>action: "uphold"</code> atau <code>"dismiss"</code>, catatan opsional dan <code>expectedRevision</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/reviews</code> / <code>/reviews/{reviewId}</code></td>
+<td>Metadata tinjauan yang diadakan dalam halaman / satu ulasan yang dapat diakses</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/reviews/{reviewId}/content</code></td>
+<td>Pengunduhan terkontrol; <code>410 review_expired</code> ketika tidak tersedia</td>
+</tr>
+<tr>
+<td>tambalan</td>
+<td><code>/reviews/{reviewId}</code></td>
+<td><code>action: "allow"</code> atau <code>"block"</code>, catatan opsional dan <code>expectedRevision</code></td>
+</tr>
+</tbody>
+</table>
+<p>Daftar diambil <code>status</code>, <code>page</code> Dan <code>pageSize</code> (default 20, maksimum 100). Hanya kebijakan pemilik yang lebih ketat
+pegangan yang saat ini melewati garis dasar platform mungkin diperbolehkan; penahan dasar memerlukan platform
+ulasan di luar API pemilik game. Bukti terbatas tidak pernah terlihat oleh pemiliknya.
+Revisi yang basi adalah <code>409 revision_conflict</code>. Memutuskan suatu peninjauan akan menghapus konten yang disimpannya; kadaluarsa juga
+mencegah pengunduhan atau persetujuannya. Mengabaikan sebuah bendera tidak membatalkan pemblokiran lainnya, dan tidak ada pemiliknya
+rute mengangkat blok manusia.</p>
+<p>Bukti adalah <code>application/octet-stream</code> lampiran dengan <code>nosniff</code>, kotak pasir CSP dan <code>no-store</code>.
+Simpan catatan/alasan sebagai teks tidak tepercaya di UI ulasan Anda. Jangan menjadikannya sebagai markup atau menggunakannya sebagai
+URL lampiran.</p>
+<h2 id="default-limits-and-errors">Batasan dan kesalahan default</h2>
+<p>Operator dapat menyesuaikan batas permainan; tarif pemain juga mendukung penggantian per pengguna. Baca penemuan untuk
+nilai-nilai aktual yang berlaku.</p>
+<table>
+<thead>
+<tr>
+<th>Membatasi</th>
+<th>Bawaan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Item/hash pencarian per permintaan</td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>Teks / gambar / total byte konten</td>
+<td>64 KiB / 5 MiB / 10 MiB</td>
+</tr>
+<tr>
+<td>Piksel gambar</td>
+<td>20 juta</td>
+</tr>
+<tr>
+<td>Pemeriksaan pemain / pemeriksaan server yang dikaitkan dengan game per menit</td>
+<td>30 / 30</td>
+</tr>
+<tr>
+<td>Penelepon membaca per menit</td>
+<td>60</td>
+</tr>
+<tr>
+<td>Item yang diperiksa atau disaring per game per hari</td>
+<td>10,000</td>
+</tr>
+<tr>
+<td>Bendera per pemain per game per hari / bendera terbuka per game</td>
+<td>20 / 1,000</td>
+</tr>
+<tr>
+<td>Tandai byte catatan</td>
+<td>4 KiB</td>
+</tr>
+<tr>
+<td>Bukti bendera yang tertunda/dipertahankan per game</td>
+<td>64 MiB / 256 MiB</td>
+</tr>
+<tr>
+<td>Bukti bendera yang tertunda/dipertahankan di seluruh platform</td>
+<td>1 GiB / 4 GiB</td>
+</tr>
+<tr>
+<td>Panggilan pengklasifikasi serentak di seluruh platform</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Periksa pengiriman / izinkan validitas</td>
+<td>1 jam / 1 jam</td>
+</tr>
+<tr>
+<td>Penahanan tinjauan biasa / retensi tanda</td>
+<td>7 hari / 30 hari</td>
+</tr>
+</tbody>
+</table>
+<p>Kehabisan antrian/penyimpanan menolak bukti baru dibandingkan mengusir kasus aktif. Hormati
+aksesibilitas dan kedaluwarsa yang dilaporkan oleh setiap titik akhir bukti/tinjauan.</p>
+<p>Ada kesalahan <code>{ error, code, retryAfterSeconds? }</code>. <code>400</code> mencakup konten/kualifikasi yang formatnya salah, <code>401</code>
+otentikasi hilang, <code>403</code> batasan ruang lingkup/delegasi atau dasar, <code>404</code> tidak ada/tidak dapat diakses
+catatan, <code>409</code> konflik hash/revisi/kebijakan, <code>410</code> konten/pemeriksaan/kursor kedaluwarsa, <code>413</code> byte/barang/
+batas piksel, dan <code>415</code> jenis/tipe yang tidak didukung. <code>429</code> mencakup tarif/anggaran/antrian/penyimpanan dengan
+<code>Retry-After</code>. Pemadaman pengklasifikasi adalah <code>503 moderation_unavailable</code>; saat ini tidak dikonfigurasi
+penggantinya tetap ada <code>503 overloaded</code>. Tidak ada kesalahan, percobaan ulang, atau pembayaran pengganti untuk keputusan yang diizinkan.</p>
+<p>Dibagikan <a href="/id/docs/api/conventions.html">konvensi API</a> menjelaskan penguraian respons, stempel waktu, penomoran halaman, dan percobaan ulang.</p>
+<p>Melihat <a href="/id/docs/credentials.html">kompatibilitas kredensial</a> Dan <a href="/id/docs/api/contracts.html">kontrak yang dapat dibaca mesin</a>.</p>
+
+{% endraw %}

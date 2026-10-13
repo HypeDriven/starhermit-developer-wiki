@@ -1,0 +1,441 @@
+---
+layout: "wiki"
+lang: "bn"
+title: "একটি ডেডিকেটেড গেম সার্ভার এবং অনবোর্ড প্লেয়ার ইন-গেম প্রকাশ করুন"
+source_url: "/docs/tutorials/dedicated-server-onboarding.html"
+source_path: "docs/tutorials/dedicated-server-onboarding.md"
+source_hash: "aa70f7fec680b797ff8479b56586e37fd9a16ee3031398235d457e97f83a90aa"
+translation: "machine"
+permalink: "/bn/docs/tutorials/dedicated-server-onboarding.html"
+---
+{% raw %}
+<h1 id="publish-a-dedicated-game-server-and-onboard-players-in-game">একটি ডেডিকেটেড গেম সার্ভার এবং অনবোর্ড প্লেয়ার ইন-গেম প্রকাশ করুন</h1>
+<p>এই টিউটোরিয়ালটি দেখায় কিভাবে:</p>
+<ol>
+<li>StarHermit এর বান্ডেল-আপলোড API সহ একটি ডেডিকেটেড গেম-সার্ভার কন্টেইনার প্রকাশ বা আপডেট করুন।</li>
+<li>একটি দীর্ঘস্থায়ী কন্টেইনারের StarHermit সার্ভার টোকেন নবায়ন করে রাখুন।</li>
+<li>স্টিম, এপিক, জিওজি, বা একটি স্বতন্ত্র বিল্ডের অনবোর্ড প্লেয়ারদের একটি মাধ্যমে না পাঠিয়ে
+OAuth প্রদানকারী বা তাদের StarHermit ড্যাশবোর্ডে যেতে হবে।</li>
+<li>সেই খেলোয়াড়দের StarHermit সেশন, ম্যাচমেকিং, লিডারবোর্ড, কৃতিত্বগুলিতে অ্যাক্সেস দিন
+সেশন চ্যাট, ভয়েস, বন্ধু, উপস্থিতি, এবং রিপ্লে।</li>
+</ol>
+<p>এক্সিকিউটেবল স্টিম, এপিক, জিওজি, আপনার নিজের থেকে এসেছে কিনা প্লেয়ার-ফেসিং API একই
+লঞ্চার, বা <code>https://&lt;slug&gt;.starhermit.com</code>.</p>
+<h2 id="important-boundary-embedded-is-not-silent">গুরুত্বপূর্ণ সীমানা: এমবেডেড নীরব নয়</h2>
+<p>StarHermit বর্তমানে কোনো বিশেষ সুবিধাপ্রাপ্তকে প্রকাশ করে না "নির্বিচারে প্লেয়ার তৈরি করুন" একটি খেলার শেষ বিন্দু
+সার্ভার একটি পাত্রের <code>STARHERMIT_SERVER_TOKEN</code> ইচ্ছাকৃতভাবে কোন খেলোয়াড়ের পরিচয় নেই এবং মিন্ট করতে পারে না
+প্লেয়ার অ্যাকাউন্ট বা ছদ্মবেশী খেলোয়াড়।</p>
+<p>পাবলিক-কী রেজিস্ট্রেশনের জন্য একটি বৈধ ইমেল এবং একটি এক-কালীন যাচাইকরণ লিঙ্কও প্রয়োজন। অতএব:</p>
+<ul>
+<li>আপনি <strong>পারে</strong> আপনার গেমের ব্র্যান্ডেড UI এর মধ্যে নিবন্ধন রাখুন এবং Google/GitHub OAuth এবং
+StarHermit ড্যাশবোর্ড।</li>
+<li>আপনি <strong>পারে না</strong> নিঃশব্দে শুধুমাত্র একটি স্টিম আইডি, এপিক অ্যাকাউন্ট আইডি বা GOG থেকে একটি StarHermit অ্যাকাউন্ট তৈরি করুন
+আইডি খেলোয়াড়কে অবশ্যই সম্মতি দিতে হবে, একটি ইমেল সরবরাহ করতে হবে এবং একবার এটি নিশ্চিত করতে হবে।</li>
+<li>প্রতিটি প্লেয়ারের ব্যক্তিগত কী তাদের ডিভাইসে তৈরি এবং সংরক্ষণ করুন। প্রতিটি খেলোয়াড়ের কী তৈরি করবেন না
+আপনার ডেডিকেটেড সার্ভারে, প্রাইভেট কী আপলোড করুন, অথবা একটি কাস্টোডিয়াল কী ডাটাবেস রাখুন যদি না আপনি
+ইচ্ছাকৃতভাবে যারা অ্যাকাউন্ট সব জন্য দায়িত্ব গ্রহণ.</li>
+</ul>
+<p>একটি নেটিভ গেমের জন্য, সবচেয়ে মসৃণ সমর্থিত অভিজ্ঞতা হল: একটি ইন-গেম অ্যাকাউন্ট প্যানেল তৈরি করে
+কী, ইমেল এবং সম্মতির জন্য জিজ্ঞাসা করে, প্লেয়ার তাদের ইনবক্সে লিঙ্ক নিশ্চিত করার সময় অপেক্ষা করে, তারপর সাইন ইন করে
+কী দিয়ে এবং OS ক্রেডেনশিয়াল ভল্টে রিফ্রেশ টোকেন রাখে। খেলোয়াড়ের কখনই দরকার নেই
+StarHermit সাইট নেভিগেট করুন।
+যে প্লেয়ার একটি ইমেল প্রদান এবং যাচাই করতে পারে না সে বর্তমান API এর সাথে এই প্রবাহটি সম্পূর্ণ করতে পারে না।</p>
+<h2 id="architecture-and-trust-boundaries">স্থাপত্য এবং বিশ্বাসের সীমানা</h2>
+<pre><code class="language-text">Steam/Epic/GOG/native client
+  ├─ owns the player's private key
+  ├─ performs public-key registration/login
+  ├─ holds player access + rotating refresh token
+  ├─ optionally links the external platform identity
+  └─ uses a game-scoped launch token for game/social APIs
+                  │
+                  │ REST + ws/v1/games
+                  ▼
+StarHermit API ───────── authenticated command ────────► your container
+  ├─ creates sessions and matchmaking                     ├─ owns simulation
+  ├─ stamps the trusted StarHermit user id                 ├─ never trusts payload identity
+  ├─ persists snapshots/results/elo/achievements           └─ uses narrow server token only
+  └─ supplies session chat, voice, friends, and replays
+</code></pre>
+<p>গেম ক্লায়েন্ট প্রমাণ করে যে খেলোয়াড় কে। StarHermit স্ট্যাম্প ট্রাফিকের উপর যে পরিচয় পাঠানো হয়েছে
+ধারক কনটেইনার কখনোই প্রমাণ হিসেবে গেমপ্লে JSON-এর ভিতরে সরবরাহ করা স্টিম আইডি বা ব্যবহারকারী আইডি গ্রহণ করে না
+পরিচয়</p>
+<h2 id="prerequisites">পূর্বশর্ত</h2>
+<p>আপনার প্রয়োজন:</p>
+<ul>
+<li>একটি StarHermit বিকাশকারী অ্যাকাউন্ট এবং সম্পূর্ণ অ্যাক্সেস টোকেন।</li>
+<li>আপনার মালিকানাধীন একটি নিবন্ধিত খেলা, সঙ্গে a <code>gameSlug</code> এবং প্রামাণিক ব্যাকএন্ড। বান্ডিল শেষ বিন্দু
+একটি বিদ্যমান গেম আপডেট করে; এটি একটি গেম রেকর্ড তৈরি করে না বা একটি স্লাগ সংরক্ষণ করে না।</li>
+<li>আপনার অ্যাকাউন্টের জন্য কন্টেইনার হোস্টিং সক্ষম।</li>
+<li>ডকার বা অন্য একটি টুল যা ডকার-সামঞ্জস্যপূর্ণ উত্পাদন করতে সক্ষম <code>docker save</code> সংরক্ষণাগার</li>
+<li>একটি ধারক বাস্তবায়ন <a href="/bn/docs/api/container-games.html#protocol-v1">গেম প্রোটোকল v1</a>.</li>
+</ul>
+<p>প্রাথমিক স্ব-পরিষেবা নিবন্ধনের জন্য, এর সাথে একটি যাচাইকৃত GitHub সংগ্রহস্থল ব্যবহার করুন <code>starhermit.txt</code> এবং ক
+বৈধ <code>container.image</code> ঘোষণা হিসাবে বর্ণনা করা হয়েছে <a href="/bn/docs/api/github-games.html">গিটহাব গেমস</a>. একবার
+গেম বিদ্যমান, বান্ডেল পুশ পরবর্তীতে ক্লায়েন্ট এবং সার্ভার সরাসরি বিল্ড প্রকাশ করতে পারে।</p>
+<h2 id="part-1-implement-the-container-contract">পার্ট 1: কন্টেইনার চুক্তি বাস্তবায়ন</h2>
+<p>আপনার প্রক্রিয়া শুনতে হবে <code>PORT</code> এবং বাস্তবায়ন:</p>
+<table>
+<thead>
+<tr>
+<th>শেষবিন্দু</th>
+<th>দায়িত্ব</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /health</code></td>
+<td>প্রত্যাবর্তন <code>200</code> শুধুমাত্র যখন সেশন গ্রহণ করা যেতে পারে</td>
+</tr>
+<tr>
+<td><code>GET /describe</code></td>
+<td>প্রটোকল ঘোষণা করুন <code>1</code>, অনুরোধ করা টিক রেট/ক্ষমতা, এবং অর্জন</td>
+</tr>
+<tr>
+<td><code>POST /sessions</code></td>
+<td>একটি সেশন তৈরি করুন বা এর থেকে একটি পুনরুদ্ধার করুন৷ <code>snapshot</code></td>
+</tr>
+<tr>
+<td><code>GET /sessions/{id}/snapshot</code></td>
+<td>একটি সম্পূর্ণ টেকসই পুনরুদ্ধার পয়েন্ট ফিরে</td>
+</tr>
+<tr>
+<td><code>DELETE /sessions/{id}</code></td>
+<td>অধিবেশন মুক্তি</td>
+</tr>
+<tr>
+<td><code>WS /stream</code></td>
+<td>প্রমাণীকৃত প্লেয়ার কমান্ড গ্রহণ করুন এবং গেম পেলোড নির্গত করুন</td>
+</tr>
+<tr>
+<td><code>WS /control</code></td>
+<td>পুশ স্ন্যাপশট, কৃতিত্ব, Elo, ফলাফল, এবং ব্যাকপ্রেশার</td>
+</tr>
+</tbody>
+</table>
+<p>যাচাই করুন <code>X-Starhermit-Invoke-Key</code> প্রতি HTTP অনুরোধে এবং ওয়েবসকেট আপগ্রেডের বিরুদ্ধে
+<code>STARHERMIT_INVOKE_KEY</code>. এটি আপনার প্রক্রিয়ায় StarHermit প্রমাণীকরণ করে।</p>
+<p>একটি ন্যূনতম ঘোষণা হল:</p>
+<pre><code class="language-json">{
+  "protocol": 1,
+  "tickRateHz": 20,
+  "maxSessions": 48,
+  "replays": true,
+  "achievements": [
+    {
+      "key": "first-win",
+      "name": "First Win",
+      "description": "Win a match.",
+      "points": 10
+    }
+  ]
+}
+</code></pre>
+<p><code>replays</code> প্ল্যাটফর্মকে প্রতিটি সমাপ্ত সেশনের শেষ অবস্থা রাখতে বলে, যা কি
+<code>GET /api/v1/games/{slug}/replays/{sessionId}</code> পরিবেশন করে আপনার গেম রিপ্লে চায় শুধুমাত্র যদি এটি ঘোষণা;
+এটি ছাড়া ম্যাচ শেষ হলে কিছুই রাখা হয় না। দেখুন
+<a href="/bn/docs/api/container-games.html#get-describe">কন্টেইনার গেম সার্ভার - <code>GET /describe</code></a>.</p>
+<p>গেমপ্লে স্ট্রিম ফ্রেম ব্যবহার করে:</p>
+<pre><code class="language-text">[1 byte type][16 byte sessionId][16 byte userId][payload...]
+</code></pre>
+<p>টাইপ <code>1</code> একটি অন্তর্মুখী আদেশ; এর ব্যবহারকারী আইডি প্রমাণীকৃত StarHermit প্লেয়ার থেকে স্ট্যাম্প করা হয়েছিল।
+টাইপ <code>2</code> একটি আউটবাউন্ড JSON পেলোড যে প্লেয়ারকে সম্বোধন করা হয়, অথবা ব্যবহারকারীর আইডি থাকাকালীন প্রত্যেকের জন্য
+সব শূন্য।</p>
+<p>টেকসই প্রভাব ওভার যেতে <code>/control</code>:</p>
+<pre><code class="language-json">{ "type": "snapshot", "sessionId": "...", "state": { "round": 4 } }
+{ "type": "achievements", "sessionId": "...", "unlocks": { "&lt;userId&gt;": ["first-win"] } }
+{ "type": "elo", "sessionId": "...", "updates": { "&lt;userId&gt;": 1248 } }
+{ "type": "result", "sessionId": "...", "result": { "kind": "win", "winner": "&lt;userId&gt;" } }
+</code></pre>
+<p>StarHermit এই আপডেটগুলি সেশন অংশগ্রহণকারীদের ফিল্টার করে এবং অ্যাচিভমেন্ট কী ঘোষণা করে। একটি ফলাফল হয়
+টার্মিনাল দেখুন <a href="/bn/docs/api/container-games.html">কন্টেইনার-হোস্টেড গেম সার্ভার</a> সম্পূর্ণ প্রোটোকলের জন্য,
+স্ন্যাপশট, বিচ্ছিন্নতা, এবং পুনরুদ্ধারের চুক্তি।</p>
+<h2 id="part-2-register-the-game-once">পর্ব 2: একবার গেমটি নিবন্ধন করুন</h2>
+<p>প্রাথমিক নিবন্ধনের জন্য ব্যবহৃত যাচাইকৃত সংগ্রহস্থলে একটি ম্যানিফেস্ট রাখুন:</p>
+<pre><code class="language-ini">name=Orbit League
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6  # your user ID from GET /api/v1/me, not username
+
+container.image=ghcr.io/your-github-login/orbit-server@sha256:&lt;64-lowercase-hex&gt;
+container.port=8080
+container.health=/health
+container.memory_mb=1024
+container.cpu=1.0
+</code></pre>
+<p>সেট <code>owner</code> অপরিবর্তনীয় <code>id</code> দ্বারা ফিরে <code>GET /api/v1/me</code>. অ্যাকাউন্ট ব্যবহারকারীর নাম ব্যবহার করবেন না বা
+ডাকনাম; সেগুলি প্রদর্শন মান এবং পরিবর্তন হতে পারে।</p>
+<p>এটি নিবন্ধন করুন:</p>
+<pre><code class="language-bash">API=https://api.starhermit.com
+ACCESS_TOKEN='developer-access-token'
+
+curl -sS -X POST "$API/api/v1/me/github-games" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repoUrl":"https://github.com/your-github-login/orbit-league"
+  }'
+</code></pre>
+<p>ফিরে আসা সংরক্ষণ করুন <code>id</code> হিসাবে <code>GAME_ID</code> এবং <code>gameSlug</code> হিসাবে <code>GAME_SLUG</code>, তারপর নিশ্চিত করুন যে ব্যাকএন্ড বিদ্যমান:
+<code>GET $API/api/v1/games/$GAME_SLUG</code> উত্তর <code>200</code> একবার এটা করে। একটি উপহার <code>gameSlug</code> একা করে না
+এটি প্রমাণ করুন - প্রতিটি যাচাইকৃত গেমে একটি, শুধুমাত্র ব্রাউজার অন্তর্ভুক্ত রয়েছে। একটি নিবন্ধন যা ঘোষণা করে একটি
+আপনার সংগ্রহস্থলের মালিক প্রমাণ না করেই ধারকটি প্রত্যাখ্যান করা হয়েছে <code>403</code>, এবং প্রাথমিক নিবন্ধন
+কন্টেইনার হোস্টিং অনুপলব্ধ বা সীমাবদ্ধ হলে ব্যর্থ হতে পারে।</p>
+<p>ম্যানিফেস্টে থাকা রেজিস্ট্রি-সমর্থিত চিত্রটি প্রথম সংস্করণ স্থাপন করার জন্য যথেষ্ট। পরবর্তী অধ্যায়
+সরাসরি-আপলোড পাথ কভার করে, CI এর জন্য উপযোগী এবং বিল্ডের জন্য যা আপনি চান না
+প্ল্যাটফর্ম ক্লোন বা আবার টান.</p>
+<h2 id="part-3-publish-a-client-and-dedicated-server-bundle">পার্ট 3: একটি ক্লায়েন্ট এবং ডেডিকেটেড সার্ভার বান্ডেল প্রকাশ করুন</h2>
+<h3 id="build-the-archive">আর্কাইভ তৈরি করুন</h3>
+<p>আপলোড হল এই লেআউট সহ একটি জিজিপ-সংকুচিত টার সংরক্ষণাগার:</p>
+<pre><code class="language-text">client/            optional static web client, including the registered launch file
+server/image.tar   optional `docker save` output
+starhermit.txt     the manifest
+</code></pre>
+<p>অন্তত <code>client/</code> বা <code>server/image.tar</code> উপস্থিত থাকতে হবে।</p>
+<p>আপনি যদি কার্ল না করে StarHermit ওয়েব ড্যাশবোর্ড বা Windows ক্লায়েন্টের মাধ্যমে প্রকাশ করেন, আপনি তা করবেন না
+হাতে এই সংরক্ষণাগার নির্মাণ. একটি বাছাই করুন <strong>সার্ভার বিতরণ ফোল্ডার</strong> (ধারণ করা <code>starhermit.txt</code>
+এবং <code>image.tar</code>) বা <strong>দ <code>image.tar</code> নিজে থেকে</strong>, এবং ক্লায়েন্ট উপরের লেআউট প্যাক করে। দ
+<a href="/bn/docs/starhermit-txt.html"><code>starhermit.txt</code></a> মান — প্রদর্শন নাম এবং <code>container.*</code> knobs — হয়
+ডায়ালগের ক্ষেত্রগুলি, ফোল্ডারের ম্যানিফেস্ট থেকে প্রিফিল করা হয় যখন একটি থাকে, তাই একটি খালি <code>image.tar</code>
+ঠিক পাশাপাশি প্রকাশ করে।</p>
+<pre><code class="language-bash">rm -rf bundle game-bundle.tar.gz
+mkdir -p bundle/client bundle/server
+
+# Optional hosted web client.
+cp -R dist/. bundle/client/
+
+# Dedicated server image.
+docker build -t orbit-server:release -f Dockerfile.server .
+docker save orbit-server:release -o bundle/server/image.tar
+
+# Keeps the artifact self-describing, and is what the dashboard/desktop clients require.
+cp starhermit.txt bundle/starhermit.txt
+
+tar -C bundle -czf game-bundle.tar.gz .
+</code></pre>
+<p>ইমেজ অবশ্যই একটি পঠনযোগ্য রুট ফাইল সিস্টেমের সাথে কাজ করতে হবে, বাধ্যতামূলক নন-রুট ব্যবহারকারী, কোন ক্ষমতা নেই, না
+ভলিউম, ইন্টারনেট নেই, এবং শুধুমাত্র একটি ছোট লিখনযোগ্য <code>/tmp</code>. ছবিতে বিক্রেতার নির্ভরতা।</p>
+<h3 id="upload-it">আপলোড করুন</h3>
+<p><code>POST /api/v1/me/github-games/{id}/bundle</code> সংরক্ষণাগারটিকে কাঁচা অনুরোধের অংশ হিসাবে নেয়, a হিসাবে নয়
+মাল্টিপার্ট ফর্ম:</p>
+<pre><code class="language-bash">curl -sS -X POST "$API/api/v1/me/github-games/$GAME_ID/bundle" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game-bundle.tar.gz
+</code></pre>
+<blockquote>
+<p><strong>প্রায় 100 MB এর বেশি একটি বান্ডিল এই রুট দিয়ে যাবে না।</strong> এপিআই এর সামনে সিডিএন
+একটি সঙ্গে একটি বড় অনুরোধ শরীরের প্রত্যাখ্যান <code>413</code> নিজস্ব - একটি প্ল্যাটফর্ম কখনও দেখে না, তাই এটি বহন করে
+না <code>limitBytes</code> এবং আপনি পড়তে পারেন এমন কোন লগে প্রদর্শিত হবে না। ক <code>docker save</code> একটি বাস্তব সার্ভার ইমেজ পৌঁছেছে
+সহজে যে আকার. আপনি যদি একটি দেখতে <code>413</code> সঙ্গে নেই <code>limitBytes</code>, এটি এটি এবং আপনার খেলা নয়
+ভাতা, যা গিগাবাইট।</p>
+<p>অভিন্ন সংরক্ষণাগার ওভার পাঠান
+<a href="/bn/docs/api/github-games.html#upload-over-a-websocket"><code>ws/v1/game-upload</code></a> পরিবর্তে — ফ্রেম পরে a
+WebSocket আপগ্রেড একটি অনুরোধের অংশ নয়, তাই ক্যাপ প্রযোজ্য নয়। একই সংরক্ষণাগার বিন্যাস, একই
+ভাতা, একই JSON উত্তর; একটি সংযোজন হল যে আপনাকে অবশ্যই পাঠাতে হবে <code>{"type":"complete"}</code> যখন
+শেষ বাইটটি আউট হয়ে গেছে, কারণ আপনি না করা পর্যন্ত কিছুই প্রকাশিত হয় না।</p>
+</blockquote>
+<p>উদাহরণ প্রতিক্রিয়া:</p>
+<pre><code class="language-json">{
+  "clientPublished": true,
+  "serverImageLoaded": true,
+  "imageDigest": "sha256:4e7d...",
+  "bytesReceived": 318767104
+}
+</code></pre>
+<p>প্ল্যাটফর্ম:</p>
+<ul>
+<li>পারমাণবিকভাবে অদলবদল করে <code>client/</code>, তাই ব্যবহারকারীরা আংশিক আপলোড করা বিল্ড দেখতে পান না;</li>
+<li>লোড <code>server/image.tar</code>, এর অপরিবর্তনীয় ডাইজেস্ট গণনা করে, এবং স্থাপনাটিকে পুনরায় পিন করে;</li>
+<li>আপলোড করা ইমেজ দ্বারা প্রতিস্থাপন করা পুরানো ধারক সারিবদ্ধ;</li>
+<li>তাদের স্থায়ী স্ন্যাপশট থেকে যোগ্য সক্রিয় সেশন পুনরুদ্ধার করে।</li>
+</ul>
+<p>আপনি শুধুমাত্র ক্লায়েন্ট বা শুধুমাত্র সার্ভার ইমেজ আপলোড করতে পারেন. ক্লায়েন্ট-শুধু প্যাচ ব্যবহার
+<code>?mode=merge</code> একই শেষ বিন্দুতে (দেখুন
+<a href="/bn/docs/api/github-games.html#partial-updates-modemerge">আংশিক আপডেট</a>); একটি মার্জ একটি চিত্র এখনও আছে
+পুরো লোড একটি গেম এর ডিস্ক ভাতা হয় <strong>2 জিবি</strong> starhermit.com এ (অপারেটর-টিউনেবল) এবং পারেন
+খেলা প্রতি সুর করা; কারণ একটি পুশ একটি গেমের সামগ্রীতে যোগ করার পরিবর্তে প্রতিস্থাপন করে, এটি উভয়ই
+গেমটি সবচেয়ে বড় পুশ এবং সর্বাধিক ডিস্ক দখল করতে পারে। <code>413</code> অন্তর্ভুক্ত <code>limitBytes</code>; একটি অবৈধ
+সংরক্ষণাগার বা ছবি রিটার্ন <code>422</code>; এবং <code>507</code> মানে সার্ভারের এখন কোন জায়গা নেই — এটা চেক করা হয়েছে
+আপনার শরীর পড়ার আগে, তাই একটি ধ্বংসপ্রাপ্ত আপলোড অর্ধেক ল্যান্ড করার পরিবর্তে প্রত্যাখ্যান করা হয়। সিমলিঙ্ক লাগাবেন না,
+হার্ড লিঙ্ক, পাথ ট্রাভার্সাল, বা ফাইলগুলি সংরক্ষণাগারে নথিভুক্ত বিন্যাসের বাইরে।</p>
+<p>একটি সফল আপলোডের অর্থ এই নয় যে নতুন প্রক্রিয়াটি এখনও স্বাস্থ্য পরীক্ষায় উত্তীর্ণ হয়েছে৷ বিদ্যমান পোল
+<code>GET /api/v1/me/github-games/{id}/deployment</code> প্রচার করার আগে একটি বাস্তব অধিবেশন দেখুন এবং পরীক্ষা করুন
+নির্মাণ একটি রিপোজিটরি কমিট পিন করা পরে স্পষ্টভাবে ডিপ্লয়মেন্টকে রিপোজিটরি কন্টেন্টে ফিরিয়ে দেয়।</p>
+<h3 id="switching-an-existing-game-from-server-to-a-container">থেকে একটি বিদ্যমান গেম স্যুইচ করা হচ্ছে <code>server=</code> একটি পাত্রে</h3>
+<p>সমর্থিত, এবং এটি গেমটিকে রাখে: একই আইডি, স্লাগ, <code>&lt;uid&gt;.starhermit.com</code> ঠিকানা, খেলোয়াড়,
+লিডারবোর্ড এবং অর্জন। কোন পৃথক নিবন্ধন ধাপ নেই.</p>
+<ol>
+<li>প্রতিস্থাপন করুন <code>server=...</code> আপনার সাথে <code>container.*</code> ব্লক ইন <code>starhermit.txt</code>. দুজনে পারস্পরিক
+একচেটিয়া উভয় ঘোষণা একটি ম্যানিফেস্ট অস্বীকার করা হয়.</li>
+<li>একটি বান্ডিল বহন ধাক্কা <code>client/</code> (সেই প্রকাশ সহ) <strong>এবং</strong> <code>server/image.tar</code>, ওভার
+<code>ws/v1/game-upload</code> যদি এটি বড় হয়।</li>
+<li>আপনি যে ছবিটি আপলোড করেন সেটিই চলে। ক <code>container.image=</code> একই ম্যানিফেস্টে লাইন হয়
+রাখা ভাল, কিন্তু আপলোড করা ডাইজেস্ট এর উপর জয়লাভ করে।</li>
+<li>পোল <code>GET /api/v1/me/github-games/{id}/deployment</code> এটি পড়া পর্যন্ত <code>running</code>, তারপর একটি বাস্তব শুরু
+ঘর বা ম্যাচ।</li>
+</ol>
+<h2 id="part-4-renew-the-containers-platform-token">পার্ট 4: কন্টেইনারের প্ল্যাটফর্ম টোকেন পুনর্নবীকরণ করুন</h2>
+<p>স্টার্টআপে ধারকটি গ্রহণ করে:</p>
+<pre><code class="language-text">STARHERMIT_API_BASE
+STARHERMIT_GAME_SLUG
+STARHERMIT_SERVER_TOKEN
+STARHERMIT_SERVER_TOKEN_EXPIRES_IN
+STARHERMIT_REFRESH_KEY
+STARHERMIT_INVOKE_KEY
+</code></pre>
+<p><code>STARHERMIT_SERVER_TOKEN</code> সংকীর্ণ: এটি গেম সার্ভারের প্রতিনিধিত্ব করে, প্লেয়ার নয়। এর পরে মেয়াদ শেষ হয়
+ডিফল্টরূপে 24 ঘন্টা। প্রায় অর্ধেক সময়সূচী পুনর্নবীকরণ
+<code>STARHERMIT_SERVER_TOKEN_EXPIRES_IN</code>:</p>
+<pre><code class="language-http">POST {STARHERMIT_API_BASE}/api/v1/games/{STARHERMIT_GAME_SLUG}/server/token
+X-Starhermit-Refresh-Key: {STARHERMIT_REFRESH_KEY}
+</code></pre>
+<pre><code class="language-json">{ "token": "eyJhbGciOi...", "expiresInSeconds": 86400 }
+</code></pre>
+<p>এই এন্ডপয়েন্টের জন্য কোন বেয়ারার টোকেনের প্রয়োজন নেই। পুরানো টোকেন থাকলেও এটি পুনরুদ্ধারের অনুমতি দেয়
+ইতিমধ্যে মেয়াদ উত্তীর্ণ। ইন-মেমরি টোকেনটি পারমাণবিকভাবে প্রতিস্থাপন করুন এবং নতুন থেকে পরবর্তী পুনর্নবীকরণের সময়সূচী করুন
+<code>expiresInSeconds</code>.</p>
+<p>দুটি স্থাপনার গোপনীয়তা আলাদা রাখুন:</p>
+<ul>
+<li><code>STARHERMIT_INVOKE_KEY</code> আপনার কন্টেইনারে StarHermit অনুরোধগুলিকে প্রমাণীকরণ করে।</li>
+<li><code>STARHERMIT_REFRESH_KEY</code> StarHermit টোকেন পুনর্নবীকরণ করার সময় আপনার কন্টেইনারকে প্রমাণীকরণ করে।</li>
+</ul>
+<p>উভয়ই প্রতিটি কন্টেইনার রিস্টার্টে ঘোরে। তাদের কখনই লগ ইন করবেন না, তাদের ফিরিয়ে দিন <code>/describe</code>, তাদের একটি মধ্যে রাখুন
+স্ন্যাপশট, বা একটি প্লেয়ার তাদের পাঠান.</p>
+<h2 id="part-5-onboard-a-non-starhermit-player-without-oauth">পার্ট 5: OAuth ছাড়া একজন নন-স্টারহার্মিট প্লেয়ার অনবোর্ড</h2>
+<p>এই প্রবাহটি নেটিভ গেম বা লঞ্চারে চালান, ডেডিকেটেড পাত্রে নয়। সম্পূর্ণ ওয়াকথ্রু,
+পরীক্ষিত ক্লায়েন্ট কোড সহ, হল <a href="/bn/docs/tutorials/public-key-onboarding.html">টিউটোরিয়াল: একটি পাবলিক কী সহ অনবোর্ড প্লেয়ার</a>;
+সংক্ষেপে:</p>
+<ol>
+<li><strong>প্রতি-ইনস্টলেশন কী তৈরি করুন</strong> প্রথম লঞ্চে (Ed25519 প্রস্তাবিত) এবং ব্যক্তিগত কী রাখুন
+OS শংসাপত্রের দোকানে। এটি কখনই আপলোড করবেন না এবং আপনার সার্ভারে খেলোয়াড়দের কী তৈরি করবেন না।</li>
+<li><strong>সম্মতি এবং একটি ইমেল ঠিকানার জন্য জিজ্ঞাসা করুন</strong>, তারপর <code>POST /api/v1/auth/public-key/register</code> সঙ্গে
+<code>{ email, keyType, keyData }</code> প্লেয়ারের ডিভাইস থেকে। এটি প্রতি এক নিবন্ধন থ্রোটল করা হয়
+ঠিকানা এবং প্রতি আইপি প্রতি 24 ঘন্টা (<code>429</code> সঙ্গে <code>Retry-After</code>), তাই এটি আপনার মাধ্যমে প্রক্সি করবেন না
+সার্ভার - প্রত্যেক প্লেয়ার তার আইপি শেয়ার করবে।</li>
+<li><strong>প্লেয়ার নিশ্চিত করার জন্য অপেক্ষা করুন।</strong> ইমেল করা লিঙ্কটি এমন একটি পৃষ্ঠা খোলে যা পর্যন্ত কিছুই পরিবর্তন করে না
+প্লেয়ার কনফার্ম চাপে, যা অ্যাকাউন্ট তৈরি করে এবং কী সংযুক্ত করে; starhermit.com-এ
+তারা তারপর StarHermit ড্যাশবোর্ডে অবতরণ করে, তাই আপনার গেম সেই টোকেনগুলি গ্রহণ করে না। পরিবর্তে এটি <strong>এটি সফল না হওয়া পর্যন্ত কী দিয়ে সাইন ইন করুন</strong>: <code>challenge</code>, StarHermit এর স্বাক্ষর করুন
+<a href="/bn/docs/tutorials/public-key-onboarding.html#3-sign-in-with-the-key">সঠিক চ্যালেঞ্জ বাইট</a>, <code>complete</code>. পর্যন্ত
+খেলোয়াড় নিশ্চিত করে, <code>complete</code> উত্তর <code>401 "Public key not registered or revoked."</code>.</li>
+<li><strong>অধিবেশন রাখুন</strong> সঙ্গে <code>POST /api/v1/auth/refresh</code>, এবং যখনই আবার কী দিয়ে সাইন ইন করুন
+রিফ্রেশ ব্যর্থ হয় বর্তমান শর্তাবলী গ্রহণ করুন যখন <code>GET /api/v1/me</code> রিপোর্ট <code>termsAcceptanceRequired</code>
+(অ্যাকাউন্ট সেশন এবং প্লেয়ার লঞ্চ টোকেন উভয়ই করতে পারেন — দেখুন
+<a href="/bn/docs/api/profile.html#terms-acceptance">শর্তাবলী গ্রহণ</a>) আপনার ধারক এর স্থাপনার টোকেন হয়
+শর্তাবলী থেকে অব্যাহতি; যে ছাড় তার খেলোয়াড়দের প্রসারিত হয় না.</li>
+</ol>
+<p><strong>আরও ডিভাইস।</strong> প্রতিটি ইনস্টলেশন প্লেয়ারের একই ইমেল ঠিকানার সাথে নিজস্ব কী নিবন্ধন করে, এবং
+কী বিদ্যমান অ্যাকাউন্টে যোগদান করে। <code>POST /api/v1/me/public-keys</code> এই খেলোয়াড়দের জন্য একটি বিকল্প নয়:
+এটির জন্য একটি সেশন প্রয়োজন যা একটি OAuth প্রদানকারীর মাধ্যমে সাইন ইন করা হয়েছে৷</p>
+<h3 id="5-add-a-player-facing-name-and-external-identity">5. একটি প্লেয়ার-মুখী নাম এবং বাহ্যিক পরিচয় যোগ করুন</h3>
+<p>উৎপন্ন অ্যাকাউন্ট একটি দিয়ে শুরু হয় <code>pk-...</code> ব্যবহারকারীর নাম খেলোয়াড়কে একটি ডাকনাম বেছে নিতে দিন:</p>
+<pre><code class="language-http">PATCH /api/v1/me
+Authorization: Bearer &lt;access-token&gt;
+Content-Type: application/json
+
+{ "nickname": "RookPilot" }
+</code></pre>
+<p>আপনি যে প্ল্যাটফর্মের অধীনে এক্সিকিউটেবল চলছে তার সাথে অ্যাকাউন্টটি যুক্ত করতে পারেন:</p>
+<pre><code class="language-http">POST /api/v1/me/identities
+Authorization: Bearer &lt;access-token&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  "provider": "epic",
+  "providerUserId": "epic-account-id",
+  "metadata": "{\"displayName\":\"RookPilot\"}"
+}
+</code></pre>
+<p>ব্যবহার a <strong>অ-সংরক্ষিত</strong> প্রদানকারীর নাম (<code>epic</code>, <code>gog</code>, অথবা আপনার নিজের স্টোরফ্রন্ট আইডি)। করবেন <strong>না</strong> ব্যবহার
+<code>steam</code>, <code>google</code>, <code>github</code>, বা অন্য কোনো নাম যাকে প্ল্যাটফর্মটি OAuth প্রদানকারী হিসাবে বিবেচনা করে — সেগুলি
+সেই প্রদানকারী কনফিগার করা না থাকলেও প্রত্যাখ্যান করা হয়। সেই প্ল্যাটফর্ম থেকে বাহ্যিক আইডি পান
+প্রমাণীকৃত SDK/সেশন, সম্পাদনাযোগ্য প্লেয়ার ইনপুট থেকে নয়। এই শেষবিন্দু একটি পরিচয় সংযুক্ত করে
+StarHermit অ্যাকাউন্টের সাথে; এটি নিজেই স্টোরফ্রন্ট মালিকানার প্রমাণ নয় এবং প্রতিস্থাপন করা উচিত নয়
+ক্রয় বা নিষেধাজ্ঞার জন্য প্ল্যাটফর্মের নিজস্ব টিকিট যাচাইকরণ।</p>
+<p>আলাদা এক্সটার্নাল-লাইব্রেরি এপিআই ঐচ্ছিক এবং বর্তমানে প্রদানকারী থাকাকালীন ডেমো সিঙ্ক্রোনাইজেশন ব্যবহার করে
+ইন্টিগ্রেশন চূড়ান্ত করা হয়; এটা ডেডিকেটেড সার্ভার খেলার জন্য প্রয়োজন হয় না.</p>
+<h2 id="part-6-enter-the-game-and-use-starhermit-services">পার্ট 6: গেমটিতে প্রবেশ করুন এবং StarHermit পরিষেবাগুলি ব্যবহার করুন</h2>
+<p>প্রতিস্থাপন করুন <code>{slug}</code> নীচের HTTP উদাহরণগুলির সাথে <code>GAME_SLUG</code>, আপনি যে গেমটিতে UUID পেয়েছেন
+নিবন্ধন ভান্ডারের নাম <code>orbit-league</code> একটি প্রদর্শন/উৎস নাম, API স্লাগ নয়।</p>
+<h3 id="mint-a-least-privilege-game-token">মিন্ট একটি ন্যূনতম বিশেষাধিকার গেম টোকেন</h3>
+<p>আপনার গেমে বেড়া দেওয়া একটি টোকেন মিন্ট করতে একবার সম্পূর্ণ অ্যাক্সেস টোকেন ব্যবহার করুন:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/launch-token
+Authorization: Bearer &lt;access-token&gt;
+</code></pre>
+<pre><code class="language-json">{ "token": "eyJhbGciOi...", "expiresInSeconds": 3600 }
+</code></pre>
+<p>গেমপ্লে এবং অনুমোদিত সেশন সামাজিক API-এর জন্য এই লঞ্চ টোকেন ব্যবহার করুন। মেয়াদ শেষ হওয়ার আগে এটি রিফ্রেশ করুন।
+যেখানে সম্ভব গেমপ্লে কোডের বাইরে সম্পূর্ণ অ্যাকাউন্ট টোকেন রাখুন।</p>
+<h3 id="matchmaking">ম্যাচমেকিং</h3>
+<pre><code class="language-http">POST /api/v1/games/{slug}/matchmaking
+Authorization: Bearer &lt;game-token&gt;
+</code></pre>
+<p>পোল <code>GET /api/v1/games/{slug}/matchmaking</code> পর্যন্ত <code>status</code> হয় <code>matched</code>, তারপর সংযোগ করুন:</p>
+<pre><code class="language-text">wss://api.starhermit.com/ws/v1/games?sessionId=&lt;sessionId&gt;&amp;access_token=&lt;game-token&gt;
+</code></pre>
+<p>ক্লায়েন্ট বার্তা JSON থেকে যায়:</p>
+<pre><code class="language-json">{ "type": "cmd", "data": { "type": "input", "throttle": 0.8 } }
+</code></pre>
+<p>StarHermit কমান্ডটিকে কনটেইনার স্ট্রীমে রূপান্তর করে এবং প্রমাণীকৃত StarHermit স্ট্যাম্প করে
+ব্যবহারকারী আইডি। আপনার কন্টেইনার টাইপ-2 স্ট্রিম ফ্রেমের মাধ্যমে প্রামাণিক গেম পেলোড ফেরত দেয়।</p>
+<h3 id="leaderboards-and-achievements">লিডারবোর্ড এবং অর্জন</h3>
+<p>প্রতিটি প্রামাণিক গেম একটি Elo লিডারবোর্ড পায়। আপনার ধারক Elo পরিবর্তন এবং ঘোষণা পাঠায়
+অর্জন উন্মোচিত হয় <code>/control</code>; ক্লায়েন্ট শুধুমাত্র ফলাফল প্ল্যাটফর্ম অবস্থা পড়ে:</p>
+<pre><code class="language-text">GET /api/v1/games/{slug}/achievements
+GET /api/v1/leaderboards/{leaderboardId}/entries
+</code></pre>
+<p>একটি পরিবর্তিত স্টিম/এপিক/জিওজি ক্লায়েন্ট সরাসরি গেম লিডারবোর্ড স্কোর জমা দিতে বা দাবি করতে পারে না
+খেলার মালিকানাধীন কৃতিত্ব।</p>
+<h3 id="session-chat-and-voice">অধিবেশন চ্যাট এবং ভয়েস</h3>
+<p><code>GET /api/v1/games/{slug}/sessions/{sessionId}</code> রিটার্ন <code>chatConversationId</code>. অধিবেশন
+কথোপকথন অংশগ্রহণকারীদের চ্যাট করতে এবং ভয়েস ব্যবহার করার অনুমতি দেয় এমনকি তারা বন্ধু না হলেও।</p>
+<p>সাধারণ ভয়েস প্রবাহ:</p>
+<ol>
+<li><code>GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;</code>.</li>
+<li>প্রয়োজন হলে, <code>POST /api/v1/voice/rooms</code> কথোপকথন আইডি সহ।</li>
+<li><code>POST /api/v1/voice/rooms/{roomId}/join</code>.</li>
+<li>সংযোগ করুন <code>wss://api.starhermit.com/ws/v1/voice?roomId=&lt;roomId&gt;&amp;access_token=&lt;game-token&gt;</code>.</li>
+</ol>
+<p>একই অ্যাকাউন্ট বন্ধু, উপস্থিতি, গেমের আমন্ত্রণ, রিপ্লে এবং প্রোফাইল পরিচয় জুড়ে সক্ষম করে
+সমস্ত স্টোরফ্রন্ট বিল্ড। একটি নতুন অ্যাকাউন্ট তৈরি করার পরিবর্তে একজন মানুষ প্রতি একটি StarHermit কী/অ্যাকাউন্ট রাখুন
+প্রতিটি ম্যাচ বা প্রতিটি স্টোরফ্রন্ট লঞ্চের জন্য।</p>
+<h2 id="production-checklist">উত্পাদন চেকলিস্ট</h2>
+<h3 id="publishing">প্রকাশনা</h3>
+<ul>
+<li>[ ] বিদ্যমান মালিকানাধীন গেমটিতে একটি নন-নাল রয়েছে৷ <code>gameSlug</code>.</li>
+<li>[ ] ধারক একটি ভুল বা অনুপস্থিত আহ্বান কী প্রত্যাখ্যান করে৷</li>
+<li>[ ] ইনভোক কী, রিফ্রেশ কী এবং সার্ভার টোকেন প্রক্রিয়া শুরুর সময় পরিবেশ থেকে পড়া হয়, কখনো ইমেজে বেক করা হয় না বা ডিস্কে ক্যাশে করা হয় না (প্রতিটি কন্টেইনার শুরুতে তিনটিই ঘোরানো হয়)।</li>
+<li>[ ] <code>/health</code> ফিরে আসে না <code>200</code> রাষ্ট্র গ্রহণ করার আগে।</li>
+<li>[ ] বান্ডিল কাঁচা ব্যবহার করে <code>application/gzip</code>, মাল্টিপার্ট এনকোডিং নয়।</li>
+<li>[ ] ছবি শুধুমাত্র পঠনযোগ্য, অ-রুট, অফলাইন এবং ভলিউম ছাড়াই কাজ করে।</li>
+<li>আপলোড করার পরে স্থাপনার স্থিতি এবং একটি বাস্তব ম্যাচমেকিং সেশন পরীক্ষা করা হয়।</li>
+<li>সার্ভার টোকেন রিফ্রেশ অর্ধেক জীবনকালের আগে চলে এবং টোকেনগুলিকে পারমাণবিকভাবে অদলবদল করে।</li>
+<li>[ ] স্ন্যাপশটগুলিতে কোনো স্থাপনার গোপনীয়তা লগ করা বা অব্যাহত থাকে না।</li>
+</ul>
+<h3 id="player-onboarding">প্লেয়ার অনবোর্ডিং</h3>
+<ul>
+<li>প্লেয়ার ডিভাইসে কী-পেয়ার তৈরি করা হয় এবং ব্যক্তিগত কী নিরাপদ স্টোরেজ ব্যবহার করে।</li>
+<li>[ ] অ্যাকাউন্ট তৈরি প্রকাশ করা হয় এবং এতে সম্মতি দেওয়া হয়।</li>
+<li>[ ] ইমেল যাচাইকরণ একবার সম্পন্ন হয়; <code>429 Retry-After</code> সম্মান করা হয়।</li>
+<li>[ ] রেজিস্ট্রেশন এবং প্লেয়ার টোকেন ডেডিকেটেড সার্ভারের মধ্য দিয়ে যায় না।</li>
+<li>[ ] অ্যাক্সেস/রিফ্রেশ টোকেনগুলি সুরক্ষিতভাবে সংরক্ষণ করা হয় এবং রিফ্রেশ ঘূর্ণন সিরিয়ালাইজ করা হয়।</li>
+<li>[ ] বহিরাগত আইডিগুলি প্রমাণীকৃত Steam/Epic/GOG SDK অবস্থা থেকে আসে৷</li>
+<li>প্রাথমিক অ্যাকাউন্ট সেটআপের পরে গেমপ্লে একটি গেম-স্কোপড টোকেন ব্যবহার করে।</li>
+<li>[ ] ক্লায়েন্ট হ্যান্ডেল <code>achievement</code>, <code>resumed</code>, এবং <code>abandoned</code> গেমপ্লে ফ্রেম।</li>
+</ul>
+<h2 id="reference-pages">রেফারেন্স পাতা</h2>
+<ul>
+<li><a href="/bn/docs/api/auth.html">প্রমাণীকরণ</a></li>
+<li><a href="/bn/docs/api/container-games.html">কন্টেইনার-হোস্টেড গেম সার্ভার</a></li>
+<li><a href="/bn/docs/api/github-games.html#push-a-game-bundle">GitHub গেমস এবং বান্ডেল আপলোড</a></li>
+<li><a href="/bn/docs/api/games.html">গেম API</a></li>
+<li><a href="/bn/docs/api/profile.html">প্রোফাইল এবং লিঙ্কযুক্ত পরিচয়</a></li>
+<li><a href="/bn/docs/api/leaderboards.html">লিডারবোর্ড</a></li>
+<li><a href="/bn/docs/api/achievements.html">অর্জন</a></li>
+<li><a href="/bn/docs/api/chat.html">চ্যাট</a></li>
+<li><a href="/bn/docs/api/voice.html">ভয়েস</a></li>
+</ul>
+
+{% endraw %}

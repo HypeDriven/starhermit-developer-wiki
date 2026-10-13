@@ -1,0 +1,125 @@
+---
+layout: "wiki"
+lang: "ur"
+title: "ترقی کو محفوظ طریقے سے لوڈ اور محفوظ کریں۔"
+source_url: "/docs/tutorials/cloud-save-sync.html"
+source_path: "docs/tutorials/cloud-save-sync.md"
+source_hash: "3d1bef0f13bb54f639d96ca6ff1c5607c172a4d25d7707062b404cba46d5de83"
+translation: "machine"
+permalink: "/ur/docs/tutorials/cloud-save-sync.html"
+---
+{% raw %}
+<h1 id="load-and-save-progress-safely">ترقی کو محفوظ طریقے سے لوڈ اور محفوظ کریں۔</h1>
+<p>سائن ان کردہ کھلاڑی کے کلائنٹ کی ملکیت میں پیش رفت کے لیے کلاؤڈ سیو کا استعمال کریں۔ غیر دستخط شدہ واحد کھلاڑی کا اختیار
+یادداشت میں پیشرفت کو برقرار رکھتا ہے اور اکاؤنٹ کو پڑھتا یا لکھتا نہیں بچاتا ہے۔ ترجیحات کا تعلق ہے۔
+<a href="/ur/docs/api/games.html#per-player-game-settings">کھیل کی ترتیبات</a>، ترقی کی دستاویز نہیں۔</p>
+<p>لانچ ٹوکن بالکل رسائی حاصل کر سکتا ہے۔ <code>game:&lt;gameId&gt;</code>، کہاں <code>gameId</code> اس کا ہے <code>game_scope</code>. پلیٹ فارم
+مبہم بائٹس ذخیرہ کرتا ہے، فی سلاٹ ایک بچت کے ساتھ۔ آپ کے گیم کی توقع کے فارمیٹ کی توثیق کریں۔ دیکھیں
+<a href="/ur/docs/api/catalog.html#cloud-saves">کلاؤڈ سیوز</a> کوٹہ اور مشروط ہیڈرز کے لیے۔</p>
+<p><img src="/docs/images/ur/cloud-save-flow.svg" alt="لکھنے سے پہلے لوڈ اور تصدیق کریں۔ پڑھنے میں ناکام اپ لوڈز؛ مشروط تحریریں نئی ​​بچتوں اور سطحی تنازعات کو محفوظ رکھتی ہیں۔"></p>
+<h2 id="a-small-complete-json-recipe">ایک چھوٹا مکمل JSON نسخہ</h2>
+<p>کاپی <a href="/docs/sdk/cloud-save-store.js"><code>cloud-save-store.js</code></a> آپ کی تعمیر میں. یہ مثال خام ذخیرہ کرتی ہے۔
+UTF-8 JSON بائٹس؛ پلیٹ فارم ان کی خدمت کرتا ہے۔ <code>application/zip</code> لیکن زپ فارمیٹ کی ضرورت نہیں ہے۔
+زپ سیو کے لیے ایک مختلف ریڈر استعمال کریں، بشمول <a href="/ur/docs/sdk/javascript.html#cloud-saves">براؤزر SDK کا زپ محفوظ کرتا ہے۔</a>.
+موجودہ کھلاڑیوں کے لیے منتقلی کے منصوبے کے بغیر فارمیٹس کو تبدیل نہ کریں۔</p>
+<pre><code class="language-js">import { CloudSaveStore } from './cloud-save-store.js';
+
+const store = new CloudSaveStore({
+  gameId: StarHermit.slug,
+  token: () =&gt; StarHermit.token, // Always obtain the current renewed token.
+});
+const valid = value =&gt; value?.version === 1 &amp;&amp; Number.isSafeInteger(value.points) &amp;&amp; value.points &gt;= 0;
+let progress = { version: 1, points: 0 };
+let saving = false;
+
+async function startAccountGame() {
+  // Keep gameplay/saving disabled until this resolves.
+  const remote = await store.load(valid);
+  progress = remote ?? { version: 1, points: 0 };
+  render(progress);
+}
+
+async function saveCheckpoint() {
+  if (saving) return; // Coalesce checkpoints; do not issue overlapping writes.
+  saving = true;
+  showSync('Saving…');
+  try {
+    await store.save(progress);
+    showSync('Saved');
+  } catch (error) {
+    if (error.status === 412) {
+      // Keep local progress in memory. Offer Reload cloud or an explicit merge.
+      showConflict(() =&gt; startAccountGame());
+    } else showSync('Save failed; retry after resolving the error');
+  } finally {
+    saving = false;
+  }
+}
+</code></pre>
+<p><code>render</code>, <code>showSync</code>، اور <code>showConflict</code> آپ کے UI ہیں۔ انتظار کرو <code>startAccountGame()</code> چالو کرنے سے پہلے
+کھیلنا یا بچانا۔ لوڈ کی ناکامی پر، کھلاڑی کی موجودہ مقامی حالت کو برقرار رکھیں، ناکامی کو ظاہر کریں،
+اور اپ لوڈز کو بلاک رکھیں۔ اے <code>404</code> خالی سلاٹ کیس ہے؛ <code>401</code>, <code>403</code>, <code>5xx</code>, خراب JSON،
+یا غیر تعاون یافتہ محفوظ ورژن خالی سلاٹ نہیں ہیں۔</p>
+<p>نسخہ اسناد کی تجدید نہیں کرتا ہے۔ براؤزر SDK لانچ ٹوکن کی تجدید کرتا ہے جب تک وہ باقی رہتے ہیں۔
+درست زیر التواء شرائط کو حل کریں یا دوبارہ پڑھنے کی کوشش کرنے سے پہلے گیم کے داخلے کے بہاؤ کے ذریعے دوبارہ تصدیق کریں۔</p>
+<h2 id="conditions-and-conflicts">حالات اور تنازعات</h2>
+<table>
+<thead>
+<tr>
+<th>جو بھری ہوئی تھی۔</th>
+<th>اگلی تحریر پر ہیڈر</th>
+<th>اگر کوئی دوسرا آلہ لکھتا ہے۔</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ETag کے ساتھ موجودہ بچت</td>
+<td><code>If-Match: &lt;etag&gt;</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>کوئی بچت نہیں (<code>404</code>)</td>
+<td><code>If-None-Match: *</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>کچھ بھی کامیابی سے لوڈ نہیں ہوا۔</td>
+<td>نہیں لکھنا</td>
+<td>پڑھنے کی دوبارہ کوشش کرتے رہیں یا کھلاڑی کو بغیر ٹریک کیے ہوئے کھیل میں رہنے دیں۔</td>
+</tr>
+</tbody>
+</table>
+<p>سے ورژن استعمال کریں۔ <strong>ڈیٹا جو آپ نے لوڈ کیا۔</strong>، بعد میں میٹا ڈیٹا چیک نہیں۔ واپس کیے گئے نئے ETag کو برقرار رکھیں
+ہر کامیاب تحریر کے ذریعے۔ اے <code>412</code> بلاکس مزید بچاتا ہے جب تک کہ گیم موجودہ ورژن کو لوڈ نہیں کرتا ہے۔
+کھلاڑی اسے اپناتا ہے یا ضم کرتا ہے۔ خاموشی سے حالت کو نہ ہٹائیں اور کسی دوسرے آلے کو اوور رائٹ نہ کریں۔
+API اس اوور رائٹ کو کالعدم کرنے کے لیے کوئی محفوظ تاریخ پیش نہیں کرتا ہے۔</p>
+<p>اگر دو آلات کو آزادانہ طور پر کاؤنٹرز یا انوینٹری کو اپ ڈیٹ کرنا ضروری ہے، تو ایک آخری تحریر جیتنے والی دستاویز
+کھیل فٹ نہیں ہو سکتا. سرور کی مستند حالت کا استعمال کریں اور اس کے بجائے توثیق شدہ گیم کمانڈز کی وضاحت کریں۔</p>
+<h2 id="save-format-and-migration">فارمیٹ اور ہجرت کو محفوظ کریں۔</h2>
+<p>ایک فارمیٹ ورژن شامل کریں اور ریموٹ کو اپنانے سے پہلے اقسام، حدود اور مطلوبہ فیلڈز کی توثیق کریں
+ترقی معاون پرانے ورژنز کے لیے ایک منتقلی لکھیں۔ ایک نئے نامعلوم ورژن کو برقرار رکھیں؛
+اسے ڈیفالٹس پر دوبارہ ترتیب نہ دیں اور اس پر اپ لوڈ کریں۔ کلاؤڈ ڈیٹا کلائنٹ کے زیر کنٹرول ہے، لہذا اس کا علاج کبھی نہ کریں۔
+مسابقتی سکور یا ادا شدہ استحقاق کے ثبوت کے طور پر۔</p>
+<p>ڈیفالٹ ڈی کوڈ کی بچت کی حد 10 MiB ہے۔ Base64 درخواست کے جسم میں تقریبا ایک تہائی کا اضافہ کرتا ہے۔
+<code>413 cloud_save_too_large</code>, <code>409 cloud_save_slots_exhausted</code>، اور <code>507 cloud_save_quota_exceeded</code>
+مختلف صلاحیت کی ناکامیاں ہیں؛ معائنہ <code>code</code> اور <code>limit</code>. عزت <code>Retry-After</code> پر <code>429</code>.</p>
+<h2 id="checkpoints-and-page-exit">چیک پوائنٹس اور صفحہ سے باہر نکلنا</h2>
+<p>بامعنی چوکیوں پر محفوظ کریں اور دکھائی دینے والی سیو ایکشن پیش کریں۔ تیز رفتار تبدیلیوں کو ڈیباؤنس کریں اور سیریلائز کریں۔
+لکھتا ہے لہذا ہر ایک آخری تسلیم شدہ ورژن استعمال کرتا ہے۔ تسلیم ہونے تک گندا اشارے رکھیں۔
+ایک ناکام درخواست ایک تصدیق شدہ بچت نہیں ہے۔ ایک مبہم تحریر کے بعد، دوسری تحریر سے پہلے دوبارہ لوڈ کریں۔</p>
+<p>صفحہ سے باہر نکلنا اپ لوڈ بہترین کوشش ہے۔ براؤزر <code>fetch(..., { keepalive: true })</code> ایک چھوٹی سی پرواز میں حصہ لیتا ہے۔
+باڈی الاؤنس، عام طور پر 64 KiB؛ ایک 10 MiB بچت اس پر بھروسہ نہیں کر سکتی۔ کسی بھی درخواست سے پہلے ایک ٹیب بند ہو سکتا ہے۔
+ختم پائیداری کے لیے عام پیش منظر کی بچت کا استعمال کریں، اور غیر تسلیم شدہ پیش رفت کا لیبل نہ لگائیں۔
+محفوظ کر لیا Quickstart ہر پوائنٹ کلیکشن پر اپنی چھوٹی دستاویز کو محفوظ کرتا ہے۔</p>
+<h2 id="verify-in-your-game">اپنے گیم میں تصدیق کریں۔</h2>
+<ol>
+<li>ایک خالی سلاٹ کے ساتھ شروع کریں؛ پیشرفت جمع کریں، محفوظ کریں، دوبارہ لوڈ کریں، اور تصدیق کریں کہ اس کی واپسی ہے۔</li>
+<li>نیٹ ورک کی خرابی کے ساتھ پڑھنے سے انکار کریں، <code>403</code>، یا غلط ڈیٹا؛ تصدیق کریں کہ کوئی اپ لوڈ نہیں ہے۔</li>
+<li>ایک ورژن پر دو ٹیبز کھولیں۔ A میں محفوظ کریں، پھر B: B کو تنازعات کو سامنے لانا چاہیے اور اپنی مقامی حالت کو محفوظ رکھنا چاہیے۔</li>
+<li>نامعلوم ڈیٹا کو اوور رائٹ کیے بغیر پرانے/نئے فارمیٹ اور گمشدہ اعتراف کی جانچ کریں۔</li>
+<li>غیر ٹریک شدہ سنگل پلیئر موڈ میں داخل ہوں اور تصدیق کریں کہ پلے کلاؤڈ سیو کی کوئی درخواست نہیں کرتا ہے۔</li>
+</ol>
+<p>دیکھیں <a href="/ur/docs/tutorials/browser-quickstart.html">چلانے کے قابل کوئیک اسٹارٹ</a>, <a href="/ur/docs/api/conventions.html">API کنونشنز</a>، اور
+<a href="/ur/docs/troubleshooting.html#game-setup-and-storage">خرابیوں کا سراغ لگانا</a>.</p>
+
+{% endraw %}

@@ -1,0 +1,125 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "安全地加载和保存进度"
+source_url: "/docs/tutorials/cloud-save-sync.html"
+source_path: "docs/tutorials/cloud-save-sync.md"
+source_hash: "3d1bef0f13bb54f639d96ca6ff1c5607c172a4d25d7707062b404cba46d5de83"
+translation: "machine"
+permalink: "/zh-CN/docs/tutorials/cloud-save-sync.html"
+---
+{% raw %}
+<h1 id="load-and-save-progress-safely">安全地加载和保存进度</h1>
+<p>使用云保存来保存已登录玩家的客户端拥有的进度。未签名的单人游戏选项
+将进度保留在内存中，并且不读取或写入帐户保存。偏好属于
+<a href="/zh-CN/docs/api/games.html#per-player-game-settings">游戏设置</a>，而不是进度文档。</p>
+<p>启动令牌可以准确访问 <code>game:&lt;gameId&gt;</code>， 在哪里 <code>gameId</code> 是它的 <code>game_scope</code>。平台
+存储不透明字节，每个槽保存一次。验证您的游戏所需的格式。看
+<a href="/zh-CN/docs/api/catalog.html#cloud-saves">云存档</a> 用于配额和条件标头。</p>
+<p><img src="/docs/images/zh-CN/cloud-save-flow.svg" alt="写入之前加载并验证。读取失败阻止上传；条件写入保留较新的保存和表面冲突。"></p>
+<h2 id="a-small-complete-json-recipe">一个完整的小 JSON 食谱</h2>
+<p>复制 <a href="/docs/sdk/cloud-save-store.js"><code>cloud-save-store.js</code></a> 进入你的构建。此示例存储原始数据
+UTF-8 JSON 字节；该平台为他们提供服务 <code>application/zip</code> 但不需要 ZIP 格式。
+使用不同的阅读器进行 ZIP 保存，包括 <a href="/zh-CN/docs/sdk/javascript.html#cloud-saves">浏览器SDK的ZIP保存</a>。
+如果没有现有播放器的迁移计划，请勿更改格式。</p>
+<pre><code class="language-js">import { CloudSaveStore } from './cloud-save-store.js';
+
+const store = new CloudSaveStore({
+  gameId: StarHermit.slug,
+  token: () =&gt; StarHermit.token, // Always obtain the current renewed token.
+});
+const valid = value =&gt; value?.version === 1 &amp;&amp; Number.isSafeInteger(value.points) &amp;&amp; value.points &gt;= 0;
+let progress = { version: 1, points: 0 };
+let saving = false;
+
+async function startAccountGame() {
+  // Keep gameplay/saving disabled until this resolves.
+  const remote = await store.load(valid);
+  progress = remote ?? { version: 1, points: 0 };
+  render(progress);
+}
+
+async function saveCheckpoint() {
+  if (saving) return; // Coalesce checkpoints; do not issue overlapping writes.
+  saving = true;
+  showSync('Saving…');
+  try {
+    await store.save(progress);
+    showSync('Saved');
+  } catch (error) {
+    if (error.status === 412) {
+      // Keep local progress in memory. Offer Reload cloud or an explicit merge.
+      showConflict(() =&gt; startAccountGame());
+    } else showSync('Save failed; retry after resolving the error');
+  } finally {
+    saving = false;
+  }
+}
+</code></pre>
+<p><code>render</code>, <code>showSync</code>， 和 <code>showConflict</code> 是你的用户界面。等待 <code>startAccountGame()</code> 启用之前
+播放或保存。加载失败时，保留播放器当前的本地状态，显示失败，
+并阻止上传。一个 <code>404</code> 是空槽情况； <code>401</code>, <code>403</code>, <code>5xx</code>, 格式错误的 JSON,
+或不受支持的保存版本不是空槽。</p>
+<p>该配方不会更新凭据。浏览器 SDK 在启动令牌仍然存在时更新它们
+有效。解决待决条款或在重试读取之前通过游戏的进入流程重新进行身份验证。</p>
+<h2 id="conditions-and-conflicts">条件和冲突</h2>
+<table>
+<thead>
+<tr>
+<th>加载了什么</th>
+<th>下次写入时的标头</th>
+<th>如果另一个设备写入</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>使用 ETag 进行现有保存</td>
+<td><code>If-Match: &lt;etag&gt;</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>没有保存（<code>404</code>)</td>
+<td><code>If-None-Match: *</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>没有加载成功</td>
+<td>不写</td>
+<td>继续重试读取或让玩家留在未跟踪的游戏中</td>
+</tr>
+</tbody>
+</table>
+<p>使用来自的版本 <strong>您加载的数据</strong>，而不是稍后的元数据检查。保留返回的新ETag
+每次成功写入。一个 <code>412</code> 阻止进一步保存，直到游戏加载当前版本并
+玩家采用或合并它。不要默默地删除该条件并覆盖另一个设备。
+API 不提供保存历史记录来撤消该覆盖。</p>
+<p>如果两个设备必须独立更新计数器或库存，则单个最后写入的文档获胜
+可能不适合游戏。使用服务器权威状态并定义经过验证的游戏命令。</p>
+<h2 id="save-format-and-migration">保存格式和迁移</h2>
+<p>在采用远程之前，包括格式版本并验证类型、范围和必填字段
+进步。为支持的旧版本编写迁移。保持较新的未知版本完好无损；
+不要将其重置为默认值并上传。云数据是客户端控制的，所以永远不要对待它
+作为竞争分数或付费权利的证明。</p>
+<p>默认解码保存限制为 10 MiB。 Base64 向请求正文添加了大约三分之一。
+<code>413 cloud_save_too_large</code>, <code>409 cloud_save_slots_exhausted</code>， 和 <code>507 cloud_save_quota_exceeded</code>
+是不同的容量故障；检查 <code>code</code> 和 <code>limit</code>。荣誉 <code>Retry-After</code> 在 <code>429</code>.</p>
+<h2 id="checkpoints-and-page-exit">检查点和页面退出</h2>
+<p>在有意义的检查点保存并提供可见的保存操作。反跳快速变化并序列化
+写入，以便每个人都使用最后确认的版本。保留脏指示器直至得到确认。
+失败的请求并不是确认的保存；在一次不明确的写入之后，在另一次写入之前重新加载。</p>
+<p>页面退出上传是最好的努力。浏览器 <code>fetch(..., { keepalive: true })</code> 在飞行中共享一个小
+身体余量，通常为 64 KiB； 10 MiB 的保存不能依赖它。选项卡可能会在任何请求之前关闭
+完成。使用普通的前景保存以提高耐用性，并且不要将未确认的进度标记为
+已保存。快速入门会在每个点集合中保存其小文档。</p>
+<h2 id="verify-in-your-game">在你的游戏中验证</h2>
+<ol>
+<li>从一个空槽开始；收集进度、保存、重新加载并确认其返回。</li>
+<li>拒绝读取网络错误， <code>403</code>，或无效数据；确认没有上传。</li>
+<li>在一个版本上打开两个选项卡。保存在 A 中，然后保存在 B 中：B 必须暴露冲突并保留其本地状态。</li>
+<li>测试较旧/较新的格式和缺失的确认，而不覆盖未知数据。</li>
+<li>进入未跟踪的单人游戏模式并验证游戏是否发出云保存请求。</li>
+</ol>
+<p>看 <a href="/zh-CN/docs/tutorials/browser-quickstart.html">可运行的快速入门</a>, <a href="/zh-CN/docs/api/conventions.html">API约定</a>， 和
+<a href="/zh-CN/docs/troubleshooting.html#game-setup-and-storage">故障排除</a>.</p>
+
+{% endraw %}

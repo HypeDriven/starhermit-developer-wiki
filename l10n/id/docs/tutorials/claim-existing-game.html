@@ -1,0 +1,250 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Klaim Game yang Ditambahkan Orang Lain"
+source_url: "/docs/tutorials/claim-existing-game.html"
+source_path: "docs/tutorials/claim-existing-game.md"
+source_hash: "fc2b52c67cda7e6fd24b0791208c1511aafea7d1f6e61e1cf9b61cc9d6eb1003"
+translation: "machine"
+permalink: "/id/docs/tutorials/claim-existing-game.html"
+---
+{% raw %}
+<h1 id="claim-a-game-someone-else-added">Klaim Game yang Ditambahkan Orang Lain</h1>
+<p>Jika seseorang telah menambahkan game GitHub publik Anda ke StarHermit, Anda tidak perlu membuat
+daftar kedua. Klaim listingan yang ada untuk menjadi pemilik terverifikasi dan kelola metadatanya,
+hosting, penerapan, backend server, dan transfer di masa mendatang.</p>
+<p>Klaim dilindungi oleh kontrol repositori. Mengetahui ID game atau URL repositori saja tidak cukup.
+Anda harus membuktikan kendali dengan salah satu dari dua cara berikut:</p>
+<ol>
+<li>Tautkan akun GitHub pribadi yang memiliki repositori; atau</li>
+<li>Komit ID pengguna StarHermit Anda yang tidak dapat diubah sebagai <code>owner=</code> di repositori <code>starhermit.txt</code>.</li>
+</ol>
+<p>Metode kedua sangat berguna untuk repositori milik organisasi, karena saat ini
+Pemeriksaan login GitHub cocok dengan pemilik repositori pribadi dan tidak menyimpulkan keanggotaan organisasi.</p>
+<h2 id="what-claiming-changes">Apa yang diklaim berubah</h2>
+<p>Klaim yang berhasil:</p>
+<ul>
+<li>menyimpan ID game/daftar yang ada dan akumulasi riwayatnya;</li>
+<li>mengubah pengguna StarHermit yang mengelola listingan menjadi Anda;</li>
+<li>menandai daftar sebagai <code>isVerifiedOwner: true</code>;</li>
+<li>menyegarkan metadata dan kontrol tepercaya dari <code>starhermit.txt</code> jika memungkinkan;</li>
+<li>menyediakan atau menyegarkan backend skrip/wadah yang dideklarasikan;</li>
+<li>mengaktifkan hosting platform jika tersedia dan mengantri penerapan sebagai <code>pending</code>;</li>
+<li>menghapus akses pengelolaan dari orang yang pertama kali mengirimkan listingan tersebut.</li>
+</ul>
+<p>Mengklaim tidak memberikan akses kepada pengirim sebelumnya ke akun GitHub Anda, dan tidak digabungkan
+Akun pengguna StarHermit. Ini mentransfer pengelolaan daftar spesifik itu.</p>
+<h2 id="before-you-begin">Sebelum Anda mulai</h2>
+<p>Anda membutuhkan:</p>
+<ul>
+<li>Akun StarHermit dan token akses pengguna penuh—bukan token peluncuran dalam lingkup game.</li>
+<li>Akses tulis ke repositori jika menggunakan <code>owner=</code> metode bukti.</li>
+<li>ID daftar StarHermit yang ada.</li>
+<li>Untuk game repositori yang dikloning, valid <code>starhermit.txt</code> di root repositori.</li>
+</ul>
+<p>Hanya <code>github.com/&lt;owner&gt;/&lt;repo&gt;</code> repositori dan situs Halaman GitHub mereka berpartisipasi dalam klaim ini
+mengalir. URL yang dihosting secara sewenang-wenang tidak memiliki kepemilikan repositori GitHub untuk membuktikannya dan tidak dapat diklaim
+cara.</p>
+<p>Contoh penggunaan di bawah ini:</p>
+<pre><code class="language-bash">API=https://api.starhermit.com
+ACCESS_TOKEN='your-full-user-access-token'
+OWNER='your-github-login'
+REPO='your-game-repository'
+</code></pre>
+<p>Akses token berlangsung 15 menit. Segarkan milik Anda sebelum memulai jika sudah hampir habis masa berlakunya.</p>
+<h2 id="step-1-find-the-existing-listing">Langkah 1: temukan daftar yang ada</h2>
+<p>Daftar permainan yang dibagikan:</p>
+<pre><code class="language-bash">curl -sS "$API/api/v1/github-games" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>Setiap item menyertakan daftar yang tidak dapat diubah <code>id</code>, dinormalisasi <code>repoUrl</code>, <code>ownerLogin</code>, <code>repoName</code>, itu
+pengirim saat ini, dan status kepemilikan:</p>
+<pre><code class="language-json">{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "repoUrl": "https://github.com/octocat/orbit-league",
+  "ownerLogin": "octocat",
+  "repoName": "orbit-league",
+  "displayName": "Orbit League",
+  "isVerifiedOwner": false,
+  "submittedByUserId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "submittedByUsername": "someone-else"
+}
+</code></pre>
+<p>Cocokkan keduanya <code>ownerLogin</code> Dan <code>repoName</code>; jangan memilih game hanya karena nama tampilannya
+serupa. Dengan <code>jq</code>:</p>
+<pre><code class="language-bash">GAME_ID=$(
+  curl -sS "$API/api/v1/github-games" \
+    -H "Authorization: Bearer $ACCESS_TOKEN" |
+  jq -r --arg owner "$OWNER" --arg repo "$REPO" \
+    '.[] | select((.ownerLogin | ascii_downcase) == ($owner | ascii_downcase)
+               and (.repoName | ascii_downcase) == ($repo | ascii_downcase)) | .id' |
+  head -n1
+)
+
+printf 'Listing ID: %s\n' "$GAME_ID"
+</code></pre>
+<p>Hentikan jika hasilnya kosong. Jangan panggil klaim dengan ID yang disalin dari listingan yang tidak terkait.</p>
+<h2 id="step-2-choose-how-to-prove-ownership">Langkah 2: pilih cara membuktikan kepemilikan</h2>
+<h3 id="option-a-link-the-repository-owners-github-account">Opsi A: tautkan akun GitHub pemilik repositori</h3>
+<p>Gunakan ini ketika repositori dimiliki langsung oleh login GitHub pribadi Anda.</p>
+<p>Dari alur akun/pengaturan StarHermit, mulai GitHub OAuth <strong>link</strong> mode saat masuk ke
+Akun StarHermit yang seharusnya mengelola permainan. Menautkan berbeda dengan membuat a
+akun StarHermit kedua dengan login GitHub.</p>
+<p>Alur API dimulai pada:</p>
+<pre><code class="language-text">GET /api/v1/auth/oauth/github/authorize?link=true
+</code></pre>
+<p>Ini digerakkan oleh browser dan menggunakan cookie negara yang berumur pendek. Penautan memerlukan StarHermit terbaru
+otentikasi. Selesaikan otorisasi GitHub di sesi browser yang sama yang memulainya.</p>
+<p>Verifikasi hasilnya:</p>
+<pre><code class="language-bash">curl -sS "$API/api/v1/me/github" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>Mengharapkan:</p>
+<pre><code class="language-json">{ "linked": true, "login": "octocat" }
+</code></pre>
+<p>Login yang dikembalikan harus cocok dengan listingan yang ada <code>ownerLogin</code>, tidak peka huruf besar-kecil. Pribadi
+Login GitHub tidak membuktikan keanggotaan organisasi yang memiliki repositori. Untuk sebuah
+repositori milik organisasi, gunakan Opsi B.</p>
+<h3 id="option-b-add-owner-to-starhermittxt">Opsi B: tambahkan <code>owner=</code> ke <code>starhermit.txt</code></h3>
+<p>Hal ini membuktikan kontrol karena hanya seseorang yang mampu mempublikasikan konten repositori yang dapat menambah nilai.
+Mengatur <code>owner</code> ke ID pengguna StarHermit (UUID) Anda yang tidak dapat diubah, <strong>bukan</strong> nama pengguna atau nama panggilan Anda.</p>
+<p>Dapatkan ID Anda:</p>
+<pre><code class="language-bash">STARHERMIT_USER_ID=$(
+  curl -sS "$API/api/v1/me" \
+    -H "Authorization: Bearer $ACCESS_TOKEN" |
+  jq -r '.id'
+)
+</code></pre>
+<p>Di root repositori, buat atau perbarui <code>starhermit.txt</code>:</p>
+<pre><code class="language-ini">name=Orbit League
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6
+</code></pre>
+<p>Ganti pemilik contoh dengan <code>STARHERMIT_USER_ID</code>. Jangan masukkan nama pengguna atau nama panggilan Anda di sini;
+hal tersebut dapat berubah, sedangkan ID pengguna adalah pengidentifikasi kepemilikan yang stabil.</p>
+<p>Untuk game resmi, pertahankan satu deklarasi backend:</p>
+<pre><code class="language-ini"># JavaScript runtime:
+server=server.js
+
+# OR container runtime, never both:
+# container.image=ghcr.io/your-org/orbit-server@sha256:&lt;64-lowercase-hex&gt;
+</code></pre>
+<p>Komit dan dorong manifes ke repositori/versi yang dapat dibaca StarHermit:</p>
+<pre><code class="language-bash">git add starhermit.txt
+git commit -m "Declare StarHermit game ownership"
+git push
+</code></pre>
+<p>Sebelum mengklaim, buka repositori mentahnya <code>starhermit.txt</code> URL di browser yang tidak diautentikasi dan
+konfirmasikan nilai baru dapat dibaca publik. Mengklaim membaca repositori pada waktu permintaan; sebuah
+perubahan lokal yang tidak didorong tidak dapat membuktikan apa pun.</p>
+<h2 id="step-3-validate-the-manifest">Langkah 3: validasi manifes</h2>
+<p>Untuk game repositori kloning normal, klaim memerlukan:</p>
+<ul>
+<li><code>starhermit.txt</code> di root repositori;</li>
+<li>tidak kosong <code>name=</code>;</li>
+<li><code>launch=</code> menunjuk ke relatif repositori <code>.html</code> atau <code>.htm</code> mengajukan;</li>
+<li>opsional yang valid <code>server=</code> jalan berakhir di <code>.js</code>/<code>.mjs</code>, atau valid <code>container.image=</code> pernyataan;</li>
+<li>jangan pernah kedua runtime server sekaligus.</li>
+</ul>
+<p>Daftar Halaman GitHub mempertahankan URL yang dihostingnya sebagai target peluncuran dan tidak memerlukan manifes
+ketika kepemilikan GitHub pribadi terbukti, meskipun nama manifes yang valid masih dapat memperbaruinya
+nama tampilan.</p>
+<p>Jika game mendeklarasikan sebuah container, image-nya harus memenuhi registri, namespace pemilik, dan intisari
+aturan di <a href="/id/docs/api/container-games.html">Server Game yang dihosting oleh kontainer</a>. Container hosting juga bisa
+dibatasi oleh operator platform.</p>
+<h2 id="step-4-claim-the-listing">Langkah 4: klaim daftarnya</h2>
+<p>Permintaan klaim tidak memiliki badan:</p>
+<pre><code class="language-bash">curl -sS -X POST \
+  "$API/api/v1/me/github-games/$GAME_ID/claim" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>Sukses <code>200</code> mengembalikan game yang diperbarui:</p>
+<pre><code class="language-json">{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "repoUrl": "https://github.com/octocat/orbit-league",
+  "ownerLogin": "octocat",
+  "repoName": "orbit-league",
+  "displayName": "Orbit League",
+  "launchPath": "index.html",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "isVerifiedOwner": true,
+  "metadataSource": "starhermit.txt",
+  "hosting": {
+    "hostingEnabled": true,
+    "deployStatus": "pending"
+  }
+}
+</code></pre>
+<p>ID harus sama dengan yang ditemukan pada Langkah 1. Jangan membuat listing baru setelah klaim berhasil.</p>
+<p>Mengklaim listingan yang sudah Anda kelola diperbolehkan dengan sengaja. Ia membaca ulang manifesnya,
+menyediakan kembali backend, dan mengantri ulang hosting, sehingga panggilan yang sama dapat digunakan untuk menyinkronkan ulang
+game yang dikelola pemilik setelah perubahan repositori.</p>
+<h2 id="step-5-verify-takeover-and-deployment">Langkah 5: verifikasi pengambilalihan dan penerapan</h2>
+<p>Konfirmasikan bahwa game tersebut sekarang muncul di daftar terkelola Anda:</p>
+<pre><code class="language-bash">curl -sS "$API/api/v1/me/github-games" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" |
+jq --arg id "$GAME_ID" '.[] | select(.id == $id)'
+</code></pre>
+<p>Periksa status penerapan:</p>
+<pre><code class="language-bash">curl -sS \
+  "$API/api/v1/me/github-games/$GAME_ID/deployment" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>Klaim biasanya mengantri penerapan, jadi <code>pending</code> segera setelah klaim normal. Jajak pendapat dengan
+mundur hingga mencapai status hidup/sukses lingkungan atau terpapar <code>deployError</code>.</p>
+<p>Setelah pengambilalihan, titik akhir pengelolaan yang tersedia untuk Anda meliputi:</p>
+<pre><code class="language-text">PUT    /api/v1/me/github-games/{id}/deployment  pin a commit/branch and redeploy
+POST   /api/v1/me/github-games/{id}/bundle      upload built client/container output
+PUT    /api/v1/me/github-games/{id}/hosting     requeue hosting where supported
+POST   /api/v1/me/github-games/{id}/transfer    transfer management deliberately
+DELETE /api/v1/me/github-games/{id}             remove the game
+</code></pre>
+<p>Pengirim asli tidak lagi melihat daftar ini di bawah <code>GET /api/v1/me/github-games</code> dan tidak bisa
+gunakan titik akhir pengelolaan cakupan pemilik ini untuk itu.</p>
+<h2 id="troubleshooting">Pemecahan masalah</h2>
+<h3 id="403-link-the-repository-owner-or-add-owner"><code>403</code>: tautkan pemilik repositori atau tambahkan <code>owner=</code></h3>
+<p>Login GitHub yang tertaut tidak cocok <code>ownerLogin</code>, atau manifes <code>owner</code> tidak sama persis
+ID pengguna StarHermit Anda.</p>
+<ul>
+<li>Memeriksa <code>GET /api/v1/me/github</code>.</li>
+<li>Periksa persisnya <code>ownerLogin</code> dikembalikan oleh daftar publik.</li>
+<li>Untuk repositori organisasi, gunakan <code>owner=&lt;your StarHermit user ID&gt;</code> di repo.</li>
+<li>Konfirmasikan bahwa Anda mengirimkan manifes dan URL mentahnya dapat dibaca oleh publik.</li>
+</ul>
+<h3 id="404-no-shared-game-with-that-id"><code>404</code>: tidak ada permainan bersama dengan ID itu</h3>
+<p>ID salah, atau listingan telah dihapus. Ulangi Langkah 1. Listing yang dihapus tidak dapat diklaim.</p>
+<h3 id="400-missing-or-invalid-starhermittxt"><code>400</code>: hilang atau tidak valid <code>starhermit.txt</code></h3>
+<p>Untuk repositori yang dikloning, pastikan manifes root valid <code>name</code> dan HTML <code>launch</code> nilai-nilai. Juga
+memvalidasi deklarasi skrip/wadah opsional. Klaim tersebut awalnya tidak mempercayai metadata
+dimasukkan oleh bukan pemilik; itu menggantikannya dengan metadata yang dikontrol repositori.</p>
+<h3 id="claim-fails-around-the-slugbackend">Klaim gagal di sekitar slug/backend</h3>
+<p>Skrip mungkin tidak valid atau hosting kontainer mungkin tidak tersedia. Periksa kesalahan yang dikembalikan dan
+deklarasi backend, lalu panggil klaim lagi. Platform menetapkan UUID game sebagai slugnya;
+tidak ada siput nyata untuk dipilih atau diselesaikan.</p>
+<h3 id="github-was-linked-but-the-wrong-starhermit-account-owns-the-link">GitHub telah ditautkan tetapi akun StarHermit yang salah memiliki tautan tersebut</h3>
+<p>Masuk ke akun StarHermit yang dimaksud dan lengkapi OAuth <strong>link</strong> mengalir ke sana. Jangan mengklaim
+dari akun StarHermit kedua sementara dan kemudian mengandalkan penggabungan akun; permainan transfer API
+manajemen, bukan identitas pengguna.</p>
+<h2 id="security-notes">Catatan keamanan</h2>
+<ul>
+<li>Jangan pernah menerima tautan klaim atau ID daftar sebagai bukti kepemilikan repositori.</li>
+<li>Jangan masukkan token akses GitHub, kredensial kontainer, atau rahasia lainnya <code>starhermit.txt</code>.</li>
+<li>Selalu gunakan ID pengguna StarHermit yang tidak dapat diubah <code>owner=</code>; jangan gunakan nama pengguna atau nama panggilan.</li>
+<li>Tinjau URL listingan dan repositori yang ada sebelum mengklaim; nama tampilan tidak unik.</li>
+<li>Jika nanti Anda mentransfer permainan, penerima menjadi pengelola tetapi status pemilik terverifikasi menjadi pengelola
+mengatur ulang. Mereka harus menjalankan sendiri aliran klaim jika mereka mengontrol repositori.</li>
+</ul>
+<h2 id="reference-pages">Halaman referensi</h2>
+<ul>
+<li><a href="/id/docs/api/github-games.html">API Permainan GitHub</a></li>
+<li><a href="/id/docs/api/auth.html#oauth">Otentikasi dan GitHub OAuth</a></li>
+<li><a href="/id/docs/api/game-scripts.html">Skrip Permainan</a></li>
+<li><a href="/id/docs/api/container-games.html">Server Game yang dihosting oleh kontainer</a></li>
+<li><a href="/id/docs/tutorials/dedicated-server-onboarding.html">Penerbitan Server Khusus</a></li>
+</ul>
+
+{% endraw %}

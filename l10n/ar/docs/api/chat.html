@@ -1,0 +1,361 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "محادثة"
+source_url: "/docs/api/chat.html"
+source_path: "docs/api/chat.md"
+source_hash: "9c505584849a0722b12e5a1beb5ca636c08fbd95af2294c71ff7c49eddef36ad"
+translation: "machine"
+permalink: "/ar/docs/api/chat.html"
+---
+{% raw %}
+<h1 id="chat">محادثة</h1>
+<p>تغطي دردشة StarHermit الرسائل المباشرة وغرف المجموعات ومحادثات جلسات الألعاب عبر REST API (<code>api/v1/chat</code>) بالإضافة إلى قناة دفع WebSocket من الخادم إلى العميل (<code>ws/v1/chat</code>). تتطلب جميع نقاط نهاية REST المصادقة. تختلف أجسام الخطأ؛ يرى <a href="/ar/docs/api/conventions.html#requests-and-responses">اتفاقيات API</a>.</p>
+<h2 id="rest-endpoints">نقاط النهاية REST</h2>
+<p>قاعدة: <code>https://api.starhermit.com/api/v1/chat</code>.</p>
+<table>
+<thead>
+<tr>
+<th>طريقة</th>
+<th>طريق</th>
+<th>مصادقة</th>
+<th>وصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>بريد</td>
+<td><code>/conversations</code></td>
+<td>JWT</td>
+<td>إنشاء محادثة (صديق واحد = مباشر، ≥2 = مجموعة)</td>
+</tr>
+<tr>
+<td>رقعة</td>
+<td><code>/conversations/{id}</code></td>
+<td>JWT</td>
+<td>إعادة تسمية محادثة (أي عضو)</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/conversations/{id}/invites</code></td>
+<td>JWT</td>
+<td>دعوة مستخدم إلى مجموعة</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/invites</code></td>
+<td>JWT</td>
+<td>قم بإدراج دعوات الدردشة المعلقة</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/invites/{id}/accept</code></td>
+<td>JWT</td>
+<td>قبول دعوة للدردشة</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/invites/{id}/decline</code></td>
+<td>JWT</td>
+<td>رفض دعوة للدردشة</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/rooms/joinable</code></td>
+<td>JWT</td>
+<td>قم بإدراج الغرف المفتوحة التي يوجد بداخلها صديق واحد أو أكثر</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/conversations/{id}/join</code></td>
+<td>JWT</td>
+<td>الانضمام إلى غرفة مفتوحة (يجب أن يكون لديك أصدقاء مع أحد الأعضاء)</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/conversations/{id}/participants</code></td>
+<td>JWT</td>
+<td>إضافة مشاركين إلى محادثة</td>
+</tr>
+<tr>
+<td>يمسح</td>
+<td><code>/conversations/{id}/participants/{userId}</code></td>
+<td>JWT</td>
+<td>إزالة مشارك (النفس: أي عضو؛ الآخرون: منشئ المجموعة فقط)</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/conversations/{id}/leave</code></td>
+<td>JWT</td>
+<td>اترك محادثة</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/conversations</code></td>
+<td>JWT</td>
+<td>قائمة المحادثات، بما في ذلك عدد غير المقروءة</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/conversations/{id}</code></td>
+<td>JWT</td>
+<td>احصل على محادثة، بما في ذلك عدد الرسائل غير المقروءة</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/unread</code></td>
+<td>JWT</td>
+<td>احصل على إجمالي عدد الرسائل غير المقروءة</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/conversations/{id}/read</code></td>
+<td>JWT</td>
+<td>وضع علامة على المحادثة كمقروءة</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/conversations/{id}/messages?page=&amp;pageSize=</code></td>
+<td>JWT</td>
+<td>الحصول على سجل الرسائل المقسم إلى صفحات</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/conversations/{id}/messages</code></td>
+<td>JWT</td>
+<td>إرسال رسالة (السعر محدود)</td>
+</tr>
+<tr>
+<td>يضع</td>
+<td><code>/conversations/{conversationId}/messages/{messageId}</code></td>
+<td>JWT</td>
+<td>تحرير رسالة</td>
+</tr>
+<tr>
+<td>يمسح</td>
+<td><code>/conversations/{conversationId}/messages/{messageId}</code></td>
+<td>JWT</td>
+<td>حذف رسالة (علامة مميزة)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-conversation">قم بإنشاء محادثة</h3>
+<p><code>POST /conversations</code></p>
+<pre><code class="language-json">{
+  "participantIds": ["&lt;guid&gt;"],
+  "name": "Friday night lobby",
+  "friendUserId": "&lt;guid&gt;",
+  "joinPolicy": "closed"
+}
+</code></pre>
+<p>جميع الحقول اختيارية. يقوم أحد الأصدقاء المشاركين بإنشاء ملف <strong>مباشر</strong> محادثة؛ اثنان أو أكثر ينشئون أ <strong>مجموعة</strong>. <code>joinPolicy</code> يكون <code>"open"</code> أو <code>"closed"</code> (تقصير <code>"closed"</code>). يعود أ <code>ConversationDto</code>.</p>
+<h3 id="rename-a-conversation">إعادة تسمية محادثة</h3>
+<p><code>PATCH /conversations/{id}</code> مع <code>{ "name": "New name" }</code> → <code>ConversationDto</code>. يجوز لأي عضو إعادة التسمية؛ مذكرة النظام مع <code>kind: "system_rename"</code> يتم بثه.</p>
+<h3 id="invites">يدعو</h3>
+<p><code>POST /conversations/{id}/invites</code> مع <code>{ "toUserId": "&lt;guid&gt;" }</code> → <code>ChatInviteDto</code>. الدعوات هي الطريقة الوحيدة للدخول إلى غرفة مغلقة.</p>
+<p><code>GET /invites</code> → <code>ChatInviteDto[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "id": "&lt;guid&gt;",
+    "conversationId": "&lt;guid&gt;",
+    "conversationName": "Friday night lobby",
+    "fromUserId": "&lt;guid&gt;",
+    "fromUsername": "alice",
+    "toUserId": "&lt;guid&gt;",
+    "status": "pending",
+    "createdAt": "2026-07-22T07:00:00Z"
+  }
+]
+</code></pre>
+<p><code>POST /invites/{id}/accept</code> و <code>POST /invites/{id}/decline</code> → <code>ChatInviteDto</code>.</p>
+<h3 id="joining-rooms">الانضمام إلى الغرف</h3>
+<p><code>GET /rooms/joinable</code> → <code>JoinableRoomDto[]</code> - الغرف المفتوحة التي يوجد بداخلها أحد أصدقائك على الأقل:</p>
+<pre><code class="language-json">[
+  {
+    "id": "&lt;guid&gt;",
+    "name": "Friday night lobby",
+    "joinPolicy": "open",
+    "createdAt": "2026-07-22T07:00:00Z",
+    "participants": [{ "userId": "&lt;guid&gt;", "username": "alice" }]
+  }
+]
+</code></pre>
+<p><code>POST /conversations/{id}/join</code> → <code>ConversationDto</code>. ينضم إلى غرفة مفتوحة؛ يجب أن تكون صديقًا لأحد الأعضاء.</p>
+<h3 id="participants">مشاركون</h3>
+<p><code>POST /conversations/{id}/participants</code> مع <code>{ "participantIds": ["&lt;guid&gt;"] }</code> → <code>ConversationDto</code>.</p>
+<p><code>DELETE /conversations/{id}/participants/{userId}</code> → <code>204</code>. يجوز لأي عضو إزالة نفسه؛ تتطلب إزالة الآخرين أن تكون منشئ المجموعة.</p>
+<p><code>POST /conversations/{id}/leave</code> → <code>204</code>.</p>
+<h3 id="reading-conversations">قراءة المحادثات</h3>
+<p><code>GET /conversations</code> → <code>ConversationDto[]</code>.</p>
+<p><code>GET /conversations/{id}</code> → <code>ConversationDto</code>:</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "type": "group",
+  "name": "Friday night lobby",
+  "createdByUserId": "&lt;guid&gt;",
+  "joinPolicy": "closed",
+  "createdAt": "2026-07-22T07:00:00Z",
+  "participants": [{ "userId": "&lt;guid&gt;", "username": "alice" }],
+  "otherParticipant": { "userId": "&lt;guid&gt;", "username": "bob" },
+  "unreadCount": 3
+}
+</code></pre>
+<p><code>type</code> هو واحد من <code>direct</code>, <code>group</code>, <code>game</code>. <code>name</code>, <code>createdByUserId</code>، و <code>otherParticipant</code> قد يكون غائبا. <code>unreadCount</code> يحسب الرسائل النصية غير المقروءة المرسلة من قبل الأعضاء الآخرين بعد أفق قراءة المتصل لكل محادثة.</p>
+<h3 id="unread-state">حالة غير مقروءة</h3>
+<p><code>GET /unread</code> إرجاع عدد الرسائل غير المقروءة في جميع محادثات المتصل:</p>
+<pre><code class="language-json">{ "total": 7 }
+</code></pre>
+<p><code>POST /conversations/{id}/read</code> يتقدم أفق قراءة المتصل لتلك المحادثة.
+استخدمه بعد عرض النص الحالي. يصدر الخادم أ <code>conversation_read</code> حدث ل
+جميع المقابس التابعة للمتصل، مما يسمح للعديد من العملاء الذين قاموا بتسجيل الدخول بمسح شاراتهم.
+قد تؤدي الرسائل الجديدة والمحذوفة إلى تغيير الإجمالي، لذلك يجب على العملاء التحديث من أحداث WebSocket أو
+إعادة بشكل دوري <code>/unread</code>.</p>
+<h3 id="messages">رسائل</h3>
+<p><code>GET /conversations/{id}/messages?page=1&amp;pageSize=50</code> → <code>PagedMessagesDto</code>:</p>
+<pre><code class="language-json">{
+  "conversationId": "&lt;guid&gt;",
+  "page": 1,
+  "pageSize": 50,
+  "totalCount": 123,
+  "items": []
+}
+</code></pre>
+<p><code>POST /conversations/{id}/messages</code> مع <code>{ "content": "hello" }</code> → <code>MessageDto</code>. يقتصر السعر على 10 رسائل/دقيقة لكل مستخدم؛ يتجاوز ذلك يعود <code>429</code>.</p>
+<p><code>PUT /conversations/{conversationId}/messages/{messageId}</code> مع <code>{ "content": "edited" }</code> → <code>MessageDto</code>.</p>
+<p><code>DELETE /conversations/{conversationId}/messages/{messageId}</code> → <code>204</code>. الحذف علامة قبر: تبقى الرسالة مع <code>isDeleted: true</code>.</p>
+<p><code>MessageDto</code>:</p>
+<pre><code class="language-json">{
+  "id": "&lt;guid&gt;",
+  "conversationId": "&lt;guid&gt;",
+  "senderId": "&lt;guid&gt;",
+  "senderUsername": "alice",
+  "content": "hello",
+  "kind": "text",
+  "metadata": { "key": "value" },
+  "sentAt": "2026-07-22T07:00:00Z",
+  "editedAt": null,
+  "isDeleted": false
+}
+</code></pre>
+<p><code>kind</code> يكون <code>"text"</code> أو <code>"system_rename"</code>; <code>content</code>, <code>metadata</code> (a <code>Dictionary&lt;string,string&gt;</code>)، و <code>editedAt</code> قد تكون غائبة/فارغة.</p>
+<h2 id="websocket-wsv1chat">مقبس ويب: <code>ws/v1/chat</code></h2>
+<p>الاتصال ب <code>wss://api.starhermit.com/ws/v1/chat</code> مع JWT عبر <code>Authorization</code> رأس, <code>?ticket=</code>، أو <code>?access_token=</code>.</p>
+<p>هذا هو <strong>خادم نقي → قناة دفع العميل</strong>: يتم تجاهل إطارات العميل (فقط <code>Close</code> يتم تكريمه). كل إطار عبارة عن مظروف:</p>
+<pre><code class="language-json">{ "type": "&lt;event&gt;", "payload": { } }
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>حدث <code>type</code></th>
+<th>الحمولة</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>conversation_created</code></td>
+<td><code>ConversationDto</code></td>
+</tr>
+<tr>
+<td><code>conversation_renamed</code></td>
+<td><code>ConversationDto</code></td>
+</tr>
+<tr>
+<td><code>participants_added</code></td>
+<td><code>ConversationDto</code></td>
+</tr>
+<tr>
+<td><code>participant_removed</code></td>
+<td><code>ConversationDto</code></td>
+</tr>
+<tr>
+<td><code>chat_invite</code></td>
+<td><code>ChatInviteDto</code></td>
+</tr>
+<tr>
+<td><code>chat_invite_responded</code></td>
+<td><code>ChatInviteDto</code></td>
+</tr>
+<tr>
+<td><code>new_message</code></td>
+<td><code>MessageDto</code></td>
+</tr>
+<tr>
+<td><code>message_updated</code></td>
+<td><code>MessageDto</code></td>
+</tr>
+<tr>
+<td><code>message_deleted</code></td>
+<td><code>MessageDto</code></td>
+</tr>
+<tr>
+<td><code>conversation_read</code></td>
+<td>تغيير حالة القراءة للمستخدم الذي قام بتسجيل الدخول؛ إعادة جلب التهم غير المقروءة</td>
+</tr>
+<tr>
+<td><code>game_invite</code></td>
+<td><code>{ "inviteId", "kind", "gameSlug", "gameName", "roomId", "from": { "userId", "username" }, "createdAt", "acceptPath", "declinePath", "inProgress", "sessionId" }</code> - انظر أدناه</td>
+</tr>
+</tbody>
+</table>
+<h3 id="game_invite-one-event-for-both-invite-systems"><code>game_invite</code>: حدث واحد لكلا نظامي الدعوة</h3>
+<p>يمكن دعوة أي شخص للعب بطريقتين، وهذا الحدث الفردي يحمل كليهما - ينفذ العميل نخبًا واحدًا، وليس اثنين:</p>
+<table>
+<thead>
+<tr>
+<th><code>kind</code></th>
+<th>صادرة عن</th>
+<th>قبول ذلك</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>"session"</code></td>
+<td><a href="/ar/docs/api/games.html#invites"><code>POST /games/{slug}/invites</code></a></td>
+<td>إنشاء جلسة لعب جديدة لكما</td>
+</tr>
+<tr>
+<td><code>"room"</code></td>
+<td><a href="/ar/docs/api/realtime.html#invites"><code>POST /realtime/rooms/{id}/invites</code></a></td>
+<td>يشغل مقعدًا في غرفة يجلس فيها الداعي بالفعل؛ <code>roomId</code> هي تلك الغرفة</td>
+</tr>
+</tbody>
+</table>
+<p><code>acceptPath</code> و <code>declinePath</code> هي نقاط النهاية التي تجيب <strong>هذا</strong> دعوة - ​​استخدمها والتمييز لا يهم أبدًا. الإجابة عند نقطة نهاية النظام الآخر هي أ <code>404</code>: يحتفظ الاثنان بمعرفات دعوة منفصلة.</p>
+<p><code>inProgress</code> يكون <code>true</code> عند قبول الانضمام إلى لعبة يتم لعبها بالفعل — دعوة جلسة تحدد جلسة قيد التشغيل، أو دعوة غرفة إلى غرفة بدأت تسمح بالانضمام قيد التقدم — و <code>sessionId</code> هي جلسة تلك اللعبة. استخدامه ليقول "انضم إلى لعبتهم" بدلاً من "يلعب".</p>
+<pre><code class="language-json">{
+  "type": "game_invite",
+  "payload": {
+    "inviteId": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+    "kind": "room",
+    "gameSlug": "poker",
+    "gameName": "StarHermit Poker",
+    "roomId": "b1d2c3e4-5f60-4a71-8b92-c3d4e5f60718",
+    "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "alice" },
+    "createdAt": "2026-07-26T14:10:00Z",
+    "acceptPath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/accept",
+    "declinePath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/decline"
+  }
+}
+</code></pre>
+<p><code>roomId</code> يكون <code>null</code> ل <code>"session"</code> يدعو. لا يمكن لرمز الإطلاق المميز على مستوى اللعبة فتح هذا المقبس أو قراءة الحساب على مستوى الحساب <code>/me/game-invites</code> البريد الوارد. استطلاع عملاء اللعبة <code>GET /api/v1/games/{slug}/invites</code> لدعوات الجلسة و <code>GET /api/v1/realtime/rooms/invites</code> لدعوات غرفة لعبتهم. يمكن لعملاء الحساب قراءة كلا النوعين من خلال <code>GET /api/v1/me/game-invites</code>.</p>
+<h2 id="chat-inside-a-game-session">الدردشة داخل جلسة اللعبة</h2>
+<p>رمز إطلاق على نطاق اللعبة <strong>لا أستطيع</strong> يفتح <code>ws/v1/chat</code> - تم حظره لأن المقبس يبث جميع محادثات المستخدم. إطلاق الرموز المميزة <strong>يمكن</strong> استخدم واجهة برمجة تطبيقات REST للدردشة في المحادثات المرفقة بجلسات اللعبة الخاصة بهم: تُرجع تفاصيل الجلسة ملفًا <code>chatConversationId</code>، المحادثة لها نوع <code>"game"</code>المشاركون فيها هم لاعبو الجلسة، ويتم تجاوز قواعد الصداقة.</p>
+<p>لذلك عادةً ما يقوم عملاء اللعبة بتحميل السجل عبر REST واستقصاء الرسائل الجديدة بدلاً من استخدام المقبس. على سبيل المثال، <a href="/ar/docs/tutorials/chess-walkthrough.html">تنفيذ مرجع الشطرنج</a> استطلاعات الرأي كل 5 ثواني:</p>
+<pre><code class="language-http">GET /api/v1/chat/conversations/{chatConversationId}/messages?page=1&amp;pageSize=50
+Authorization: Bearer &lt;launch-token&gt;
+</code></pre>
+<pre><code class="language-http">POST /api/v1/chat/conversations/{chatConversationId}/messages
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+
+{ "content": "good game" }
+</code></pre>
+<h2 id="see-also">انظر أيضا</h2>
+<ul>
+<li><a href="/ar/docs/api/voice.html">صوت</a> - الغرف الصوتية مرساة لمحادثات الدردشة</li>
+<li><a href="/ar/docs/api/friends.html">أصدقاء</a> - بوابات الصداقة للمحادثات المباشرة والانضمام للغرف</li>
+<li><a href="/ar/docs/api/games.html">ألعاب</a> — جلسات اللعبة و <code>chatConversationId</code></li>
+</ul>
+<p>يرى <a href="/ar/docs/credentials.html">التوافق الاعتماد</a> و <a href="/ar/docs/api/contracts.html">العقود المقروءة آليا</a>.</p>
+
+{% endraw %}

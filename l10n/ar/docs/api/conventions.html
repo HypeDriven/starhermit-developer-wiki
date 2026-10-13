@@ -1,0 +1,192 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "اتفاقيات API"
+source_url: "/docs/api/conventions.html"
+source_path: "docs/api/conventions.md"
+source_hash: "3772241b0e04e8e2f4e4ecf1c0ef8e2d956c065446a78c7df107b6205de258d6"
+translation: "machine"
+permalink: "/ar/docs/api/conventions.html"
+---
+{% raw %}
+<h1 id="api-conventions">اتفاقيات API</h1>
+<p>يستخدم REST <code>https://api.starhermit.com/api/v1/...</code>; استخدام المقابس <code>wss://api.starhermit.com/ws/v1/...</code>.
+يمكن الاتصال بالألعاب المستضافة <code>/api/v1/...</code> و <code>/ws/v1/...</code> على أصلهم. يستخدم العملاء الأصليون
+أصل واجهة برمجة التطبيقات العامة. تحتاج صفحة التطوير على أصل آخر إلى أصل CORS مسموح به في اللعبة
+المضيف؛ إن تعيين عنوان URL الأساسي لـ SDK وحده لا يسمح بهذا الأصل.</p>
+<h2 id="requests-and-responses">الطلبات والردود</h2>
+<p>أرسل JSON مع <code>Content-Type: application/json</code>، باستثناء تحميلات حزمة gzip الأولية. أسماء أعضاء JSON
+هي حالة الجمل. إرسال بيانات اعتماد حاملها في REST <code>Authorization</code> header.</p>
+<table>
+<thead>
+<tr>
+<th>إجابة</th>
+<th>كيفية قراءتها</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>200</code> / <code>201</code> JSON</td>
+<td>تحليل الكائن أو الصفيف الموثق؛ تحمل حقول إضافية</td>
+</tr>
+<tr>
+<td><code>204</code></td>
+<td>النجاح بلا جسد؛ لا تتصل <code>response.json()</code></td>
+</tr>
+<tr>
+<td><code>302</code></td>
+<td>إعادة توجيه تسجيل الدخول/تأكيد المتصفح؛ التنقل بدلاً من جلب صفحات OAuth</td>
+</tr>
+<tr>
+<td><code>304</code></td>
+<td>القراءة الشرطية دون تغيير؛ الاحتفاظ بالبيانات التي تمتلكها بالفعل</td>
+</tr>
+<tr>
+<td>الصورة، المرفق، الحفظ السحابي</td>
+<td>قراءة البايتات باستخدام نوع محتوى الاستجابة وعقد نقطة النهاية</td>
+</tr>
+<tr>
+<td>خطأ</td>
+<td>اقرأ الحالة أولاً، ثم قم بتحليل الجسم بشكل دفاعي</td>
+</tr>
+</tbody>
+</table>
+<p>نموذج الخطأ الشائع هو <code>{ "error": "...", "code": "..." }</code>، مع الحقول الاختيارية اعتمادًا على
+نقطة النهاية. <code>error</code> غالبا ما تكون قابلة للقراءة من قبل الإنسان؛ <code>code</code> هو تمييز مستقر حيثما تقدم.
+تضع المصطلحات وبعض نقاط النهاية الأخرى أداة تمييز مباشرة <code>error</code>. تعود بعض نقاط النهاية بشكل عادي
+نص أو نص فارغ أو كائن تفاصيل مشكلة التحقق من الصحة <code>title</code>, <code>status</code> و <code>errors</code>.
+يجب ألا يفترض العملاء أن كل استجابة غير ناجحة هي JSON أو تحتوي على نفس الحقول.</p>
+<pre><code class="language-js">export async function readResponse(response) {
+  if (response.status === 204 || response.status === 304) return null;
+  const text = await response.text();
+  let body;
+  try { body = text ? JSON.parse(text) : null; } catch { body = text || null; }
+  if (!response.ok) {
+    const message = (body &amp;&amp; typeof body === 'object' &amp;&amp; (body.error || body.message || body.title))
+      || (typeof body === 'string' &amp;&amp; body) || response.statusText;
+    throw Object.assign(new Error(message), {
+      status: response.status, code: body?.code, body,
+      retryAfter: response.headers.get('Retry-After'),
+    });
+  }
+  return body;
+}
+</code></pre>
+<h2 id="time-sizes-and-nulls">الوقت والأحجام والقيم الخالية</h2>
+<ul>
+<li><code>createdAt</code>, <code>updatedAt</code>, <code>finishedAt</code>والطوابع الزمنية للحساب/الموارد المماثلة هي سلاسل ISO 8601
+مع إزاحة. علاج غائب أو <code>null</code> القيم الاختيارية غير متوفرة.</li>
+<li><code>ctx.now</code>, <code>summary.deadline</code>، قائمة الجلسة <code>deadline</code>، و <code>/time.serverTime</code> هي عدد صحيح يونكس
+<strong>ميلي ثانية</strong>. تحويل مع <code>new Date(value)</code>، لا <code>Date.parse(value)</code>.</li>
+<li>القيم الحدية بالبايت هي بايت، وليست أحرف Base64. تحميل Base64 JSON أكبر من حجمه
+محتويات فك التشفير. استخدم الحد الفعال الذي أبلغت عنه نقطة النهاية عندما يكون متاحًا.</li>
+<li>الإغفال، <code>null</code>والكائن الفارغ ليس متكافئًا عالميًا. إعدادات <code>PATCH</code> يزيل أ
+مفتاح اسمه مع <code>null</code>; إعدادات مفتاح واحد <code>PUT</code> مخازن <code>null</code> كقيمة. مجموعة <code>PUT</code> يستبدل
+الخريطة بأكملها. اقرأ قواعد التحديث الخاصة بكل نقطة نهاية.</li>
+<li>يتم دمج تصحيح الإعدادات <strong>مفاتيح المستوى الأعلى</strong>. تحل قيمة الكائن المتوفرة محل قيمة هذا المفتاح؛
+ولا يقوم بدمج الخصائص المتداخلة بشكل متكرر.</li>
+</ul>
+<h2 id="pagination">ترقيم الصفحات</h2>
+<p>الترحيل يعتمد على مكان واحد <code>page</code>/<code>pageSize</code> يتم دعمها. تختلف واجهات برمجة التطبيقات المختلفة عن عمد
+مظاريف الاستجابة؛ لا تقم بإعادة استخدام المحلل اللغوي الذي يفترض اسم حقل عدد واحد.</p>
+<table>
+<thead>
+<tr>
+<th>منطقة</th>
+<th>شكل الجمع</th>
+<th>الافتراضي / الحد الأقصى لحجم الصفحة</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>عناوين البرامج وبنياتها</td>
+<td><code>{ items, totalCount, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>رسائل الدردشة</td>
+<td><code>{ conversationId, items, totalCount, page, pageSize }</code></td>
+<td>50 / 100</td>
+</tr>
+<tr>
+<td>إدخالات المتصدرين</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>البرامج الخارجية</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20؛ طلب حجم صفحة إيجابي صغير</td>
+</tr>
+<tr>
+<td>التقارير وسجلات أعطال الحاويات وقوائم الإشراف</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>الجلسات والأصدقاء وقوائم الألعاب والإنجازات</td>
+<td>المصفوفات</td>
+<td>الحدود القصوى الخاصة بنقطة النهاية؛ لا يوجد مؤشر عام للصفحة التالية</td>
+</tr>
+<tr>
+<td>تغذية سحب الاعتدال</td>
+<td>على أساس المؤشر</td>
+<td>احتفظ بالمؤشر الذي تم إرجاعه؛ التعافي من <code>410</code> كما هو موثق</td>
+</tr>
+</tbody>
+</table>
+<p>تعكس البيانات التعريفية لصفحات الاستجابة الصفحة المقدمة حيثما كان ذلك متاحًا. <a href="/ar/#api-reference">الصفحات المرجعية</a>
+و <a href="/ar/docs/api/contracts.html">العقود المقروءة آليا</a> وصف معلمات الاستعلام الخاصة بنقطة النهاية.</p>
+<h2 id="retry-and-concurrency">إعادة المحاولة والتزامن</h2>
+<table>
+<thead>
+<tr>
+<th>الموقف</th>
+<th>فعل</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>تم رفض رمز الوصول إلى الحساب باستخدام <code>401</code></td>
+<td>التحديث مرة واحدة، باستخدام طلب تحديث مشترك واحد؛ ثم قم بتسجيل الدخول إذا تم الرفض</td>
+</tr>
+<tr>
+<td>انتهت صلاحية رمز الإطلاق</td>
+<td>الحصول على رمز مميز جديد من خلال تسجيل الدخول/المشغل؛ الرموز منتهية الصلاحية لا يمكنها تجديد نفسها</td>
+</tr>
+<tr>
+<td><code>403 terms_acceptance_required</code></td>
+<td>قم بعرض الشروط الحالية وقبولها بشكل صريح، ثم أعد المحاولة</td>
+</tr>
+<tr>
+<td>آخر <code>403</code></td>
+<td>حل النطاق أو العضوية أو الأذونات أو حالة الحساب؛ لا تقم بالتحديث في حلقة</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>حل تعارض التكرار/الحالة/المراجعة؛ أعد القراءة قبل تغيير المورد</td>
+</tr>
+<tr>
+<td>الحفظ السحابي <code>412</code></td>
+<td>قم بتحميل الإصدار الأحدث ودع اللعبة تندمج أو تعتمده</td>
+</tr>
+<tr>
+<td><code>429</code> أو مؤقتة <code>503</code></td>
+<td>شرف <code>Retry-After</code>وأضف الارتعاش وإعادة المحاولة المقيدة</td>
+</tr>
+<tr>
+<td>فشل الشبكة أثناء الكتابة</td>
+<td>قد تكون النتيجة غير معروفة. فحص حالة المورد قبل تكرار الإجراء</td>
+</tr>
+</tbody>
+</table>
+<p><code>Retry-After</code> يمكن أن يكون ثواني أو تاريخ HTTP. لا تخترع رأسًا غير فعال: واجهة برمجة التطبيقات (API) لا تفعل ذلك
+وعد بآلية مفتاح العجز العام. يمكن إعادة محاولة إنشاء الجلسة أو إنشاء دعوة
+مورد آخر أو يتعارض مع الأول. تفضل القراءات والعمليات العاطلة صراحةً
+إعادة المحاولة التلقائية. تحديث التناوب، والتحميلات الكاملة، والموافقة على الشروط، ونتائج اللعبة النهائية لكل منها
+لديهم قواعدهم الخاصة.</p>
+<p>من أجل عمليات الكتابة للمقارنة والمبادلة، استخدم ETags للحفظ السحابي، الغرفة <code>expectedRevision</code>، أو مراجعات الاعتدال
+حيث يدعم. الكتابة الناجحة لا تعني بالضرورة نشر حاوية مكتملة؛ التحقق منها
+الحالة قبل إرسال اللاعبين إلى بناء جديد. يرى <a href="/ar/docs/troubleshooting.html">استكشاف الأخطاء وإصلاحها</a>.</p>
+
+{% endraw %}

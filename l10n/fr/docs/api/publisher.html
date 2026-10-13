@@ -1,0 +1,387 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "Éditeur"
+source_url: "/docs/api/publisher.html"
+source_path: "docs/api/publisher.md"
+source_hash: "9e89984a9a4079848d8caad7471dca1a8215f68459ac2bf1078bd011cecfc2bf"
+translation: "machine"
+permalink: "/fr/docs/api/publisher.html"
+---
+{% raw %}
+<h1 id="publisher">Éditeur</h1>
+<p>L'espace éditeur&#160;: gérez les organisations d'éditeurs et leurs membres, créez et téléchargez des titres et des builds de logiciels, et gérez les réalisations, les droits et les définitions de classement pour vos titres.</p>
+<blockquote>
+<p><strong>Publier un jeu plutôt qu'un titre de catalogue ?</strong> Vous n’avez besoin de rien de tout cela. Le propriétaire d'un
+jeu avec un backend de script ou de conteneur est son éditeur et gère ses classements et
+réalisations sous <code>/api/v1/me/github-games/{id}/…</code> - voir
+<a href="/fr/docs/tutorials/game-leaderboards-achievements.html">Tutoriel&#160;: classements et réalisations pour votre jeu</a>.</p>
+</blockquote>
+<p>URL de base&#160;: <code>https://api.starhermit.com</code>. Tous les itinéraires nécessitent un JWT ainsi que les revendications d'autorisation répertoriées. Rôles&#160;: <code>PublisherMember</code>, <code>PublisherOwner</code>. Les demandes d'autorisation sont attribuées via des rôles&#160;; les jetons frappés portent les revendications d'autorisation.</p>
+<h2 id="publishers-and-members">Editeurs et membres</h2>
+<p>Préfixe de l'itinéraire&#160;: <code>api/v1/publisher</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Chemin</th>
+<th>Authentification</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/publisher</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code>)</td>
+<td>Créer un éditeur&#160;; le créateur devient membre avec un rôle <code>"Owner"</code> → <code>201</code></td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/publisher</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code>)</td>
+<td>Liste des éditeurs → <code>Publisher[]</code></td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/publisher/{publisherId}/members</code></td>
+<td>JWT (<code>Permission-publisher.members.manage</code>) + <strong>rôle <code>Owner</code></strong></td>
+<td>Ajouter un membre → <code>204</code></td>
+</tr>
+<tr>
+<td>SUPPRIMER</td>
+<td><code>/api/v1/publisher/{publisherId}/members/{memberUserId}</code></td>
+<td>JWT (<code>Permission-publisher.members.manage</code>) + <strong>rôle <code>Owner</code></strong></td>
+<td>Supprimer un membre → <code>204</code> (le propriétaire ne peut pas être supprimé)</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/publisher/{publisherId}/members/{memberUserId}</code></td>
+<td>JWT (<code>Permission-publisher.members.manage</code>) + <strong>adhésion à cet éditeur</strong></td>
+<td>Devenir membre → <code>PublisherMember</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="who-may-change-membership">Qui peut changer d'adhésion</h3>
+<p>La revendication d'autorisation indique que vous pouvez gérer les membres éditeurs quelque part&#160;; ça ne dit pas <em>lequel</em>
+éditeur. Les deux contrôles s’appliquent donc&#160;:</p>
+<ul>
+<li><strong>L'ajout et la suppression de membres sont <code>Owner</code>-seulement.</strong> L'adhésion confère une autorité de gestion de contenu sur
+chacun des titres de l'éditeur, donc un simple membre qui pourrait ajouter des membres pourrait accorder cela
+autorité à quiconque. Un non-propriétaire obtient <code>401</code>.</li>
+<li><strong>La lecture d’une adhésion nécessite d’appartenir à cet éditeur.</strong> Un appelant à l'extérieur reçoit la même chose
+<code>404</code> en tant qu'utilisateur qui n'est pas membre, le point de terminaison ne révèle donc rien sur les éditeurs que vous n'êtes pas
+une partie de.</li>
+</ul>
+<h3 id="create-a-publisher">Créer un éditeur</h3>
+<p><code>POST /api/v1/publisher</code></p>
+<pre><code class="language-json">{
+  "name": "HypeDriven",
+  "description": "..."
+}
+</code></pre>
+<p>Le créateur devient membre avec rôle <code>"Owner"</code>.</p>
+<h3 id="add-a-member">Ajouter un membre</h3>
+<p><code>POST /api/v1/publisher/{publisherId}/members</code></p>
+<pre><code class="language-json">{ "userId": "&lt;user id&gt;" }
+</code></pre>
+<h3 id="dtos">DTO</h3>
+<pre><code class="language-json">// Publisher
+{
+  "id": "...",
+  "name": "...",
+  "description": "...",
+  "ownerUserId": "...",
+  "createdAt": "...",
+  "updatedAt": "..."
+}
+</code></pre>
+<pre><code class="language-json">// PublisherMember
+{
+  "id": "...",
+  "publisherId": "...",
+  "userId": "...",
+  "role": "...",
+  "joinedAt": "..."
+}
+</code></pre>
+<h2 id="software-titles-and-builds">Titres et builds de logiciels</h2>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Chemin</th>
+<th>Authentification</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/publisher/software</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code>)</td>
+<td>Créer/mettre à jour un titre de logiciel (corps = métadonnées du titre&#160;; adhésion à l'éditeur réel du titre obligatoire)</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/publisher/software/upload</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code> <strong>+</strong> <code>Permission-publisher.binary.publish</code>)</td>
+<td>Obtenir les URL de téléchargement pour un titre → <code>UploadUrlInfo[]</code></td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/publisher/software/build/finalize</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code> <strong>+</strong> <code>Permission-publisher.binary.publish</code>)</td>
+<td>Finaliser une build à partir des ressources téléchargées → <code>204</code></td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/publisher/analytics/downloads?publisherId=</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code>)</td>
+<td>Nombre de téléchargements par titre</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/publisher/analytics/launches?publisherId=</code></td>
+<td>JWT (<code>Permission-publisher.content.manage</code>)</td>
+<td>Nombre de lancements par titre</td>
+</tr>
+</tbody>
+</table>
+<h3 id="publishing-a-build-needs-the-binary-publish-grant">La publication d'une version nécessite la subvention de publication binaire</h3>
+<p>Les deux points de terminaison de build nécessitent <strong><code>publisher.binary.publish</code></strong> au sommet de
+<code>publisher.content.manage</code> et l'adhésion à l'éditeur du titre. Sans cela, les deux répondent <code>403</code>,
+tandis que tous les autres points de terminaison de cette page continuent de fonctionner - vous pouvez créer et modifier des titres, définir
+les réalisations et les classements, ainsi que les droits aux subventions&#160;; vous ne pouvez tout simplement pas envoyer un exécutable.</p>
+<p>La raison est ce qu'est une construction. Les ressources d'une build sont téléchargées par le client de bureau et exécutées sur le
+la machine du joueur avec les privilèges du joueur, en dehors de tout contrôle de Starhermit bac à sable - contrairement à un
+jeu par navigateur, qui s'exécute dans le navigateur. Ainsi, le droit d'en publier un est accordé par compte par un
+Administrateur de Starhermit (le <code>BinaryPublisher</code> rôle), non acquis par la création d’un éditeur. Non
+un autre rôle le porte. <strong>Demandez la subvention à un administrateur avant de créer un flux de téléchargement sur
+ces points de terminaison</strong>; il est également supprimé lorsqu'un compte d'éditeur est suspendu.</p>
+<p>Les jeux par navigateur n'ont besoin de rien de tout cela&#160;: <code>/api/v1/me/github-games</code> soumissions, téléchargements de dossiers et bundle
+les push restent en libre-service pour tout compte connecté.</p>
+<h3 id="create-or-update-a-catalog-title">Créer ou mettre à jour un titre de catalogue</h3>
+<p><code>POST /api/v1/publisher/software</code> accepte <code>id</code> (omettre pour un nouveau titre), <code>publisherId</code>, <code>name</code>,
+<code>description</code>, <code>category</code>, <code>platform</code>, <code>releaseStatus</code>, <code>tags</code>, et <code>priceCents</code>:</p>
+<pre><code class="language-json">{
+  "publisherId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "name": "Orbit League",
+  "description": "A space racing game.",
+  "category": "game",
+  "platform": "windows",
+  "releaseStatus": "released",
+  "tags": ["racing"],
+  "priceCents": 0
+}
+</code></pre>
+<p>Le succès est <code>201</code> avec le titre. Seules les métadonnées du titre sont acceptées&#160;; ne pas envoyer d'adhésion d'éditeur
+ou des objets d'actif ici. La création d'un éditeur revient <code>201</code> sans objet éditeur&#160;; liste
+<code>GET /api/v1/publisher</code> pour obtenir son identifiant.</p>
+<h3 id="get-upload-urls">Obtenir les URL de téléchargement</h3>
+<p><code>POST /api/v1/publisher/software/upload</code></p>
+<pre><code class="language-json">{ "titleId": "&lt;title id&gt;" }
+</code></pre>
+<p>Réponse - <code>UploadUrlInfo[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "type": "executable",
+    "uploadUrl": "...",
+    "fieldKey": "..."
+  }
+]
+</code></pre>
+<p><code>type</code> est l'un des <code>"executable"</code>, <code>"data"</code>, <code>"metadata"</code>.</p>
+<h3 id="finalize-a-build">Finaliser une build</h3>
+<p><code>POST /api/v1/publisher/software/build/finalize</code> → <code>204</code></p>
+<pre><code class="language-json">{
+  "titleId": "&lt;title id&gt;",
+  "buildId": "&lt;optional build id&gt;",
+  "version": "1.0.0",
+  "releaseNotes": "...",
+  "assets": [
+    { "type": "executable", "checksum": "...", "fieldKey": "..." }
+  ]
+}
+</code></pre>
+<p>Le workflow de création de catalogue est actuellement en version préliminaire et ne fournit pas de livraison binaire de production.
+ou une garantie de vérification du contenu ou d'analyse des logiciels malveillants. Ne pas traiter une construction ou un actif accepté
+statut comme preuve qu’un exécutable est sûr. Voir <a href="/fr/docs/availability.html">disponibilité des fonctionnalités</a>.
+La publication de jeux hébergés utilise le <a href="/fr/docs/api/github-games.html">API de téléchargement de jeu</a>.</p>
+<h3 id="analytics">Analytique</h3>
+<p>Les deux points de terminaison renvoient un identifiant de titre de mappage d'objet JSON à compter&#160;:</p>
+<pre><code class="language-json">{ "&lt;titleId&gt;": 42 }
+</code></pre>
+<h2 id="achievements">Réalisations</h2>
+<p>Itinéraire <code>api/v1/publisher</code>; toutes les voies de gestion des réalisations nécessitent <code>Permission-publisher.content.manage</code>.</p>
+<p>Ces points de terminaison gèrent <strong>titre-catalogue</strong> réalisations uniquement. Ils exigent également que l'appelant soit un
+membre de l'éditeur propriétaire du titre, et ils <strong>échec fermé pour les réalisations qui appartiennent à
+un jeu faisant autorité</strong> — ceux-ci sont déclarés par le script du jeu ou le backend du conteneur et ne le sont pas
+géré par l'éditeur (voir <a href="/fr/docs/api/achievements.html">Réalisations</a>, <a href="/fr/docs/api/game-scripts.html#achievements">Scripts de jeu</a>,
+et <a href="/fr/docs/api/container-games.html#control-channel">Serveurs de jeux de conteneurs</a>).</p>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Chemin</th>
+<th>Authentification</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/publisher/titles/{titleId}/achievements</code></td>
+<td>JWT</td>
+<td>Créer une réalisation → <code>AchievementDto</code></td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/publisher/titles/{titleId}/achievements</code></td>
+<td>JWT</td>
+<td>Lister les réalisations d'un titre → <code>AchievementDto[]</code></td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/publisher/achievements/{id}</code></td>
+<td>JWT</td>
+<td>Obtenez un succès → <code>AchievementDto</code></td>
+</tr>
+<tr>
+<td>METTRE</td>
+<td><code>/api/v1/publisher/achievements/{id}</code></td>
+<td>JWT</td>
+<td>Mettre à jour (tous les champs nullables) → <code>AchievementDto</code></td>
+</tr>
+<tr>
+<td>SUPPRIMER</td>
+<td><code>/api/v1/publisher/achievements/{id}</code></td>
+<td>JWT</td>
+<td>Supprimer → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-an-achievement">Créer une réalisation</h3>
+<p><code>POST /api/v1/publisher/titles/{titleId}/achievements</code></p>
+<pre><code class="language-json">{
+  "key": "first_win",
+  "name": "First Win",
+  "description": "Win your first game.",
+  "icon": "...",
+  "secret": false,
+  "points": 10,
+  "visibility": "...",
+  "criteria": "..."
+}
+</code></pre>
+<p><code>icon</code>, <code>visibility</code>, et <code>criteria</code> sont facultatifs. Sur <code>PUT</code>, tous les champs sont nullables. Voir <a href="/fr/docs/api/achievements.html">achievements.md</a> pour la surface face au joueur.</p>
+<h2 id="entitlements">Droits</h2>
+<p>Itinéraire <code>api/v1/publisher/entitlements</code>; les deux itinéraires nécessitent <code>Permission-publisher.content.manage</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Chemin</th>
+<th>Authentification</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/publisher/entitlements/grant</code></td>
+<td>JWT</td>
+<td>Attribuer un titre à un utilisateur → <code>204</code></td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/publisher/entitlements/revoke</code></td>
+<td>JWT</td>
+<td>Révoquer un titre d'un utilisateur → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<p>Corps pour les deux&#160;:</p>
+<pre><code class="language-json">{
+  "userId": "&lt;user id&gt;",
+  "softwareTitleId": "&lt;title id&gt;"
+}
+</code></pre>
+<h2 id="leaderboards">Classements</h2>
+<p>Itinéraire <code>api/v1/publisher/leaderboards</code>; tous les itinéraires nécessitent <code>Permission-publisher.content.manage</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Chemin</th>
+<th>Authentification</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/publisher/leaderboards/</code></td>
+<td>JWT</td>
+<td>Créer une définition de classement → <code>LeaderboardDefinitionDto</code></td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/publisher/leaderboards/{id}</code></td>
+<td>JWT</td>
+<td>Obtenir une définition → <code>LeaderboardDefinitionDto</code></td>
+</tr>
+<tr>
+<td>METTRE</td>
+<td><code>/api/v1/publisher/leaderboards/{id}</code></td>
+<td>JWT</td>
+<td>Mettre à jour (tous les champs nullables) → <code>LeaderboardDefinitionDto</code></td>
+</tr>
+<tr>
+<td>SUPPRIMER</td>
+<td><code>/api/v1/publisher/leaderboards/{id}</code></td>
+<td>JWT</td>
+<td>Supprimer → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="create-a-leaderboard">Créer un classement</h3>
+<p><code>POST /api/v1/publisher/leaderboards/</code></p>
+<pre><code class="language-json">{
+  "name": "Global Elo",
+  "scoreType": "...",
+  "sortDirection": "...",
+  "resetSchedule": "...",
+  "minScore": 0,
+  "maxScore": 4000,
+  "scope": "...",
+  "region": "...",
+  "isActive": true,
+  "softwareTitleId": "&lt;optional title id&gt;"
+}
+</code></pre>
+<p><code>resetSchedule</code>, <code>minScore</code>, <code>maxScore</code>, <code>region</code>, et <code>softwareTitleId</code> sont facultatifs. Sur <code>PUT</code>, tous les champs sont nullables. <code>resetSchedule</code> est <code>daily</code>, <code>weekly</code>, <code>monthly</code> ou <code>never</code>; tout le reste est un <code>400</code> - voir <a href="/fr/docs/api/leaderboards.html#reset-schedules">Réinitialiser les horaires</a>. Voir <a href="/fr/docs/api/leaderboards.html">leaderboards.md</a> pour la surface face au joueur.</p>
+<h2 id="publish-a-build-flow">Publier un build&#160;: flux</h2>
+<ol start="0">
+<li><strong>Détenir la subvention de publication binaire</strong>: les étapes 3 et 5 nécessitent <code>publisher.binary.publish</code>, lequel un
+Subventions d'administrateur Starhermit par compte. Voir
+<a href="#publishing-a-build-needs-the-binary-publish-grant">La publication d'une version nécessite la subvention de publication binaire</a>.</li>
+<li><strong>Créer un éditeur</strong>: <code>POST /api/v1/publisher</code> avec <code>{ name, description }</code>.</li>
+<li><strong>Créer le titre</strong>: <code>POST /api/v1/publisher/software</code> avec les métadonnées du titre ci-dessous.</li>
+<li><strong>Obtenir les URL de téléchargement</strong>: <code>POST /api/v1/publisher/software/upload</code> avec <code>{ titleId }</code>.</li>
+<li><strong>Télécharger des fichiers</strong> au retour <code>uploadUrl</code>s.</li>
+<li><strong>Finaliser la construction</strong>: <code>POST /api/v1/publisher/software/build/finalize</code> avec les ressources téléchargées' <code>{ type, checksum, fieldKey }</code> entrées.</li>
+<li><strong>Vérifier la disponibilité de la distribution</strong>: l'aperçu actuel du catalogue ne garantit pas les téléchargements de production vérifiés ni l'analyse des logiciels malveillants&#160;; voir <a href="/fr/docs/availability.html">disponibilité</a>.</li>
+<li><strong>Les utilisateurs réclament et téléchargent</strong> le titre dans le catalogue — voir <a href="/fr/docs/api/catalog.html">catalog.md</a>.</li>
+</ol>
+<p>Les corps d’erreur varient&#160;; voir <a href="/fr/docs/api/conventions.html#requests-and-responses">Conventions API</a>.</p>
+<h2 id="see-also">Voir aussi</h2>
+<ul>
+<li><a href="/fr/docs/api/catalog.html">catalog.md</a> - comment les joueurs parcourent, réclament et téléchargent des titres</li>
+<li><a href="/fr/docs/api/achievements.html">achievements.md</a> — réalisations face aux joueurs</li>
+<li><a href="/fr/docs/api/leaderboards.html">leaderboards.md</a> - classements face aux joueurs</li>
+<li><a href="/fr/docs/api/auth.html">auth.md</a> — JWT, rôles et revendications d'autorisation</li>
+</ul>
+<p>Voir <a href="/fr/docs/credentials.html">compatibilité des informations d'identification</a> et <a href="/fr/docs/api/contracts.html">contrats lisibles par machine</a>.</p>
+
+{% endraw %}

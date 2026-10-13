@@ -1,0 +1,449 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "统一SDK"
+source_url: "/docs/sdk/unity.html"
+source_path: "docs/sdk/unity.md"
+source_hash: "49c40f7a86e1b1c9d76eecec12b5c49c0ad2c5b566298738cdb8050cf2dd4b86"
+translation: "machine"
+permalink: "/zh-CN/docs/sdk/unity.html"
+---
+{% raw %}
+<h1 id="unity-sdk">统一SDK</h1>
+<p>这 <strong>星隐者Unity SDK</strong> (<a href="https://github.com/HypeDriven/starhermit-unity-sdk">HypeDriven/starhermit-unity-sdk</a>）
+是一个 Unity 包管理器包，带有适用于该平台的类型化、异步 C# 客户端。它处理
+HTTP 请求、JSON 解析、令牌刷新和 WebSocket 重新连接。</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>包裹</td>
+<td><code>com.starhermit.sdk</code>，版本0.1.0</td>
+</tr>
+<tr>
+<td>命名空间</td>
+<td><code>Starhermit</code></td>
+</tr>
+<tr>
+<td>API基线</td>
+<td>REST v1 和 WebSocket v1</td>
+</tr>
+<tr>
+<td>较新的 REST 功能</td>
+<td>使用 <code>client.Raw</code> 和型号 <code>RawJson</code> 当此 SDK 版本没有类型成员时</td>
+</tr>
+<tr>
+<td>WebSocket 协议</td>
+<td>总共 6 个，每个连接类别一个</td>
+</tr>
+<tr>
+<td>执照</td>
+<td>麻省理工学院</td>
+</tr>
+</tbody>
+</table>
+<p>SDK 是一个客户端，而不是平台的第二个实现。授权、友谊、
+权利、房间会员资格、分数验证、游戏结果和存储预算保留
+服务器权威性与以下页面中记录的完全相同 - SDK 显示服务器的答案
+及其发布的限制，而不是决定或缓存自己的限制。</p>
+<p>此页面是集成指南。完整的包文档位于以下存储库中
+<code>Packages/com.starhermit.sdk/Documentation~</code>.</p>
+<h2 id="requirements">要求</h2>
+<ul>
+<li>Unity 2021.3 LTS 或更高版本，API 兼容性级别 <strong>.NET 标准 2.1</strong>, C# 9.</li>
+<li>Mono 和 IL2CPP，可从“禁用”到“禁用”进行托管剥离 <strong>高的</strong> （包裹自带
+<code>Runtime/link.xml</code>).</li>
+<li>没有反射，没有动态代码生成，没有强制性的本机插件。</li>
+</ul>
+<p>每个模块都会针对每个构建目标进行编译。如果目标确实缺乏能力——不
+无头服务器上的麦克风，浏览器中没有握手标头 - 调用会引发
+<code>StarhermitFeatureUnavailableException</code> 具有稳定的 <code>Reason</code>，而不是构建失败或
+禁用不相关的功能。</p>
+<table>
+<thead>
+<tr>
+<th>能力</th>
+<th>桌面/移动/控制台</th>
+<th>网页GL</th>
+<th>无头服务器</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>休息</td>
+<td><code>UnityWebRequestTransport</code></td>
+<td><code>UnityWebRequestTransport</code></td>
+<td><code>HttpClientTransport</code></td>
+</tr>
+<tr>
+<td>WebSocket</td>
+<td><code>ClientWebSocketAdapter</code></td>
+<td><code>WebGLSocketFactory</code> + 捆绑 <code>.jslib</code> 桥</td>
+<td><code>ClientWebSocketAdapter</code></td>
+</tr>
+<tr>
+<td>开放认证</td>
+<td>注入 <code>IStarhermitOAuthBrowser</code></td>
+<td>注入的浏览器适配器</td>
+<td>来自主机的 URL 切换</td>
+</tr>
+<tr>
+<td>代币存储</td>
+<td>注入存储； <code>EncryptedFileTokenStore</code> 选择加入</td>
+<td>注入浏览器存储</td>
+<td>注入存储或内存</td>
+</tr>
+<tr>
+<td>文件传输</td>
+<td><code>SystemFileStore</code></td>
+<td>注入水槽</td>
+<td><code>SystemFileStore</code></td>
+</tr>
+<tr>
+<td>语音捕捉/回放</td>
+<td><code>UnityMicrophoneCapture</code> / <code>UnityAudioPlayback</code></td>
+<td>注入的浏览器媒体适配器</td>
+<td>除非注入否则不可用</td>
+</tr>
+<tr>
+<td>公钥签名</td>
+<td>注入 <code>IStarhermitSigner</code></td>
+<td>注入签名者或浏览器加密</td>
+<td>注入签名者</td>
+</tr>
+</tbody>
+</table>
+<h2 id="install">安装</h2>
+<p>包管理器 → <strong>从 git URL 添加包</strong>，或中的一个条目 <code>Packages/manifest.json</code>。套餐
+位于存储库的子文件夹中，因此 URL 需要 <code>path=</code>:</p>
+<pre><code class="language-json">{
+  "dependencies": {
+    "com.starhermit.sdk": "https://github.com/HypeDriven/starhermit-unity-sdk.git?path=/Packages/com.starhermit.sdk"
+  }
+}
+</code></pre>
+<p>通过附加固定版本 <code>#&lt;tag-or-commit&gt;</code>:</p>
+<pre><code class="language-text">https://github.com/HypeDriven/starhermit-unity-sdk.git?path=/Packages/com.starhermit.sdk#v0.1.0
+</code></pre>
+<p>Unity炮轰 <code>git</code>，因此只有编辑者的 git 可以验证时私有存储库才会解析
+非交互方式 — SSH 密钥（<code>git@github.com:HypeDriven/starhermit-unity-sdk.git?path=/Packages/com.starhermit.sdk</code>）或一个
+配置的凭证助手。本地路径或作用域注册表的工作方式相同。导入修改无
+项目设置并且不执行网络访问。</p>
+<h2 id="create-a-client">创建一个客户端</h2>
+<pre><code class="language-csharp">using Starhermit;
+
+var client = StarhermitClient.Create(new StarhermitOptions
+{
+    ApiBaseUri = new Uri("https://api.starhermit.com/api/v1/"),
+    GameSlug   = "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+    TokenStore = myPlatformSecureStore,
+    LogLevel   = StarhermitLogLevel.Warning
+});
+
+await client.InitializeAsync();               // loads a stored session, refreshes it if expired
+var me = await client.Me.GetProfileAsync();
+</code></pre>
+<p><code>Create</code> 不执行任何 I/O。在您初始化、调用服务或打开一个服务之前，没有任何东西会触及网络。
+连接。 WebSocket 基础源自 <code>ApiBaseUri</code> (<code>wss://&lt;host&gt;/ws/v1/</code>）除非你设置
+<code>WebSocketBaseUri</code> 你自己。</p>
+<p><code>StarhermitClient</code> 是 <code>IDisposable</code>：处理取消正在进行的请求，关闭每个连接
+发出，停止心跳并释放音频。包中没有静态可变状态，因此
+两个客户端可以在不同的环境下并行运行，并且一个客户端可以承受场景负载。</p>
+<p><strong>平台上发布的游戏</strong> 服务于 <code>https://&lt;slug&gt;.starhermit.com</code> 和 <code>/api</code> 和
+<code>/ws</code> 代理同源（参见 <a href="/zh-CN/docs/api/github-games.html">GitHub 游戏</a>）。 WebGL 版本发布了
+way 应该指向它自己的原点，以便浏览器进行同源调用：</p>
+<pre><code class="language-csharp">ApiBaseUri = new Uri("https://83fd04b1-3cbe-4b09-a251-3733ad4b9d94.starhermit.com/api/v1/") // your game's uid
+</code></pre>
+<p>对于本地后端， <code>AllowInsecureTransport = true</code> 许可 <code>http</code>/<code>ws</code>。客户施工拒绝
+没有它的非 HTTPS 地址，并且编辑器的构建验证会导致非开发播放器构建失败
+仍然有它设置。它永远不会禁用证书验证。</p>
+<h2 id="signing-in">登录</h2>
+<p>中描述的三种凭证类型 <a href="/zh-CN/docs/api/auth.html">验证</a> 是单独的类型
+存储在SDK中；没有人可以替代另一个人。</p>
+<p><strong>开放认证</strong> — SDK 通过注入的方式打开授权 URL <code>IStarhermitOAuthBrowser</code> 并完成
+交换：</p>
+<pre><code class="language-csharp">var session = await client.Auth.SignInWithOAuthAsync("google");
+</code></pre>
+<p>使用 <code>BuildAuthorizeUri(provider)</code> 加 <code>CompleteOAuthAsync(...)</code> 相反，当您的平台将
+通过其自己的深层链接或嵌入式浏览器管道重定向回来。</p>
+<p><strong>公钥</strong> — 嵌入式、控制台和专用服务器播放器的无密码流程
+（见 <a href="/zh-CN/docs/tutorials/dedicated-server-onboarding.html">专用服务器+嵌入式播放器入门</a>）。
+支持的密钥类型有 <code>Ed25519</code>, <code>ECDSA-P256</code> 和 <code>RSA-PSS</code>; SDK从不生成或存储
+私钥，它调用注入 <code>IStarhermitSigner</code>:</p>
+<pre><code class="language-csharp">var session = await client.Auth.SignInWithPublicKeyAsync(signer);   // or (), using Options.Signer
+</code></pre>
+<blockquote>
+<p><strong>值得了解的合同细节。</strong> 部署根据自己的挑战签名验证挑战签名
+挑战的 PascalCase 序列化，而您收到的 JSON 是驼峰命名法 — 重新序列化
+响应永远不会得到验证。 <code>StarhermitChallenge.CanonicalPayload</code> 将精确的字节复制到
+签名，因此手卷签名也必须这样做。</p>
+</blockquote>
+<p><strong>游戏启动令牌</strong> — 每场比赛铸造并围入该游戏的表面：</p>
+<pre><code class="language-csharp">var chess = client.Games.ForSlug("83fd04b1-3cbe-4b09-a251-3733ad4b9d94");
+await chess.AcquireLaunchTokenAsync();
+var fenced = chess.WithLaunchToken();     // subsequent calls authorise with the launch token
+</code></pre>
+<p>铸造启动令牌永远不会取代帐户会话。请求携带哪个凭证
+由请求管道决定，而不是由您调用的服务决定。</p>
+<p>协调访问令牌刷新： <code>401</code> 最多购买一次刷新和一次重播，并且并发
+调用者等待相同的刷新，而不是启动多个刷新 - 使用旋转刷新令牌，第二次
+交换将撤销该家庭并注销该球员。明确拒绝提出 <code>SessionExpired</code>
+一次;传输失败会使会话保持完整。</p>
+<h3 id="accepting-the-current-terms">接受当前条款</h3>
+<p>在开始心跳、游戏请求或套接字之前检查接受情况。 0.1.0版本有
+<code>AcceptTermsAsync</code>，但较新的配置文件字段和术语发现使用其原始 JSON 支持：</p>
+<pre><code class="language-csharp">var profile = await client.Me.GetProfileAsync(ct);
+var needsAcceptance = profile.RawJson["termsAcceptanceRequired"].AsBooleanOrDefault();
+var terms = await client.Raw.SendForJsonAsync(new StarhermitRequest("GET", "terms"), ct);
+var textToDisplay = terms["text"].AsStringOrNull();
+var displayedHash = terms["hash"].AsStringOrNull();
+// Display textToDisplay. Retain displayedHash for this displayed revision.
+// Only in the user's Accept handler, using an account session:
+// await client.Me.AcceptTermsAsync(displayedHash, ct);
+</code></pre>
+<p>不要使用示例修订标签，例如 <code>terms-2026-08</code>：只有来自 API 的当前哈希值是
+接受了。在 <code>409</code>，获取并显示新文本以供再次接受。在
+<code>403 terms_acceptance_required</code>，在重试之前解决接受问题；玩家启动代币也可以在明确同意后通过 API 提交接受。看 <a href="/zh-CN/docs/api/profile.html#terms-acceptance">轮廓</a> 以获得完整的流程。</p>
+<h2 id="where-each-wiki-page-lives-in-the-sdk">每个 wiki 页面在 SDK 中的位置</h2>
+<p>这里记录的每个 REST 区域在客户端都有一个服务，并且每个 WebSocket 协议都有一个
+连接类。</p>
+<table>
+<thead>
+<tr>
+<th>维基页面</th>
+<th>软件开发工具包</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="/zh-CN/docs/api/auth.html">验证</a></td>
+<td><code>client.Auth</code> （密钥注册和撤销也可以在 <code>client.Me</code>)</td>
+</tr>
+<tr>
+<td><a href="/zh-CN/docs/api/profile.html">轮廓</a></td>
+<td><code>client.Me</code>, <code>client.Entitlements</code>, <code>StarhermitPresenceHeartbeat</code></td>
+</tr>
+<tr>
+<td><a href="/zh-CN/docs/api/friends.html">朋友们</a></td>
+<td><code>client.Friends</code></td>
+</tr>
+<tr>
+<td><a href="/zh-CN/docs/api/chat.html">聊天</a></td>
+<td><code>client.Chat</code> + <code>StarhermitChatConnection</code></td>
+</tr>
+<tr>
+<td><a href="/zh-CN/docs/api/voice.html">嗓音</a></td>
+<td><code>client.Voice</code> + <code>StarhermitVoiceConnection</code></td>
+</tr>
+<tr>
+<td><a href="/zh-CN/docs/api/catalog.html">目录</a></td>
+<td><code>client.Software</code>, <code>client.CloudSaves</code>, <code>client.Ratings</code>, <code>client.Wishlist</code></td>
+</tr>
+<tr>
+<td><a href="/zh-CN/docs/api/activity.html">活动</a></td>
+<td><code>client.Activity</code></td>
+</tr>
+<tr>
+<td><a href="/zh-CN/docs/api/external-libraries.html">外部库</a></td>
+<td><code>client.Activity</code> （链接、取消链接、自有软件、外部启动）</td>
+</tr>
+<tr>
+<td><a href="/zh-CN/docs/api/achievements.html">成就</a></td>
+<td><code>client.Achievements</code>, <code>client.Games.ForSlug(slug).GetAchievementsAsync()</code></td>
+</tr>
+<tr>
+<td><a href="/zh-CN/docs/api/leaderboards.html">排行榜</a></td>
+<td><code>client.Leaderboards</code></td>
+</tr>
+<tr>
+<td><a href="/zh-CN/docs/api/games.html">游戏</a></td>
+<td><code>client.Games.ForSlug(slug)</code> + <code>StarhermitGameConnection</code></td>
+</tr>
+<tr>
+<td><a href="/zh-CN/docs/api/realtime.html">实时房间</a></td>
+<td><code>client.RealtimeRooms</code> + <code>StarhermitRealtimeConnection</code></td>
+</tr>
+<tr>
+<td><a href="/zh-CN/docs/api/relay.html">中继</a></td>
+<td><code>client.Relay</code> + <code>StarhermitRelayConnection</code></td>
+</tr>
+<tr>
+<td><a href="/zh-CN/docs/api/container-games.html">容器游戏服务器</a></td>
+<td><code>client.GameServer</code> （服务器令牌交换和会话查找）</td>
+</tr>
+<tr>
+<td><a href="/zh-CN/docs/api/github-games.html">GitHub 游戏</a></td>
+<td><code>client.BrowserGames</code> + <code>StarhermitGameUploadConnection</code></td>
+</tr>
+<tr>
+<td><a href="/zh-CN/docs/api/publisher.html">出版商</a></td>
+<td><code>client.Publishers</code>, <code>StarhermitBuildPublisher</code></td>
+</tr>
+<tr>
+<td><a href="/zh-CN/docs/getting-started.html#server-clock--get-apiv1time">服务器时钟</a></td>
+<td><code>client.Time</code>, <code>client.ServerClock</code></td>
+</tr>
+</tbody>
+</table>
+<p><a href="/zh-CN/docs/api/game-scripts.html">游戏脚本</a> 无SDK服务：平台运行脚本，其
+客户端通过上面的游戏 API 与它对话。</p>
+<h2 id="a-session-end-to-end">一个会话从头到尾</h2>
+<p>生命周期从 <a href="/zh-CN/docs/tutorials/chess-walkthrough.html">集成演练</a>，在 C# 中：</p>
+<pre><code class="language-csharp">var chess = client.Games.ForSlug("83fd04b1-3cbe-4b09-a251-3733ad4b9d94");
+await chess.AcquireLaunchTokenAsync();
+
+var ticket = await chess.EnqueueMatchmakingAsync();
+while (!ticket.IsMatched)
+{
+    await Task.Delay(TimeSpan.FromSeconds(2), ct);
+    ticket = await chess.GetMatchmakingAsync(ct) ?? ticket;
+}
+
+using var game = client.CreateGameConnection(ticket.SessionId!.Value, "83fd04b1-3cbe-4b09-a251-3733ad4b9d94", useLaunchToken: true);
+game.FrameReceived       += frame =&gt; ApplyServerState(frame);
+game.AchievementUnlocked += unlock =&gt; ShowToast(unlock);
+game.PresenceChanged     += (userId, online) =&gt; UpdateOpponentDot(userId, online);
+game.ErrorReceived       += message =&gt; ShowError(message);
+
+await game.ConnectAsync(ct);
+await game.SendCommandAsync(writer =&gt;
+{
+    writer.Write("type", "move");
+    writer.Write("from", "e2");
+    writer.Write("to",   "e4");
+}, ct);
+</code></pre>
+<p><code>SendCommandAsync</code> 将有效负载包装为 <code>{"type":"cmd","data":…}</code>; <code>SendRealtimeInputAsync</code> 是
+连续输入的速率限制路径。连接不勾选游戏逻辑，预测权威
+状态、捏造结果或在不明确的命令之后重新发送可能的非幂等命令
+断开连接——服务器仍然是所发生事件的唯一权威。</p>
+<p>每个连接共享一个状态机： <code>Disconnected</code>, <code>Connecting</code>, <code>Connected</code>, <code>Reconnecting</code>,
+<code>Closing</code>, <code>Faulted</code>， 和 <code>StateChanged</code>, <code>Closed</code> 和 <code>Faulted</code> 事件，有界出站队列
+显式背压和有序发送。重新连接使用抖动退避，重新获取电流
+每次尝试之前的令牌，以及 <strong>授权或保单关闭时永久停止</strong> 而不是
+敲打一扇门，将平台关上。它从不假设成员资格在间隙中幸存下来：每个协议
+重新连接时重新获取或重新加入。</p>
+<p>凭证乘坐 <code>Authorization</code> 平台允许的标头以及 <code>?access_token=</code> 在
+<code>/ws/**</code> 否则，因为浏览器无法设置握手标头。查询令牌是从
+每一条日志。</p>
+<h2 id="async-threading-and-unity">异步、线程和 Unity</h2>
+<p>每个 I/O 操作都会返回 <code>Task</code> 并采取尾随 <code>CancellationToken</code>。没有 <code>async void</code>
+方法，并且没有公共方法会阻塞调用线程。</p>
+<p>事件和进度回调被发布到创建客户端的同步上下文 - 所以
+如果你在 Unity 的主线程上创建它，处理程序可能会触及 <code>GameObject</code>直接。无头服务器
+可以跳过跳跃 <code>options.CallbackDispatcher = ImmediateCallbackDispatcher.Instance</code>。回调是
+每个连接都排序，并且抛出的处理程序会报告给诊断程序，而无需停止
+接收循环。</p>
+<p><code>StarhermitLifecycle.Attach(client)</code> 桥接 Unity 的应用程序事件：存在心跳暂停
+挂起时并在恢复时立即发送，并且客户端在退出时被处理而无需同步
+网络工作。</p>
+<p>模型从未参考 <code>GameObject</code>, <code>MonoBehaviour</code> 或一个场景。 <code>StarhermitTextures</code> 转换头像和
+将封面艺术字节转换为 <code>Texture2D</code> 在主线程上 - 调用者拥有结果并且必须销毁它。</p>
+<h2 id="errors-retries-and-pagination">错误、重试和分页</h2>
+<table>
+<thead>
+<tr>
+<th>地位</th>
+<th>例外</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>400 / 422</td>
+<td><code>StarhermitBadRequestException</code>, <code>StarhermitValidationException</code> （由线路名称键入的字段错误）</td>
+</tr>
+<tr>
+<td>401</td>
+<td><code>StarhermitAuthenticationException</code></td>
+</tr>
+<tr>
+<td>402</td>
+<td><code>StarhermitEntitlementException</code></td>
+</tr>
+<tr>
+<td>403</td>
+<td><code>StarhermitAuthorizationException</code></td>
+</tr>
+<tr>
+<td>404</td>
+<td><code>StarhermitNotFoundException</code></td>
+</tr>
+<tr>
+<td>409</td>
+<td><code>StarhermitConflictException</code></td>
+</tr>
+<tr>
+<td>429</td>
+<td><code>StarhermitRateLimitException</code> （携带 <code>RetryAfter</code>)</td>
+</tr>
+<tr>
+<td>5xx</td>
+<td><code>StarhermitServerException</code></td>
+</tr>
+</tbody>
+</table>
+<p>每个都携带状态，服务器的 <code>{"error":"..."}</code> 消息、任何机器可读的代码、请求
+身份证号， <code>Retry-After</code>、经过编辑的标头和经过大小限制的经过编辑的正文。从未到达的请求
+API上涨 <code>StarhermitTransportException</code> 或者 <code>StarhermitTimeoutException</code> — 运输故障永远不会发生
+打扮成 API 响应。取消总是表现为 <code>OperationCanceledException</code>.</p>
+<p>重试是有限的、抖动的、荣誉的 <code>Retry-After</code> 达到上限，并限制每秒失败一次
+尝试可以生存：连接错误、超时、 <code>408</code>, <code>429</code> 和瞬态 <code>5xx</code>. <code>403</code>, <code>404</code>, <code>409</code>
+并且验证失败永远不会重试，并且仅当选择使用 POST 时才会重试
+<code>AsIdempotent</code>。整个流程的重试预算可以防止多个客户端将一次中断变成一场风暴。</p>
+<p>列出端点返回 <code>StarhermitPage&lt;T&gt;</code> 携带服务器自己的分页元数据，加上lazy
+仅在消耗页面时获取页面的枚举：</p>
+<pre><code class="language-csharp">await foreach (var title in client.Software.EnumerateTitlesAsync(query, cancellationToken: ct)) { … }
+</code></pre>
+<p>下载流至 <code>IStarhermitFileStore</code> 通过临时文件，验证提供的 SHA-256 并
+以原子方式提升； <code>OpenDownloadAsync</code> 报告 <code>IsResumed</code> 只为真正的 <code>206</code>，因为
+将整个文件附加到部分文件会损坏它，同时仍然通过长度检查。</p>
+<h2 id="storing-credentials">存储凭证</h2>
+<p>套餐 <strong>没有任何声称安全的商店。</strong> 默认是内存中的；选择加入
+<code>EncryptedFileTokenStore</code> （AES-CBC 与 HMAC-SHA256 通过您的应用程序提供的密钥）已记录
+作为静态混淆，而不是钥匙串。金属丝 <code>IStarhermitTokenStore</code> 平台自身安全
+storage — Keychain、Keystore、控制台 SDK 的用户存储。 <code>PlayerPrefs</code> 从未呈现为
+安全。</p>
+<p>令牌、刷新令牌、私钥、客户端机密和调用密钥永远不会序列化为
+<code>ScriptableObject</code>，一个场景， <code>Resources</code>、日志、异常消息、遥测事件或构建
+神器。 <code>StarhermitSettings</code> 仅保存非秘密项目默认值：地址、slug、日志级别、
+超时和开发标志。</p>
+<p>密文是结构化的——通过标题、查询参数和 JSON 成员名称，在每个深度——所以
+此 SDK 版本从未听说过的凭据仍然从日志、异常和遥测中剥离。
+URL 片段被完全丢弃。默认不收集遥测数据；注入的接收器接收
+事件名称、操作 ID、持续时间、状态系列、重试次数、请求 ID 和结果、从不 URL、
+主体或播放器内容。</p>
+<h2 id="when-the-platform-ships-something-new">当平台推出新产品时</h2>
+<p>模型是不可变的，并保留从中解析它们的 JSON，因此在部署之后添加了一个字段
+此 SDK 版本仍然可读，并且此版本未键入的端点仍可调用
+与键入的调用相同的凭据、重试和编辑：</p>
+<pre><code class="language-csharp">var value = profile.RawJson["shippedAfterThisSdk"].AsStringOrNull();
+
+var json  = await client.Raw.SendForJsonAsync(
+    new StarhermitRequest("GET", "some/new/route").WithQuery("page", 1), ct);
+</code></pre>
+<p>套接字帧在其类型鉴别器上分派，并带有未知帧回退，该回退保留了
+有效负载，未知的枚举字符串保留为字符串而不是强制的，以及未知的隐私级别
+读作 <strong>最多</strong> 私人解释。 <code>Optional&lt;T&gt;</code> 区分省略、显式 null 和
+value，这是 PATCH 主体所需要的。</p>
+<p><code>client.GetDiagnostics()</code> 返回连接状态、队列深度、重新连接计数、令牌过期、时钟
+新鲜度、正在进行的请求、重试次数和最后编辑的错误 - 附加到的快照
+错误报告。</p>
+<h2 id="samples">样品</h2>
+<p>包中附带了八个示例，并在 CI 中编译，因此它们不会偏离它们所使用的 API
+演示：身份验证和个人资料、好友和聊天、配对游戏、实时和中继、语音、
+目录服务、发布者工具和专用服务器。</p>
+<h2 id="verification-status">验证状态</h2>
+<p>SDK自己的套件（144项密封测试） <code>dotnet test</code>，以 Unity EditMode 运行的相同文件
+测试）以及生成的覆盖清单，当 API 操作没有 SDK 映射时，该清单会导致构建失败
+抓住每一个变化；另外五个测试在指向其中一个时会读取实时部署，并被跳过
+否则。编辑器矩阵和 IL2CPP
+适用于 Linux、Android 和 WebGL 的播放器构建是在 CI 中定义的，但需要获得许可的构建农场，因此
+上面的平台表说明了预期的支持——只有在构建目标后才将目标视为合格的目标
+你自己吧。</p>
+
+{% endraw %}

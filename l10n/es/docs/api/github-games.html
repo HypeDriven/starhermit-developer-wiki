@@ -1,0 +1,848 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Juegos de GitHub"
+source_url: "/docs/api/github-games.html"
+source_path: "docs/api/github-games.md"
+source_hash: "3ac05be03d6f084237353cccfe3c7a2c060046dd000d68711193907a1b4c6263"
+translation: "machine"
+permalink: "/es/docs/api/github-games.html"
+---
+{% raw %}
+<h1 id="github-games">Juegos de GitHub</h1>
+<p>Publicar un juego desde un repositorio de GitHub en <a href="https://starhermit.com">estrellaermitaño</a>o registrar un juego web ya alojado. Para juegos de repositorio, la plataforma dice <code>starhermit.txt</code>, clona el repositorio y lo sirve en <code>&lt;slug&gt;.starhermit.com</code>. Porque <code>/api</code> y <code>/ws</code> tienen un proxy del mismo origen desde ese subdominio, un juego alojado en una plataforma necesita <strong>sin configuración CORS o basada en API</strong>. Una confirmación fija controla qué versión del repositorio está activa. El <a href="/es/docs/tutorials/chess-walkthrough.html">implementación de referencia de ajedrez</a> se publica de esta manera y sirve como ejemplo de referencia del modelo.</p>
+<p>URL básica: <code>https://api.starhermit.com</code>. Todas las rutas están bajo <code>api/v1/...</code> y requieren un JWT a menos que se indique lo contrario.</p>
+<p>Los archivos de clientes alojados pueden declarar <a href="/es/docs/starhermit-txt.html#browser-asset-caching">Duración de la caché de carpetas</a>
+y <a href="/es/docs/starhermit-txt.html#allowing-another-website-to-access-your-hosted-game">orígenes CORS adicionales</a>
+en <code>starhermit.txt</code>. Esas políticas se publican con los archivos del cliente; una fusión sin manifiesto conserva
+configuraciones existentes, mientras que un manifiesto proporcionado las reemplaza.</p>
+<h2 id="the-manifest-starhermittxt">El manifiesto: <code>starhermit.txt</code></h2>
+<p>Lugar <code>starhermit.txt</code> en la raíz del repositorio. Formato: <code>key=value</code> pauta, <code>#</code> inicia un comentario.</p>
+<pre><code class="language-text">name=Your Game
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html        # repo-relative HTML entry
+cover=art/cover.png      # optional cover art for the library tile; or an https:// URL
+description=One-line pitch\nSecond line   # optional; or description.file=DESCRIPTION.md
+release_notes.file=CHANGELOG.md          # optional; or release_notes=inline text
+owner=&lt;starhermit user id&gt;  # UUID from GET /api/v1/me; do not use username/nickname
+# Choose at most one authoritative backend, or omit both for a browser-only game:
+server=server.js         # sandboxed JavaScript; see game-scripts.md
+# container.image=ghcr.io/owner/game@sha256:&lt;64 lowercase hex&gt;; see container-games.md
+
+control.up=KeyW+ArrowUp | Move forward
+control.shoot=Space | Shoot
+</code></pre>
+<ul>
+<li>no hay <code>slug</code> Clave: la plataforma asigna un uid y lo utiliza como subdominio (<code>&lt;uid&gt;.starhermit.com</code>) y el espacio de nombres de la API del juego (<code>/api/v1/games/&lt;uid&gt;/…</code>).</li>
+<li><code>cover</code> (alias <code>cover_art</code>, <code>coverart</code>) es la obra de arte que se muestra en el mosaico de la biblioteca del juego: una ruta relativa al archivo de inicio, o una ruta absoluta <code>https://</code> URL. Opcional: sin uno, el mosaico muestra el favicon de su sitio. Vuelva a leer en cada implementación, por lo que cambiar la línea cambia la portada. Ver <a href="#cover-art">Arte de portada</a> para los cultivos de teja.</li>
+<li><code>description</code> / <code>release_notes</code> (o <code>description.file</code> / <code>release_notes.file</code>, que nombra un <code>.md</code>/<code>.markdown</code>/<code>.txt</code> archivo relativo al manifiesto) son textos opcionales para tu juego. Se vuelven a leer en cada implementación como <code>cover</code>. Ver <a href="#description-and-release-notes">Descripción y notas de la versión</a>.</li>
+<li><code>server</code> declara un backend de JavaScript en un espacio aislado; ver <a href="/es/docs/api/game-scripts.html">game-scripts.md</a>.</li>
+<li><code>container.image</code> declara un contenedor backend; ver <a href="/es/docs/api/container-games.html">container-games.md</a>. Debe estar anclado en un resumen, alojado en el espacio de nombres del propietario verificado de GitHub en un registro incluido en la lista permitida y puede ir acompañado de <code>container.port</code>, <code>container.health</code>, <code>container.memory_mb</code>, <code>container.cpu</code>, y no secreto <code>container.env.*</code> valores.</li>
+<li>Ambas claves de backend son opcionales para un juego de navegador puro, pero se excluyen mutuamente.</li>
+</ul>
+<h3 id="default-control-bindings">Enlaces de control predeterminados</h3>
+<p>Un juego puede declarar cero o más acciones del navegador de escritorio:</p>
+<pre><code class="language-text">control.&lt;action&gt;=&lt;code&gt;[+&lt;code&gt;...][ | &lt;label&gt;]
+</code></pre>
+<ul>
+<li>Las acciones están en minúsculas. <code>[a-z0-9_]{1,32}</code> identificadores y conservar el orden manifiesto.</li>
+<li>Los códigos son <code>KeyboardEvent.code</code> valores; <code>+</code> separa claves alternativas para una acción.</li>
+<li>La etiqueta opcional se muestra en las IU de reasignación de controles y su valor predeterminado es la identificación de la acción.</li>
+<li>Un manifiesto puede declarar hasta 32 acciones y 4 códigos por acción. Un código no puede ser utilizado por
+dos acciones. Las líneas de control no válidas se ignoran.</li>
+<li>Juegos sin <code>control.*</code> las declaraciones no tienen controles API/UI (<code>404 "This game declares no controls."</code>). Las declaraciones se vuelven a leer desde cada compilación publicada: cada implementación, carga de carpeta
+y reemplazar el empuje del paquete. Paso a paso: <a href="/es/docs/tutorials/game-controls.html">Tutorial: añade controles a tu juego</a>.</li>
+</ul>
+<p>Los jugadores pueden anular estos valores predeterminados por juego a través del
+<a href="/es/docs/api/games.html#per-player-control-bindings">API de controles de juegos</a>.</p>
+<h2 id="endpoints">Puntos finales</h2>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Camino</th>
+<th>autenticación</th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/me/github-games</code></td>
+<td>JWT</td>
+<td>Registrar un juego desde una URL de repositorio → <code>201 GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/me/github-games/upload</code></td>
+<td>JWT</td>
+<td><strong>Agregar un juego desde una carpeta local</strong> — sin repositorio en absoluto → <code>201 { game, bytesReceived }</code></td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/me/github-games/{id}/claim</code></td>
+<td>JWT</td>
+<td>Tome posesión después de demostrar el control del repositorio mediante el enlace de GitHub o el propietario del manifiesto → <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>PONER</td>
+<td><code>/api/v1/me/github-games/{id}/url</code></td>
+<td>JWT</td>
+<td>Apunta un juego existente a una URL diferente; El fluido y el tiempo de juego sobreviven.</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/me/github-games</code></td>
+<td>JWT</td>
+<td>Lista tus juegos de GitHub registrados → <code>GitHubGameDto[]</code></td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/me/github-games/{id}/stats</code></td>
+<td>JWT (propietario)</td>
+<td><strong>Cifras de audiencia de un juego que agregaste</strong> → <code>GameStatsDto</code></td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/me/github-games/{id}/sessions</code></td>
+<td>JWT (propietario)</td>
+<td>Sesiones en vivo del servidor de este juego.</td>
+</tr>
+<tr>
+<td>BORRAR</td>
+<td><code>/api/v1/me/github-games/{id}/sessions/{sessionId}</code></td>
+<td>JWT (propietario)</td>
+<td>Finalizar una sesión en vivo (<code>abandoned</code> / <code>operator_ended</code>)</td>
+</tr>
+<tr>
+<td>OBTENER/PUBLICAR</td>
+<td><code>/api/v1/me/github-games/{id}/achievements</code></td>
+<td>JWT (propietario)</td>
+<td><a href="/es/docs/api/achievements.html#achievements-created-by-the-games-owner">Los logros de tu juego</a>: listar todos, crear uno</td>
+</tr>
+<tr>
+<td>PONER/ELIMINAR</td>
+<td><code>/api/v1/me/github-games/{id}/achievements/{achievementId}</code></td>
+<td>JWT (propietario)</td>
+<td>Actualizar/eliminar uno que hayas creado</td>
+</tr>
+<tr>
+<td>OBTENER/PUBLICAR</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards</code></td>
+<td>JWT (propietario)</td>
+<td><a href="/es/docs/api/leaderboards.html#your-games-own-leaderboards">Las tablas de clasificación de tu juego</a>: listar todos, crear uno</td>
+</tr>
+<tr>
+<td>PONER/ELIMINAR</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards/{leaderboardId}</code></td>
+<td>JWT (propietario)</td>
+<td>Actualizar/eliminar uno</td>
+</tr>
+<tr>
+<td>BORRAR</td>
+<td><code>/api/v1/me/github-games/{id}/players/{userId}/elo</code></td>
+<td>JWT (propietario)</td>
+<td><a href="/es/docs/api/leaderboards.html#resetting-a-players-rating">Restablecer la calificación de un jugador</a> a 1200</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/me/github-games/{id}/transfer</code></td>
+<td>JWT</td>
+<td>Transferir un juego a otro usuario → <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>BORRAR</td>
+<td><code>/api/v1/me/github-games/{id}</code></td>
+<td>JWT</td>
+<td>Eliminar un juego registrado → <code>204</code></td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/me/github-games/removed</code></td>
+<td>JWT</td>
+<td>Tus juegos eliminados: <code>restorable</code> (juegos subidos), <code>filesKept</code></td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/me/github-games/{id}/restore</code></td>
+<td>JWT</td>
+<td>Restaurar un juego subido y eliminado: la misma identificación e historial, sus archivos si aún no se han recuperado (30 días); <code>409</code> para un juego con una fuente: agregue su URL nuevamente</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/me/github-games/{id}/bundle</code></td>
+<td>JWT</td>
+<td>Publicar un raw <code>.tar.gz</code> que contiene archivos de cliente y/o una imagen de contenedor guardada. <code>?mode=merge</code> parchea archivos de clientes activos en lugar de reemplazarlos</td>
+</tr>
+<tr>
+<td>WS</td>
+<td><code>/ws/v1/game-upload</code></td>
+<td>JWT (<code>?access_token=</code>)</td>
+<td><strong>Las mismas dos cargas a través de un WebSocket</strong> — el transporte a utilizar para cualquier valor superior a ~100 MB</td>
+</tr>
+<tr>
+<td>PONER</td>
+<td><code>/api/v1/me/github-games/{id}/hosting</code></td>
+<td>JWT</td>
+<td>Activar/desactivar alojamiento ("Implementar en starhermit") → <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/me/github-games/{id}/deployment</code></td>
+<td>JWT</td>
+<td>Leer estado de implementación/alojamiento → <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>PONER</td>
+<td><code>/api/v1/me/github-games/{id}/deployment</code></td>
+<td>JWT</td>
+<td>Anclar una confirmación/rama; pone en cola una redistribución → <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/github-games</code></td>
+<td>JWT</td>
+<td>Navegación pública de juegos compartidos de GitHub → <code>SharedGitHubGameDto[]</code></td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/github-games/{id}/release-notes</code></td>
+<td>JWT</td>
+<td>Notas de la versión del juego desde su manifiesto → <code>GitHubGameReleaseNotesDto</code>, o <code>404</code> para un juego desconocido o eliminado</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/github-games/{id}/icon</code></td>
+<td>Anónimo</td>
+<td>Bytes de imagen del icono del juego (favicon o avatar del propietario); <code>ResponseCache</code> 86400</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/github-games/{id}/cover</code></td>
+<td>Anónimo</td>
+<td><strong>Bytes de imagen de portada</strong>, o <code>404</code> cuando el juego no tiene ninguno; <code>ResponseCache</code> 3600</td>
+</tr>
+<tr>
+<td>PONER</td>
+<td><code>/api/v1/me/github-games/{id}/cover</code></td>
+<td>JWT (propietario)</td>
+<td>Sube la portada, anulando la del manifiesto. <code>cover=</code> → <code>204</code></td>
+</tr>
+<tr>
+<td>BORRAR</td>
+<td><code>/api/v1/me/github-games/{id}/cover</code></td>
+<td>JWT (propietario)</td>
+<td>Suelta la portada cargada y vuelve al manifiesto → <code>204</code></td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/me/github</code></td>
+<td>JWT</td>
+<td>Estado del enlace de identidad de GitHub → <code>{ linked, login }</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="register-a-game">Registrar un juego</h3>
+<p><code>POST /api/v1/me/github-games</code></p>
+<pre><code class="language-json">{
+  "repoUrl": "https://github.com/HypeDriven/starhermit-chess",
+  "displayName": "StarHermit Chess",
+  "launchPath": "index.html"
+}
+</code></pre>
+<p>A pesar de su nombre histórico, <code>repoUrl</code> Acepta tres fuentes de lanzamiento:</p>
+<ol>
+<li>A <code>github.com/&lt;owner&gt;/&lt;repo&gt;</code> repositorio. El backend lee su manifiesto y puede implementarlo.
+al alojamiento StarHermit.</li>
+<li>Una URL de páginas de GitHub ya alojada, como <code>https://owner.github.io/game/</code>. Repositorio
+la identidad se infiere de la URL; se inicia la URL en sí, sin clonación ni instalación.</li>
+<li>cualquier otro publico <code>http://</code> o <code>https://</code> URL del juego web alojado. Se lanza directamente y
+no participa en la reclamación de propiedad de GitHub.</li>
+</ol>
+<ul>
+<li><code>displayName</code> y <code>launchPath</code> son alternativas opcionales. Son útiles para un repositorio de terceros.
+sin metadatos de manifiesto confiables; una URL alojada directamente es en sí misma la ubicación de lanzamiento.</li>
+<li>Para propietarios de repositorios verificados, la plataforma valida <code>starhermit.txt</code>.</li>
+<li>Un opcional <code>server=</code> guión o <code>container.image=</code> el backend proporciona un juego autorizado; ver <a href="/es/docs/api/game-scripts.html">game-scripts.md</a> y <a href="/es/docs/api/container-games.html">container-games.md</a>. El alojamiento de contenedores está abierto a cualquier usuario que haya iniciado sesión en starhermit.com; una implementación autohospedada puede restringirla a una lista de operadores permitidos.</li>
+<li><strong>Un servidor backend declarado necesita un propietario probado.</strong> Presentar un repositorio que declare <code>server=</code> o <code>container.image=</code> sin iniciar sesión en GitHub o <code>owner=</code> la prueba es <code>403</code> (nombrando ambas pruebas), no una lista exclusiva del navegador que pretende tener un backend.</li>
+<li>Límites: 100 juegos por usuario (anulable por el operador por cuenta). Registrar una devolución duplicada <code>409</code>.</li>
+</ul>
+<p>Los estados de registro/implementación incluyen: <code>InvalidUrl</code>, <code>LimitReached</code>, <code>Duplicate</code>, <code>MissingManualMetadata</code>, <code>MissingStarhermitTxt</code>, <code>InvalidLaunchPath</code>, <code>InvalidServerScriptPath</code>, <code>InvalidContainerImage</code>, <code>ServerProvisionConflict</code>, <code>RemovedByOwner</code>.</p>
+<p>Los errores utilizan la forma estándar:</p>
+<pre><code class="language-json">{ "error": "..." }
+</code></pre>
+<h3 id="add-a-game-from-a-local-folder">Agregar un juego desde una carpeta local</h3>
+<p><code>POST /api/v1/me/github-games/upload</code> → <code>201</code></p>
+<p>La contraparte de registrar una URL: <strong>no hay repositorio</strong>, y no se clona nada. la carpeta
+viaja como uno <code>.tar.gz</code> en el cuerpo de la solicitud y la plataforma aloja lo que contiene. Mismo archivo
+formato como <a href="#push-a-game-bundle">empujando un paquete</a>, por lo que el mismo embalaje sirve para ambos.</p>
+<p>El juego creado tiene un <code>gameSlug</code> desde el principio, ya sea que declare o no un servidor, por lo que un
+la carga solo del navegador puede usar <a href="/es/docs/api/games.html#per-player-control-bindings">controles</a>,
+<a href="/es/docs/api/games.html#per-player-game-settings">configuración por jugador</a>, es
+<a href="/es/docs/api/catalog.html#saving-from-inside-a-game-launch-token">ranura para guardar en la nube</a>, <a href="/es/docs/api/realtime.html">salas en tiempo real</a>
+y lanzar tokens como cualquier otro juego.</p>
+<pre><code class="language-text">client/           the game's files, published as-is
+starhermit.txt    name= and launch= instead of the query parameters
+</code></pre>
+<p>El manifiesto es opcional para <em>este punto final</em> - los parámetros de consulta pueden proporcionar los mismos valores - y
+Los clientes de StarHermit siempre envían uno, creado a partir de sus campos de manifiesto. Envío del archivo al interior
+Todavía vale la pena hacer tu compilación: hace que la compilación sea autodescriptiva y completa previamente esos campos, por lo que
+se puede volver a cargar sin recordar qué valores necesitaba. Ver
+<a href="/es/docs/starhermit-txt.html">El <code>starhermit.txt</code> manifiesto</a> para el formato, y tenga en cuenta que <strong>todo
+adyacente al manifiesto se carga</strong> — sube una compilación distribuible, no un árbol de fuentes.</p>
+<p>Envíe los bytes directamente, no datos de formularios de varias partes, con <code>Content-Type: application/gzip</code>:</p>
+<pre><code class="language-bash">tar -czf game.tar.gz client/ starhermit.txt
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/upload?displayName=My%20Game" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game.tar.gz
+</code></pre>
+<pre><code class="language-json">{
+  "game": { "id": "...", "displayName": "My Game", "launchPath": "index.html", "hosting": { "hostingEnabled": true } },
+  "bytesReceived": 4194304
+}
+</code></pre>
+<p>Los metadatos se resuelven en este orden, por lo que la mayoría de las carpetas no necesitan ningún parámetro de consulta:</p>
+<ol>
+<li><code>?displayName=</code> / <code>?launchPath=</code> en la solicitud.</li>
+<li><code>name=</code> / <code>launch=</code> en un <code>starhermit.txt</code> en la raíz del archivo.</li>
+<li><code>index.html</code> en la raíz de <code>client/</code> - Se utiliza como ruta de lanzamiento cuando nada más lo nombra.</li>
+</ol>
+<p>Notas específicas de esta ruta:</p>
+<ul>
+<li><strong>El juego se activa tan pronto como vuelve la llamada.</strong> No hay alojamiento ni implementación por separado
+paso: <code>deployStatus</code> es <code>live</code> y <code>deployedCommitSha</code> es <code>null</code>, porque no hay ningún compromiso.</li>
+<li><strong>Los archivos no se pueden regenerar.</strong>, por lo que la plataforma nunca los vuelve a implementar desde ningún lugar. un juego
+agregado de esta manera lleva <code>contentSource: upload</code> y conserva su compilación cargada hasta que la publique
+otro. Impulsar una nueva construcción con
+<a href="#push-a-game-bundle">el punto final del paquete</a> o cargar la carpeta nuevamente.</li>
+<li><strong>Sin depósito significa que no hay reclamos.</strong> <code>ownerLogin</code> está vacío, por lo que ningún inicio de sesión de GitHub podrá igualarlo;
+<code>repoUrl</code> lleva un sintético <code>upload:&lt;id&gt;</code> valor en lugar de una URL.</li>
+<li><strong>A <code>server/image.tar</code> es rechazado aquí</strong> (<code>422</code>). Una imagen de servidor necesita un juego aprovisionado para
+adjuntar a, que no existe hasta que exista el juego: primero crea el juego y luego envía la imagen.
+a <code>/{id}/bundle</code>.</li>
+<li>Se rechaza una ruta de inicio que nombra un archivo que el archivo no contiene (<code>422</code>) mientras la carga es
+todavía en preparación, en lugar de convertirse en un 404 para cada jugador.</li>
+</ul>
+<p>Los límites son los mismos que para cualquier otro empujón: ver <a href="#upload-limits">Límites de carga</a>.</p>
+<h4 id="an-uploaded-folder-can-bring-its-own-server-backend">Una carpeta cargada puede traer su propio servidor backend</h4>
+<p>Si el archivo <a href="/es/docs/starhermit-txt.html"><code>starhermit.txt</code></a> declara la lógica del servidor, la carga
+también lo aprovisiona, lo mismo que hace el flujo del repositorio, sin un repositorio. Elige uno
+estilo; declarar ambos es rechazado.</p>
+<table>
+<thead>
+<tr>
+<th>Declaración</th>
+<th>Lo que sucede</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server=path/to/server.js</code></td>
+<td>Un backend de script. El archivo viaja <strong>dentro de la carpeta que subes</strong>, por lo que su fuente se lee directamente desde el archivo: no hay nada que recuperar. Ver <a href="/es/docs/api/game-scripts.html">game-scripts.md</a>.</td>
+</tr>
+<tr>
+<td><code>container.image=name@sha256:…</code></td>
+<td>Un backend de contenedor, anclado en resumen como siempre. Ver <a href="/es/docs/api/container-games.html">container-games.md</a>. La imagen en sí se empuja después a <code>/{id}/bundle</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Los rechazos aquí fallan en toda la creación: ninguna fila del juego a medio hacer sobrevive:</p>
+<ul>
+<li><code>server=</code> nombrar un archivo que el archivo no contiene.</li>
+<li><code>server=</code> apuntando fuera de los archivos del cliente (<code>../</code>).</li>
+<li>declarando ambos <code>server=</code> y <code>container.image=</code>.</li>
+<li>Solicitar un contenedor donde los contenedores estén inhabilitados, o a un propietario no aprobado para ellos.</li>
+</ul>
+<h3 id="cover-art">Arte de portada</h3>
+<p>La imagen que se muestra en el mosaico de tu juego en la biblioteca. Configúrelo de cualquier manera: cualquiera que use, el
+anónimo <code>GET /api/v1/github-games/{id}/cover</code> es lo que le sirve:</p>
+<ul>
+<li><strong>en tu construcción</strong> — a <code>cover=</code> línea en <code>starhermit.txt</code>, nombrando una imagen relativa al lanzamiento
+archivo o un absoluto <code>https://</code> URL. Vuelva a leer en cada implementación, para que su repositorio siga siendo la fuente de la verdad.</li>
+<li><strong>subido</strong> — <code>PUT /api/v1/me/github-games/{id}/cover</code> con la imagen codificada en base64. esto es
+¿Qué es el panel web? <em>Administrar → Portada</em> hace y qué puede hacer un operador de StarHermit por usted.</li>
+</ul>
+<pre><code class="language-http">PUT /api/v1/me/github-games/{id}/cover
+Authorization: Bearer &lt;token&gt;
+Content-Type: application/json
+
+{ "imageBase64": "iVBORw0KGgoAAAANSUhEUg..." }
+</code></pre>
+<p>una carga <strong>anula</strong> el manifiesto, deliberadamente: un despliegue que relee <code>starhermit.txt</code> debe
+Nunca deshagas el arte que alguien eligió a mano. <code>DELETE /api/v1/me/github-games/{id}/cover</code> es el camino de regreso
+elimina la carga y el manifiesto <code>cover=</code> se aplica nuevamente.</p>
+<p>PNG, JPEG, GIF, WEBP, BMP o SVG, hasta <strong>4 megas</strong>. El tipo se detecta a partir de los bytes, por lo que
+<code>Content-Type</code> usted afirma que no es necesario ni creído, y los bytes que no son una imagen decodificable
+son rechazados con <code>400</code>. un pariente <code>cover=</code> El camino debe terminar en <code>.png</code>, <code>.jpg</code>/<code>.jpeg</code>, <code>.gif</code>,
+<code>.webp</code> o <code>.svg</code> (No <code>..</code>, sin liderazgo <code>/</code>); un valor inutilizable se elimina en lugar de fallar el
+juego.</p>
+<p>La portada es un cartel: ambas bibliotecas <strong>escale para llenar el mosaico y recorte central</strong> lo que sea que haga
+no encaja. Los azulejos no tienen la misma forma.</p>
+<table>
+<thead>
+<tr>
+<th>Superficie</th>
+<th>Teja</th>
+<th>Cultivo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cliente de Windows</td>
+<td>Retrato de 96×128 (3:4)</td>
+<td>Llena el retrato; el arte más amplio pierde los lados</td>
+</tr>
+<tr>
+<td>Panel web</td>
+<td>Cuadrado</td>
+<td>Llena el cuadrado; El arte más alto pierde la parte superior e inferior.</td>
+</tr>
+</tbody>
+</table>
+<p>Mantenga el sujeto en el centro para que ambos cultivos se vean bien. Las portadas SVG se muestran en la biblioteca web; el
+El cliente de Windows no puede decodificar SVG, por lo que el mosaico muestra el favicon. Un juego sin cobertura en
+todo vuelve a su favicon (<code>GET /api/v1/github-games/{id}/icon</code>). El icono se resuelve desde el
+URL que enviaste y, cuando la plataforma aloja el juego, de la copia que sirve en
+<code>&lt;uid&gt;.starhermit.com</code> – por lo que un paquete subido con un favicon en sus archivos todavía tiene un ícono.</p>
+<h3 id="audience-figures-for-your-game">Cifras de audiencia de tu juego</h3>
+<p><code>GET /api/v1/me/github-games/{id}/stats</code> → <code>GameStatsDto</code></p>
+<p>¿Cuántas personas juegan un juego? <strong>tu agregaste</strong>. Restringido al propietario del juego; cualquier otra persona podrá <code>404</code>,
+La misma respuesta que un juego que no existe.</p>
+<pre><code class="language-json">{
+  "totalPlayers": 42,
+  "playingNow": 3,
+  "totalSessions": 130,
+  "totalPlaytimeMinutes": 8140,
+  "lastPlayedAt": "2026-07-29T08:45:24Z",
+  "livenessWindowHours": 4
+}
+</code></pre>
+<ul>
+<li><strong>Solo agregado.</strong> Aprendes el tamaño de tu audiencia, nunca quién está en ella.</li>
+<li><code>totalPlayers</code> cuenta <strong>personas distintas</strong>, no sesiones: alguien que jugó seis veces es uno
+jugador.</li>
+<li><code>playingNow</code> cuenta distintos jugadores cuya sesión no ha finalizado <em>y</em> comenzó dentro
+<code>livenessWindowHours</code>. La ventana importa: un cliente que falla o pierde su red nunca envía
+el final de la sesión, y sin ella, esas filas se leerían como personas que siguen jugando indefinidamente.</li>
+<li><code>totalPlaytimeMinutes</code> cuenta <strong>solo sesiones completadas</strong>, igualando las cifras de tiempo de reproducción por usuario
+en <a href="/es/docs/api/activity.html">activity.md</a>. Una sesión en vuelo no aporta nada todavía.</li>
+<li><code>lastPlayedAt</code> es <code>null</code> para un juego que nadie ha jugado.</li>
+</ul>
+<p>Las cifras provienen del mismo libro de lanzamiento que escribe cada cliente (ver <a href="/es/docs/api/activity.html">activity.md</a>), por lo que un
+el juego cuyos jugadores nunca reportan lanzamientos se leerá como cero.</p>
+<h3 id="claim-ownership">Reclamar propiedad</h3>
+<p><code>POST /api/v1/me/github-games/{id}/claim</code> → <code>GitHubGameDto</code></p>
+<p>Hazte cargo de un listado existente cuando controlas su repositorio. Demuestre la propiedad ya sea vinculando el
+inicio de sesión personal de GitHub que coincida con el propietario del repositorio, o confirmando
+<code>owner=&lt;your StarHermit user ID&gt;</code> al repositorio <code>starhermit.txt</code>. <code>owner</code> debería ser el
+UUID inmutable devuelto como <code>id</code> por <code>GET /api/v1/me</code>, <strong>no</strong> un nombre de usuario o apodo. el manifiesto
+El método admite repositorios propiedad de la organización, que no se infieren de la organización personal de GitHub.
+membresía.</p>
+<p>En caso de éxito, el listado existente conserva su ID/historial, pasa a ser administrado por el reclamante y se actualiza
+metadatos controlados por el repositorio y declaraciones de backend, y alojamiento de colas cuando esté disponible. el
+El remitente anterior pierde el acceso de administración con ámbito de propietario. Reclamar un listado que ya administras
+lo vuelve a sincronizar en lugar de devolver un conflicto.</p>
+<p>Almacenes de metadatos de identidad de GitHub <code>{"login":"…"}</code>; vincule su cuenta de GitHub a través del flujo de OAuth (consulte
+<a href="/es/docs/api/auth.html">auth.md</a>). Verifique el estado del enlace con <code>GET /api/v1/me/github</code> → <code>{ linked, login }</code>. Ver el
+<a href="/es/docs/tutorials/claim-existing-game.html">tutorial de reclamo paso a paso</a> para el descubrimiento, ambas pruebas
+métodos, validación, adquisición y resolución de problemas.</p>
+<h3 id="transfer-ownership">Transferir propiedad</h3>
+<p><code>POST /api/v1/me/github-games/{id}/transfer</code></p>
+<pre><code class="language-json">{ "toUserId": "&lt;user id&gt;" }
+</code></pre>
+<h3 id="push-a-game-bundle">Enviar un paquete de juegos</h3>
+<p><code>POST /api/v1/me/github-games/{id}/bundle</code> publica resultados construidos sin pedirle a StarHermit que
+clonarlo de nuevo. La persona que llama debe ser propietaria del juego registrado. enviar el <code>.tar.gz</code> bytes directamente—no
+datos de formulario de varias partes, con <code>Content-Type: application/gzip</code>:</p>
+<pre><code class="language-text">client/            optional static client files; must include the registered launch file
+server/image.tar   optional output from `docker save`
+starhermit.txt     optional manifest copy for bundle portability
+remove.txt         merge only: client-relative paths to delete, one per line
+</code></pre>
+<p>Al menos <code>client/</code> o <code>server/image.tar</code> debe estar presente (una fusión también puede ser solo <code>remove.txt</code>). Los archivos del cliente se intercambian atómicamente. un
+La imagen del servidor se carga, la plataforma fija el resumen y pone en cola la implementación del contenedor para
+reinicie en esa imagen. Una imagen cargada tiene prioridad sobre la referencia de registro del manifiesto,
+y más de un <code>server=</code> línea; un manifiesto declarando ambos <code>server=</code> y <code>container.image=</code> es rechazado
+antes de que se cargue algo. Todo lo demás que haya en el archivo se ignora.</p>
+<p><strong>Cargar una imagen es en sí misma la declaración.</strong> Si el juego aún no tiene servidor backend, un
+carpeta cargada que no declaró ninguna - empujando <code>server/image.tar</code> provisiones uno del resumen justo
+cargado, debajo del <code>gameSlug</code> el juego ya lo tiene. No es necesario nombrar una imagen fijada en un resumen en un
+manifiesto primero, que era circular: la definición tenía que existir antes de poder recibir una imagen,
+y la imagen era lo único que podía describirlo.</p>
+<p><strong>Un re-push aplica las perillas del contenedor que declara su manifiesto, y solo esas.</strong> Incluir
+<code>starhermit.txt</code> en el paquete con un cambio <code>container.port</code>, <code>container.health</code>,
+<code>container.memory_mb</code> o <code>container.cpu</code> y la implementación lo retoma al reiniciar; deja una perilla afuera y
+Mantiene lo que estableciste la última vez. Omitir el manifiesto por completo y nada sobre la implementación.
+cambia excepto la imagen.</p>
+<p>Los clientes de StarHermit crean este paquete para usted, desde una carpeta <strong>o un solo <code>.tar</code></strong>:</p>
+<ul>
+<li><strong>Archivos de clientes</strong> — la carpeta de distribución del juego, o un <code>.tar</code> de ello. Una carpeta está empaquetada debajo
+<code>client/</code>; a <code>.tar</code>Las entradas de se reubican allí (un archivo que ya está bajo <code>client/</code> queda
+solo). solo ustar: se rechazan los archivos GNU de nombre largo y PAX, porque reubicarlos significa
+reescribiendo los bloques de metadatos que nombran la siguiente entrada.</li>
+<li><strong>Servidor dedicado</strong> — la carpeta de distribución del servidor, o la <code>docker save</code> <code>.tar</code> por sí solo.
+De una carpeta solo el manifiesto y <code>image.tar</code> están cargados: la imagen ya contiene su
+propios archivos del servidor, por lo que empaquetar el resto enviaría gigabytes para que la plataforma los descarte.</li>
+</ul>
+<p>En ambos casos el <a href="/es/docs/starhermit-txt.html"><code>starhermit.txt</code></a> es editable en el cuadro de diálogo. Cualquiera que sea el
+La compilación seleccionada incluye campos precompletados, y todo lo que contienen se escribe en la raíz del paquete, por lo que
+una compilación sin manifiesto es publicable y una que se envía como <code>.tar</code> todavía puede tener su manifiesto
+actualizado.</p>
+<pre><code class="language-bash">docker save my-game-server:release -o image.tar
+mkdir -p bundle/server
+mv image.tar bundle/server/image.tar
+cp starhermit.txt bundle/
+tar -C bundle -czf game-bundle.tar.gz .
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game-bundle.tar.gz
+</code></pre>
+<pre><code class="language-json">{
+  "clientPublished": false,
+  "serverImageLoaded": true,
+  "imageDigest": "sha256:...",
+  "bytesReceived": 318767104,
+  "mode": "replace",
+  "filesRemoved": 0
+}
+</code></pre>
+<h4 id="partial-updates-modemerge">Actualizaciones parciales: <code>?mode=merge</code></h4>
+<p>Un empujón es un <strong>reemplazar</strong> a menos que pidas lo contrario: el archivo es el juego completo, y todo lo que no esté en
+ya no está. <code>?mode=merge</code> (HTTP y el socket de carga por igual) lo convierte en un <strong>parche</strong> del cliente en vivo
+archivos: la respuesta a volver a cargar gigabytes de activos sin cambios para una solución de un solo archivo.</p>
+<pre><code class="language-bash">printf '%s\n' '# one client-relative path per line; a directory removes everything under it' \
+    'assets/old-music.ogg' 'levels/cut/' &gt; remove.txt
+tar czf patch.tar.gz client/index.html client/js/app.js remove.txt
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle?mode=merge" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @patch.tar.gz
+</code></pre>
+<p>Con <code>mode=merge</code>:</p>
+<ul>
+<li>archivos bajo <code>client/</code> se agregan o sobrescriben</li>
+<li>caminos en una raíz <code>remove.txt</code> (<code>#</code> comentarios; un directorio elimina todo su subárbol) se eliminan</li>
+<li>todos los demás archivos en vivo permanecen exactamente como están</li>
+</ul>
+<p>El árbol fusionado se presenta como una copia y se intercambia atómicamente: los jugadores ven el juego antiguo o el
+uno completamente nuevo, nunca una mezcla. El resultado está acotado por la <strong>juegos</strong> asignación, no la de la carga, por lo que
+un juego no puede crecer más allá de su límite, un pequeño parche a la vez. Una fusión se trata sólo de archivos de clientes; a
+<code>server/image.tar</code> se carga exactamente como en un reemplazo. Un parche que no lleva <code>starhermit.txt</code> hojas
+portada tal como estaba.</p>
+<p>Se rechaza una fusión (<code>409</code>/<code>422</code>, nada cambia) cuando el juego no tiene nada publicado todavía, cuando
+eliminaría el archivo de inicio, o cuando <code>remove.txt</code> puntos fuera del juego. A <code>remove.txt</code> en un
+El reemplazo simple también se rechaza (<code>422</code>), porque allí sólo podría significar algo que no sabías
+pretender. <code>mode</code> debe ser <code>replace</code> (predeterminado) o <code>merge</code>; cualquier otra cosa es <code>400</code>.</p>
+<p>El mismo parámetro funciona en el socket: <code>ws/v1/game-upload?gameId=…&amp;mode=merge</code>. El <code>ready</code> marco
+lo repite como <code>"apply":"merge"</code>.</p>
+<p>El terminal actualiza un juego registrado existente; nunca crea el registro del juego; para eso, consulte
+<a href="#add-a-game-from-a-local-folder">agregar un juego desde una carpeta local</a>. Él <em>poder</em> aprovisionar el juego
+backend del servidor, como efecto secundario de cargar una imagen de servidor en un juego que no tenía ninguna. Ver el
+<a href="/es/docs/tutorials/dedicated-server-onboarding.html">tutorial de publicación de servidor dedicado</a>.</p>
+<h3 id="upload-from-cicd">Cargar desde CI/CD</h3>
+<p>No mantenga un token OAuth interactivo en un repositorio secreto. Inicie sesión a través de OAuth una vez y utilice
+esa sesión para agregar una clave de implementación etiquetada por separado con <code>POST /api/v1/me/public-keys</code>. El CI
+el trabajo puede entonces firmar <code>/auth/public-key/challenge</code>, cambiarlo en <code>/auth/public-key/complete</code>y utilizar
+el token de acceso de 15 minutos devuelto en este punto final del paquete.</p>
+<p>La clave de implementación actúa como su cuenta propietaria, por lo que esa cuenta debe ser propietaria del juego objetivo. no puede
+agregar otra clave o revocar otras claves. Puede revocarse mediante <code>/me/public-keys/current</code>;
+administrar la inscripción y otras claves desde una sesión autenticada por OAuth. Utilice una clave por
+entorno para que un flujo de trabajo pueda desactivarse sin detener los demás. Archivos sobre aproximadamente
+100 MB deben utilizar el transporte WebSocket a continuación.</p>
+<p>Ver <a href="/es/docs/tutorials/ci-cd-build-upload.html">Cargue compilaciones desde CI/CD con una clave pública inscrita en OAuth</a>
+para generación de claves, configuración secreta de GitHub, un script completo de carga/firma de desafíos, estático y
+diseños de paquetes de contenedores y un flujo de trabajo de GitHub Actions.</p>
+<h3 id="upload-over-a-websocket">Cargar a través de un WebSocket</h3>
+<p><code>GET /ws/v1/game-upload</code> (mejora) - <strong>Úselo para cualquier cosa que supere los 100 MB.</strong></p>
+<p>La CDN delante de la API rechaza un cuerpo de solicitud HTTP aproximadamente <strong>100 megas</strong> con un <code>413</code> de su
+propio. Esa negativa nunca llega a la plataforma, por lo que no conlleva ningún efecto. <code>limitBytes</code> y no aparece en ningún registro
+sabe leer - un <code>413</code> sin <code>limitBytes</code> El campo es el CDN, no la asignación de tu juego, que son dos
+órdenes de magnitud mayores. Cualquier realista <code>docker save</code> lo golpeará.</p>
+<p>Las tramas enviadas después de la actualización de WebSocket no son un cuerpo de solicitud, por lo que no se aplica el límite.
+<strong>Sólo el transporte difiere.</strong> Las tramas binarias se concatenan exactamente en los bytes que las rutas HTTP
+Lea, siga el mismo proceso y cada cuerpo de rechazo, concesión y éxito es el que HTTP
+ruta habría producido, por lo que un cliente puede compartir una ruta de código entre ambos.</p>
+<pre><code class="language-text">wss://api.starhermit.com/ws/v1/game-upload?gameId=$GAME_ID&amp;access_token=$TOKEN
+wss://api.starhermit.com/ws/v1/game-upload?gameId=$GAME_ID&amp;mode=merge&amp;access_token=$TOKEN
+wss://api.starhermit.com/ws/v1/game-upload?displayName=My%20Game&amp;launchPath=index.html&amp;access_token=$TOKEN
+</code></pre>
+<p>Aprobar <code>gameId</code> para acceder a un juego de tu propiedad (el <code>/{id}/bundle</code> ruta); omitirlo y pasar
+<code>displayName</code>/<code>launchPath</code> para crear uno desde una carpeta (la <code>/upload</code> ruta). La ficha va en el
+cadena de consulta porque un navegador no puede establecer una <code>Authorization</code> encabezado en un protocolo de enlace WebSocket; es
+verificado una vez, en el apretón de manos, por lo que una carga que sobrevive a su token de acceso aún finaliza.</p>
+<table>
+<thead>
+<tr>
+<th>Dirección</th>
+<th>Marco</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>servidor →</td>
+<td><code>{"type":"ready","mode":"bundle","apply":"replace","limitBytes":N,"heartbeatSeconds":15}</code></td>
+<td>Asignación liquidada y espacio libre comprobado. Comience a enviar. <code>mode</code> es <code>bundle</code> o <code>create</code>. <code>apply</code> es <code>merge</code> cuando solicitó una actualización parcial.</td>
+</tr>
+<tr>
+<td>→ servidor</td>
+<td><em>binario</em></td>
+<td>Archive bytes, fragmentados como desee: el servidor nunca vuelve a ensamblar los mensajes, por lo que 256 KB–1 MB es un buen valor predeterminado. Concatenados, sus marcos deben ser exactamente los <code>.tar.gz</code>.</td>
+</tr>
+<tr>
+<td>servidor →</td>
+<td><code>{"type":"ack","bytesReceived":N}</code></td>
+<td>Progreso de recepción, aproximadamente cada 8 MB. Conduce tu barra de progreso a partir de esto.</td>
+</tr>
+<tr>
+<td>→ servidor</td>
+<td><code>{"type":"complete"}</code></td>
+<td>El archivo ha sido enviado íntegramente.</td>
+</tr>
+<tr>
+<td>→ servidor</td>
+<td><code>{"type":"abort"}</code></td>
+<td>Abandonar. Respondido con <code>status: 499</code>; no se publica nada.</td>
+</tr>
+<tr>
+<td>servidor →</td>
+<td><code>{"type":"progress","phase":"publishing","bytesReceived":N}</code></td>
+<td>Latidos cada 15 segundos mientras llega la carga. Ignóralos, pero espéralos.</td>
+</tr>
+<tr>
+<td>servidor →</td>
+<td><code>{"type":"result","status":200,...}</code></td>
+<td>Éxito. El resto del objeto es el cuerpo de la respuesta HTTP palabra por palabra (<code>status</code> es <code>201</code> para crear).</td>
+</tr>
+<tr>
+<td>servidor →</td>
+<td><code>{"type":"error","status":413,"error":"...","limitBytes":N}</code></td>
+<td>Negativa. <code>status</code> y el cuerpo son lo que habría respondido la ruta HTTP.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>No se publica nada hasta <code>{"type":"complete"}</code> llega.</strong> Este es el único comportamiento sin HTTP
+equivalente, y es deliberado: el marcador de fin de archivo vive <em>adentro</em> los bytes de un tar, por lo que el
+La plataforma termina de leer un archivo de apariencia completa sin que la conexión termine. un enchufe
+que simplemente se cayó después del último byte se publicaría exactamente igual que uno que terminó:
+Reemplazar silenciosamente un juego en vivo con un empujón abandonado. Cerrar el socket sin las cargas del marco.
+nada.</p>
+<p>La publicación después del último byte puede llevar tiempo, especialmente para una imagen de servidor. Esperar <code>progress</code>
+latidos del corazón mientras termina; no trate un intervalo de silencio como un error de carga.</p>
+<h3 id="upload-limits">Límites de carga</h3>
+<p>Todas las rutas de carga (tanto los puntos finales HTTP como WebSocket) comparten las mismas reglas.</p>
+<table>
+<thead>
+<tr>
+<th>Límite</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Asignación de discos por juego</td>
+<td><strong>2GB</strong> en starhermit.com (la asignación puede variar según el juego/implementación)</td>
+</tr>
+<tr>
+<td>Archivos alojados por cuenta</td>
+<td><strong>20GB</strong> en todos los juegos de una cuenta (ajustable por operador por cuenta)</td>
+</tr>
+<tr>
+<td>Implementación del repositorio</td>
+<td><strong>50 megas</strong> archivo</td>
+</tr>
+<tr>
+<td><code>starhermit.txt</code> / <code>remove.txt</code></td>
+<td><strong>256KB</strong> cada; <code>remove.txt</code> enumera como máximo 10.000 rutas (<code>422</code>)</td>
+</tr>
+<tr>
+<td>Aplicación</td>
+<td>aplicado <strong>mientras transmite</strong>, por lo que un empujón de gran tamaño se corta en pleno vuelo</td>
+</tr>
+</tbody>
+</table>
+<p>Una carga o envío se interrumpe en lo que queda de la asignación de alojamiento de la cuenta (<code>413</code> con
+<code>limitBytes</code>), y una implementación de repositorio que lo aprobaría falla con un motivo que nombra la asignación.
+Por push y por juego son el mismo número en un reemplazo. Una fusión está limitada por el <strong>resultante</strong>
+tamaño del juego, por lo que se rechaza un pequeño parche que haría que el árbol vivo exceda lo permitido.</p>
+<table>
+<thead>
+<tr>
+<th>Estado</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td><code>mode</code> tampoco lo es <code>replace</code> ni <code>merge</code>.</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>Una fusión con un juego que aún no tiene archivos publicados.</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>Por encima de la asignación. El cuerpo lleva <code>{ "error", "limitBytes" }</code>. A <code>413</code> <strong>sin</strong> <code>limitBytes</code> es el límite del cuerpo de ~100 MB de la CDN, no esto: <a href="#upload-over-a-websocket">utilizar el socket de carga</a>.</td>
+</tr>
+<tr>
+<td><code>422</code></td>
+<td>Archivo con formato incorrecto o contenido inutilizable (falta el archivo de inicio, no <code>client/</code>, a <code>server/image.tar</code> en la ruta de creación, una combinación que eliminaría el archivo de inicio, <code>remove.txt</code> en un reemplazo). También un <strong>truncado</strong> archivo: el resultado normal de una conexión interrumpida durante la carga.</td>
+</tr>
+<tr>
+<td><code>507</code></td>
+<td>El servidor no tiene espacio en este momento. Rechazado <strong>antes de leer el cuerpo</strong> cuando la capacidad de publicación no esté disponible; Vuelva a intentarlo más tarde.</td>
+</tr>
+</tbody>
+</table>
+<p>Los archivos no pueden escapar de su raíz ni contener enlaces, y sólo se almacenan archivos y directorios normales.
+extraído: se rechazan los enlaces simbólicos, los enlaces físicos y los nodos de dispositivos. <code>git archive</code> encabezados globales PAX,
+<code>./</code>-nombres con prefijo de <code>tar -czf game.tgz .</code>y nombres de archivos que simplemente contienen <code>..</code>
+(<code>sprite..png</code>) son aceptados. A <code>..</code> El segmento de ruta aún se rechaza.</p>
+<h3 id="rate-limit">Límite de tarifa</h3>
+<p>Enviar, reclamar, cambiar URL, alojamiento e implementación llegan a GitHub en el único token de la plataforma, por lo que
+juntos están limitados a 10 solicitudes por minuto por cuenta (<code>429</code>, con <code>Retry-After</code>). un
+El operador puede aumentarlo para una cuenta.</p>
+<h3 id="enable-hosting">Habilitar alojamiento</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/hosting</code> → <code>GameHostingView</code> ("Implementar en starhermit")</p>
+<pre><code class="language-json">{ "enabled": true }
+</code></pre>
+<h3 id="pin-a-deployment">Anclar una implementación</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/deployment</code> → <code>GameHostingView</code></p>
+<pre><code class="language-json">{ "commit": "&lt;sha or branch&gt;" }
+</code></pre>
+<p><code>commit</code> es opcional. Fijar un sha/branch pone en cola una redistribución; encuesta <code>GET /api/v1/me/github-games/{id}/deployment</code> por estatus.</p>
+<p>Esto se rechaza para un juego que no nombra ningún repositorio (un paquete subido): fijar una confirmación es lo que
+mueve un juego a su repositorio y un juego creado en paquete no tiene ninguno. Redistribuir un juego subido
+verifica los archivos que aún están en el volumen en lugar de buscar github.com.</p>
+<h3 id="move-a-game-to-a-new-url">Mover un juego a una nueva URL</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/url</code></p>
+<pre><code class="language-json">{ "repoUrl": "https://github.com/you/new-repo", "displayName": "optional for a hosted URL" }
+</code></pre>
+<p>La fila sobrevive - fluido, <code>&lt;uid&gt;.starhermit.com</code>, tiempo de juego, calificaciones, y se redistribuye desde el
+destino. Un destino de github debe ser uno que la persona que llama pueda demostrar que controla (<code>403</code> de lo contrario),
+y su <code>starhermit.txt</code> no debe nombrar un <em>diferente</em> <code>owner=</code> (<code>403</code>). Un script o contenedor
+El backend está deshabilitado a menos que el destino lo declare.</p>
+<h3 id="live-sessions-owner">Sesiones en vivo (propietario)</h3>
+<p><code>GET /api/v1/me/github-games/{id}/sessions</code> enumera las sesiones activas del servidor del juego.
+<code>DELETE .../sessions/{sessionId}</code> termina uno a través del camino de abandono de la plataforma (sin ganador, no
+elo, razon <code>operator_ended</code>). Eso devuelve la capacidad del asiento que estaba manteniendo una sesión estancada.</p>
+<h3 id="leaderboards-and-achievements-owner">Tablas de clasificación y logros (propietario)</h3>
+<p>El propietario de un juego es su editor: puedes crear <strong>tablas de clasificación</strong> y <strong>logros</strong> por ello
+bajo <code>/me/github-games/{id}/leaderboards</code> y <code>/achievements</code> sin una cuenta de editor. Sólo
+El servidor de tu juego les escribe, por lo que el juego necesita una <code>server=</code> guión o <code>container.image=</code>
+backend: un juego solo para navegador obtiene <code>409</code>. Ver <a href="/es/docs/api/leaderboards.html#your-games-own-leaderboards">Tablas de clasificación</a>,
+<a href="/es/docs/api/achievements.html#achievements-created-by-the-games-owner">Logros</a> y el
+<a href="/es/docs/tutorials/game-leaderboards-achievements.html">tutorial</a>.</p>
+<h2 id="dtos">DTO</h2>
+<pre><code class="language-json">// GitHubGameDto
+{
+  "id": "...",
+  "repoUrl": "...",
+  "ownerLogin": "...",
+  "repoName": "...",
+  "displayName": "...",
+  "launchPath": "index.html",
+  "serverScriptPath": "server.js",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "serverRuntime": "script",
+  "isVerifiedOwner": true,
+  "metadataSource": "...",
+  "createdAt": "...",
+  "coverArtSource": "manifest",
+  "coverArtUpdatedAt": "...",
+  "hosting": { "hostingEnabled": true },
+  "description": "Tend a garden on a drifting asteroid.",
+  "releaseNotesUpdatedAt": "..."
+}
+</code></pre>
+<ul>
+<li><code>serverScriptPath</code> está presente solo para un backend de JavaScript. El DTO actual no expone una referencia de imagen de contenedor.</li>
+<li><code>gameSlug</code> está presente para cada juego agregado desde una carpeta local y para cada juego agregado por un propietario verificado, <strong>con o sin servidor backend</strong> – aborda los controles del juego, la configuración, la ranura para guardar en la nube, las salas y los tokens de inicio. Es <code>null</code> sólo para un envío a repositorio cuyo propietario no esté probado. No te dice si el juego tiene un backend; <code>serverRuntime</code> hace.</li>
+<li><code>serverRuntime</code> dice si el juego tiene un servidor backend: <code>"script"</code>, <code>"container"</code>, o <code>null</code> para un juego sólo de navegador. esta de acuerdo con <code>GET /api/v1/games/{gameSlug}</code>, que responde <code>404</code> exactamente cuando es <code>null</code>.</li>
+<li>Para un juego agregado desde una carpeta local, <code>repoUrl</code> es un sintetico <code>upload:&lt;id&gt;</code> marcador y <code>ownerLogin</code>/<code>repoName</code> están vacíos: no hay ningún repositorio que nombrar y un propietario vacío es lo que hace que el listado no sea reclamable.</li>
+<li><code>coverArtSource</code> es <code>"upload"</code>, <code>"manifest"</code> o <code>null</code>, y <code>coverArtUpdatedAt</code> es cuando esa cubierta cambió por última vez; úsela para eliminar el caché <code>/cover</code> URL. Cualquier valor que no sea nulo significa que el juego tiene una portada para recuperar; <code>null</code> significa volver a <code>/icon</code>. Las dos fuentes no son iguales: una subida siempre gana, y es la única <code>DELETE /cover</code> puede eliminar.</li>
+<li><code>description</code> es la descripción del manifiesto, o <code>null</code>. <code>releaseNotesUpdatedAt</code> es cuando duran las notas de la versión <em>texto cambiado</em> (<code>null</code> cuando el juego no tiene ninguno). Redistribuir notas idénticas no lo mueve, por lo que es seguro conducir un "Qué hay de nuevo" Insignia: recuerda el valor que vio un jugador por última vez y compáralo. Las notas en sí no están en la lista; ver <a href="#description-and-release-notes">Descripción y notas de la versión</a>.</li>
+<li><code>SharedGitHubGameDto</code> se extiende <code>GitHubGameDto</code> con <code>submittedByUserId</code> y <code>submittedByUsername</code>.</li>
+</ul>
+<h3 id="description-and-release-notes">Descripción y notas de la versión</h3>
+<p>Ambos provienen del juego. <code>starhermit.txt</code>; ver
+<a href="/es/docs/starhermit-txt.html#description-and-release-notes">la referencia manifiesta</a> para saber cómo escribirlos.
+La descripción está en los listados de juegos anteriores. Las notas de la versión pueden tener hasta 20.000 caracteres, por lo que
+se mantienen fuera de la lista de exploración, que devuelve todos los juegos a la vez y se recuperan por juego:</p>
+<pre><code class="language-http">GET /api/v1/github-games/{id}/release-notes
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<pre><code class="language-json">// GitHubGameReleaseNotesDto
+{
+  "id": "...",
+  "releaseNotes": "- New: night cycle\n- Fixed: seeds vanishing after a reload",
+  "updatedAt": "2026-09-27T10:15:00+00:00",
+  "commitSha": "4f2a…"
+}
+</code></pre>
+<ul>
+<li><code>releaseNotes</code> y <code>updatedAt</code> son <code>null</code> cuando el juego no declara notas.</li>
+<li><code>commitSha</code> es el compromiso implementado para un juego de repositorio, y <code>null</code> para una compilación cargada.</li>
+<li>Sólo pregunta cuando <code>releaseNotesUpdatedAt</code> en el listado es más nuevo que lo que mostraste por última vez.</li>
+<li>El texto se devuelve exactamente como lo escribió el desarrollador (normalmente Markdown). renderizarlo es
+la elección del cliente y debe tratarse como una entrada que no es de confianza, como cualquier texto de usuario.</li>
+</ul>
+<pre><code class="language-json">// GameHostingView
+{
+  "hostingEnabled": true,
+  "hostedUrl": "https://yourgame.starhermit.com",
+  "deployStatus": "...",
+  "pinnedCommitSha": "...",
+  "deployedCommitSha": "...",
+  "deployError": null,
+  "deployedAt": "..."
+}
+</code></pre>
+<p><code>hostedUrl</code>, <code>pinnedCommitSha</code>, <code>deployedCommitSha</code>, <code>deployError</code>, y <code>deployedAt</code> son opcionales.</p>
+<pre><code class="language-json">// GameStatsDto  (GET /api/v1/me/github-games/{id}/stats — owner only)
+{
+  "totalPlayers": 42,
+  "playingNow": 3,
+  "totalSessions": 130,
+  "totalPlaytimeMinutes": 8140,
+  "lastPlayedAt": "2026-07-29T08:45:24Z",
+  "livenessWindowHours": 4
+}
+</code></pre>
+<h2 id="publish-your-own-game-walkthrough">Publica tu propio juego: tutorial</h2>
+<p>Hay dos rutas. Si tu juego se encuentra en un repositorio de Git, sigue los pasos numerados a continuación.
+Si es solo una carpeta en su máquina, una llamada lo hace todo:
+<a href="#add-a-game-from-a-local-folder">agregar un juego desde una carpeta local</a> registra el juego, publica el
+archivos y lo deja activo: sin alternar alojamiento ni pin de confirmación, porque no hay ningún repositorio para
+pista.</p>
+<ol>
+<li><strong>Elige una fuente</strong>: envía un repositorio que contiene <code>starhermit.txt</code> en la raíz (opcionalmente declarando un <code>server.js</code> script o imagen de contenedor), o preparar la URL pública de un juego de navegador ya alojado.</li>
+<li><strong>Vincula tu identidad de GitHub</strong> a través del flujo OAuth (ver <a href="/es/docs/api/auth.html">auth.md</a>); verificar con <code>GET /api/v1/me/github</code>.</li>
+<li><strong>Registra el juego</strong>: <code>POST /api/v1/me/github-games</code> con el repositorio o la URL del juego alojado en <code>repoUrl</code>.</li>
+<li><strong>Solo juegos de repositorio: habilite el alojamiento</strong>: <code>PUT /api/v1/me/github-games/{id}/hosting</code> con <code>{ "enabled": true }</code>.</li>
+<li><strong>Solo juegos de repositorio: fijar una confirmación</strong>: <code>PUT /api/v1/me/github-games/{id}/deployment</code> con <code>{ "commit": "&lt;sha&gt;" }</code>. La confirmación fijada controla la versión en vivo.</li>
+<li><strong>Los jugadores inician el juego.</strong>: un juego de repositorio implementado se sirve en <code>&lt;slug&gt;.starhermit.com</code>; un juego alojado directamente abre la URL enviada. Cada juego con un <code>gameSlug</code> - backend o no - recibe un token de lanzamiento de <code>POST /api/v1/games/&lt;slug&gt;/launch-token</code> en el fragmento de URL (opcionalmente con <code>&amp;session_id=&lt;guid&gt;</code> para invitar a enlaces profundos).</li>
+</ol>
+<p>Para conocer el contrato completo del lado del cliente (cómo el juego lee el token de lanzamiento y se comunica con la API), consulte el <a href="/es/docs/tutorials/chess-walkthrough.html">tutorial de ajedrez</a> de la implementación de referencia.</p>
+<h2 id="see-also">Ver también</h2>
+<ul>
+<li><a href="/es/docs/api/games.html">games.md</a> — puntos finales del juego, tokens de lanzamiento</li>
+<li><a href="/es/docs/api/game-scripts.html">game-scripts.md</a> — servidores de juegos JavaScript en espacio aislado</li>
+<li><a href="/es/docs/api/container-games.html">container-games.md</a> — servidores de juegos alojados en contenedores</li>
+<li><a href="/es/docs/api/auth.html">auth.md</a> — Vinculación de identidades JWT y OAuth</li>
+<li><a href="/es/docs/tutorials/chess-walkthrough.html">tutoriales/chess-walkthrough.md</a> — implementación de referencia de un extremo a otro</li>
+<li><a href="/es/docs/tutorials/claim-existing-game.html">tutoriales/reclamar-juego-existente.md</a> — hacerse cargo de un listado existente de su propiedad</li>
+</ul>
+<p>Compartido <a href="/es/docs/api/conventions.html">Convenciones API</a> Describe el análisis de respuestas, las marcas de tiempo, la paginación y los reintentos.</p>
+<p>Ver <a href="/es/docs/credentials.html">compatibilidad de credenciales</a> y <a href="/es/docs/api/contracts.html">contratos legibles por máquina</a>.</p>
+
+{% endraw %}

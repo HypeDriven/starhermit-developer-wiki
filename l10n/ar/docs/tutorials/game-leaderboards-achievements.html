@@ -1,0 +1,331 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "البرنامج التعليمي: المتصدرين والإنجازات التي حققتها لعبتك"
+source_url: "/docs/tutorials/game-leaderboards-achievements.html"
+source_path: "docs/tutorials/game-leaderboards-achievements.md"
+source_hash: "96ac3993941c25c39514f47fc1c97e41e66138bc4e9b8d819a8bb8bb12108f31"
+translation: "machine"
+permalink: "/ar/docs/tutorials/game-leaderboards-achievements.html"
+---
+{% raw %}
+<h1 id="tutorial-leaderboards-and-achievements-for-your-game">البرنامج التعليمي: المتصدرين والإنجازات التي حققتها لعبتك</h1>
+<p>إذا كنت تمتلك لعبة على StarHermit، فأنت ناشرها. يمكنك إعطائها <strong>المتصدرين</strong> (درجة عالية،
+أسرع تشغيل، أطول خط) و <strong>الإنجازات</strong> بدون حساب ناشر أو أي خاص
+إذن. امتلاك اللعبة هو كل ما يتطلبه الأمر.</p>
+<p>هناك قاعدة واحدة وراء كل شيء في هذه الصفحة: <strong>أنت تحددهم، يكتب خادم اللعبة الخاص بك
+لهم.</strong> لا يمكن لعميل اللاعب أبدًا نشر نتيجة أو المطالبة بإنجاز لها، ويجب على الخادم الخاص بك التحقق من صحة طريقة اللعب التي تكسبه. رفض عمليات إرسال واجهة برمجة التطبيقات المباشرة
+وحده لا يمنع العميل المعدل من اختراع أحداث اللعبة. ولهذا السبب تحتاج اللعبة إلى واجهة خلفية موثوقة: أ
+<code>server=</code> السيناريو أو أ <code>container.image=</code> في <a href="/ar/docs/starhermit-txt.html"><code>starhermit.txt</code></a>.</p>
+<p>يبني هذا البرنامج التعليمي كلا من لعبة أركيد صغيرة، <em>جامع النجوم</em>: ينتهي التشغيل عندما يكون اللاعب
+تعطل، ولها مجموع النقاط ووقت التشغيل.</p>
+<ol>
+<li><a href="#before-you-start">قبل أن تبدأ</a></li>
+<li><a href="#1-create-the-leaderboards">إنشاء المتصدرين</a></li>
+<li><a href="#2-create-the-achievements">إنشاء الإنجازات</a></li>
+<li><a href="#3-post-scores-and-unlock-achievements-from-your-script">نشر النتائج وفتح الإنجازات من البرنامج النصي الخاص بك</a></li>
+<li><a href="#3b-the-same-from-a-container">نفس الشيء من الحاوية</a></li>
+<li><a href="#4-show-them-in-your-game">أظهرهم في لعبتك</a></li>
+<li><a href="#5-look-after-them">اعتني بهم</a></li>
+</ol>
+<h2 id="before-you-start">قبل أن تبدأ</h2>
+<p>أنت بحاجة إلى:</p>
+<ul>
+<li><strong>لعبة ذات واجهة خلفية للخادم</strong> التي تمتلكها: التي أضفتها من مستودعك الخاص، وتم تحميلها
+كمجلد، أو <a href="/ar/docs/tutorials/claim-existing-game.html">ادعى</a>. لعبة متصفح فقط تجيب <code>409</code> لكل مكالمة
+أدناه، مع رسالة توضح السبب.</li>
+<li><strong>رمز وصول المستخدم الكامل</strong>، وليس رمز إطلاق اللعبة. رموز الإطلاق محاطة بسياج حول اللعبة
+سطح اللاعب ولا يمكن الوصول إليه <code>/me/...</code>.</li>
+<li><strong>معرف لعبتك</strong> (وهو كذلك <code>&lt;id&gt;.starhermit.com</code> عنوان):</li>
+</ul>
+<pre><code class="language-bash">ACCESS_TOKEN='your-full-user-access-token'
+API=https://api.starhermit.com
+
+curl -s "$API/api/v1/me/github-games" -H "Authorization: Bearer $ACCESS_TOKEN" |
+  jq '.[] | {id, displayName, gameSlug}'
+</code></pre>
+<pre><code class="language-bash">GAME_ID='the-id-from-above'
+</code></pre>
+<p><code>gameSlug</code> هو ما يسميه عميلك اللعبة <code>/api/v1/games/{slug}/...</code>. كل لعبة قمت بإضافتها
+أو التي تم تحميلها تحتوي على لعبة واحدة مضمنة للمتصفح فقط، لذلك لا تخبرك ما إذا كان هناك خادم:
+<code>GET /api/v1/games/{slug}</code> يفعل - يجيب <code>404</code> حتى تحصل اللعبة على خلفية.</p>
+<h2 id="1-create-the-leaderboards">1. قم بإنشاء لوحات الصدارة</h2>
+<p>يحصل Star Collector على لوحتين: أكبر عدد من النقاط (الأعلى هو الأفضل) وأسرع تشغيل إلى 100 نقطة (أقل
+هو أفضل).</p>
+<pre><code class="language-bash">curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/leaderboards" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "high-score", "name": "High score",
+        "scoreType": "integer", "sortDirection": "desc",
+        "minScore": 0, "maxScore": 1000000 }'
+
+curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/leaderboards" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "fastest-100", "name": "Fastest to 100",
+        "scoreType": "time-ms", "sortDirection": "asc" }'
+</code></pre>
+<p>تعود كل مكالمة <code>201</code> والمجلس، بما في ذلك <code>id</code> و <code>key</code>. يستخدم الخادم الخاص بك <strong>مفتاح</strong>,
+لذا اختره بعناية. المفتاح، <code>scoreType</code> و <code>sortDirection</code> لا يمكن تغييرها لاحقا.</p>
+<table>
+<thead>
+<tr>
+<th><code>scoreType</code></th>
+<th>يقبل</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>integer</code></td>
+<td>أعداد كاملة</td>
+</tr>
+<tr>
+<td><code>decimal</code></td>
+<td>أي رقم</td>
+</tr>
+<tr>
+<td><code>time-ms</code></td>
+<td>ميلي ثانية كاملة وغير سلبية</td>
+</tr>
+</tbody>
+</table>
+<p>تعيين <code>minScore</code>/<code>maxScore</code> إلى ما يمكن أن تنتجه لعبتك بالفعل. يتم إسقاط النتيجة خارجهم ،
+وهو حماية رخيصة ضد الأخطاء في منطق الخادم الخاص بك.</p>
+<h2 id="2-create-the-achievements">2. إنشاء الإنجازات</h2>
+<p>يمكنك إعطاء إنجازات اللعبة بطريقتين، ويمكنك استخدام كليهما في وقت واحد:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>أعلن في التعليمات البرمجية</th>
+<th>تم إنشاؤها من خلال API</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>أين</td>
+<td><code>game.achievements</code> في البرنامج النصي الخاص بك، أو <code>/describe</code> في الحاوية الخاصة بك</td>
+<td><code>POST /me/github-games/{id}/achievements</code></td>
+</tr>
+<tr>
+<td>تم التغيير بواسطة</td>
+<td>نشر تحديث</td>
+<td>استدعاء API، ويصبح ساري المفعول على الفور</td>
+</tr>
+<tr>
+<td>جيد ل</td>
+<td>الإنجازات التي تم بناء التعليمات البرمجية الخاصة بك حولها</td>
+<td>إضافة أو إعادة صياغة البعض دون إصدار</td>
+</tr>
+</tbody>
+</table>
+<p>يتم فتح قفل كلا النوعين بنفس الطريقة، حيث يقوم الخادم الخاص بك بإرجاع المفتاح. هنا نقوم بإنشاء اثنين من خلال
+واجهة برمجة التطبيقات:</p>
+<pre><code class="language-bash">curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/achievements" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "century", "name": "Century",
+        "description": "Collect 100 stars in one run.", "points": 10 }'
+
+curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/achievements" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "untouchable", "name": "Untouchable",
+        "description": "Reach 500 points without losing a shield.",
+        "points": 50, "secret": true }'
+</code></pre>
+<p>A <code>secret</code> يظل الإنجاز مخفيًا عن اللاعبين حتى يفتحوه.</p>
+<p>لرؤية كل ما تحتويه اللعبة، بما في ذلك الإنجازات التي يعلنها الكود الخاص بك، قم بإدراجها:</p>
+<pre><code class="language-bash">curl -s "$API/api/v1/me/github-games/$GAME_ID/achievements" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" | jq '.[] | {key, origin, unlocks}'
+</code></pre>
+<p><code>origin</code> يكون <code>declared</code> للإنجازات من التعليمات البرمجية الخاصة بك و <code>owner</code> للإنجازات التي قمت بإنشائها
+هنا. يمكنك التعديل والحذف فقط <code>owner</code> تلك. أ <code>declared</code> سيتم إرجاع أحدهما إلى التالي
+التحديث، لذلك ترفض واجهة برمجة التطبيقات (<code>409</code>) وقمت بتغييره في الكود بدلاً من ذلك.</p>
+<h2 id="3-post-scores-and-unlock-achievements-from-your-script">3. نشر النتائج وفتح الإنجازات من البرنامج النصي الخاص بك</h2>
+<p>يُبلغ البرنامج النصي الخاص بك عن كلا النوعين من النتائج في قيمة الإرجاع الخاصة به. يمكنه القيام بذلك من أي خطاف:
+<code>createSession</code>, <code>onPlayerMessage</code> أو <code>onTick</code>.</p>
+<ul>
+<li><code>scores</code>: مفتاح اللوحة → معرف اللاعب → الرقم.</li>
+<li><code>achievements</code>: معرف اللاعب → مفاتيح لفتح.</li>
+</ul>
+<pre><code class="language-js">'use strict';
+
+function endRun(ctx, s, playerId) {
+  var run = s.runs[playerId];
+  var scores = { "high-score": {} };
+  scores["high-score"][playerId] = run.points;
+  if (run.reached100At) {
+    scores["fastest-100"] = {};
+    scores["fastest-100"][playerId] = run.reached100At - run.startedAt;
+  }
+
+  var unlocked = [];
+  if (run.stars &gt;= 100) unlocked.push("century");
+  if (run.points &gt;= 500 &amp;&amp; !run.lostShield) unlocked.push("untouchable");
+  var achievements = {};
+  achievements[playerId] = unlocked;
+
+  run.over = true;
+  return {
+    ok: true,
+    sessionState: s,
+    scores: scores,
+    achievements: achievements,
+    broadcast: [{ to: [playerId], data: { type: "run-over", points: run.points } }]
+  };
+}
+
+globalThis.game = {
+  tickRateHz: 10,
+
+  createSession(ctx) {
+    var runs = {};
+    ctx.players.forEach(function (p) {
+      runs[p.id] = { points: 0, stars: 0, lostShield: false, startedAt: ctx.now,
+                     reached100At: null, over: false };
+    });
+    return { ok: true, sessionState: { runs: runs } };
+  },
+
+  onPlayerMessage(ctx) {
+    var s = ctx.sessionState;
+    var from = ctx.message.from;
+    var run = s.runs[from];
+    var msg = ctx.message.data || {};
+    if (!run || run.over) return { ok: false, error: "No run in progress" };
+
+    // The client reports what happened; the script decides what it is worth.
+    if (msg.type === "collect") {
+      run.stars += 1;
+      run.points += 5;
+      if (run.points &gt;= 100 &amp;&amp; !run.reached100At) run.reached100At = ctx.now;
+      return { ok: true, sessionState: s };
+    }
+    if (msg.type === "shield-lost") {
+      run.lostShield = true;
+      return { ok: true, sessionState: s };
+    }
+    if (msg.type === "crash") return endRun(ctx, s, from);
+    return { ok: false, error: "Unknown command" };
+  },
+
+  onTick(ctx) { return { ok: true }; }
+};
+</code></pre>
+<p>الأشياء التي تفعلها <strong>لا</strong> تحتاج إلى التعامل مع:</p>
+<ul>
+<li><strong>نتائج أسوأ.</strong> يحتفظ كل لاعب بأفضل درجاته على كل لوحة، والتي يتم الحكم عليها من خلال اللوحة
+<code>sortDirection</code>. قم بالإبلاغ عن كل عملية تشغيل والمنصة تحافظ على الأفضل.</li>
+<li><strong>كرر عمليات الفتح.</strong> إن فتح شيء يمتلكه اللاعب بالفعل لا يؤدي إلى أي شيء، لذا أعد المفتاح
+كلما استمرت الحالة.</li>
+<li><strong>معرف أي شخص آخر.</strong> يسجل الأهداف ويفتحها للأشخاص غير الموجودين في الجلسة، بما في ذلك الذكاء الاصطناعي
+مقعد، يتم تجاهلها.</li>
+</ul>
+<p>يتم إسقاط المفاتيح غير المعروفة واللوحات غير النشطة والنتائج خارج النطاق بصمت. النص الخاص بك لا يحصل
+خطأ بالنسبة لهم، لذا تحقق من لوحاتك مرة واحدة، كما هو الحال في <a href="#4-show-them-in-your-game">القسم 4</a>.</p>
+<p>يجب أن تجعل اللعبة الحقيقية الخادم يقوم بتحديد النقاط والأوقات من حالته الرسمية، وليس
+الثقة <code>collect</code> الرسائل كما هي. يتم الاحتفاظ بهذا المثال قصيرًا لإظهار التقارير.
+<a href="/ar/docs/api/game-scripts.html#leaderboards">مخطوطات اللعبة</a> لديه عقد كامل على شكل العودة.</p>
+<h2 id="3b-the-same-from-a-container">3ب. نفس الشيء من الحاوية</h2>
+<p>ترسل لعبة الحاوية نفس الأمرين إلى WebSocket للتحكم الخاص بها:</p>
+<pre><code class="language-json">{ "type": "scores", "sessionId": "…",
+  "scores": { "high-score": { "&lt;userId&gt;": 740 }, "fastest-100": { "&lt;userId&gt;": 41250 } } }
+
+{ "type": "achievements", "sessionId": "…",
+  "unlocks": { "&lt;userId&gt;": ["century"] } }
+</code></pre>
+<p><code>scores</code> يمكن أيضًا تضمينها في أي مظروف استجابة تعود منه الحاوية الخاصة بك <code>/sessions</code>. ال
+تنطبق نفس القواعد: المشاركون فقط، والحفاظ على أفضل النتائج، وتجاهل المفاتيح غير المعروفة. يرى
+<a href="/ar/docs/api/container-games.html#control-channel">خوادم ألعاب الحاويات</a>.</p>
+<h2 id="4-show-them-in-your-game">4. أظهرهم في لعبتك</h2>
+<p>يقرأ عميلك كل شيء باستخدام رمز الإطلاق الذي يحمله بالفعل. لا شيء هنا يحتاج إلى
+رمز المالك.</p>
+<p><strong>العثور على المجالس.</strong></p>
+<pre><code class="language-js">const boards = await api(`/api/v1/games/${slug}/leaderboards`);
+// [{ id, key: "high-score", name: "High score", sortDirection: "desc", ... }, ...]
+const high = boards.find(b =&gt; b.key === "high-score");
+</code></pre>
+<p>يتم سرد المجالس النشطة فقط.</p>
+<p><strong>قراءة لوحة.</strong></p>
+<pre><code class="language-js">const page = await api(`/api/v1/leaderboards/${high.id}/entries?page=1&amp;pageSize=10`);
+// { items: [{ rank, username, score, ... }], total, page, pageSize }
+const friends = await api(`/api/v1/leaderboards/${high.id}/entries?friendsOnly=true&amp;pageSize=10`);
+</code></pre>
+<p>ل <code>time-ms</code> اللوحة، قم بتنسيق النتيجة كوقت: <code>41250</code> → <code>0:41.25</code>.</p>
+<p><strong>الإنجازات.</strong></p>
+<ul>
+<li><code>GET /api/v1/games/{slug}/achievements</code> يسرد كل إنجاز مع اللاعب <code>unlocked</code>
+ولاية. تبقى الأسرار مخفية حتى يتم اكتسابها.</li>
+<li>يصل إلغاء القفل نفسه مباشرةً <code>ws/v1/games</code> مثل
+<code>{"type":"achievement","data":{key,name,description,points,...}}</code>. أظهر نخبًا عندما يحدث ذلك.
+يقوم استدعاء القائمة عند التحميل بالتقاط أي شيء مفتوح أثناء إغلاق المقبس.</li>
+</ul>
+<p>يرى <a href="/ar/docs/api/achievements.html#3-the-player-is-notified-over-the-gameplay-socket">الإنجازات</a> ل
+الإطار.</p>
+<h2 id="5-look-after-them">5. اعتني بهم</h2>
+<p><strong>إعادة تسمية لوحة أو تغيير حدودها.</strong></p>
+<pre><code class="language-bash">curl -s -X PUT "$API/api/v1/me/github-games/$GAME_ID/leaderboards/$BOARD_ID" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "name": "All-time high score", "maxScore": 2000000 }'
+</code></pre>
+<p>تنطبق الحدود الجديدة على النتائج الجديدة فقط.</p>
+<p><strong>تقاعد مجلس الإدارة ولكن احتفظ بنتائجه.</strong> يرسل <code>{ "isActive": false }</code>. يتوقف المجلس عن القبول
+يسجل ويختفي من قائمة اللعبة. لا يزال من الممكن قراءة إدخالاته بواسطة المعرف.</p>
+<p><strong>إعادة تعيين على جدول زمني.</strong> إعطاء لوحة <code>"resetSchedule": "daily"</code>, <code>"weekly"</code> أو <code>"monthly"</code> (على
+إنشاء، أو في وقت لاحق مع <code>PUT</code>) ويبدأ من جديد في تمام الساعة 00:00 بالتوقيت العالمي المنسق لكل فترة — وهو مثالي لـ "هذا
+أفضل الأسبوع" لوحة بجانب واحدة في كل الأوقات. لا يوجد شيء يجب القيام به في البرنامج النصي الخاص بك: قم بإبلاغ النتائج كالمعتاد، و
+يتم احتساب النتيجة الأولى لكل لاعب في الفترة الجديدة. يرى
+<a href="/ar/docs/api/leaderboards.html#reset-schedules">إعادة تعيين الجداول الزمنية</a>.</p>
+<p><strong>ابدأ موسمًا جديدًا يدويًا.</strong> بالنسبة لموسم واحد بدلاً من الجدول الزمني، قم بإنشاء لوحة جديدة
+(<code>high-score-s2</code>)، وجه البرنامج النصي إليه، وقم بسحب النص القديم.</p>
+<p><strong>حذف لوحة.</strong> <code>DELETE .../leaderboards/{id}</code> يزيل اللوحة وجميع مداخلها، و
+لا يمكن التراجع عنه.</p>
+<p><strong>تحرير الإنجاز.</strong> <code>PUT .../achievements/{achievementId}</code> مع أي من <code>name</code>,
+<code>description</code>, <code>icon</code>, <code>secret</code> و <code>points</code>. المفتاح لا يتغير أبدا.</p>
+<p><strong>حذف إنجاز.</strong> يعمل هذا فقط مع الجهاز الذي قمت بإنشائه ولم يفتحه أحد بعد.
+الإنجازات المكتسبة دائمة.</p>
+<p><strong>نقل الإنجاز إلى التعليمات البرمجية.</strong> أعلن نفس المفتاح في <code>game.achievements</code> ونشر. ال
+يتولى الإعلان الإنجاز الحالي، ويحتفظ به اللاعبون الذين يمتلكونه.</p>
+<table>
+<thead>
+<tr>
+<th>إجابة</th>
+<th>معنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>404</code></td>
+<td>اللعبة ليست ملكك، أو اللوحة أو الإنجاز لا ينتمي إليها</td>
+</tr>
+<tr>
+<td><code>409</code> "…الخادم الخلفي…"</td>
+<td>اللعبة لا يوجد بها <code>server=</code> أو <code>container.image=</code></td>
+</tr>
+<tr>
+<td><code>409</code> "بالفعل…"</td>
+<td>يتم أخذ المفتاح بلوحة أو بإنجاز معلن أو مبتكر</td>
+</tr>
+<tr>
+<td><code>409</code> "المعلنة من قبل خادم اللعبة"</td>
+<td>قم بتغيير هذا الإنجاز في التعليمات البرمجية الخاصة بك</td>
+</tr>
+<tr>
+<td><code>409</code> "مقفلة بالفعل"</td>
+<td>يحتفظ به اللاعبون، لذلك لا يمكن حذفه</td>
+</tr>
+<tr>
+<td><code>400</code></td>
+<td>مفتاح به أحرف أخرى، أو اسم مفقود، أو <code>minScore</code> &gt; <code>maxScore</code></td>
+</tr>
+</tbody>
+</table>
+<p>الحدود: 2048 لوحة صدارة و200 إنجاز تم إنشاؤه لكل لعبة، بالإضافة إلى ما يصل إلى 100 إنجاز معلن.</p>
+<h2 id="checklist">قائمة التحقق</h2>
+<ul>
+<li>[ ] اللعبة لديها <code>server=</code> البرنامج النصي أو <code>container.image=</code>، و <code>gameSlug</code> تم تعيينه في <code>GET /me/github-games</code>.</li>
+<li>[ ] كل لوحة لها مفتاح ثابت واليمين <code>scoreType</code> و <code>sortDirection</code> (لا يمكنهم التغيير لاحقًا).</li>
+<li>[ ] يعود الخادم <code>scores</code> و <code>achievements</code> (البرنامج النصي) أو يرسل رسائل التحكم (الحاوية) الصادرة من الدولة الموثوقة.</li>
+<li>[ ] يجد العميل لوحات بها <code>GET /games/{slug}/leaderboards</code>، لا تقم مطلقًا بترميز هوياتهم، وتقرأ الإدخالات حسب المعرف.</li>
+<li>[ ] يتم تحميل العميل <code>GET /games/{slug}/achievements</code> ويظهر نخبًا على <code>achievement</code> إطار.</li>
+<li>[ ] اللوحات القديمة متقاعدة <code>isActive: false</code> بدلاً من حذفها، إلا إذا كنت تريد حقًا اختفاء النتائج.</li>
+</ul>
+
+{% endraw %}

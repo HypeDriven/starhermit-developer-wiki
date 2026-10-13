@@ -1,0 +1,125 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "Chargez et enregistrez votre progression en toute sécurité"
+source_url: "/docs/tutorials/cloud-save-sync.html"
+source_path: "docs/tutorials/cloud-save-sync.md"
+source_hash: "3d1bef0f13bb54f639d96ca6ff1c5607c172a4d25d7707062b404cba46d5de83"
+translation: "machine"
+permalink: "/fr/docs/tutorials/cloud-save-sync.html"
+---
+{% raw %}
+<h1 id="load-and-save-progress-safely">Chargez et enregistrez votre progression en toute sécurité</h1>
+<p>Utilisez les sauvegardes dans le cloud pour la progression appartenant au client d'un joueur connecté. L'option solo non signée
+conserve la progression en mémoire et ne lit ni n'écrit les sauvegardes du compte. Les préférences appartiennent à
+<a href="/fr/docs/api/games.html#per-player-game-settings">paramètres du jeu</a>, pas le document d'avancement.</p>
+<p>Un jeton de lancement peut accéder exactement <code>game:&lt;gameId&gt;</code>, où <code>gameId</code> est-ce que c'est <code>game_scope</code>. La plateforme
+stocke les octets opaques, avec une sauvegarde par emplacement. Validez le format attendu par votre jeu. Voir
+<a href="/fr/docs/api/catalog.html#cloud-saves">Sauvegardes cloud</a> pour les quotas et les en-têtes conditionnels.</p>
+<p><img src="/docs/images/fr/cloud-save-flow.svg" alt="Chargez et validez avant d'écrire. Les lectures échouées bloquent les téléchargements ; les écritures conditionnelles préservent les sauvegardes les plus récentes et font apparaître les conflits."></p>
+<h2 id="a-small-complete-json-recipe">Une petite recette JSON complète</h2>
+<p>Copie <a href="/docs/sdk/cloud-save-store.js"><code>cloud-save-store.js</code></a> dans votre construction. Cet exemple stocke les données brutes
+Octets JSON UTF-8&#160;; la plateforme leur sert avec <code>application/zip</code> mais ne nécessite pas de format ZIP.
+Utilisez un autre lecteur pour les sauvegardes ZIP, y compris le <a href="/fr/docs/sdk/javascript.html#cloud-saves">sauvegardes ZIP du SDK du navigateur</a>.
+Ne changez pas de format sans un plan de migration pour les lecteurs existants.</p>
+<pre><code class="language-js">import { CloudSaveStore } from './cloud-save-store.js';
+
+const store = new CloudSaveStore({
+  gameId: StarHermit.slug,
+  token: () =&gt; StarHermit.token, // Always obtain the current renewed token.
+});
+const valid = value =&gt; value?.version === 1 &amp;&amp; Number.isSafeInteger(value.points) &amp;&amp; value.points &gt;= 0;
+let progress = { version: 1, points: 0 };
+let saving = false;
+
+async function startAccountGame() {
+  // Keep gameplay/saving disabled until this resolves.
+  const remote = await store.load(valid);
+  progress = remote ?? { version: 1, points: 0 };
+  render(progress);
+}
+
+async function saveCheckpoint() {
+  if (saving) return; // Coalesce checkpoints; do not issue overlapping writes.
+  saving = true;
+  showSync('Saving…');
+  try {
+    await store.save(progress);
+    showSync('Saved');
+  } catch (error) {
+    if (error.status === 412) {
+      // Keep local progress in memory. Offer Reload cloud or an explicit merge.
+      showConflict(() =&gt; startAccountGame());
+    } else showSync('Save failed; retry after resolving the error');
+  } finally {
+    saving = false;
+  }
+}
+</code></pre>
+<p><code>render</code>, <code>showSync</code>, et <code>showConflict</code> sont votre interface utilisateur. Attendre <code>startAccountGame()</code> avant d'activer
+jouer ou sauvegarder. En cas d'échec de chargement, conservez l'état local actuel du lecteur, affichez l'échec,
+et gardez les téléchargements bloqués. UN <code>404</code> est le cas de l'emplacement vide&#160;; <code>401</code>, <code>403</code>, <code>5xx</code>, JSON mal formé,
+ou une version de sauvegarde non prise en charge ne sont pas des emplacements vides.</p>
+<p>La recette ne renouvelle pas les informations d'identification. Le SDK du navigateur renouvelle les jetons de lancement tant qu'ils restent
+valide. Résolvez les termes en attente ou réauthentifiez-vous via le flux d'entrée du jeu avant de réessayer une lecture.</p>
+<h2 id="conditions-and-conflicts">Conditions et conflits</h2>
+<table>
+<thead>
+<tr>
+<th>Ce qui a été chargé</th>
+<th>En-tête lors de la prochaine écriture</th>
+<th>Si un autre appareil écrit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sauvegarde existante avec ETag</td>
+<td><code>If-Match: &lt;etag&gt;</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>Aucune sauvegarde (<code>404</code>)</td>
+<td><code>If-None-Match: *</code></td>
+<td><code>412 precondition_failed</code></td>
+</tr>
+<tr>
+<td>Rien n'a été chargé avec succès</td>
+<td>Pas d'écriture</td>
+<td>Continuez à réessayer la lecture ou laissez le joueur rester en jeu non suivi</td>
+</tr>
+</tbody>
+</table>
+<p>Utilisez la version du <strong>les données que vous avez chargées</strong>, pas une vérification ultérieure des métadonnées. Conserver le nouvel ETag renvoyé
+par chaque écriture réussie. UN <code>412</code> bloque les sauvegardes supplémentaires jusqu'à ce que le jeu charge la version actuelle et
+le joueur l'adopte ou le fusionne. Ne supprimez pas silencieusement la condition et n’écrasez pas un autre périphérique.
+L'API n'offre aucun historique de sauvegarde pour annuler cet écrasement.</p>
+<p>Si deux appareils doivent mettre à jour indépendamment les compteurs ou l'inventaire, un seul document de dernière écriture l'emporte
+peut ne pas correspondre au jeu. Utilisez l’état faisant autorité sur le serveur et définissez plutôt des commandes de jeu validées.</p>
+<h2 id="save-format-and-migration">Format de sauvegarde et migration</h2>
+<p>Incluez une version de format et validez les types, les plages et les champs obligatoires avant d'adopter la version à distance.
+progrès. Écrivez une migration pour les anciennes versions prises en charge. Conservez intacte une version inconnue plus récente&#160;;
+ne le réinitialisez pas aux valeurs par défaut et ne téléchargez pas dessus. Les données cloud sont contrôlées par le client, alors ne les traitez jamais
+comme preuve d'un score compétitif ou d'un droit payé.</p>
+<p>La limite de sauvegarde décodée par défaut est de 10&#160;Mio. Base64 ajoute environ un tiers au corps de la requête.
+<code>413 cloud_save_too_large</code>, <code>409 cloud_save_slots_exhausted</code>, et <code>507 cloud_save_quota_exceeded</code>
+sont différentes pannes de capacité&#160;; inspecter <code>code</code> et <code>limit</code>. Honneur <code>Retry-After</code> sur <code>429</code>.</p>
+<h2 id="checkpoints-and-page-exit">Points de contrôle et sortie de page</h2>
+<p>Enregistrez à des points de contrôle significatifs et proposez une action de sauvegarde visible. Anti-rebond des changements rapides et sérialisation
+écrit pour que chacun utilise la dernière version reconnue. Conservez un indicateur sale jusqu'à ce qu'il soit reconnu.
+Une requête ayant échoué n’est pas une sauvegarde confirmée&#160;; après une écriture ambiguë, rechargez avant une autre écriture.</p>
+<p>Un téléchargement de sortie de page est la meilleure solution. Navigateur <code>fetch(..., { keepalive: true })</code> partage un petit vol
+allocation corporelle, généralement 64 Ko&#160;; une sauvegarde de 10&#160;Mio ne peut pas s'appuyer sur elle. Un onglet peut se fermer avant toute demande
+se termine. Utilisez des sauvegardes de premier plan ordinaires pour plus de durabilité et ne qualifiez pas les progrès non reconnus de
+enregistré. Le démarrage rapide enregistre son petit document à chaque point de collecte.</p>
+<h2 id="verify-in-your-game">Vérifiez dans votre jeu</h2>
+<ol>
+<li>Commencez avec un emplacement vide&#160;; collectez la progression, enregistrez, rechargez et confirmez son retour.</li>
+<li>Refuser les lectures avec une erreur réseau, <code>403</code>, ou des données invalides&#160;; confirmez qu'aucun téléchargement ne suit.</li>
+<li>Ouvrez deux onglets sur une version. Enregistrez en A, puis B&#160;: B doit faire apparaître un conflit et préserver son état local.</li>
+<li>Testez un format plus ancien/plus récent et un accusé de réception manquant sans écraser les données inconnues.</li>
+<li>Entrez en mode solo non suivi et vérifiez que le jeu ne fait aucune demande de sauvegarde dans le cloud.</li>
+</ol>
+<p>Voir <a href="/fr/docs/tutorials/browser-quickstart.html">le démarrage rapide exécutable</a>, <a href="/fr/docs/api/conventions.html">Conventions API</a>, et
+<a href="/fr/docs/troubleshooting.html#game-setup-and-storage">dépannage</a>.</p>
+
+{% endraw %}

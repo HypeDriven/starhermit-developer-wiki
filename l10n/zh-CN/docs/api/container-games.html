@@ -1,0 +1,434 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "容器托管的游戏服务器"
+source_url: "/docs/api/container-games.html"
+source_path: "docs/api/container-games.md"
+source_hash: "1236c6a7fd9205e65079aaa8684a472e45c363e0314f51528484e44c183f19c1"
+translation: "machine"
+permalink: "/zh-CN/docs/api/container-games.html"
+---
+{% raw %}
+<h1 id="container-hosted-game-servers">容器托管的游戏服务器</h1>
+<p>StarHermit 游戏可以将其权威服务器逻辑作为容器映像而不是
+沙盒 JavaScript 文件。这使得服务器可以使用 Rust、Go、C++ 或任何其他可以运行的运行时
+提供 HTTP 和 WebSocket 服务。面向浏览器的 <a href="/zh-CN/docs/api/games.html">游戏API</a> 保持不变：客户仍然
+使用游戏范围的启动令牌、REST 会话以及 <code>ws/v1/games</code> JSON 帧。</p>
+<p>容器托管对 starhermit.com 上的任何登录用户开放。自托管部署可以
+将其限制在运营商许可名单中；那里未设定的许可名单不承认任何人，而不是所有人。
+这同样适用于注册表映像和上传的 <code>server/image.tar</code>，所以两条路线都不是
+安静地比对方更宽容。</p>
+<p>初始游戏注册后，开发者还可以推送构建的游戏 <code>.tar.gz</code> 含有
+<code>server/image.tar</code> (<code>docker save</code> 输出）通过
+<code>POST /api/v1/me/github-games/{id}/bundle</code>。平台加载并摘要固定图像和队列
+部署重新启动。看 <a href="/zh-CN/docs/api/github-games.html#push-a-game-bundle">GitHub Games — 推送游戏包</a>
+和 <a href="/zh-CN/docs/tutorials/dedicated-server-onboarding.html">专用服务器教程</a>.</p>
+<p>在围绕该推送构建发布管道之前，值得了解有关该推送的以下详细信息：</p>
+<ul>
+<li><strong>一个大 <code>docker save</code> 可以超过 CDN 的 ~100 MB 请求正文上限</strong>，其答案为 <code>413</code>
+平台永远不会看到——没有 <code>limitBytes</code>，任何日志中都没有您可以阅读的内容。将存档推过去
+<a href="/zh-CN/docs/api/github-games.html#upload-over-a-websocket"><code>ws/v1/game-upload</code></a> 反而;相同的存档，相同的
+补贴，同样的答案。</li>
+<li><strong>您上传的图像本身就是声明。</strong> 一款还没有后端的游戏——一个是从
+声明为 none 的上传文件夹 — 从摘要中获取其容器定义
+刚刚加载。您不需要 <code>container.image=</code> 首先在清单中。</li>
+<li><strong>重新推送会应用其清单声明的旋钮并保留其省略的旋钮。</strong> 改变
+<code>container.port</code> 现在重新上传会将部署移动到该端口；遗漏清单
+捆绑包的内容除了图像外什么都没有改变。</li>
+<li><strong>上传的图像胜过清单</strong>，包括超过 <code>server=</code> 线和清单
+声明两者 <code>server=</code> 和 <code>container.image=</code> 在加载任何内容之前被拒绝。</li>
+<li><strong>您的本地镜像标签不会选择已部署的版本。</strong> 上传的图像由其固定
+内容摘要。您可以根据需要在本地标记它；验证上传的摘要和部署
+发布后的状态。</li>
+<li><strong><code>?mode=merge</code> 仅修补客户端文件。</strong> A <code>server/image.tar</code> 在合并中加载完全一样
+替换时——图像不能半更新。看
+<a href="/zh-CN/docs/api/github-games.html#partial-updates-modemerge">部分更新</a>.</li>
+</ul>
+<h2 id="manifest">显现</h2>
+<p>在存储库中声明图像 <code>starhermit.txt</code>:</p>
+<pre><code class="language-ini">name=Void Marshals
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+
+container.image=ghcr.io/octocat/vm-server@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+container.port=8080
+container.health=/health
+container.memory_mb=1024
+container.cpu=1.0
+container.env.LOG_LEVEL=info
+</code></pre>
+<p>仅有的 <code>container.image</code> 是必须的。端口和健康路径默认为 <code>8080</code> 和 <code>/health</code>。
+内存和CPU是请求，不是保证；平台将它们限制在操作员限制范围内。</p>
+<p>您的映像有大小上限：未压缩的 2 GiB，除非操作员已将您的游戏设置为另一个，并且
+注册表拉取需要五分钟。超过天花板的拉力被中途放弃，上传
+<code>image.tar</code> 超过它被拒绝 <code>413</code>，并且一旦未压缩就会变得更大的图像是
+再次删除。
+<code>container.env.*</code> 仅用于非秘密配置。</p>
+<p>提交将被拒绝，除非：</p>
+<ul>
+<li>图像被摘要固定为 <code>name@sha256:&lt;64 lowercase hex&gt;</code>。不接受可变标签。</li>
+<li>注册表已列入白名单，且映像位于经过验证的存储库所有者的命名空间下；
+目前这意味着 <code>ghcr.io/&lt;github-owner&gt;/...</code>.</li>
+<li>该清单恰好声明了一个服务器运行时。 <code>server=</code> 和 <code>container.image=</code> 是相互的
+独家。</li>
+<li>环境名称有效且不以保留开头 <code>STARHERMIT_</code> 前缀。</li>
+</ul>
+<p>切勿将凭据放入 <code>starhermit.txt</code>;它是一个公共存储库文件。</p>
+<h2 id="protocol-v1">协议v1</h2>
+<p>容器提供 HTTP/1.1 服务 <code>container.port</code>。每个平台 HTTP 请求和 WebSocket 升级都包括 <code>X-Starhermit-Invoke-Key</code>，其值
+匹配注入的 <code>STARHERMIT_INVOKE_KEY</code>;当请求不存在或错误时拒绝请求。</p>
+<table>
+<thead>
+<tr>
+<th>端点</th>
+<th>目的</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET &lt;container.health&gt;</code></td>
+<td>返回 <code>200</code> 当服务器准备好时</td>
+</tr>
+<tr>
+<td><code>GET /describe</code></td>
+<td>声明协议版本、滴答率、容量和成就</td>
+</tr>
+<tr>
+<td><code>POST /sessions</code></td>
+<td>启动会话，或在以下情况下恢复会话 <code>snapshot</code> 存在</td>
+</tr>
+<tr>
+<td><code>GET /sessions/{sessionId}/snapshot</code></td>
+<td>返回当前的持久状态</td>
+</tr>
+<tr>
+<td><code>DELETE /sessions/{sessionId}</code></td>
+<td>拆除会话</td>
+</tr>
+<tr>
+<td><code>POST /sessions/{sessionId}/members</code></td>
+<td><em>选修的：</em> 玩家正在加入或离开正在运行的会话</td>
+</tr>
+<tr>
+<td><code>WS /control</code></td>
+<td>部署范围的出站控制通道</td>
+</tr>
+<tr>
+<td><code>WS /stream</code></td>
+<td>两个方向的游戏框架</td>
+</tr>
+</tbody>
+</table>
+<p>一个容器承载一场游戏的所有实时会话。保持会话状态由 <code>sessionId</code> 并做
+不要假设该过程将在一场比赛的生命周期中持续存在。</p>
+<h3 id="get-describe"><code>GET /describe</code></h3>
+<pre><code class="language-json">{
+  "protocol": 1,
+  "tickRateHz": 20,
+  "maxSessions": 48,
+  "replays": true,
+  "persistent": false,
+  "achievements": [
+    { "key": "first-blood", "name": "First Blood", "description": "Score first.", "points": 10 }
+  ]
+}
+</code></pre>
+<p><code>protocol</code> 必须是 <code>1</code>. <code>tickRateHz</code> 和 <code>maxSessions</code> 是请求并且可能被限制。平台
+永远不会进入容器的循环，所以 <code>tickRateHz</code> 告诉它你的游戏有多快 <em>动作</em> 而不是如何
+快速运行它：它可以阻止平台请求快照的速度快于游戏生成的速度
+新状态。声明循环实际运行的速率。接受分数费率（<code>0.5</code> 是一
+每两秒打勾一次），并且缓慢的速率确实会延长快照请求之间的间隔 -
+这就是游戏崩溃所花费的费用。未声明任何内容的容器离开检查点
+节奏到快照成本单独。成就条目使用与以下相同的字段和限制
+<a href="/zh-CN/docs/api/game-scripts.html#declare">剧本宣布的成就</a>。声明的和所有者创建的密钥可以稍后授予。</p>
+<p><code>replays</code> 要求平台将每个已完成会话的最后状态保留为 <strong>重播</strong>，服务于
+<code>GET /api/v1/games/{slug}/replays/{sessionId}</code> （看 <a href="/zh-CN/docs/api/games.html#replays">游戏 API — 重播</a>）。它必须
+是字面意思 <code>true</code> 或者 <code>false</code>;没有声明任何内容的游戏没有重播及其重播端点
+回答 <code>404</code>。与滴答率一样，它是一个请求 - 操作员可以回答特定游戏
+不管怎样——所以让你的客户分支 <code>replaysEnabled</code> 从 <code>GET /api/v1/games/{slug}</code> 而不是在
+你声明了什么。无论哪种方式，快照都不受影响：实时会话是否需要还原点
+或者不保留最后一个。</p>
+<p><code>persistent</code> （文字 <code>true</code>/<code>false</code>）要求会话 <strong>暂停而不是结束</strong> 当每个
+玩家已离开。暂停会停顿会话：平台拍摄最终快照并存储它，然后
+来电 <code>DELETE /sessions/{id}</code>;下一个加入的玩家将其带回来 <code>POST /sessions</code> 与
+那个 <code>snapshot</code>，与崩溃恢复完全相同，但不花费重新启动预算或发送
+<code>resumed</code>。恢复的持久会话还带有 <code>pausedMs</code>，暂停所花费的总时间。请参阅
+<a href="/zh-CN/docs/tutorials/persistent-sessions.html">持久会话教程</a>.</p>
+<p><code>linkedAchievements</code> （最多 8 个其他游戏的 slugs 的数组）将玩家的解锁内容放在这些游戏中
+游戏进入ctx <code>POST /sessions</code>，在创建和恢复时。看
+<a href="/zh-CN/docs/api/achievements.html#achievements-from-other-games">其他游戏的成就</a>.</p>
+<p>目前的 <code>/describe</code> 读者不导入 <code>queues</code> 财产。因此容器游戏使用
+隐含的 <code>default</code> 1v1配对队列；此处添加形状不会启用更大的匹配。
+查看 <code>GET /api/v1/games/{slug}/queues</code> 以获得有效的形状。清单截止日期开始和 AI 席位
+限制仍然适用于该形状；看 <a href="/zh-CN/docs/api/games.html#matchmaking">牵线搭桥</a>.</p>
+<h3 id="post-sessions"><code>POST /sessions</code></h3>
+<p>该请求与 JavaScript 游戏收到的上下文形状相同：</p>
+<pre><code class="language-json">{
+  "now": 1769500000000,
+  "random": 0.418,
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [
+    { "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "name": "alice" }
+  ],
+  "sessionState": null,
+  "playerStates": {
+    "7c9e6679-7425-40de-944b-e07fc1f90ae7": null
+  }
+}
+</code></pre>
+<p>字段语义匹配 <a href="/zh-CN/docs/api/game-scripts.html#context-object">脚本上下文</a>， 包括
+<a href="/zh-CN/docs/api/game-scripts.html#matchmaking-seat-layout">匹配席位、AI旗帜和空座</a> 用于游戏
+配置开始截止日期 <code>starhermit.txt</code>。回应
+标准结果包络，例如：</p>
+<pre><code class="language-json">{ "ok": true, "sessionState": { "round": 1 } }
+</code></pre>
+<p>恢复时请求还包含 <code>snapshot</code>，保存平台保留的最后一个状态，
+和 <code>restoredFrom</code>，Unix 毫秒时间戳。从快照重建可播放会话。
+当玩家重新加入暂停的会话时，持久游戏会以相同的方式恢复， <code>pausedMs</code>
+在身体里。</p>
+<h3 id="get-sessionssessionidsnapshot"><code>GET /sessions/{sessionId}/snapshot</code></h3>
+<p>返回带有完整信息的标准信封 <code>sessionState</code> 还原点：</p>
+<pre><code class="language-json">{ "ok": true, "sessionState": { "round": 3, "scores": [2, 1] } }
+</code></pre>
+<p>平台定期检查活动会话。快照响应还可以包括
+<code>playerStates</code>, <code>eloUpdates</code>, <code>achievements</code>, <code>scores</code>， 或者 <code>result</code>;他们通过了相同的验证并且
+作为脚本结果的持久性规则。对于与 <a href="#get-describe">重播</a>，最后一个状态a
+达到的已完成会话是平台保留的重播内容 - 因此请设置该状态
+可重建，而不仅仅是可恢复。</p>
+<h3 id="post-sessionssessionidmembers"><code>POST /sessions/{sessionId}/members</code></h3>
+<p>选修的。玩家可以 <strong>加入正在进行的会话</strong>，通过一个 <a href="/zh-CN/docs/api/realtime.html">实时房间</a> 这允许
+或者接受朋友的 <a href="/zh-CN/docs/api/games.html#inviting-a-friend-into-a-game-in-progress">邀请加入他们正在玩的会话</a>,
+房间可以让玩家让出自己的座位，而无需人工智能占据。平台询问你的容器
+在更改最终完成之前。主体是普通的ctx，带有 <code>players</code> 已经反映了
+改变，加上 <code>membership</code>:</p>
+<pre><code class="language-json">{
+  "now": 1769500000000,
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [
+    { "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "name": "alice" },
+    { "id": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol" }
+  ],
+  "membership": { "change": "joined", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol", "team": 0, "slot": 1 }
+}
+</code></pre>
+<p><code>change</code> 是 <code>joined</code> 或者 <code>left</code>。使用标准信封答复：</p>
+<ul>
+<li><strong>可以拒绝加入。</strong> <code>{"ok": false, "error": "This world is full."}</code> 将玩家转开，
+座位被退还并且没有任何记录；邀请接受答案 <code>409</code> 并且邀请仍然存在
+待定。如果您不实现端点，则每个加入都会被拒绝： <code>404</code>, <code>405</code> 和 <code>501</code> 意思是
+"这场比赛不会让玩家中途休息"，所以为固定名单编写的游戏永远不会有
+陌生人掉进了里面。</li>
+<li><strong>休假是最后的决定</strong> 无论你回答什么。</li>
+<li>答案可能会带有 <code>achievements</code> 和 <code>scores</code>. A <code>sessionState</code> 被忽略：发送 <code>snapshot</code>
+超过 <a href="#control-channel"><code>/control</code></a> 如果更改值得检查点。</li>
+</ul>
+<p>加入后，新玩家的命令开始到达 <code>/stream</code> 他们在 <code>players</code> 在每一个
+稍后恢复。离开后，它们的框架停止并且它们的套接字关闭。每个连接的客户端
+收到一个 <a href="/zh-CN/docs/api/games.html#server--client"><code>membership</code> 框架</a> 无论哪种方式，会话聊天都会得到或失去
+会员。</p>
+<p>A <a href="/zh-CN/docs/tutorials/persistent-sessions.html">暂停的持久会话</a> 没有被问到，因为它没有运行。恢复的是
+恢复它携带当前 <code>players</code>，因此将您之前在恢复中未见过的玩家视为
+加入了。</p>
+<h2 id="gameplay-stream">游戏直播</h2>
+<p><code>WS /stream</code> 在两个方向上使用二进制消息：</p>
+<pre><code class="language-text">[1 byte type][16 byte sessionId][16 byte userId][payload...]
+</code></pre>
+<p>GUID 使用其 16 字节 .NET 线路表示形式。</p>
+<ul>
+<li><strong>类型1、平台→集装箱：</strong> 玩家命令。平台对经过认证的用户id进行标记；
+有效负载是来自客户端的 JSON 值 <code>cmd.data</code>.</li>
+<li><strong>类型2、容器→平台：</strong> 游戏有效负载。使用其用户 ID 来称呼一名参与者，或使用
+要广播的全零用户 ID。有效负载必须是有效的 JSON；客户在里面收到它
+<code>{"type":"game","data":...}</code>.</li>
+</ul>
+<p>会话固定到流连接以保持顺序。绝不接受或派生玩家
+来自命令 JSON 的身份 - 经过身份验证的标头具有权威性。</p>
+<h2 id="control-channel">控制通道</h2>
+<p>发送 JSON 文本消息 <code>WS /control</code> 为了获得持久的效果：</p>
+<pre><code class="language-json">{ "type": "snapshot",     "sessionId": "...", "state": { "round": 3 } }
+{ "type": "achievements", "sessionId": "...", "unlocks": { "&lt;userId&gt;": ["first-blood"] } }
+{ "type": "elo",          "sessionId": "...", "updates": { "&lt;userId&gt;": 1312 } }   // absolute ratings, not deltas — see games.md#elo-per-match
+{ "type": "scores",       "sessionId": "...", "scores": { "&lt;boardKey&gt;": { "&lt;userId&gt;": 4200 } } }
+{ "type": "result",       "sessionId": "...", "result": { "kind": "win", "winner": "..." } }
+{ "type": "backpressure", "load": 0.75 }
+</code></pre>
+<p>该平台仅接受路由到此部署的会话的效果，过滤收件人
+会话参与者，将成就键限制为游戏的成就（由声明或创建）
+它的所有者），限制 <code>scores</code> 到游戏本身的
+<a href="/zh-CN/docs/api/leaderboards.html#your-games-own-leaderboards">所有者创建的排行榜</a> — 每个玩家都保留自己的
+最好的——并应用国家预算。
+<code>result</code> 结束会话；该会话的后续影响将被忽略。 <code>backpressure.load</code> 是
+夹在 <code>0..1</code> 并帮助平台考虑当前的部署负载。</p>
+<p>在语义上重要的事件（例如进球或回合转换）之后推送快照，而不是
+而不是仅依赖定期检查点。</p>
+<h2 id="container-environment-and-server-api">容器环境和服务器API</h2>
+<table>
+<thead>
+<tr>
+<th>多变的</th>
+<th>意义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>STARHERMIT_PROTOCOL</code></td>
+<td>协议版本（<code>1</code>)</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_GAME_SLUG</code></td>
+<td>这游戏的梗</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_INVOKE_KEY</code></td>
+<td>秘密预计在 <code>X-Starhermit-Invoke-Key</code>;向您的容器验证平台</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_REFRESH_KEY</code></td>
+<td>仅用于更新服务器令牌的单独秘密</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_API_BASE</code></td>
+<td>可从隔离网络访问平台 API 基本 URL</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_SERVER_TOKEN</code></td>
+<td>窄服务器到服务器 API 的不记名令牌即将过期</td>
+</tr>
+<tr>
+<td><code>STARHERMIT_SERVER_TOKEN_EXPIRES_IN</code></td>
+<td>注入的服务器令牌的生命周期（以秒为单位）</td>
+</tr>
+<tr>
+<td><code>PORT</code></td>
+<td>容器必须侦听的端口</td>
+</tr>
+</tbody>
+</table>
+<p>服务器令牌没有玩家身份，不能使用帐户或玩家操作。它可以读取
+<code>GET /api/v1/time</code>，协调自己的会话，并调用服务器支持的
+<a href="/zh-CN/docs/api/moderation.html#callers-and-routes">审核路线</a> 为了自己的游戏。生成路线是
+<a href="/zh-CN/docs/availability.html#reserved-generation-routes">已保留且不可用</a>.</p>
+<h3 id="renew-the-server-token">更新服务器令牌</h3>
+<p>注入的服务器令牌会过期（默认为 24​​ 小时）。之前刷新一下就好了
+<code>STARHERMIT_SERVER_TOKEN_EXPIRES_IN</code> 经过：</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/server/token
+X-Starhermit-Refresh-Key: &lt;STARHERMIT_REFRESH_KEY&gt;
+</code></pre>
+<pre><code class="language-json">{ "token": "eyJhbGciOi...", "expiresInSeconds": 86400 }
+</code></pre>
+<p>有意在不使用过期的承载令牌的情况下调用此端点。专用刷新键
+与实时部署进行比较，即使在旧令牌过期后也能正常工作。它是独特的
+来自 <code>STARHERMIT_INVOKE_KEY</code>：调用密钥验证对您的进程的平台调用，而
+刷新密钥向平台验证您的流程。每当容器启动时，两者都会旋转。
+在报告生命周期的一半左右安排更新并自动替换令牌。</p>
+<p>"每当容器启动时" 不仅仅包括部署。空闲部署在以下时间后停止
+没有会话的安静时段（默认为 15 分钟），并由下一个玩家重新开始。一个坠毁的集装箱是
+重新启动。每次启动都是一个带有新密钥和新令牌的新容器，因此请从
+运行过程的环境。切勿将它们烘焙到映像、配置文件或快照中。</p>
+<p>如果启动失败 <code>The game container returned 401 for GET /describe</code>，平台的关键和
+你的流程的关键不同意。读 <code>STARHERMIT_INVOKE_KEY</code> 在启动时并比较未修改的情况。如果验证仍然失败，
+报告游戏 ID 和清理的启动日志；不要松开支票。</p>
+<h3 id="reconcile-a-session">协调会话</h3>
+<p><code>GET /api/v1/games/{slug}/server/sessions/{sessionId}</code> 和
+<code>Authorization: Bearer &lt;STARHERMIT_SERVER_TOKEN&gt;</code> 返回平台的当前会话视图：</p>
+<pre><code class="language-json">{
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "status": "active",
+  "players": [
+    { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" }
+  ],
+  "createdAt": "2026-07-27T16:00:00Z",
+  "finishedAt": null,
+  "chatConversationId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+  "result": null
+}
+</code></pre>
+<p>恢复后容器需要确认平台是否还考虑时使用此
+会话处于活动状态。禁止使用其他游戏的令牌或玩家启动令牌。</p>
+<h2 id="isolation">隔离</h2>
+<p>游戏容器无法访问互联网。它只能通过 StarHermit API 访问
+<code>STARHERMIT_API_BASE</code>;它无法到达其他游戏、平台服务或主机。供应商全部
+运行时依赖关系到图像中。</p>
+<p>根文件系统是只读的，除了一个小的 <code>/tmp</code>;该进程以强制非 root 身份运行
+没有 Linux 功能、没有卷以及 CPU、内存和进程限制的用户。请勿安装
+启动或持久时的包仅将状态匹配到本地磁盘。</p>
+<h2 id="failure-and-recovery">失败与恢复</h2>
+<p>如果进程终止，平台将重新启动部署并从其进程重新创建其实时会话。
+最后的快照。连接的玩家收到一个平台框架：</p>
+<pre><code class="language-json">{ "type": "resumed", "sessionId": "...", "lostMs": 750 }
+</code></pre>
+<p>客户端应放弃本地预测并等待游戏的正常全状态负载。一次会议
+当不存在可用快照、太旧或会话已损坏时，将被放弃而不是恢复
+重新启动过于频繁。平台在没有获胜者或 elo 变化的情况下完成比赛并发送：</p>
+<pre><code class="language-json">{ "type": "abandoned", "sessionId": "...", "reason": "server_failure" }
+</code></pre>
+<p><code>reason</code> 是 <code>server_failure</code> 当恢复不安全或更换从未开始时，以及
+<code>restore_failed</code> 当重新创建会话失败时。发布新图像可恢复实时会话
+进行替换（或放弃那些太陈旧的）。启动失败——拉超时，
+容器退出，或者它从未及时回答其运行状况检查 - 会通过退避重试，就像
+崩溃。十分钟内三次失败尝试（操作员可调）将禁用部署（<code>failed</code>),
+它是 <strong>不是</strong> 被玩家的需求唤醒。临时托管中断可以在不花费游戏故障津贴的情况下重试。</p>
+<p>没有实时会话的部署将在闲置 15 分钟后停止（操作员可以将游戏设置为不同的窗口）。
+已暂停 <a href="#get-describe">执着的</a> 会话停在容器外并且不会继续运行。
+下一个会话请求针对 <code>stopped</code> 部署唤醒它（<code>pending</code> → 健康门 →
+<code>running</code>）；输掉那场比赛是 <code>503</code> 说比赛开始了。仅有的 <code>stopped</code> 被唤醒这个
+方式——从不 <code>failed</code>.</p>
+<p>设计 <code>POST /sessions</code> 恢复和快照节奏作为游戏协议的一部分，而不是作为
+可选的优化。</p>
+<p>游戏所有者可以列出并结束搁浅的会话：
+<code>GET</code>/<code>DELETE /api/v1/me/github-games/{id}/sessions[/{sessionId}]</code>.</p>
+<h2 id="your-servers-output-and-crash-reports">您的服务器的输出和崩溃报告</h2>
+<p>作为游戏的所有者，您可以阅读服务器打印的内容以及服务器故障时发生的情况：</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/github-games/{id}/container/logs?tail=N</code></td>
+<td>最近的输出： <code>{ source, deploymentStatus, capturedAt, truncated, logs }</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/github-games/{id}/container/crashes?page=&amp;pageSize=</code></td>
+<td>碰撞记录，最新的在前</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/github-games/{id}/container/crashes/{crashId}</code></td>
+<td>一份崩溃记录，捕获输出</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>日志</strong> 从正在运行的服务器上线（<code>source: "live"</code>），最新保留，最多 500 行，
+默认为 256 KiB。当没有任何东西运行时，您将获得上次崩溃时捕获的输出
+（<code>source: "last_crash"</code>）。后端是脚本或没有脚本的游戏会得到 <code>409</code>.</li>
+<li><strong>崩溃记录</strong> 每当您的服务器崩溃、停止应答、超时时都会写入
+启动或无法启动 - 在容器被删除之前。它携带种类、退出代码、
+图像摘要、重新启动计数、受影响的会话以及服务器的最后 64 KiB 输出。的
+最近的 50 个将保留 30 天。</li>
+<li><strong>秘密已被编辑。</strong> 您的服务器的调用密钥、刷新密钥和任何服务器令牌显示为
+<code>[redacted]</code>。你自己的 <code>container.env.*</code> 值显示为打印形式 - 不要记录您不会记录的内容
+想要存储。</li>
+</ul>
+<p>运营商可以针对每场比赛更改这些限制。</p>
+<h2 id="see-also">参见</h2>
+<ul>
+<li><a href="/zh-CN/docs/api/github-games.html">GitHub 游戏</a> — 存储库注册和部署</li>
+<li><a href="/zh-CN/docs/api/games.html">游戏API</a> - 面向玩家的 REST 和 WebSocket 界面未改变</li>
+<li><a href="/zh-CN/docs/api/game-scripts.html">游戏脚本</a> — 替代 JavaScript 运行时和共享上下文/结果形状</li>
+<li><a href="/zh-CN/docs/api/achievements.html">成就</a> — 面向玩家的成就读取和通知</li>
+</ul>
+<p>共享 <a href="/zh-CN/docs/api/conventions.html">API约定</a> 描述响应解析、时间戳、分页和重试。</p>
+<p>看 <a href="/zh-CN/docs/credentials.html">凭证兼容性</a> 和 <a href="/zh-CN/docs/api/contracts.html">机器可读的合同</a>.</p>
+
+{% endraw %}

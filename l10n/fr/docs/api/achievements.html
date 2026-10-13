@@ -1,0 +1,423 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "Réalisations"
+source_url: "/docs/api/achievements.html"
+source_path: "docs/api/achievements.md"
+source_hash: "c1d53f838d5142ee2120e5c9dae0320c206922aeea5b05f708503462166883e0"
+translation: "machine"
+permalink: "/fr/docs/api/achievements.html"
+---
+{% raw %}
+<h1 id="achievements">Réalisations</h1>
+<p>Une réalisation appartient exactement à <strong>un propriétaire</strong>, et le propriétaire décide qui est autorisé à le déverrouiller&#160;:</p>
+<table>
+<thead>
+<tr>
+<th>Propriétaire</th>
+<th>Déclaré par</th>
+<th>Débloqué par</th>
+<th>Utilisez-le pour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Un jeu faisant autorité</strong></td>
+<td><code>game.achievements</code> dans un script, ou <code>achievements</code> à partir d'un conteneur <code>/describe</code> — <strong>ou par le propriétaire du jeu</strong> à travers <a href="#achievements-created-by-the-games-owner"><code>/me/github-games/{id}/achievements</code></a></td>
+<td><strong>Le runtime du serveur du jeu uniquement</strong> — faisant autorité sur le serveur</td>
+<td>Jeux avec un <code>server=</code> script ou <code>container.image=</code> back-end</td>
+</tr>
+<tr>
+<td><strong>Un titre de catalogue</strong> (<code>SoftwareTitle</code>)</td>
+<td>Un éditeur, via le <a href="/fr/docs/api/publisher.html#achievements">API de l'éditeur</a></td>
+<td>Le client du joueur, via <code>POST /api/v1/me/achievements/unlock</code> (droit requis)</td>
+<td>Titres distribués dont le client est le seul à savoir que le joueur a gagné quelque chose</td>
+</tr>
+</tbody>
+</table>
+<p>Les deux s’excluent mutuellement et la plateforme applique la séparation&#160;:</p>
+<ul>
+<li><code>POST /api/v1/me/achievements/unlock</code> <strong>refuse les réalisations à l'échelle du jeu</strong> — un client ne peut jamais en réclamer un.</li>
+<li>Les points de terminaison CRUD de l’éditeur les refusent également. Vous n'avez pas besoin d'un éditeur pour un jeu que vous possédez&#160;: comme
+son propriétaire, toi <strong>sont</strong> son éditeur, et vous gérez ses réalisations à travers
+<a href="#achievements-created-by-the-games-owner">les points de terminaison du propriétaire</a> plutôt.</li>
+</ul>
+<p>URL de base&#160;: <code>https://api.starhermit.com</code>. Tous les itinéraires sont sous <code>/api/v1/...</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Chemin</th>
+<th>Authentification</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/games/{slug}/achievements</code></td>
+<td>Porteur</td>
+<td>Réalisations d'un jeu faisant autorité + état de déverrouillage de l'appelant</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/me/github-games/{id}/achievements</code></td>
+<td>JWT (propriétaire du jeu)</td>
+<td>Chaque réalisation de votre jeu, avec son <code>origin</code> et débloquer le compte</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/me/github-games/{id}/achievements</code></td>
+<td>JWT (propriétaire du jeu)</td>
+<td>Créez un succès pour votre jeu → <code>201</code></td>
+</tr>
+<tr>
+<td>METTRE</td>
+<td><code>/api/v1/me/github-games/{id}/achievements/{achievementId}</code></td>
+<td>JWT (propriétaire du jeu)</td>
+<td>Mettez à jour celui que vous avez créé</td>
+</tr>
+<tr>
+<td>SUPPRIMER</td>
+<td><code>/api/v1/me/github-games/{id}/achievements/{achievementId}</code></td>
+<td>JWT (propriétaire du jeu)</td>
+<td>Supprimez celui que vous avez créé et que personne n'a déverrouillé → <code>204</code></td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/software/{titleId}/achievements</code></td>
+<td>Anonyme</td>
+<td>Définitions des réalisations d'un titre de catalogue</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/me/achievements?titleId=</code></td>
+<td>JWT</td>
+<td>Les déverrouillages de l'appelant (tous les propriétaires ou un titre)</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/me/achievements/unlock</code></td>
+<td>JWT</td>
+<td>Déverrouillage réclamé par le client — <strong>titres du catalogue uniquement</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Lisez les erreurs de manière défensive comme décrit dans <a href="/fr/docs/api/conventions.html#requests-and-responses">Conventions API</a>.
+<code>POST /me/achievements/unlock</code> renvoie son <code>400</code> raison sous forme de texte brut.</p>
+<h2 id="server-authoritative-game-achievements">Réalisations de jeu faisant autorité sur le serveur</h2>
+<p>C'est le mécanisme <strong>n'importe lequel</strong> le jeu doit être utilisé lorsqu'il dispose d'un backend de script ou de conteneur. Le
+le runtime du serveur est le seul rédacteur. Il doit valider que le joueur a gagné chaque déverrouillage&#160;; rejeter
+les soumissions directes d'API ne valident pas à elles seules les événements signalés par un client modifié.</p>
+<h3 id="1-declare-them-in-your-script">1. Déclarez-les dans votre script</h3>
+<p>Ajouter un statique <code>achievements</code> tableau au <code>game</code> objet - voir
+<a href="/fr/docs/api/game-scripts.html#achievements">Scripts de jeu — Réalisations</a> pour le contrat complet :</p>
+<pre><code class="language-js">globalThis.game = {
+  achievements: [
+    { key: "first-win",  name: "First Win",  description: "Win a match.", points: 10 },
+    { key: "flawless",   name: "Flawless",   description: "Win without conceding.",
+      points: 50, secret: true, icon: "https://cdn.example/flawless.png" }
+  ],
+  createSession(ctx) { /* ... */ },
+  onPlayerMessage(ctx) { /* ... */ },
+  onTick(ctx) { /* ... */ }
+};
+</code></pre>
+<p>La déclaration est lue <strong>quand le jeu est publié ou mis à jour</strong> de son référentiel. Publiez une mise à jour pour appliquer une modification.</p>
+<h3 id="2-unlock-them-from-any-lifecycle-hook">2. Déverrouillez-les depuis n’importe quel hook de cycle de vie</h3>
+<p>Renvoyez un <code>achievements</code> map — identifiant utilisateur → tableau de clés — à partir de <code>createSession</code>, <code>onPlayerMessage</code>,
+ou <code>onTick</code>:</p>
+<pre><code class="language-js">return {
+  ok: true,
+  sessionState: state,
+  achievements: { [winnerId]: ["first-win", "flawless"] },
+  result: { kind: "win", winner: winnerId }
+};
+</code></pre>
+<p>Les déverrouillages sont <strong>idempotent</strong> — rendre une clé que le joueur détient déjà est une opération impossible, donc un script peut
+réaffirmez une réussite à chaque tick sans vous soucier des doublons.</p>
+<h3 id="3-the-player-is-notified-over-the-gameplay-socket">3. Le joueur est averti via le socket de jeu</h3>
+<p>Chaque déverrouillage nouvellement accordé est transmis uniquement au joueur gagnant, le <code>ws/v1/games</code>, comme son propre cadre
+type (vérité de la plateforme, pas un script relayé <code>game</code> message):</p>
+<pre><code class="language-json">{
+  "type": "achievement",
+  "data": {
+    "key": "first-win",
+    "name": "First Win",
+    "description": "Win a match.",
+    "icon": null,
+    "points": 10,
+    "unlockedAt": "2026-07-25T09:14:02Z"
+  }
+}
+</code></pre>
+<p>Déblocages accordés à partir de <code>createSession</code> sont persistés avant que quiconque ait un socket, ils arrivent donc avec
+pas de cadre - lisez-les à partir du point de terminaison de la liste lors du chargement.</p>
+<h3 id="container-backends">Backends de conteneurs</h3>
+<p>Un conteneur déclare les mêmes champs de réussite dans <code>GET /describe</code>, puis envoie un
+<code>achievements</code> message sur son contrôle WebSocket. La plateforme applique la même clé, participant,
+idempotence et règles de livraison. Voir <a href="/fr/docs/api/container-games.html#control-channel">Serveurs de jeux de conteneurs</a>.</p>
+<h3 id="get-apiv1gamesslugachievements"><code>GET /api/v1/games/{slug}/achievements</code></h3>
+<p>Chaque réussite déclarée par le jeu, avec l'état de déverrouillage de l'appelant. <code>404</code> si la limace n'a pas
+définition de jeu faisant autorité (un jeu sans script ni backend de conteneur n'a aucun jeu appartenant
+réalisations — voir <a href="#which-games-can-use-this">Quels jeux peuvent utiliser cela</a>). Les réalisations secrètes sont cachées jusqu'à ce que le
+l'appelant les déverrouille. Classé par création, puis clé.</p>
+<pre><code class="language-json">[
+  {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "key": "first-win",
+    "name": "First Win",
+    "description": "Win a match.",
+    "icon": null,
+    "secret": false,
+    "points": 10,
+    "unlocked": true,
+    "unlockedAt": "2026-07-25T09:14:02Z"
+  }
+]
+</code></pre>
+<p>Fonctionne avec un JWT utilisateur complet ou un jeton de lancement à l'échelle du jeu.</p>
+<h3 id="which-games-can-use-this">Quels jeux peuvent utiliser cela</h3>
+<p>Le mécanisme est disponible pour un jeu qui déclare soit un <code>server=</code> un script ou un
+<code>container.image=</code> back-end dans <a href="/fr/docs/api/github-games.html#the-manifest-starhermittxt"><code>starhermit.txt</code></a>. Le
+l'exécution du serveur rend le déverrouillage faisant autorité. Les cas d'utilisation basés sur des scripts incluent&#160;:</p>
+<ul>
+<li><strong>Jeux de plateforme scriptés</strong> — débloquer depuis <code>onPlayerMessage</code> / <code>onTick</code> au fur et à mesure que le match se déroule.</li>
+<li><strong>Jeux en temps réel dans une salle</strong> — a <a href="/fr/docs/api/realtime.html#room-bound-sessions">salle en temps réel</a> pour un
+jeu avec un <code>server=</code> le script crée une session liée lorsqu'il démarre, et chaque hook de celle-ci
+la session peut accorder des réalisations.</li>
+<li><strong>Jeux solo et entraînements</strong> — une session contre le siège AI
+(<code>POST /api/v1/games/{slug}/sessions/ai</code>) exécute le même script et le même chemin de déverrouillage.</li>
+<li><strong>Jeux en temps réel routés par l'hôte</strong> — un jeu dont le gameplay s'étend sur
+<a href="/fr/docs/api/realtime.html#binary-frames-gameplay">canal binaire de salle en temps réel</a> peut toujours expédier un script serveur
+uniquement en tant qu'autorité de réalisation&#160;: le démarrage de la salle crée la session liée et le script
+récompenses de <code>createSession</code> / <code>onTick</code> / durable <code>cmd</code> messages envoyés <code>ws/v1/games</code> tandis que le
+le chemin rapide continue de couler <code>ws/v1/realtime</code>.</li>
+</ul>
+<p>Les sessions sauvegardées sur des conteneurs peuvent également déclarer et accorder des réalisations via leur protocole. Un jeu
+avec <strong>pas de backend faisant autorité</strong> (un jeu par navigateur pur, ou construit uniquement sur le <a href="/fr/docs/api/relay.html">relais homologue</a>)
+n'a pas de chemin de déverrouillage faisant autorité sur le serveur. Le déverrouillage revendiqué par le client est disponible uniquement pour
+titres distribués dans le catalogue, ci-dessous.</p>
+<h3 id="limits-and-rules">Limites et règles</h3>
+<table>
+<thead>
+<tr>
+<th>Règle</th>
+<th>Valeur</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Réalisations déclarées par match</td>
+<td>100 (extras ignorés)</td>
+</tr>
+<tr>
+<td>Longueur de la clé de réussite</td>
+<td>128 caractères</td>
+</tr>
+<tr>
+<td>Clés de déverrouillage acceptées par joueur, par invocation</td>
+<td>32</td>
+</tr>
+<tr>
+<td><code>points</code></td>
+<td>fixé à 0-10 000&#160;; la valeur par défaut est 0</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>par défaut le <code>key</code> lorsqu'il est omis</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Une entrée de déclaration mal formée est <strong>ignoré</strong>. Un script qui ne parvient pas à évaluer génère un message vide
+liste; la déclaration d'un conteneur est lue après avoir passé les contrôles de santé. Vérifiez avec
+<code>GET /api/v1/games/{slug}/achievements</code> après le déploiement.</li>
+<li>Définitions renversées par <code>key</code>. Une clé que votre backend cesse de déclarer est supprimée <strong>seulement si personne n'a
+je l'ai débloqué</strong> - l'histoire acquise n'est jamais détruite. Réalisations créées par le propriétaire via l'API
+ne sont jamais touchés par cela : seuls ceux déclarés sont réconciliés.</li>
+<li>Les déverrouillages pour les utilisateurs qui ne participent pas à la session et pour le siège AI sont ignorés.</li>
+</ul>
+<h2 id="achievements-from-other-games">Réalisations d'autres jeux</h2>
+<p>Un jeu peut ouvrir des fonctionnalités en fonction de ce que le joueur a débloqué <strong>un autre</strong> jeu&#160;: une suite honorant
+l'original, ou des jeux d'une série partageant des produits cosmétiques. Il existe deux manières de les lire.</p>
+<h3 id="from-your-server-ctxlinkedachievements-trusted">Depuis votre serveur&#160;: <code>ctx.linkedAchievements</code> (confiance)</h3>
+<p>Nommez les autres jeux de votre script, à côté de vos autres déclarations&#160;:</p>
+<pre><code class="language-js">globalThis.game = {
+  linkedAchievements: ["83fd04b1-3cbe-4b09-a251-3733ad4b9d94"], // other games' slugs (uids)
+  // ...
+};
+</code></pre>
+<p>Un conteneur renvoie la même chose <code>linkedAchievements</code> tableau de <code>GET /describe</code>. Chaque script
+le ctx d'invocation transporte alors les clés déverrouillées de chaque joueur humain dans ces jeux&#160;:</p>
+<pre><code class="language-js">ctx.linkedAchievements = {
+  "7c9e6679-...": {                                   // player id
+    "83fd04b1-3cbe-4b09-a251-3733ad4b9d94": ["first-win", "checkmate-10"]
+  }
+};
+</code></pre>
+<ul>
+<li>Il est relu sur <strong>chaque invocation</strong>, donc un déverrouillage gagné dans l'autre partie en cours de match est visible sur
+le suivant. Un conteneur le reçoit dans le ctx de <code>POST /sessions</code>, c'est-à-dire à la création et à
+restaurer.</li>
+<li>Au plus <strong>8</strong> jeux; entrées qui ne sont pas des chaînes non vides, des doublons et des slugs supérieurs à 100
+les caractères sont supprimés. Comme les autres déclarations, elle est lue lors de la publication du jeu ou
+mis à jour.</li>
+<li>Un jeu qui déclare que rien n'obtient non <code>linkedAchievements</code> champ et ne paie rien.</li>
+<li>Utilisez cette voie pour tout ce que la plateforme doit imposer, comme débloquer un jeu ou accorder un
+réalisation de votre propre.</li>
+</ul>
+<h3 id="from-your-client-get-apiv1gamessluglinked-achievementsotherslug">De votre client&#160;: <code>GET /api/v1/games/{slug}/linked-achievements/{otherSlug}</code></h3>
+<p>Celui de l'appelant se déverrouille <code>otherSlug</code>. Il ne nécessite aucune déclaration, donc un jeu sur navigateur uniquement sans
+le serveur peut l'utiliser et il fonctionne avec le jeton de lancement pour <code>{slug}</code>: les propres points de terminaison de l'autre jeu
+restez à l'écart de ce jeton.</p>
+<pre><code class="language-json">{
+  "game": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "hidden": false,
+  "unlocked": [
+    { "key": "first-win", "unlockedAt": "2026-07-25T09:14:02Z" }
+  ]
+}
+</code></pre>
+<p>Un client peut mentir sur ce qu’il a reçu, alors considérez cela comme un indice concernant l’interface utilisateur et les cosmétiques, et non comme une preuve.</p>
+<h3 id="what-is-disclosed">Ce qui est divulgué</h3>
+<ul>
+<li><strong>Déverrouillez uniquement l'état du jeu que vous avez nommé</strong>: clés et heures de déverrouillage, jamais de noms, descriptions ou
+la liste des autres jeux auxquels le joueur a joué. Un succès secret que le joueur a débloqué est
+inclus.</li>
+<li>Une limace qui ne correspond à aucun jeu répond comme un jeu sans rien débloqué.</li>
+<li><strong>La vie privée est respectée.</strong> Un joueur dont la confidentialité des réalisations est <code>Private</code> est <strong>caché</strong>: absent
+de <code>ctx.linkedAchievements</code>, et <code>"hidden": true</code> avec une liste vide du point de terminaison. Caché
+n'est pas la même chose que "n'en a pas", alors ne le traitez pas comme tel. <code>FriendsOnly</code> (le défaut) est divulgué,
+parce que le lecteur agit pour le joueur.</li>
+</ul>
+<h2 id="achievements-created-by-the-games-owner">Succès créés par le propriétaire du jeu</h2>
+<p>Déclarer les succès dans le code n'est pas le seul moyen d'en donner à votre jeu. Si vous possédez un jeu avec un
+<code>server=</code> script ou <code>container.image=</code> backend, vous pouvez également créer des réalisations pour celui-ci via le
+API&#160;: comme le fait un éditeur pour un titre de catalogue, sans compte ni autorisation d'éditeur requis.
+Posséder le jeu représente la totalité de la subvention. Utilisez-le lorsqu'un concepteur souhaite ajouter ou reformuler
+réalisations sans changement de code, ou lorsque votre backend accorde des clés qu'il ne déclare pas.</p>
+<p><strong>Seul le serveur de votre jeu peut les débloquer</strong>, exactement comme ceux déclarés&#160;: votre script renvoie la clé
+dans <code>achievements</code>, ou votre conteneur l'envoie sur le canal de contrôle. Rien ne change sur le
+côté déverrouillage — les clés sont résolues contre <em>tous</em> des réalisations du jeu, déclarées et créées.</p>
+<p><code>{id}</code> est l'identifiant de votre jeu <code>GET /api/v1/me/github-games</code>.</p>
+<h3 id="post-apiv1megithub-gamesidachievements"><code>POST /api/v1/me/github-games/{id}/achievements</code></h3>
+<pre><code class="language-json">{
+  "key": "speedrunner",
+  "name": "Speedrunner",
+  "description": "Finish a level in under a minute.",
+  "icon": "https://cdn.example/speedrunner.png",
+  "secret": false,
+  "points": 25
+}
+</code></pre>
+<p><code>key</code>, <code>name</code> et <code>description</code> sont nécessaires. Retours <code>201</code>:</p>
+<pre><code class="language-json">{
+  "id": "…",
+  "key": "speedrunner",
+  "name": "Speedrunner",
+  "description": "Finish a level in under a minute.",
+  "icon": "https://cdn.example/speedrunner.png",
+  "secret": false,
+  "points": 25,
+  "origin": "owner",
+  "unlocks": 0,
+  "createdAt": "…",
+  "updatedAt": "…"
+}
+</code></pre>
+<p><code>GET</code> sur le même chemin répertorie toutes les réalisations du jeu sous cette forme&#160;: <code>origin</code> est <code>declared</code>
+pour ceux que votre script ou conteneur déclare et <code>owner</code> pour ceux créés ici, et <code>unlocks</code>
+compte combien de joueurs détiennent chacun.</p>
+<p><code>PUT .../achievements/{achievementId}</code> prend n'importe lequel de <code>name</code>, <code>description</code>, <code>icon</code>, <code>secret</code> et
+<code>points</code>; le <code>key</code> ne peut pas changer. <code>DELETE</code> le supprime.</p>
+<h3 id="rules">Règles</h3>
+<table>
+<thead>
+<tr>
+<th>Règle</th>
+<th>Valeur</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Clé</td>
+<td>1 à 128 caractères&#160;: lettres, chiffres, <code>.</code>, <code>_</code>, <code>-</code>, commençant par une lettre ou un chiffre</td>
+</tr>
+<tr>
+<td><code>name</code> / <code>description</code></td>
+<td>requis; au maximum 200/2000 caractères</td>
+</tr>
+<tr>
+<td><code>points</code></td>
+<td>0 à 10 000&#160;; la valeur par défaut est 0</td>
+</tr>
+<tr>
+<td>Réalisations créées par le propriétaire par jeu</td>
+<td>200 (en plus des 100 déclarés)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Une réalisation déclarée reste celle de votre code.</strong> Créer une clé dont le jeu a déjà des retours <code>409</code>,
+tout comme la modification ou la suppression d'un <code>declared</code> un - la prochaine mise à jour le remettrait en tant que code
+le déclare. Modifiez-le dans votre script ou <code>/describe</code> plutôt.</li>
+<li><strong>Si votre code déclare ultérieurement une clé que vous avez créée ici</strong>, la déclaration prend cette réalisation
+fini (<code>origin</code> devient <code>declared</code>). Les joueurs qui l'ont mérité le gardent.</li>
+<li><strong>Un succès débloqué par quelqu'un ne peut pas être supprimé</strong> (<code>409</code>).</li>
+<li><code>404</code> signifie que le jeu ne vous appartient pas&#160;; <code>409</code> sur l'une de ces routes avec un message concernant un serveur
+backend signifie que le jeu n'en a pas - un jeu sur navigateur uniquement n'a rien qui puisse débloquer un
+réalisation.</li>
+</ul>
+<p>Étape par étape&#160;: <a href="/fr/docs/tutorials/game-leaderboards-achievements.html">Tutoriel&#160;: classements et réalisations pour votre jeu</a>.</p>
+<h2 id="catalog-title-achievements">Réalisations des titres de catalogue</h2>
+<p>Pour les logiciels distribués via le catalogue, où le client est le seul à respecter les
+état de déverrouillage. Les définitions sont lues de manière anonyme&#160;; le déverrouillage nécessite un JWT et un non révoqué
+droit au titre.</p>
+<h3 id="get-apiv1softwaretitleidachievements"><code>GET /api/v1/software/{titleId}/achievements</code></h3>
+<p><code>AchievementDto[]</code>. Les succès secrets sont masqués à moins qu'ils ne soient déverrouillés par l'appelant (et son
+<code>criteria</code> est retenu jusque-là). Les réalisations liées au jeu n'apparaissent jamais ici.</p>
+<pre><code class="language-json">[
+  {
+    "id": "…",
+    "key": "…",
+    "name": "…",
+    "description": "…",
+    "icon": "…",
+    "secret": false,
+    "points": 10,
+    "visibility": "…",
+    "criteria": "…"
+  }
+]
+</code></pre>
+<h3 id="post-apiv1meachievementsunlock"><code>POST /api/v1/me/achievements/unlock</code></h3>
+<pre><code class="language-json">{ "achievementDefinitionId": "…" }
+</code></pre>
+<p>Retours <code>204</code>. Retours <code>400</code> lorsque la réalisation n'existe pas, lorsque l'appelant n'a aucun droit
+au titre (voir <a href="/fr/docs/api/catalog.html">catalog.md</a>), ou lorsque la réalisation est <strong>à l'échelle du jeu</strong> — ce sont
+accordé uniquement par le script faisant autorité du jeu ou le backend du conteneur. Ré-déverrouiller quelque chose déjà retenu revient <code>204</code>.</p>
+<p>La gestion côté éditeur (définition, mise à jour et suppression des réalisations de titres) réside dans
+<a href="/fr/docs/api/publisher.html#achievements">publisher.md</a>.</p>
+<h2 id="get-apiv1meachievements"><code>GET /api/v1/me/achievements</code></h2>
+<p>L'appelant se déverrouille lorsque <code>UserAchievementDto[]</code>. <strong>Sans <code>titleId</code> cela renvoie à chaque déverrouillage du
+l'utilisateur détient, à la fois pour le jeu et pour le titre</strong>; passer <code>?titleId=</code> pour le restreindre à un seul titre de catalogue.</p>
+<pre><code class="language-json">[
+  {
+    "id": "…",
+    "achievementDefinitionId": "…",
+    "key": "…",
+    "name": "…",
+    "description": "…",
+    "icon": "…",
+    "points": 10,
+    "unlockedAt": "…"
+  }
+]
+</code></pre>
+<p>Pour l'écran de réussite d'un jeu, préférez <code>GET /api/v1/games/{slug}/achievements</code>, qui aussi
+renvoie les définitions du joueur <em>pas</em> encore débloqué.</p>
+<p>Commun <a href="/fr/docs/api/conventions.html">Conventions API</a> décrire l'analyse des réponses, les horodatages, la pagination et les tentatives.</p>
+<p>Voir <a href="/fr/docs/credentials.html">compatibilité des informations d'identification</a> et <a href="/fr/docs/api/contracts.html">contrats lisibles par machine</a>.</p>
+
+{% endraw %}

@@ -1,0 +1,185 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "Rapports de crash et de bugs"
+source_url: "/docs/api/reports.html"
+source_path: "docs/api/reports.md"
+source_hash: "6d28d99eae2ec0d57e0611ea1d1db48136d4f38dacbb270fd4242dbfd0f0e97a"
+translation: "machine"
+permalink: "/fr/docs/api/reports.html"
+---
+{% raw %}
+<h1 id="crash-and-bug-reports">Rapports de crash et de bugs</h1>
+<p>Les joueurs peuvent signaler un crash ou un bug depuis n'importe quel jeu doté d'un slug - jeux sur navigateur uniquement
+inclus - en utilisant le jeton de lancement du jeu ou un jeton d'utilisateur complet. Le propriétaire du jeu lit, trie et
+les supprime via <code>/api/v1/me/github-games/{id}/reports</code>.</p>
+<p>Pour connaître les sorties du serveur et les enregistrements de crash d'un jeu conteneur, voir
+<a href="/fr/docs/api/container-games.html#your-servers-output-and-crash-reports">Serveurs de jeux hébergés par des conteneurs&#160;–&#160;Rapports de sortie et de plantage de votre serveur</a>.</p>
+<h2 id="endpoints">Points de terminaison</h2>
+<table>
+<thead>
+<tr>
+<th>Méthode</th>
+<th>Chemin</th>
+<th>Authentification</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POSTE</td>
+<td><code>/api/v1/games/{slug}/reports</code></td>
+<td>Jeton de lancement pour ce jeu, ou JWT</td>
+<td>Déposer un rapport de crash ou de bug</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/games/{slug}/reports/mine</code></td>
+<td>Jeton de lancement pour ce jeu, ou JWT</td>
+<td>Vos 50 derniers rapports pour ce jeu, avec leur statut</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/me/github-games/{id}/reports</code></td>
+<td>JWT (propriétaire)</td>
+<td>Liste des rapports&#160;: <code>?kind=crash|bug&amp;status=open|acknowledged|resolved&amp;page=&amp;pageSize=</code> (≤100)</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (propriétaire)</td>
+<td>Un rapport, avec sa liste de pièces jointes</td>
+</tr>
+<tr>
+<td>OBTENIR</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}/attachments/{attachmentId}</code></td>
+<td>JWT (propriétaire)</td>
+<td>Une pièce jointe, toujours en téléchargement</td>
+</tr>
+<tr>
+<td>CORRECTIF</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (propriétaire)</td>
+<td>Ensemble <code>status</code></td>
+</tr>
+<tr>
+<td>SUPPRIMER</td>
+<td><code>/api/v1/me/github-games/{id}/reports/{reportId}</code></td>
+<td>JWT (propriétaire)</td>
+<td>Supprimer un rapport → <code>204</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="file-a-report">Déposer un rapport</h2>
+<pre><code class="language-http">POST /api/v1/games/{slug}/reports
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+</code></pre>
+<pre><code class="language-json">{
+  "kind": "crash",
+  "title": "Crash entering the second level",
+  "description": "TypeError: cannot read properties of undefined (reading 'tiles')\n    at loadLevel (game.js:812)",
+  "clientVersion": "1.4.2",
+  "platform": "web",
+  "buildId": "a1b2c3d",
+  "sessionId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "attachments": [
+    { "fileName": "console.log", "contentType": "text/plain", "dataBase64": "…" }
+  ]
+}
+</code></pre>
+<ul>
+<li><code>kind</code> est <code>crash</code> ou <code>bug</code>; <code>title</code> est requis (≤200 caractères).</li>
+<li>Tout le reste est facultatif. <code>userAgent</code> par défaut celui de la demande <code>User-Agent</code> en-tête.</li>
+<li>Réponse: <code>201 { "id", "kind", "status": "open", "createdAt" }</code>.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Statut</th>
+<th>Signification</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td>Malformé&#160;: inconnu <code>kind</code>, manquant <code>title</code>, base64 invalide ou non JSON</td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>Jeu inconnu ou supprimé</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>Description, nombre de pièces jointes ou octets de pièces jointes dépassant les limites du jeu</td>
+</tr>
+<tr>
+<td><code>429</code></td>
+<td>Au-delà de la limite de rapport quotidien pour ce jeu&#160;; voir <code>Retry-After</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="limits">Limites</h2>
+<p>Les opérateurs peuvent modifier chacun de ces éléments pour l'ensemble de la plateforme et pour des jeux individuels&#160;; la limite quotidienne
+peut également être défini pour un seul joueur.</p>
+<table>
+<thead>
+<tr>
+<th>Limite</th>
+<th>Défaut</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Rapports par joueur par match et par jour</td>
+<td>20</td>
+</tr>
+<tr>
+<td>Longueur de la description</td>
+<td>20 000 caractères</td>
+</tr>
+<tr>
+<td>Pièces jointes par rapport</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Octets de pièces jointes par rapport</td>
+<td>2 Mo</td>
+</tr>
+<tr>
+<td>Rapports conservés par match</td>
+<td>2,000</td>
+</tr>
+<tr>
+<td>Octets conservés par jeu</td>
+<td>256 Mo</td>
+</tr>
+<tr>
+<td>Rétention</td>
+<td>90 jours</td>
+</tr>
+</tbody>
+</table>
+<p>Lorsqu'un jeu atteint sa limite de stockage, les rapports les plus anciens (ceux résolus en premier) sont supprimés.
+faire de la place. Un seul rapport plus grand que la limite totale d'octets par jeu est refusé avec <code>413</code>.</p>
+<h2 id="triage-reports-game-owner">Rapports de tri (propriétaire du jeu)</h2>
+<p>La liste revient <code>{ "items", "total", "page", "pageSize" }</code>; chaque élément porte le nom du journaliste,
+<code>kind</code>, <code>status</code>, <code>title</code>, les détails du client et son nombre de pièces jointes. Déplacer un rapport vers
+<code>open</code> → <code>acknowledged</code> → <code>resolved</code> avec:</p>
+<pre><code class="language-http">PATCH /api/v1/me/github-games/{id}/reports/{reportId}
+Content-Type: application/json
+
+{ "status": "resolved" }
+</code></pre>
+<p>Les pièces jointes sont servies sous forme de téléchargements (<code>Content-Disposition: attachment</code>, <code>nosniff</code>, un bac à sable
+CSP). Seuls les types inertes conservent leur type de contenu déclaré&#160;: texte, JSON, PNG, JPEG, WebP, GIF, zip et
+gzip; tout le reste, balisage inclus, est servi comme <code>application/octet-stream</code>.</p>
+<h2 id="from-the-javascript-sdk">À partir du SDK JavaScript</h2>
+<pre><code class="language-js">StarHermit.reportBug('Score did not save', 'Finished level 3, score shows 0', { clientVersion: '1.4.2' });
+StarHermit.captureCrashes({ clientVersion: '1.4.2' });   // opt-in: uncaught errors become crash reports
+</code></pre>
+<p>Voir le <a href="/fr/docs/sdk/javascript.html#crash-and-bug-reports">SDK JavaScript</a>.</p>
+<p>Commun <a href="/fr/docs/api/conventions.html">Conventions API</a> décrire l'analyse des réponses, les horodatages, la pagination et les tentatives.</p>
+<p>Voir <a href="/fr/docs/credentials.html">compatibilité des informations d'identification</a> et <a href="/fr/docs/api/contracts.html">contrats lisibles par machine</a>.</p>
+
+{% endraw %}

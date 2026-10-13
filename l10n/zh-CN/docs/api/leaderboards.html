@@ -1,0 +1,251 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "排行榜"
+source_url: "/docs/api/leaderboards.html"
+source_path: "docs/api/leaderboards.md"
+source_hash: "8dc804e92e296ca450fe1e537cab9b10deabd2f397a82763791d66544f8a5eff"
+translation: "machine"
+permalink: "/zh-CN/docs/api/leaderboards.html"
+---
+{% raw %}
+<h1 id="leaderboards">排行榜</h1>
+<p>排行榜定义和条目。读取是匿名的；提交分数需要 JWT。</p>
+<p>基本网址： <code>https://api.starhermit.com</code>。所有路线均在 <code>/api/v1/...</code>.</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/leaderboards</code></td>
+<td>匿名的</td>
+<td>列表定义（查询 <code>scope</code>, <code>region</code>, <code>titleId</code>)</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/leaderboards/{id}</code></td>
+<td>匿名的</td>
+<td>得到一个定义</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/leaderboards/{id}/entries?scope=&amp;region=&amp;friendsOnly=&amp;page=&amp;pageSize=</code></td>
+<td>匿名的</td>
+<td>分页条目； <code>friendsOnly=true</code> 需要授权</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/leaderboards/{id}/submit</code></td>
+<td>智威汤逊</td>
+<td>提交分数（仅限目录板）</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/games/{slug}/leaderboards</code></td>
+<td>承载者</td>
+<td>您的游戏自己的活动板（接受启动令牌）</td>
+</tr>
+<tr>
+<td>获取/发布</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards</code></td>
+<td>JWT（游戏所有者）</td>
+<td>列出/创建您的游戏板</td>
+</tr>
+<tr>
+<td>放置/删除</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards/{leaderboardId}</code></td>
+<td>JWT（游戏所有者）</td>
+<td>更新/删除一个</td>
+</tr>
+</tbody>
+</table>
+<p>定义是 <code>LeaderboardDefinitionDto[]</code>:</p>
+<pre><code class="language-json">[
+  {
+    "id": "…",
+    "softwareTitleId": "…",
+    "gameDefinitionId": null,
+    "key": null,
+    "name": "…",
+    "scoreType": "…",
+    "sortDirection": "…",
+    "resetSchedule": "weekly",
+    "currentPeriodStartedAt": "2026-10-12T00:00:00+00:00",
+    "nextResetAt": "2026-10-19T00:00:00+00:00",
+    "minScore": 0,
+    "maxScore": 100,
+    "scope": "…",
+    "region": "…",
+    "isActive": true,
+    "createdAt": "…",
+    "updatedAt": "…"
+  }
+]
+</code></pre>
+<p>条目回复：</p>
+<pre><code class="language-json">{
+  "items": [
+    {
+      "id": "…",
+      "userId": "…",
+      "username": "…",
+      "score": 1500,
+      "rank": 1,
+      "region": "…",
+      "submittedAt": "…"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "pageSize": 20
+}
+</code></pre>
+<p>提交正文：</p>
+<pre><code class="language-json">{
+  "score": 1500
+}
+</code></pre>
+<p>分数根据定义进行验证 <code>minScore</code>/<code>maxScore</code> 和出版商规则；响应即为录入结果。</p>
+<h2 id="authoritative-games-and-elo">权威游戏和Elo</h2>
+<p>每个权威游戏都有elo排行榜；它的id来自 <code>GET /api/v1/games/{slug}</code> → <code>leaderboardId</code> （看 <a href="/zh-CN/docs/api/games.html">games.md</a>）。分数仅由平台根据脚本编写 <code>eloUpdates</code> 或者容器控制通道——直接提交被拒绝。游戏客户端通过标准分页端点读取条目；例如，国际象棋参考实现请求：</p>
+<pre><code>GET /api/v1/leaderboards/{leaderboardId}/entries?friendsOnly=true&amp;page=1&amp;pageSize=10
+</code></pre>
+<p>游戏范围的启动令牌可以读取自己游戏的排行榜。发行商端排行榜CRUD驻留在 <a href="/zh-CN/docs/api/publisher.html">publisher.md</a>.</p>
+<h3 id="resetting-a-players-rating">重置玩家的评分</h3>
+<p>游戏所有者可以将一名玩家的评分恢复到起始状态 <strong>1200</strong> — 对于蓝精灵来说，增强的
+帐户或评级已损坏的错误：</p>
+<pre><code>DELETE /api/v1/me/github-games/{id}/players/{userId}/elo      → 200 { "userId": "…", "elo": 1200 }
+</code></pre>
+<p>它重置评级匹配对，从 elo 板上删除玩家的行（它返回
+与他们的下一个评级匹配），并设置一个顶级数字 <strong><code>elo</code></strong> 在脚本的播放器文档中
+到 1200 — 因为您的脚本根据其自己的文档计算下一个评级，仅重置
+平台的副本将在下一场比赛时被撤销。文档中的其他所有内容（胜利、历史）
+被独自留下。如果您的脚本以任何其他名称保留其评级，则它是 <strong>不是</strong> 重写：保留
+它在 <code>playerStates[id].elo</code> 免费重置。已经进行的比赛可能仍会报告
+重置前计算的评级。 <code>404</code> 当游戏不是你的或者玩家没有评分时
+它。评级还取决于 <a href="/zh-CN/docs/api/games.html#limits">埃罗规则</a>.</p>
+<h2 id="reset-schedules">重置时间表</h2>
+<p>任何排行榜（游戏自己的排行榜或目录标题的排行榜）都可以按时间表重新开始：</p>
+<table>
+<thead>
+<tr>
+<th><code>resetSchedule</code></th>
+<th>重新开始</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>daily</code></td>
+<td>每天 00:00 UTC</td>
+</tr>
+<tr>
+<td><code>weekly</code></td>
+<td>每个星期一 00:00 UTC</td>
+</tr>
+<tr>
+<td><code>monthly</code></td>
+<td>每月 1 日 00:00 UTC</td>
+</tr>
+<tr>
+<td>省略， <code>null</code> 或者 <code>"never"</code></td>
+<td>绝不</td>
+</tr>
+</tbody>
+</table>
+<p>任何其他值都是 <code>400</code>。定义报告 <code>currentPeriodStartedAt</code> 和 <code>nextResetAt</code> （两个都
+<code>null</code> 对于永远不会重置的板），以便客户可以显示 "2天内重置".</p>
+<p>当电路板处于复位状态时，会应用复位 <strong>读</strong>：条目端点仅显示自此以来提交的分数
+当前周期开始，并在该周期内计算排名。没有删除任何内容
+边界，因此重置会在 UTC 时间 00:00 准确生效。这也意味着日程可以改变
+随时 - 它会更改显示的条目，而不是保留的条目。以前的时期没有
+通过API可读。</p>
+<h2 id="your-games-own-leaderboards">您的游戏自己的排行榜</h2>
+<p>除了 elo 棋盘之外，还有一款游戏 <code>server=</code> 脚本或 <code>container.image=</code> 后端可以有
+自己的排行榜——高分、最快圈速、最多击杀数——由 <strong>游戏的所有者</strong>。
+您不需要发行商帐户：拥有该游戏即可使您成为其发行商。</p>
+<p>就像 elo 板一样， <strong>只有您的游戏服务器才会写入它们。</strong> 你的脚本返回
+<code>scores: { "&lt;key&gt;": { "&lt;userId&gt;": score } }</code> 从任何钩子（参见
+<a href="/zh-CN/docs/api/game-scripts.html#leaderboards">游戏脚本——排行榜</a>），或者你的容器发送一个
+<a href="/zh-CN/docs/api/container-games.html#control-channel"><code>scores</code> 控制消息</a>. <code>POST /leaderboards/{id}/submit</code> 是
+被拒绝，因此修改后的客户端无法发布分数。</p>
+<h3 id="create-one--post-apiv1megithub-gamesidleaderboards">创建一个—— <code>POST /api/v1/me/github-games/{id}/leaderboards</code></h3>
+<pre><code class="language-json">{
+  "key": "high-score",
+  "name": "High score",
+  "scoreType": "integer",
+  "sortDirection": "desc",
+  "minScore": 0,
+  "maxScore": 1000000,
+  "isActive": true
+}
+</code></pre>
+<p>退货 <code>201</code> 与一个 <code>LeaderboardDefinitionDto</code> 谁 <code>gameDefinitionId</code> 和 <code>key</code> 已设置。</p>
+<table>
+<thead>
+<tr>
+<th>场地</th>
+<th>意义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>key</code></td>
+<td><strong>必需的。</strong> 您的服务器提交的名称：1–64 个字母、数字、 <code>.</code>, <code>_</code>, <code>-</code>。每场比赛都是独一无二的。</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td><strong>必需的。</strong> 显示名称，最多 200 个字符。</td>
+</tr>
+<tr>
+<td><code>scoreType</code></td>
+<td><code>integer</code> （默认）， <code>decimal</code>， 或者 <code>time-ms</code> （非负整数毫秒）</td>
+</tr>
+<tr>
+<td><code>sortDirection</code></td>
+<td><code>desc</code> （默认值 — 越高越好）或 <code>asc</code> （越低越好，例如单圈时间）</td>
+</tr>
+<tr>
+<td><code>minScore</code> / <code>maxScore</code></td>
+<td>可选边界；忽略它们之外的分数</td>
+</tr>
+<tr>
+<td><code>isActive</code></td>
+<td>默认 <code>true</code>。不活跃的棋盘不接受分数，也不会向玩家列出。</td>
+</tr>
+<tr>
+<td><code>resetSchedule</code></td>
+<td>选修的： <code>daily</code>, <code>weekly</code> 或者 <code>monthly</code> - 看 <a href="#reset-schedules">重置时间表</a>。默认值：从不重置。</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>key</code>, <code>scoreType</code> 和 <code>sortDirection</code> 创建后无法更改</strong>：您的服务器通过密钥提交，
+已经存储的分数是由另外两个人选择的。需要另一种吗？创建一个新板。
+<code>PUT .../leaderboards/{leaderboardId}</code> 接受 <code>name</code>, <code>minScore</code>, <code>maxScore</code>, <code>isActive</code> 和
+<code>resetSchedule</code> （发送 <code>"never"</code> 停止重置）； <code>DELETE</code> 拆下电路板 <strong>及其条目</strong> -
+放 <code>isActive: false</code> 退休它并保留它们。一个游戏最多可能有 <strong>2048</strong> 板。</p>
+<h3 id="how-scores-are-kept">分数如何保存</h3>
+<ul>
+<li><strong>每位玩家一份参赛作品：他们的最佳作品。</strong> "最好的" 遵循董事会的 <code>sortDirection</code>。提交一个
+更差的分数不会改变任何事情，因此在每场比赛后报告而不先检查。在板上有
+重新设定时间表，这是最好的 <strong>这个时期</strong>：重置后的第一个分数始终有效，
+无论该球员上节课的成绩有多好。</li>
+<li>只有在该会话中的玩家才能得分； AI 座位和其他任何人都被忽略。</li>
+<li>违反董事会规则的分数（超出范围、分数 <code>integer</code> 板，负
+<code>time-ms</code>) 被忽略，就像没有活动板的键一样。不会向您的服务器报告任何内容。</li>
+</ul>
+<h3 id="show-them-in-your-game">在你的游戏中展示它们</h3>
+<p><code>GET /api/v1/games/{slug}/leaderboards</code> 列出游戏的活动板及其 <code>id</code> 和 <code>key</code>,
+并与游戏的启动令牌一起使用。使用上面的标准分页端点读取条目 -
+<code>GET /api/v1/leaderboards/{id}/entries</code> - 启动代币也可能到达这些主板。</p>
+<p>逐步： <a href="/zh-CN/docs/tutorials/game-leaderboards-achievements.html">教程：游戏的排行榜和成就</a>.</p>
+<p>看 <a href="/zh-CN/docs/api/conventions.html#requests-and-responses">API约定</a> 用于错误解析。</p>
+<p>看 <a href="/zh-CN/docs/credentials.html">凭证兼容性</a> 和 <a href="/zh-CN/docs/api/contracts.html">机器可读的合同</a>.</p>
+
+{% endraw %}

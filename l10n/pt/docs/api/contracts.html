@@ -1,0 +1,132 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Contratos REST e WebSocket"
+source_url: "/docs/api/contracts.html"
+source_path: "docs/api/contracts.md"
+source_hash: "373c7589e9304a2144060efd06d29237e3468f3d33f187e151dba7bb1212148c"
+translation: "machine"
+permalink: "/pt/docs/api/contracts.html"
+---
+{% raw %}
+<h1 id="rest-and-websocket-contracts">Contratos REST e WebSocket</h1>
+<p>Esses contratos para download complementam as páginas de referência. Use-os para inspecionar operações,
+valide exemplos de cargas úteis ou importe solicitações REST para um cliente compatível com OpenAPI.</p>
+<table>
+<thead>
+<tr>
+<th>Arquivo</th>
+<th>Cobertura</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="/docs/contracts/openapi.json">Contrato REST OpenAPI</a></td>
+<td>Métodos REST públicos, caminhos, parâmetros, modelos de solicitação JSON, respostas bem-sucedidas e famílias de credenciais; operações de geração reservadas são marcadas como indisponíveis</td>
+</tr>
+<tr>
+<td><a href="/docs/contracts/websocket.schema.json">Esquemas WebSocket JSON</a></td>
+<td>Quadros de texto conhecidos por protocolo e direção; os dados de jogabilidade/sinalização de propriedade do aplicativo permanecem abertos</td>
+</tr>
+<tr>
+<td><a href="/docs/contracts/binary-protocols.json">Layouts binários</a></td>
+<td>Prefixo do remetente em tempo real, prefixo de voz, retransmissão sem moldura, cabeçalho do fluxo do contêiner e blocos de upload</td>
+</tr>
+</tbody>
+</table>
+<h2 id="rest-contracts">Contratos REST</h2>
+<p>O arquivo REST usa <a href="https://spec.openapis.org/oas/v3.0.3.html">OpenAPI 3.0.3</a> e a origem da API pública. Cada operação está vinculada à sua página de referência,
+que carrega as regras completas de autorização, validação, limites e erros. <code>x-credentials</code>
+identifica as famílias de credenciais aceitas; não substitui verificações de propriedade ou de adesão.
+<code>x-required-policies</code> descreve permissões nomeadas onde a API as aplica.</p>
+<p>As respostas podem incluir campos adicionais. JSON, metadados, diagnóstico e upload específicos do jogo
+os resultados usam formas abertas onde a referência do jogo ou do endpoint define seu conteúdo. Sucesso
+esquemas não são uma promessa de que todo chamador está autorizado. Erros de endpoint podem ser JSON, texto simples,
+respostas vazias ou detalhes do problema de validação; usar <a href="/pt/docs/api/conventions.html#requests-and-responses">análise de resposta defensiva</a>.</p>
+<p>Não trate as operações de geração reservada como um serviço funcional. Seu contrato descreve o
+atual <code>503 overloaded</code> resposta, não campos de solicitação futuros ou comportamento de geração.</p>
+<h2 id="websocket-contracts">Contratos WebSocket</h2>
+<p>Escolha um <code>$defs</code> esquema para o protocolo e direção do seu soquete. Por exemplo, validar um cliente
+quadro de movimento contra <code>GameRealtimeInput</code>, em vez do durável genérico <code>GameCommand</code>:</p>
+<pre><code class="language-json">{ "type": "cmd", "data": { "type": "input", "realtime": true, "seq": 1, "x": 0.5 } }
+</code></pre>
+<p><code>realtime</code> pertence <strong>dentro <code>data</code></strong>. Os campos de jogo posteriores são o contrato do seu jogo.
+Use um <a href="https://json-schema.org/draft/2020-12/json-schema-core">Esquema JSON 2020-12</a> validador com o documento de esquema completo para que as referências locais sejam resolvidas.
+O documento raiz contém definições; selecionar uma definição é necessário para validar um quadro.</p>
+<table>
+<thead>
+<tr>
+<th>Protocolo</th>
+<th>Definição de texto do cliente</th>
+<th>Definição de texto do servidor</th>
+<th>Dados binários</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Jogos</td>
+<td><code>GameCommand</code> / <code>GameRealtimeInput</code></td>
+<td><code>GameServerFrame</code></td>
+<td>Apenas jogabilidade de texto</td>
+</tr>
+<tr>
+<td>Salas em tempo real</td>
+<td><code>RealtimeClientControl</code></td>
+<td><code>RealtimeServerFrame</code></td>
+<td>Dados de jogo roteados pelo host, prefixo do participante remetente de 16 bytes no recebimento</td>
+</tr>
+<tr>
+<td>Voz</td>
+<td><code>VoiceClientControl</code></td>
+<td><code>VoiceServerEvent</code></td>
+<td>Áudio, prefixo do usuário remetente de 16 bytes no recebimento</td>
+</tr>
+<tr>
+<td>Bater papo</td>
+<td>Nenhum comando do cliente; usar REST</td>
+<td><code>ChatServerPush</code></td>
+<td>Nenhum</td>
+</tr>
+<tr>
+<td>Retransmissão de pares</td>
+<td>Sem enquadramento JSON</td>
+<td>Sem enquadramento JSON</td>
+<td>Carga útil inalterada; sem prefixo de identidade</td>
+</tr>
+<tr>
+<td>Carregamento de jogo</td>
+<td><code>UploadClientControl</code></td>
+<td><code>UploadServerFrame</code></td>
+<td>Arquivar pedaços</td>
+</tr>
+<tr>
+<td>Controle de contêiner</td>
+<td><code>ContainerControl</code> do servidor</td>
+<td>Nenhum envelope de agradecimento geral</td>
+<td>A jogabilidade usa o contêiner separado <code>/stream</code></td>
+</tr>
+</tbody>
+</table>
+<p>Os tipos de quadros futuros devem chegar ao manipulador de quadros desconhecidos do seu cliente, em vez de travar o recebimento
+laço. A validação do formato JSON não valida regras do jogo, autoriza associação ou impõe taxa
+limites. As páginas de referência definem restrições de função e tamanho/taxa.</p>
+<h2 id="guid-byte-order">Ordem de bytes GUID</h2>
+<p>Os três primeiros grupos UUID são little-endian em um cabeçalho de byte .NET GUID. Por exemplo:</p>
+<pre><code class="language-text">UUID:  00112233-4455-6677-8899-aabbccddeeff
+Bytes: 33 22 11 00 55 44 77 66 88 99 aa bb cc dd ee ff
+</code></pre>
+<p>Um decodificador de navegador para o prefixo de 16 bytes:</p>
+<pre><code class="language-js">function guidFromDotNet(bytes) {
+  if (bytes.length !== 16) throw new Error('Expected a 16-byte GUID');
+  const hex = i =&gt; bytes[i].toString(16).padStart(2, '0');
+  return `${hex(3)}${hex(2)}${hex(1)}${hex(0)}-${hex(5)}${hex(4)}-${hex(7)}${hex(6)}-` +
+    `${hex(8)}${hex(9)}-${hex(10)}${hex(11)}${hex(12)}${hex(13)}${hex(14)}${hex(15)}`;
+}
+</code></pre>
+<p>Os prefixos em tempo real identificam <strong>participantes</strong>, enquanto os prefixos de voz identificam <strong>Usuários</strong>. Um contêiner
+stream tem um tipo de um byte seguido por UUIDs de sessão/usuário, então seu JSON começa em byte <strong>33</strong>. O
+o relé não adiciona nenhum prefixo. Ler cada soquete como o mesmo layout binário corrompe cargas úteis e identidade.</p>
+<p>Ver <a href="/pt/docs/credentials.html">credenciais e identificadores</a>, <a href="/pt/docs/session-lifecycle.html">ciclo de vida da sessão</a>,
+e <a href="/pt/docs/troubleshooting.html#websockets">Solução de problemas do WebSocket</a>.</p>
+
+{% endraw %}

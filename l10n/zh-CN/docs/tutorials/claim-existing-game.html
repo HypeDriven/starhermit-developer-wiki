@@ -1,0 +1,250 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "认领其他人添加的游戏"
+source_url: "/docs/tutorials/claim-existing-game.html"
+source_path: "docs/tutorials/claim-existing-game.md"
+source_hash: "fc2b52c67cda7e6fd24b0791208c1511aafea7d1f6e61e1cf9b61cc9d6eb1003"
+translation: "machine"
+permalink: "/zh-CN/docs/tutorials/claim-existing-game.html"
+---
+{% raw %}
+<h1 id="claim-a-game-someone-else-added">认领其他人添加的游戏</h1>
+<p>如果有人已经将您的公共 GitHub 游戏添加到 StarHermit，您无需创建
+第二次上市。声明现有列表成为其经过验证的所有者并管理其元数据，
+托管、部署、服务器后端和未来的传输。</p>
+<p>声明受到存储库控制的保护。仅仅知道游戏 ID 或存储库 URL 是不够的。
+您必须通过以下两种方式之一证明控制权：</p>
+<ol>
+<li>链接拥有该存储库的个人 GitHub 帐户；或者</li>
+<li>将您的不可变 StarHermit 用户 ID 提交为 <code>owner=</code> 在存储库的 <code>starhermit.txt</code>.</li>
+</ol>
+<p>第二种方法对于组织拥有的存储库特别有用，因为当前
+GitHub 登录检查与个人存储库所有者相匹配，并且不会推断组织成员身份。</p>
+<h2 id="what-claiming-changes">声明发生了什么变化</h2>
+<p>索赔成功：</p>
+<ul>
+<li>保留现有游戏/列表 ID 及其累积历史记录；</li>
+<li>将列表的管理 StarHermit 用户更改为您；</li>
+<li>将列表标记为 <code>isVerifiedOwner: true</code>;</li>
+<li>刷新可信元数据和控制 <code>starhermit.txt</code> 如适用；</li>
+<li>提供或刷新已声明的脚本/容器后端；</li>
+<li>启用可用的平台托管并将部署排队为 <code>pending</code>;</li>
+<li>删除最初提交该列表的人员的管理权限。</li>
+</ul>
+<p>声明不会让之前的提交者访问您的 GitHub 帐户，并且不会合并
+StarHermit 用户帐户。它转移该特定列表的管理。</p>
+<h2 id="before-you-begin">开始之前</h2>
+<p>您需要：</p>
+<ul>
+<li>StarHermit 帐户和完整的用户访问令牌，而不是游戏范围的启动令牌。</li>
+<li>如果使用的话，可以对存储库进行写访问 <code>owner=</code> 证明方法。</li>
+<li>现有的 StarHermit 列表 ID。</li>
+<li>对于克隆存储库游戏，有效的 <code>starhermit.txt</code> 在存储库根目录下。</li>
+</ul>
+<p>仅有的 <code>github.com/&lt;owner&gt;/&lt;repo&gt;</code> 存储库及其 GitHub Pages 站点参与此声明
+流动。任意托管 URL 没有可证明的 GitHub 存储库所有权，因此无法声明这一点
+方式。</p>
+<p>下面的例子使用：</p>
+<pre><code class="language-bash">API=https://api.starhermit.com
+ACCESS_TOKEN='your-full-user-access-token'
+OWNER='your-github-login'
+REPO='your-game-repository'
+</code></pre>
+<p>访问令牌持续 15 分钟。如果即将过期，请在开始之前刷新您的。</p>
+<h2 id="step-1-find-the-existing-listing">第1步：找到现有的列表</h2>
+<p>列出共享游戏：</p>
+<pre><code class="language-bash">curl -sS "$API/api/v1/github-games" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>每个项目都包含不可变的列表 <code>id</code>, 归一化 <code>repoUrl</code>, <code>ownerLogin</code>, <code>repoName</code>, 的
+当前提交者和所有权状态：</p>
+<pre><code class="language-json">{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "repoUrl": "https://github.com/octocat/orbit-league",
+  "ownerLogin": "octocat",
+  "repoName": "orbit-league",
+  "displayName": "Orbit League",
+  "isVerifiedOwner": false,
+  "submittedByUserId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "submittedByUsername": "someone-else"
+}
+</code></pre>
+<p>两者都匹配 <code>ownerLogin</code> 和 <code>repoName</code>;不要仅仅因为游戏的显示名称是而选择游戏
+类似。和 <code>jq</code>:</p>
+<pre><code class="language-bash">GAME_ID=$(
+  curl -sS "$API/api/v1/github-games" \
+    -H "Authorization: Bearer $ACCESS_TOKEN" |
+  jq -r --arg owner "$OWNER" --arg repo "$REPO" \
+    '.[] | select((.ownerLogin | ascii_downcase) == ($owner | ascii_downcase)
+               and (.repoName | ascii_downcase) == ($repo | ascii_downcase)) | .id' |
+  head -n1
+)
+
+printf 'Listing ID: %s\n' "$GAME_ID"
+</code></pre>
+<p>如果结果为空则停止。请勿使用从不相关列表中复制的 ID 致电索赔。</p>
+<h2 id="step-2-choose-how-to-prove-ownership">第2步：选择如何证明所有权</h2>
+<h3 id="option-a-link-the-repository-owners-github-account">选项 A：链接存储库所有者的 GitHub 帐户</h3>
+<p>当存储库由您的个人 GitHub 登录名直接拥有时，请使用此选项。</p>
+<p>从 StarHermit 的帐户/设置流程中，启动 GitHub OAuth <strong>关联</strong> 模式，同时登录
+应该管理游戏的 StarHermit 帐户。链接与意外创建链接不同
+使用 GitHub 登录的第二个 StarHermit 帐户。</p>
+<p>API 流程开始于：</p>
+<pre><code class="language-text">GET /api/v1/auth/oauth/github/authorize?link=true
+</code></pre>
+<p>它是浏览器驱动的并使用短期状态 cookie。链接需要最近的 StarHermit
+认证。在启动它的同一浏览器会话中完成 GitHub 授权。</p>
+<p>验证结果：</p>
+<pre><code class="language-bash">curl -sS "$API/api/v1/me/github" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>预期的：</p>
+<pre><code class="language-json">{ "linked": true, "login": "octocat" }
+</code></pre>
+<p>返回的登录名必须与现有列表匹配 <code>ownerLogin</code>，不区分大小写。个人的
+GitHub 登录并不能证明拥有该存储库的组织的成员资格。对于一个
+组织拥有的存储库，请使用选项 B。</p>
+<h3 id="option-b-add-owner-to-starhermittxt">选项B：添加 <code>owner=</code> 到 <code>starhermit.txt</code></h3>
+<p>这证明了控制力，因为只有能够发布存储库内容的人才能增加价值。
+放 <code>owner</code> 到您不可变的 StarHermit 用户 ID (UUID)， <strong>不是</strong> 您的用户名或昵称。</p>
+<p>获取您的身份证：</p>
+<pre><code class="language-bash">STARHERMIT_USER_ID=$(
+  curl -sS "$API/api/v1/me" \
+    -H "Authorization: Bearer $ACCESS_TOKEN" |
+  jq -r '.id'
+)
+</code></pre>
+<p>在存储库根目录中，创建或更新 <code>starhermit.txt</code>:</p>
+<pre><code class="language-ini">name=Orbit League
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html
+owner=3fa85f64-5717-4562-b3fc-2c963f66afa6
+</code></pre>
+<p>将示例所有者替换为 <code>STARHERMIT_USER_ID</code>。不要将您的用户名或昵称放在这里；
+这些可以改变，而用户 ID 是稳定的所有权标识符。</p>
+<p>对于一款权威游戏，只保留一个后端声明：</p>
+<pre><code class="language-ini"># JavaScript runtime:
+server=server.js
+
+# OR container runtime, never both:
+# container.image=ghcr.io/your-org/orbit-server@sha256:&lt;64-lowercase-hex&gt;
+</code></pre>
+<p>提交清单并将其推送到 StarHermit 可以读取的存储库/版本：</p>
+<pre><code class="language-bash">git add starhermit.txt
+git commit -m "Declare StarHermit game ownership"
+git push
+</code></pre>
+<p>在声明之前，打开存储库的原始 <code>starhermit.txt</code> 未经身份验证的浏览器中的 URL 以及
+确认新值是公开可读的。声明在请求时读取存储库；一个
+未经推动的局部变革不能证明任何事情。</p>
+<h2 id="step-3-validate-the-manifest">第 3 步：验证清单</h2>
+<p>对于普通的克隆存储库游戏，声明需要：</p>
+<ul>
+<li><code>starhermit.txt</code> 在存储库根目录下；</li>
+<li>非空 <code>name=</code>;</li>
+<li><code>launch=</code> 指向存储库相关的 <code>.html</code> 或者 <code>.htm</code> 文件;</li>
+<li>有效的可选 <code>server=</code> 路径结束于 <code>.js</code>/<code>.mjs</code>，或有效的 <code>container.image=</code> 宣言;</li>
+<li>永远不会两个服务器同时运行。</li>
+</ul>
+<p>GitHub Pages 列表将其托管 URL 作为启动目标，并且不需要清单
+当个人 GitHub 所有权得到证明时，尽管有效的清单名称仍然可以更新其
+显示名称。</p>
+<p>如果游戏声明了一个容器，它的镜像必须满足注册表、所有者命名空间和摘要
+规则在 <a href="/zh-CN/docs/api/container-games.html">容器托管的游戏服务器</a>。容器托管也可以
+受平台运营商限制。</p>
+<h2 id="step-4-claim-the-listing">第 4 步：认领列表</h2>
+<p>索赔请求没有正文：</p>
+<pre><code class="language-bash">curl -sS -X POST \
+  "$API/api/v1/me/github-games/$GAME_ID/claim" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>一个成功的 <code>200</code> 返回更新后的游戏：</p>
+<pre><code class="language-json">{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "repoUrl": "https://github.com/octocat/orbit-league",
+  "ownerLogin": "octocat",
+  "repoName": "orbit-league",
+  "displayName": "Orbit League",
+  "launchPath": "index.html",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "isVerifiedOwner": true,
+  "metadataSource": "starhermit.txt",
+  "hosting": {
+    "hostingEnabled": true,
+    "deployStatus": "pending"
+  }
+}
+</code></pre>
+<p>ID 应与步骤 1 中找到的 ID 相同。申领成功后请勿创建新列表。</p>
+<p>特意允许声明您已经管理的列表。它重新读取清单，
+重新配置后端并重新排队托管，因此可以使用相同的调用来重新同步
+存储库更改后所有者管理的游戏。</p>
+<h2 id="step-5-verify-takeover-and-deployment">第 5 步：验证接管和部署</h2>
+<p>确认游戏现在出现在您的托管列表中：</p>
+<pre><code class="language-bash">curl -sS "$API/api/v1/me/github-games" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" |
+jq --arg id "$GAME_ID" '.[] | select(.id == $id)'
+</code></pre>
+<p>检查部署状态：</p>
+<pre><code class="language-bash">curl -sS \
+  "$API/api/v1/me/github-games/$GAME_ID/deployment" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+</code></pre>
+<p>声明通常会对部署进行排队，因此 <code>pending</code> 索赔后立即正常。投票与
+退避，直到达到环境的实时/成功状态或暴露 <code>deployError</code>.</p>
+<p>接管后，您可用的管理端点包括：</p>
+<pre><code class="language-text">PUT    /api/v1/me/github-games/{id}/deployment  pin a commit/branch and redeploy
+POST   /api/v1/me/github-games/{id}/bundle      upload built client/container output
+PUT    /api/v1/me/github-games/{id}/hosting     requeue hosting where supported
+POST   /api/v1/me/github-games/{id}/transfer    transfer management deliberately
+DELETE /api/v1/me/github-games/{id}             remove the game
+</code></pre>
+<p>原始提交者不再在下面看到此列表 <code>GET /api/v1/me/github-games</code> 并且不能
+为其使用这些所有者范围的管理端点。</p>
+<h2 id="troubleshooting">故障排除</h2>
+<h3 id="403-link-the-repository-owner-or-add-owner"><code>403</code>：链接存储库所有者或添加 <code>owner=</code></h3>
+<p>链接的 GitHub 登录名不匹配 <code>ownerLogin</code>，或清单 <code>owner</code> 不完全匹配
+您的 StarHermit 用户 ID。</p>
+<ul>
+<li>查看 <code>GET /api/v1/me/github</code>.</li>
+<li>检查准确的 <code>ownerLogin</code> 由公开上市返回。</li>
+<li>对于组织存储库，使用 <code>owner=&lt;your StarHermit user ID&gt;</code> 在回购协议中。</li>
+<li>确认您推送了清单并且其原始 URL 是公开可读的。</li>
+</ul>
+<h3 id="404-no-shared-game-with-that-id"><code>404</code>: 没有与该 ID 共享的游戏</h3>
+<p>ID 错误，或者列表已被删除。重复步骤 1。已删除的列表不可领取。</p>
+<h3 id="400-missing-or-invalid-starhermittxt"><code>400</code>: 缺失或无效 <code>starhermit.txt</code></h3>
+<p>对于克隆存储库，请确保根清单有效 <code>name</code> 和 HTML <code>launch</code> 价值观。还有
+验证可选脚本/容器声明。该声明最初并不信任元数据
+由非所有者输入；它用存储库控制的元数据替换它。</p>
+<h3 id="claim-fails-around-the-slugbackend">slug/后端的声明失败</h3>
+<p>该脚本可能无效或容器托管可能不可用。检查返回的错误并
+后端声明，然后再次调用claim。平台将游戏的UUID分配为其slug；
+没有明显的问题可供选择或解决。</p>
+<h3 id="github-was-linked-but-the-wrong-starhermit-account-owns-the-link">GitHub 已链接，但错误的 StarHermit 帐户拥有该链接</h3>
+<p>登录目标 StarHermit 帐户并完成 OAuth <strong>关联</strong> 流向那里。请勿索赔
+从临时的第二个 StarHermit 帐户，然后依靠帐户合并； API传输游戏
+管理，而不是用户身份。</p>
+<h2 id="security-notes">安全说明</h2>
+<ul>
+<li>切勿接受声明链接或列表 ID 作为存储库所有权的证明。</li>
+<li>不要将 GitHub 访问令牌、容器凭据或其他机密放入 <code>starhermit.txt</code>.</li>
+<li>始终使用不可变的 StarHermit 用户 ID <code>owner=</code>;不要使用用户名或昵称。</li>
+<li>在声明之前查看现有列表和存储库 URL；显示名称不唯一。</li>
+<li>如果您稍后转让游戏，接收者将成为管理员，但已验证所有者状态为
+重置。如果他们控制存储库，他们必须自己运行声明流程。</li>
+</ul>
+<h2 id="reference-pages">参考页</h2>
+<ul>
+<li><a href="/zh-CN/docs/api/github-games.html">GitHub 游戏 API</a></li>
+<li><a href="/zh-CN/docs/api/auth.html#oauth">身份验证和 GitHub OAuth</a></li>
+<li><a href="/zh-CN/docs/api/game-scripts.html">游戏脚本</a></li>
+<li><a href="/zh-CN/docs/api/container-games.html">容器托管的游戏服务器</a></li>
+<li><a href="/zh-CN/docs/tutorials/dedicated-server-onboarding.html">专用服务器发布</a></li>
+</ul>
+
+{% endraw %}

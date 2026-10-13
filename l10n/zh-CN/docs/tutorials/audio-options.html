@@ -1,0 +1,220 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "教程：具有自动检测声音限制的音频选项"
+source_url: "/docs/tutorials/audio-options.html"
+source_path: "docs/tutorials/audio-options.md"
+source_hash: "f94d55a5fbdf452a7ffb1992ee0ddde65a728d25c497469cf233f4440ff666ea"
+translation: "machine"
+permalink: "/zh-CN/docs/tutorials/audio-options.html"
+---
+{% raw %}
+<h1 id="tutorial-audio-options-with-an-auto-detected-sound-limit">教程：具有自动检测声音限制的音频选项</h1>
+<p>给你的游戏一个 <strong>声音的</strong> 旁边的部分 <a href="/zh-CN/docs/tutorials/graphics-options.html">图形</a>，可从
+主菜单和游戏过程中。从下面的基线开始，让玩家覆盖它，并强制执行
+保持混音和空间化工作有限的同时播放实例的最大数量。
+这些是推荐的游戏端默认设置，而不是平台强制执行的设置。</p>
+<p><a href="/docs/sdk/audio-options.js"><code>audio-options.js</code></a> 为体积曲线提供无依赖的助手，
+设置验证和保守的自动声音限制。它不创建音频上下文、麦克风
+采集、混音器、选项面板或网络连接；您的游戏连接控制和播放。</p>
+<h2 id="1-baseline-controls">1. 基线控制</h2>
+<table>
+<thead>
+<tr>
+<th>控制</th>
+<th>推荐起始值</th>
+<th>行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>主音量</td>
+<td>80%</td>
+<td>控制所有游戏播放，包括接收的语音</td>
+</tr>
+<tr>
+<td>音乐音量</td>
+<td>70%</td>
+<td>音乐总线，乘以Master</td>
+</tr>
+<tr>
+<td>音效音量</td>
+<td>100%</td>
+<td>游戏效果总线，乘以 Master</td>
+</tr>
+<tr>
+<td>用户界面音量</td>
+<td>80%</td>
+<td>菜单和接口总线，乘以Master</td>
+</tr>
+<tr>
+<td>语音音量</td>
+<td>100%</td>
+<td>收到语音总线，乘以Master；永远不会改变麦克风增益</td>
+</tr>
+<tr>
+<td>最大并发声音数</td>
+<td>汽车</td>
+<td>显示检测计数及有效限值；提供固定 16、32、64、128 和游戏上限内经过验证的自定义计数</td>
+</tr>
+<tr>
+<td>语音聊天</td>
+<td>离开</td>
+<td>明确的会话选择加入；支持语音时提供一键通和开放式麦克风</td>
+</tr>
+<tr>
+<td>麦克风/输出设备</td>
+<td>系统默认</td>
+<td>在支持的情况下提供选择；将设备标识符保留在本地</td>
+</tr>
+<tr>
+<td>回声消除/噪声抑制</td>
+<td>开 / 开</td>
+<td>请求支持捕获处理；显示有效结果</td>
+</tr>
+<tr>
+<td>自动麦克风增益</td>
+<td>离开</td>
+<td>可选的捕捉处理，与播放音量无关</td>
+</tr>
+</tbody>
+</table>
+<p>在没有语音的游戏中隐藏语音控制。为每个滑块提供可见的百分比、可访问的标签，
+键盘支持和可用的触摸目标；让面板在小屏幕上滚动。包括明确的
+记住上一个级别的静音控制。立即应用更改，无需重新加载。
+可选的每个参与者音量和本地静音可帮助玩家平衡语音室。</p>
+<p>将滑块位置视为 0–1 并使用 <code>volumeGain(position)</code> （位置立方）感知曲线。
+通过其自己的增益连接每条总线，然后是主增益，因此主增益仅应用一次。
+斜坡增益超过约 20 毫秒，以避免喀哒声；零必须保持沉默。标准化资产并提供输出
+动态余量或限制器可防止声音重叠时发生削波。解锁用户的浏览器播放
+手势和处理暂停的上下文；不可用的音频必须让游戏保持可玩状态。</p>
+<h2 id="2-auto-detect-a-sensible-concurrency-limit">2. 自动检测合理的并发限制</h2>
+<p>使用 CPU 和内存提示，独立于图形预设或 GPU。起始政策是：</p>
+<table>
+<thead>
+<tr>
+<th>可用提示（从上到下评估）</th>
+<th>起始计数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>最多两个逻辑 CPU，或最多 2 GB 报告内存</td>
+<td>16</td>
+</tr>
+<tr>
+<td>至少四个逻辑CPU，不受上述限制</td>
+<td>64</td>
+</tr>
+<tr>
+<td>能力未知，或者不具备上述限制的 CPU 数量少于 4 个</td>
+<td>32</td>
+</tr>
+</tbody>
+</table>
+<p>参考助手将这些计数限制在游戏的硬上限， <strong>默认 64</strong>和界限
+自定义上限为 1–256。开发者可以在分析游戏后手动允许 128 或 256；汽车
+不单独从核心数量中选择这些。较小的游戏可以将上限设置为 16 或 32。
+丢失或无效的提示仍然未知。这些数字是初步启发式的，而不是测量的硬件
+容量： <a href="https://html.spec.whatwg.org/multipage/system-state.html#dom-navigator-hardwareconcurrency">浏览器可能会减少逻辑 CPU 计数</a>，
+和 <a href="https://www.w3.org/TR/device-memory/">记忆提示是近似的并且隐私受到限制</a>.</p>
+<pre><code class="language-js">import { detectAudioSystem, resolveAudio, volumeGain } from './audio-options.js';
+
+const system = detectAudioSystem();
+const GAME_SOUND_CEILING = 64;
+let saved = {}; // Load your player's validated preferences; empty means defaults.
+
+function applyAudio() {
+  const settings = resolveAudio(saved, system, GAME_SOUND_CEILING);
+  // mixer is your own adapter, not a StarHermit SDK API.
+  mixer.setPlaybackLimit(settings.effectiveConcurrentSounds);
+  mixer.setBusGain('master', volumeGain(settings.master));
+  for (const bus of ['music', 'effects', 'ui', 'voice']) {
+    mixer.setBusGain(bus, volumeGain(settings[bus]));
+  }
+  return settings; // Show recommendedConcurrentSounds and effectiveConcurrentSounds.
+}
+
+function setSoundLimit(value) {
+  // A select supplies 'auto'; parse and validate the custom integer before calling.
+  saved = { ...saved, maxConcurrentSounds: value };
+  applyAudio();
+  // Persist the requested choice, including 'auto', through your settings store.
+}
+</code></pre>
+<p>在相关混音器/输出格式更改后，在每个设备上再次运行“自动”。节省 <code>'auto'</code>，不是它的
+检测到的数量。手动计数仍然是手动的，受游戏/后端上限的影响。显示说明
+当有效计数与请求计数不同时。</p>
+<p>对于仪表混音器，使用有界的、听不见的代表性工作负载来优化 Auto：测试
+实际的重采样、空间化和效果链，并以音频块的最多 25% 为目标
+混合持续时间。例如，48 kHz 的 128 帧块为该目标提供大约 0.67 毫秒。
+安排分析远离活跃的游戏。仅默默无闻的收获并不能保证代表性
+工作，因为后端可能会优化静音。标准 Web 音频不会暴露每个图形的 CPU 时间；
+除非您自己的后端提供可靠的计时，否则请使用提示后备。不推断音频 CPU 成本
+来自 FPS 或输出通道数。</p>
+<p>自动可能会在持续测得的过载或欠载时退出会话，并具有滞后作用
+避免振荡；不要覆盖保存的首选项。通过以下方式在本地缓存测量的建议
+后端、格式、效果配置和代码版本。进行这些更改后重新评估。实例
+计算绑定的混音工作，但解码、麦克风处理和网络需要单独的预算。</p>
+<h2 id="3-enforce-the-cap-in-playback">3. 强制播放上限</h2>
+<p>数数 <strong>每个活动的播放实例</strong> 跨越音乐、循环、效果、UI 和接收到的语音。
+立体声就是一个例子。暂停/停止的声音、麦克风捕获和没有活动的虚拟声音
+渲染不算。音乐交叉淡入淡出和释放尾部计数直至完成。安排未来
+通过相同的分配器启动并绑定它们的挂起队列。</p>
+<p>为每个播放路径使用一个有界分配器，包括媒体元素和 WebRTC 输出：</p>
+<ol>
+<li>预留一部分用于音乐、重要提示和预期的语音参与者。预订
+分享上限；他们不添加额外的插槽。当房间大小或限制发生变化时进行调整。</li>
+<li>达到容量时，删除传入的低优先级效果或替换较低优先级的活动实例。
+距离、可听度和重复效果可能会破坏优先级关系。重复数据删除突发和限制
+在创建音频节点或解码新缓冲区之前重复发射器。</li>
+<li>衰落的受害者仍然占据它的槽位：将其替换排队，直到它停止，或者将其停在安全的地方
+开始替换之前的边界。切勿暂时超过褪色上限。</li>
+<li>释放并断开已结束的源。减少限制必须回收插槽，包括循环和
+尾巴，然后才承认新的播放。虚拟化循环仅保留廉价的位置/状态数据；
+也断开其昂贵的处理和绑定的虚拟实例簿记。</li>
+</ol>
+<p>优先考虑声音和有意义的游戏提示而不是氛围。连接到混音器的 WebRTC 轨道必须
+禁用直接媒体元素播放，以防止重复音频和不计其数的播放。
+单独静音增益并不会停止解码或空间化；抑制、暂停或断开工作
+在后端允许的情况下。暴露开发中的活动、抑制和虚拟化计数
+诊断，以便可以验证 CPU 限制。</p>
+<h2 id="4-voice-chat-controls">4.语音聊天控制</h2>
+<p>遵循 <a href="/zh-CN/docs/api/voice.html">语音API</a> 对于对话会员、加入/离开、发信号、自己静音
+并将主机静音。仅在玩家启用捕获后才显式加入并请求麦克风访问权限；
+无需麦克风即可继续收听。浏览器捕获需要
+<a href="https://www.w3.org/TR/mediacapture-streams/#dom-mediadevices-getusermedia">许可和安全上下文</a>。
+拒绝权限应显示有用状态，并使播放和文本聊天可用。</p>
+<p>启用语音时，建议使用一键通模式。提供可重新绑定的密钥和
+按住触摸控制；按键/指针释放时释放传输、取消输入、模糊和
+隐藏页面转换。开放式麦克风是一个明确的替代方案。显示麦克风权限，
+输入电平、讲话状态、静音/聋以及任何主机静音。麦克风测试仅根据请求运行。
+Deafen 在活动时将接收到的声音静音并抑制本地传输。</p>
+<p>在本地控制出站音频并更新平台自身的静音状态。在每次加入或
+重新连接，发送媒体前恢复预期静音：加入会清除参与者自己的静音
+在 API 中，主机静音仍然存在。点对点媒体也必须尊重主机本地静音；信令
+不允许平台过滤直接对等音频流。停止捕获轨道并关闭媒体
+禁用语音或会话结束时的连接。永远不会默默地保存首选模式
+下次启动时重新打开麦克风。</p>
+<h2 id="5-save-and-verify">5.保存并验证</h2>
+<p>保存游戏中的普通偏好设置 <a href="/zh-CN/docs/api/games.html#per-player-game-settings">每个玩家的设置</a>,
+例如在 <code>audio</code> 作为 <code>{ saved: { master: 0.8, maxConcurrentSounds: 'auto', voiceMode: 'off' }, at: … }</code>。
+保留命名空间的本地缓存以供独立播放。先读后写，协调时间戳，以及
+块云在读取失败后写入，直到重试成功，如图形教程中所示。
+在应用远程设置之前验证它们。保留设备 ID、权限、分析结果、
+本地会话成员资格和当前麦克风活动；单独存储首选语音模式
+从当前是否启用捕获。</p>
+<ul>
+<li><code>node --test tests/audio-options.test.mjs</code> 检查运送的助手的未知/受限/更强
+检测、上限、手动选择、其他设备上的自动、音量范围和语音默认值。</li>
+<li>在您的游戏中，通过鼠标、键盘和触摸来驱动真正的控制；检查实时音量变化，
+静音恢复、持久性以及重载后自动/手动切换。</li>
+<li>超出限制触发重叠的音乐、效果、声音、淡入淡出和预定声音。确认
+主动播放永远不会超过它，包括实时降低它时，并且重要的提示会保留下来。</li>
+<li>测试拒绝麦克风权限、一键通取消、重新连接静音、主机静音、设备
+失落和离开的声音。如果没有预期的会话选择加入，则无法恢复传输。</li>
+</ul>
+<p>参见： <a href="/zh-CN/docs/tutorials/graphics-options.html">图形选项</a> · <a href="/zh-CN/docs/sdk/javascript.html">JavaScript SDK</a> ·
+<a href="/zh-CN/docs/api/voice.html">语音API</a>.</p>
+
+{% endraw %}

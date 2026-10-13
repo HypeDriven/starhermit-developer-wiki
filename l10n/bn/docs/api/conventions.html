@@ -1,0 +1,192 @@
+---
+layout: "wiki"
+lang: "bn"
+title: "এপিআই কনভেনশন"
+source_url: "/docs/api/conventions.html"
+source_path: "docs/api/conventions.md"
+source_hash: "3772241b0e04e8e2f4e4ecf1c0ef8e2d956c065446a78c7df107b6205de258d6"
+translation: "machine"
+permalink: "/bn/docs/api/conventions.html"
+---
+{% raw %}
+<h1 id="api-conventions">এপিআই কনভেনশন</h1>
+<p>REST ব্যবহার করে <code>https://api.starhermit.com/api/v1/...</code>; সকেট ব্যবহার <code>wss://api.starhermit.com/ws/v1/...</code>.
+হোস্ট করা গেম কল করতে পারেন <code>/api/v1/...</code> এবং <code>/ws/v1/...</code> তাদের নিজস্ব উত্স উপর. নেটিভ ক্লায়েন্ট ব্যবহার
+সর্বজনীন API মূল। অন্য উত্সের একটি বিকাশ পৃষ্ঠার জন্য গেমটিতে একটি অনুমোদিত CORS উত্স প্রয়োজন৷
+হোস্ট; শুধুমাত্র একটি SDK বেস ইউআরএল সেট করা সেই উৎপত্তিকে অনুমোদন করে না।</p>
+<h2 id="requests-and-responses">অনুরোধ এবং প্রতিক্রিয়া</h2>
+<p>এর সাথে JSON পাঠান <code>Content-Type: application/json</code>, কাঁচা gzip বান্ডেল আপলোড ছাড়া। JSON সদস্যদের নাম
+ক্যামেলকেস হয়। REST-এ বাহক শংসাপত্র পাঠান <code>Authorization</code> হেডার</p>
+<table>
+<thead>
+<tr>
+<th>প্রতিক্রিয়া</th>
+<th>কিভাবে এটা পড়তে</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>200</code> / <code>201</code> JSON</td>
+<td>নথিভুক্ত বস্তু বা অ্যারে পার্স করুন; অতিরিক্ত ক্ষেত্র সহ্য করুন</td>
+</tr>
+<tr>
+<td><code>204</code></td>
+<td>শরীর ছাড়া সাফল্য; কল করবেন না <code>response.json()</code></td>
+</tr>
+<tr>
+<td><code>302</code></td>
+<td>ব্রাউজার সাইন-ইন/নিশ্চিতকরণ পুনঃনির্দেশ; OAuth পৃষ্ঠাগুলি আনার পরিবর্তে নেভিগেট করুন</td>
+</tr>
+<tr>
+<td><code>304</code></td>
+<td>শর্তাধীন পড়া অপরিবর্তিত; আপনি ইতিমধ্যে ধারণ করা ডেটা ধরে রাখুন</td>
+</tr>
+<tr>
+<td>ছবি, সংযুক্তি, মেঘ সংরক্ষণ</td>
+<td>রেসপন্স কন্টেন্ট টাইপ এবং এন্ডপয়েন্ট কন্ট্রাক্ট ব্যবহার করে বাইট পড়ুন</td>
+</tr>
+<tr>
+<td>ত্রুটি</td>
+<td>প্রথমে স্ট্যাটাস পড়ুন, তারপর শরীরকে আত্মরক্ষামূলকভাবে পার্স করুন</td>
+</tr>
+</tbody>
+</table>
+<p>সাধারণ ত্রুটি ফর্ম হয় <code>{ "error": "...", "code": "..." }</code>, ঐচ্ছিক ক্ষেত্রগুলির উপর নির্ভর করে
+শেষ বিন্দু <code>error</code> প্রায়ই মানুষের পাঠযোগ্য; <code>code</code> একটি স্থিতিশীল বৈষম্যকারী যেখানে প্রদান করা হয়.
+শর্তাবলী এবং কিছু অন্যান্য শেষ পয়েন্ট সরাসরি একটি বৈষম্যকারীকে রাখে <code>error</code>. কিছু শেষ পয়েন্ট প্লেইন ফিরে
+টেক্সট, একটি খালি শরীর, অথবা একটি বৈধতা সমস্যা বিবরণ বস্তুর সাথে <code>title</code>, <code>status</code> এবং <code>errors</code>.
+ক্লায়েন্টদের অনুমান করা উচিত নয় যে প্রতিটি অসফল প্রতিক্রিয়া JSON বা একই ক্ষেত্র রয়েছে৷</p>
+<pre><code class="language-js">export async function readResponse(response) {
+  if (response.status === 204 || response.status === 304) return null;
+  const text = await response.text();
+  let body;
+  try { body = text ? JSON.parse(text) : null; } catch { body = text || null; }
+  if (!response.ok) {
+    const message = (body &amp;&amp; typeof body === 'object' &amp;&amp; (body.error || body.message || body.title))
+      || (typeof body === 'string' &amp;&amp; body) || response.statusText;
+    throw Object.assign(new Error(message), {
+      status: response.status, code: body?.code, body,
+      retryAfter: response.headers.get('Retry-After'),
+    });
+  }
+  return body;
+}
+</code></pre>
+<h2 id="time-sizes-and-nulls">সময়, মাপ, এবং শূন্য</h2>
+<ul>
+<li><code>createdAt</code>, <code>updatedAt</code>, <code>finishedAt</code>, এবং অনুরূপ অ্যাকাউন্ট/রিসোর্স টাইমস্ট্যাম্প হল ISO 8601 স্ট্রিং
+একটি অফসেট সহ। অনুপস্থিত বা চিকিত্সা <code>null</code> অনুপলব্ধ হিসাবে ঐচ্ছিক মান।</li>
+<li><code>ctx.now</code>, <code>summary.deadline</code>, সেশন-তালিকা <code>deadline</code>, এবং <code>/time.serverTime</code> পূর্ণসংখ্যা ইউনিক্স
+<strong>মিলিসেকেন্ড</strong>. দিয়ে রূপান্তর করুন <code>new Date(value)</code>, না <code>Date.parse(value)</code>.</li>
+<li>বাইটে সীমা মান বাইট, বেস64 অক্ষর নয়। একটি Base64 JSON আপলোড তার থেকে বড়
+ডিকোড করা বিষয়বস্তু। যখন উপলব্ধ একটি শেষ পয়েন্ট দ্বারা রিপোর্ট কার্যকর সীমা ব্যবহার করুন.</li>
+<li>বাদ দেওয়া, <code>null</code>, এবং একটি খালি বস্তু সর্বজনীনভাবে সমতুল্য নয়। সেটিংস <code>PATCH</code> অপসারণ করে a
+নামের কী দিয়ে <code>null</code>; একক-কী সেটিংস <code>PUT</code> দোকান <code>null</code> একটি মান হিসাবে। সংগ্রহ <code>PUT</code> প্রতিস্থাপন করে
+পুরো মানচিত্র। প্রতিটি শেষ পয়েন্টের আপডেট নিয়ম পড়ুন।</li>
+<li>একটি সেটিংস প্যাচ একত্রিত হয় <strong>শীর্ষ-স্তরের কী</strong>. একটি সরবরাহকৃত বস্তুর মান সেই কীটির মান প্রতিস্থাপন করে;
+এটি পুনরাবৃত্তভাবে নেস্টেড বৈশিষ্ট্যগুলিকে একত্রিত করে না।</li>
+</ul>
+<h2 id="pagination">পৃষ্ঠা সংখ্যা</h2>
+<p>পেজিং এক-ভিত্তিক যেখানে <code>page</code>/<code>pageSize</code> সমর্থিত হয় বিভিন্ন API এর ইচ্ছাকৃতভাবে ভিন্ন আছে
+প্রতিক্রিয়া খাম; একটি পার্সার পুনরায় ব্যবহার করবেন না যা একটি একক গণনা-ক্ষেত্রের নাম ধরে নেয়।</p>
+<table>
+<thead>
+<tr>
+<th>এলাকা</th>
+<th>সংগ্রহ আকৃতি</th>
+<th>ডিফল্ট / সর্বোচ্চ পৃষ্ঠার আকার</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>সফ্টওয়্যার শিরোনাম এবং বিল্ড</td>
+<td><code>{ items, totalCount, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>চ্যাট বার্তা</td>
+<td><code>{ conversationId, items, totalCount, page, pageSize }</code></td>
+<td>50 / 100</td>
+</tr>
+<tr>
+<td>লিডারবোর্ড এন্ট্রি</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>বাহ্যিক সফ্টওয়্যার</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20; একটি ছোট ইতিবাচক পৃষ্ঠা আকার অনুরোধ করুন</td>
+</tr>
+<tr>
+<td>রিপোর্ট, কন্টেইনার ক্র্যাশ রেকর্ড, সংযম তালিকা</td>
+<td><code>{ items, total, page, pageSize }</code></td>
+<td>20 / 100</td>
+</tr>
+<tr>
+<td>সেশন, বন্ধু, গেম তালিকা, কৃতিত্ব</td>
+<td>অ্যারে</td>
+<td>এন্ডপয়েন্ট-নির্দিষ্ট ক্যাপ; কোন জেনেরিক পরবর্তী পৃষ্ঠা কার্সার</td>
+</tr>
+<tr>
+<td>সংযম প্রত্যাহার ফিড</td>
+<td>কার্সার ভিত্তিক</td>
+<td>ফিরে আসা কার্সার রাখুন; থেকে পুনরুদ্ধার <code>410</code> নথিভুক্ত হিসাবে</td>
+</tr>
+</tbody>
+</table>
+<p>প্রতিক্রিয়া পেজিং মেটাডেটা যেখানে উপলব্ধ সেখানে পরিবেশিত পৃষ্ঠা প্রতিফলিত করে। <a href="/bn/#api-reference">রেফারেন্স পাতা</a>
+এবং <a href="/bn/docs/api/contracts.html">মেশিন-পাঠযোগ্য চুক্তি</a> এন্ডপয়েন্ট-নির্দিষ্ট ক্যোয়ারী প্যারামিটার বর্ণনা করুন।</p>
+<h2 id="retry-and-concurrency">পুনরায় চেষ্টা করুন এবং একযোগে</h2>
+<table>
+<thead>
+<tr>
+<th>পরিস্থিতি</th>
+<th>অ্যাকশন</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>অ্যাকাউন্ট অ্যাক্সেস টোকেন দিয়ে প্রত্যাখ্যান করা হয়েছে <code>401</code></td>
+<td>একটি শেয়ার করা রিফ্রেশ অনুরোধ ব্যবহার করে একবার রিফ্রেশ করুন; প্রত্যাখ্যান হলে সাইন ইন করুন</td>
+</tr>
+<tr>
+<td>লঞ্চ টোকেনের মেয়াদ শেষ হয়েছে৷</td>
+<td>সাইন-ইন/লঞ্চারের মাধ্যমে একটি নতুন টোকেন পান; মেয়াদোত্তীর্ণ টোকেন নিজেদের পুনর্নবীকরণ করতে পারে না</td>
+</tr>
+<tr>
+<td><code>403 terms_acceptance_required</code></td>
+<td>বর্তমান শর্তাবলী প্রদর্শন করুন এবং স্পষ্টভাবে স্বীকার করুন, তারপর আবার চেষ্টা করুন</td>
+</tr>
+<tr>
+<td>অন্যান্য <code>403</code></td>
+<td>সুযোগ, সদস্যপদ, অনুমতি, বা অ্যাকাউন্ট স্থিতি সমাধান করুন; একটি লুপে রিফ্রেশ করবেন না</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>সদৃশ/রাষ্ট্র/সংশোধন দ্বন্দ্ব সমাধান করুন; একটি সম্পদ পরিবর্তন করার আগে পুনরায় পড়ুন</td>
+</tr>
+<tr>
+<td>মেঘ-সংরক্ষণ <code>412</code></td>
+<td>নতুন সংস্করণ লোড করুন এবং গেমটিকে একত্রিত করতে বা এটি গ্রহণ করতে দিন</td>
+</tr>
+<tr>
+<td><code>429</code> বা অস্থায়ী <code>503</code></td>
+<td>সম্মান <code>Retry-After</code>, জিটার যোগ করুন, এবং আবদ্ধ পুনরায় চেষ্টা করুন</td>
+</tr>
+<tr>
+<td>একটি লেখার সময় নেটওয়ার্ক ব্যর্থতা</td>
+<td>ফলাফল অজানা হতে পারে; ক্রিয়াটি পুনরাবৃত্তি করার আগে সম্পদের অবস্থা পরিদর্শন করুন</td>
+</tr>
+</tbody>
+</table>
+<p><code>Retry-After</code> সেকেন্ড বা HTTP তারিখ হতে পারে। একটি idempotency হেডার উদ্ভাবন করবেন না: API তা করে না
+একটি সাধারণ অক্ষমতা-কী প্রক্রিয়া প্রতিশ্রুতি. সেশন তৈরির পুনরায় চেষ্টা বা একটি আমন্ত্রণ তৈরি করতে পারে
+আরেকটি সম্পদ বা প্রথমটির সাথে দ্বন্দ্ব। পঠিত এবং স্পষ্টভাবে অদম্য ক্রিয়াকলাপ পছন্দ করুন
+স্বয়ংক্রিয় পুনরায় চেষ্টা। রিফ্রেশ ঘূর্ণন, সম্পূর্ণ আপলোড, শর্ত সম্মতি, এবং টার্মিনাল খেলা ফলাফল প্রতিটি
+তাদের নিজস্ব নিয়ম আছে।</p>
+<p>তুলনা এবং অদলবদল লেখার জন্য ক্লাউড-সেভ ইটিগস, রুম ব্যবহার করুন <code>expectedRevision</code>, বা সংযম সংশোধন
+যেখানে সমর্থিত। একটি সফল লেখা অগত্যা একটি সম্পূর্ণ কন্টেইনার স্থাপনার নয়; তার যাচাই করুন
+নতুন বিল্ডে খেলোয়াড়দের পাঠানোর আগে অবস্থা। দেখুন <a href="/bn/docs/troubleshooting.html">সমস্যা সমাধান</a>.</p>
+
+{% endraw %}

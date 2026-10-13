@@ -1,0 +1,848 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "GitHub 游戏"
+source_url: "/docs/api/github-games.html"
+source_path: "docs/api/github-games.md"
+source_hash: "3ac05be03d6f084237353cccfe3c7a2c060046dd000d68711193907a1b4c6263"
+translation: "machine"
+permalink: "/zh-CN/docs/api/github-games.html"
+---
+{% raw %}
+<h1 id="github-games">GitHub 游戏</h1>
+<p>将游戏从 GitHub 存储库发布到 <a href="https://starhermit.com">星隐士</a>，或者注册一个已经托管的网页游戏。对于存储库游戏，平台读取 <code>starhermit.txt</code>，克隆存储库，并将其提供给 <code>&lt;slug&gt;.starhermit.com</code>。因为 <code>/api</code> 和 <code>/ws</code> 被代理来自该子域的同源，平台托管的游戏需要 <strong>没有 CORS 或基于 API 的配置</strong>。固定提交控制哪个存储库版本处于活动状态。这 <a href="/zh-CN/docs/tutorials/chess-walkthrough.html">国际象棋参考实现</a> 以这种方式发布并作为模型的参考示例。</p>
+<p>基本网址： <code>https://api.starhermit.com</code>。所有路线均在 <code>api/v1/...</code> 除非另有说明，否则需要 JWT。</p>
+<p>托管客户端文件可以声明 <a href="/zh-CN/docs/starhermit-txt.html#browser-asset-caching">文件夹缓存生命周期</a>
+和 <a href="/zh-CN/docs/starhermit-txt.html#allowing-another-website-to-access-your-hosted-game">其他 CORS 来源</a>
+在 <code>starhermit.txt</code>。这些政策与客户文件一起发布；无清单合并保留
+现有设置，而提供的清单将替换它们。</p>
+<h2 id="the-manifest-starhermittxt">清单： <code>starhermit.txt</code></h2>
+<p>地方 <code>starhermit.txt</code> 在回购根目录下。格式： <code>key=value</code> 线， <code>#</code> 开始发表评论。</p>
+<pre><code class="language-text">name=Your Game
+# (There is no slug key: the platform assigns your game a uid and uses it as the
+# slug — the same value as its &lt;uid&gt;.starhermit.com address. Nothing can choose
+# it, so two games can never contend for a name. Your client reads its own slug
+# from the launch token's game_scope claim.)
+launch=index.html        # repo-relative HTML entry
+cover=art/cover.png      # optional cover art for the library tile; or an https:// URL
+description=One-line pitch\nSecond line   # optional; or description.file=DESCRIPTION.md
+release_notes.file=CHANGELOG.md          # optional; or release_notes=inline text
+owner=&lt;starhermit user id&gt;  # UUID from GET /api/v1/me; do not use username/nickname
+# Choose at most one authoritative backend, or omit both for a browser-only game:
+server=server.js         # sandboxed JavaScript; see game-scripts.md
+# container.image=ghcr.io/owner/game@sha256:&lt;64 lowercase hex&gt;; see container-games.md
+
+control.up=KeyW+ArrowUp | Move forward
+control.shoot=Space | Shoot
+</code></pre>
+<ul>
+<li>没有 <code>slug</code> key：平台分配一个 uid 并将其用作子域（<code>&lt;uid&gt;.starhermit.com</code>）和游戏 API 命名空间（<code>/api/v1/games/&lt;uid&gt;/…</code>).</li>
+<li><code>cover</code> （别名 <code>cover_art</code>, <code>coverart</code>) 是游戏库图块上显示的艺术作品：相对于启动文件的路径，或绝对路径 <code>https://</code> 网址。可选 — 如果没有，磁贴会显示您网站的图标。每次部署时都要重新阅读，因此更改行会更改封面。看 <a href="#cover-art">封面艺术</a> 对于瓦片作物。</li>
+<li><code>description</code> / <code>release_notes</code> （或者 <code>description.file</code> / <code>release_notes.file</code>，其中命名为 <code>.md</code>/<code>.markdown</code>/<code>.txt</code> 相对于清单的文件）是游戏的可选文本。每次部署时都会重新读取它们，例如 <code>cover</code>。看 <a href="#description-and-release-notes">描述和发行说明</a>.</li>
+<li><code>server</code> 声明一个沙盒 JavaScript 后端；看 <a href="/zh-CN/docs/api/game-scripts.html">game-scripts.md</a>.</li>
+<li><code>container.image</code> 声明一个容器后端；看 <a href="/zh-CN/docs/api/container-games.html">container-games.md</a>。它必须是摘要固定的，托管在许可名单注册表上经过验证的 GitHub 所有者的命名空间中，并且可能附带 <code>container.port</code>, <code>container.health</code>, <code>container.memory_mb</code>, <code>container.cpu</code>，并且非秘密 <code>container.env.*</code> 价值观。</li>
+<li>对于纯页游来说，这两个后端键都是可选的，但它们是互斥的。</li>
+</ul>
+<h3 id="default-control-bindings">默认控件绑定</h3>
+<p>游戏可以声明零个或多个桌面浏览器操作：</p>
+<pre><code class="language-text">control.&lt;action&gt;=&lt;code&gt;[+&lt;code&gt;...][ | &lt;label&gt;]
+</code></pre>
+<ul>
+<li>动作都是小写的 <code>[a-z0-9_]{1,32}</code> 标识符并保留清单顺序。</li>
+<li>代码是 <code>KeyboardEvent.code</code> 价值观； <code>+</code> 分隔一个操作的备用键。</li>
+<li>可选标签显示在控件重新映射 UI 中，默认为操作 ID。</li>
+<li>一个清单最多可以声明 32 个操作，每个操作有 4 个代码。代码不能被使用
+两个动作。无效的控制线将被忽略。</li>
+<li>游戏没有 <code>control.*</code> 声明没有控件 API/UI (<code>404 "This game declares no controls."</code>）。从每个已发布的构建中重新读取声明 - 每个部署、文件夹上传
+并取代捆绑推送。步步： <a href="/zh-CN/docs/tutorials/game-controls.html">教程：向游戏添加控件</a>.</li>
+</ul>
+<p>玩家可以通过以下方式覆盖每场比赛的默认设置
+<a href="/zh-CN/docs/api/games.html#per-player-control-bindings">游戏控制API</a>.</p>
+<h2 id="endpoints">端点</h2>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/me/github-games</code></td>
+<td>智威汤逊</td>
+<td>从存储库 URL 注册游戏 → <code>201 GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/me/github-games/upload</code></td>
+<td>智威汤逊</td>
+<td><strong>从本地文件夹添加游戏</strong> — 根本没有存储库 → <code>201 { game, bytesReceived }</code></td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/me/github-games/{id}/claim</code></td>
+<td>智威汤逊</td>
+<td>通过 GitHub 链接或清单所有者证明存储库控制后获得所有权 → <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>放</td>
+<td><code>/api/v1/me/github-games/{id}/url</code></td>
+<td>智威汤逊</td>
+<td>将现有游戏指向不同的 URL； uid 和游戏时间继续存在</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/github-games</code></td>
+<td>智威汤逊</td>
+<td>列出您注册的 GitHub 游戏 → <code>GitHubGameDto[]</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/github-games/{id}/stats</code></td>
+<td>智威汤逊（所有者）</td>
+<td><strong>您添加的游戏的观众人数</strong> → <code>GameStatsDto</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/github-games/{id}/sessions</code></td>
+<td>智威汤逊（所有者）</td>
+<td>该游戏服务器的实时会话</td>
+</tr>
+<tr>
+<td>删除</td>
+<td><code>/api/v1/me/github-games/{id}/sessions/{sessionId}</code></td>
+<td>智威汤逊（所有者）</td>
+<td>结束一场实时会话（<code>abandoned</code> / <code>operator_ended</code>)</td>
+</tr>
+<tr>
+<td>获取/发布</td>
+<td><code>/api/v1/me/github-games/{id}/achievements</code></td>
+<td>智威汤逊（所有者）</td>
+<td><a href="/zh-CN/docs/api/achievements.html#achievements-created-by-the-games-owner">您的游戏成就</a>: 列出所有，创建一个</td>
+</tr>
+<tr>
+<td>放置/删除</td>
+<td><code>/api/v1/me/github-games/{id}/achievements/{achievementId}</code></td>
+<td>智威汤逊（所有者）</td>
+<td>更新/删除您创建的一个</td>
+</tr>
+<tr>
+<td>获取/发布</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards</code></td>
+<td>智威汤逊（所有者）</td>
+<td><a href="/zh-CN/docs/api/leaderboards.html#your-games-own-leaderboards">您的游戏的排行榜</a>: 列出所有，创建一个</td>
+</tr>
+<tr>
+<td>放置/删除</td>
+<td><code>/api/v1/me/github-games/{id}/leaderboards/{leaderboardId}</code></td>
+<td>智威汤逊（所有者）</td>
+<td>更新/删除一个</td>
+</tr>
+<tr>
+<td>删除</td>
+<td><code>/api/v1/me/github-games/{id}/players/{userId}/elo</code></td>
+<td>智威汤逊（所有者）</td>
+<td><a href="/zh-CN/docs/api/leaderboards.html#resetting-a-players-rating">重置一名玩家的评分</a> 至 1200</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/me/github-games/{id}/transfer</code></td>
+<td>智威汤逊</td>
+<td>将游戏转移给另一个用户 → <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>删除</td>
+<td><code>/api/v1/me/github-games/{id}</code></td>
+<td>智威汤逊</td>
+<td>删除已注册的游戏 → <code>204</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/github-games/removed</code></td>
+<td>智威汤逊</td>
+<td>您删除的游戏： <code>restorable</code> （上传的游戏）， <code>filesKept</code></td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/me/github-games/{id}/restore</code></td>
+<td>智威汤逊</td>
+<td>恢复已删除的上传游戏：相同的ID和历史记录，如果尚未回收则其文件（30天）； <code>409</code> 对于有来源的游戏 - 再次添加其 URL</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/me/github-games/{id}/bundle</code></td>
+<td>智威汤逊</td>
+<td>发布一个原始的 <code>.tar.gz</code> 包含客户端文件和/或保存的容器映像。 <code>?mode=merge</code> 修补实时客户端文件而不是替换它们</td>
+</tr>
+<tr>
+<td>WS</td>
+<td><code>/ws/v1/game-upload</code></td>
+<td>智威汤逊（<code>?access_token=</code>)</td>
+<td><strong>通过 WebSocket 进行相同的两次上传</strong> — 用于超过 ~100 MB 的任何内容的传输</td>
+</tr>
+<tr>
+<td>放</td>
+<td><code>/api/v1/me/github-games/{id}/hosting</code></td>
+<td>智威汤逊</td>
+<td>启用/禁用托管（"部署到星隐士") → <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/github-games/{id}/deployment</code></td>
+<td>智威汤逊</td>
+<td>阅读部署/托管状态 → <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>放</td>
+<td><code>/api/v1/me/github-games/{id}/deployment</code></td>
+<td>智威汤逊</td>
+<td>固定提交/分支；将重新部署排队 → <code>GameHostingView</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/github-games</code></td>
+<td>智威汤逊</td>
+<td>共享 GitHub 游戏的公开浏览 → <code>SharedGitHubGameDto[]</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/github-games/{id}/release-notes</code></td>
+<td>智威汤逊</td>
+<td>游戏清单中的发行说明 → <code>GitHubGameReleaseNotesDto</code>， 或者 <code>404</code> 对于未知或已删除的游戏</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/github-games/{id}/icon</code></td>
+<td>匿名的</td>
+<td>游戏图标图像字节（favicon 或所有者头像）； <code>ResponseCache</code> 86400</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/github-games/{id}/cover</code></td>
+<td>匿名的</td>
+<td><strong>封面艺术图像字节</strong>， 或者 <code>404</code> 当游戏没有时； <code>ResponseCache</code> 3600</td>
+</tr>
+<tr>
+<td>放</td>
+<td><code>/api/v1/me/github-games/{id}/cover</code></td>
+<td>智威汤逊（所有者）</td>
+<td>上传封面艺术，覆盖清单的 <code>cover=</code> → <code>204</code></td>
+</tr>
+<tr>
+<td>删除</td>
+<td><code>/api/v1/me/github-games/{id}/cover</code></td>
+<td>智威汤逊（所有者）</td>
+<td>放下上传的封面，回到清单→ <code>204</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/github</code></td>
+<td>智威汤逊</td>
+<td>GitHub 身份链接状态 → <code>{ linked, login }</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="register-a-game">注册一个游戏</h3>
+<p><code>POST /api/v1/me/github-games</code></p>
+<pre><code class="language-json">{
+  "repoUrl": "https://github.com/HypeDriven/starhermit-chess",
+  "displayName": "StarHermit Chess",
+  "launchPath": "index.html"
+}
+</code></pre>
+<p>尽管它的历史名称， <code>repoUrl</code> 接受三个启动源：</p>
+<ol>
+<li>A <code>github.com/&lt;owner&gt;/&lt;repo&gt;</code> 存储库。后端读取其清单并可以部署它
+到 StarHermit 托管。</li>
+<li>已托管的 GitHub Pages URL，例如 <code>https://owner.github.io/game/</code>。存储库
+身份是从 URL 推断出来的； URL 本身已启动，无需克隆或安装。</li>
+<li>任何其他公众 <code>http://</code> 或者 <code>https://</code> 托管网页游戏 URL。它是直接启动的
+不参与 GitHub 所有权声明。</li>
+</ol>
+<ul>
+<li><code>displayName</code> 和 <code>launchPath</code> 是可选的后备方案。它们对于第三方存储库很有用
+没有可信的清单元数据；直接托管 URL 本身就是启动位置。</li>
+<li>对于经过验证的存储库所有者，平台会进行验证 <code>starhermit.txt</code>.</li>
+<li>可选的 <code>server=</code> 脚本或 <code>container.image=</code> 后台提供权威游戏；看 <a href="/zh-CN/docs/api/game-scripts.html">game-scripts.md</a> 和 <a href="/zh-CN/docs/api/container-games.html">container-games.md</a>。容器托管对 starhermit.com 上的任何登录用户开放；自托管部署可以将其限制在操作员允许列表中。</li>
+<li><strong>声明的服务器后端需要经过验证的所有者。</strong> 提交一个声明的存储库 <code>server=</code> 或者 <code>container.image=</code> 没有 GitHub 登录或 <code>owner=</code> 证明是 <code>403</code> （命名两个证明），而不是假装有后端的仅浏览器列表。</li>
+<li>限制：每个用户 100 场游戏（每个帐户可由操作员覆盖）。登记重复申报表 <code>409</code>.</li>
+</ul>
+<p>注册/部署状态包括： <code>InvalidUrl</code>, <code>LimitReached</code>, <code>Duplicate</code>, <code>MissingManualMetadata</code>, <code>MissingStarhermitTxt</code>, <code>InvalidLaunchPath</code>, <code>InvalidServerScriptPath</code>, <code>InvalidContainerImage</code>, <code>ServerProvisionConflict</code>, <code>RemovedByOwner</code>.</p>
+<p>错误使用标准形状：</p>
+<pre><code class="language-json">{ "error": "..." }
+</code></pre>
+<h3 id="add-a-game-from-a-local-folder">从本地文件夹添加游戏</h3>
+<p><code>POST /api/v1/me/github-games/upload</code> → <code>201</code></p>
+<p>注册 URL 的对应部分： <strong>没有存储库</strong>，并且没有任何内容被克隆。文件夹
+一体旅行 <code>.tar.gz</code> 请求主体和平台托管其包含的内容。相同的存档
+格式为 <a href="#push-a-game-bundle">推一捆</a>，因此相同的包装适用于两者。</p>
+<p>创建的游戏有一个 <code>gameSlug</code> 从一开始，无论它是否声明一个服务器，所以
+仅浏览器上传即可使用 <a href="/zh-CN/docs/api/games.html#per-player-control-bindings">控制</a>,
+<a href="/zh-CN/docs/api/games.html#per-player-game-settings">每个玩家的设置</a>， 它是
+<a href="/zh-CN/docs/api/catalog.html#saving-from-inside-a-game-launch-token">云保存槽</a>, <a href="/zh-CN/docs/api/realtime.html">实时房间</a>
+并像其他游戏一样启动代币。</p>
+<pre><code class="language-text">client/           the game's files, published as-is
+starhermit.txt    name= and launch= instead of the query parameters
+</code></pre>
+<p>清单是可选的 <em>这个端点</em> — 查询参数可以提供相同的值 — 并且
+StarHermit 客户总是发送一个根据其清单字段构建的。将文件传送到里面
+您的构建仍然值得做：它使构建具有自我描述性并预填充这些字段，因此它
+可以重新上传，而无需记住它需要哪些值。看
+<a href="/zh-CN/docs/starhermit-txt.html">这 <code>starhermit.txt</code> 显现</a> 对于格式，并注意 <strong>一切
+清单旁边已上传</strong> — 上传可分发的版本，而不是源代码树。</p>
+<p>直接发送字节——而不是多部分形式的数据——用 <code>Content-Type: application/gzip</code>:</p>
+<pre><code class="language-bash">tar -czf game.tar.gz client/ starhermit.txt
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/upload?displayName=My%20Game" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game.tar.gz
+</code></pre>
+<pre><code class="language-json">{
+  "game": { "id": "...", "displayName": "My Game", "launchPath": "index.html", "hosting": { "hostingEnabled": true } },
+  "bytesReceived": 4194304
+}
+</code></pre>
+<p>元数据按此顺序解析，因此大多数文件夹根本不需要查询参数：</p>
+<ol>
+<li><code>?displayName=</code> / <code>?launchPath=</code> 根据要求。</li>
+<li><code>name=</code> / <code>launch=</code> 在一个 <code>starhermit.txt</code> 在存档根目录下。</li>
+<li><code>index.html</code> 在根 <code>client/</code> - 当没有其他名称时用作启动路径。</li>
+</ol>
+<p>此路线的具体注意事项：</p>
+<ul>
+<li><strong>电话一回，比赛就开始了。</strong> 没有单独的托管或部署
+步骤： <code>deployStatus</code> 是 <code>live</code> 和 <code>deployedCommitSha</code> 是 <code>null</code>，因为没有提交。</li>
+<li><strong>文件无法重新生成</strong>，因此平台永远不会从任何地方重新部署它们。一场比赛
+添加这种方式进行 <code>contentSource: upload</code> 并保留其上传的版本直到您发布
+另一个。推送新版本
+<a href="#push-a-game-bundle">束端点</a> 或重新上传该文件夹。</li>
+<li><strong>没有存储库意味着没有声明。</strong> <code>ownerLogin</code> 是空的，所以没有 GitHub 登录可以匹配它；
+<code>repoUrl</code> 携带合成的 <code>upload:&lt;id&gt;</code> 值而不是 URL。</li>
+<li><strong>A <code>server/image.tar</code> 在这里被拒绝</strong> (<code>422</code>）。服务器映像需要配置游戏才能
+附加到，直到游戏出现才存在 - 首先创建游戏，然后推送图像
+到 <code>/{id}/bundle</code>.</li>
+<li>命名存档不包含的文件的启动路径被拒绝（<code>422</code>) 上传时
+仍然处于舞台阶段，而不是成为每个玩家的 404。</li>
+</ul>
+<p>限制与任何其他推送相同：请参阅 <a href="#upload-limits">上传限制</a>.</p>
+<h4 id="an-uploaded-folder-can-bring-its-own-server-backend">上传的文件夹可以自带服务器后端</h4>
+<p>如果存档的 <a href="/zh-CN/docs/starhermit-txt.html"><code>starhermit.txt</code></a> 声明服务器逻辑，上传
+也提供它——与没有存储库的存储库流程所做的事情相同。选择一个
+风格；声明两者均被拒绝。</p>
+<table>
+<thead>
+<tr>
+<th>宣言</th>
+<th>会发生什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server=path/to/server.js</code></td>
+<td>脚本后端。文件行进 <strong>在您上传的文件夹内</strong>，因此它的源代码是直接从存档中读取的——没有任何东西可以获取。看 <a href="/zh-CN/docs/api/game-scripts.html">game-scripts.md</a>.</td>
+</tr>
+<tr>
+<td><code>container.image=name@sha256:…</code></td>
+<td>容器后端，一如既往地固定摘要。看 <a href="/zh-CN/docs/api/container-games.html">container-games.md</a>。图像本身随后被推送到 <code>/{id}/bundle</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>这里的拒绝会让整个创作失败——没有一个半成品的游戏能够幸存下来：</p>
+<ul>
+<li><code>server=</code> 命名存档中不包含的文件。</li>
+<li><code>server=</code> 指向客户端文件外部（<code>../</code>).</li>
+<li>声明两者 <code>server=</code> 和 <code>container.image=</code>.</li>
+<li>要求提供禁用容器的容器，或者向未经批准使用容器的所有者索要容器。</li>
+</ul>
+<h3 id="cover-art">封面艺术</h3>
+<p>库中游戏图块上显示的图像。无论您使用哪种方式，
+匿名 <code>GET /api/v1/github-games/{id}/cover</code> 是为它服务的：</p>
+<ul>
+<li><strong>在你的构建中</strong> — a <code>cover=</code> 线路输入 <code>starhermit.txt</code>，命名与启动相关的图像
+文件或绝对 <code>https://</code> 网址。每次部署时都要重新阅读，以便您的存储库始终是事实的来源。</li>
+<li><strong>已上传</strong> — <code>PUT /api/v1/me/github-games/{id}/cover</code> 图像经过 base64 编码。这是
+网络仪表板是什么 <em>管理 → 封面艺术</em> 是做什么的，以及 StarHermit 接线员可以为您做什么。</li>
+</ul>
+<pre><code class="language-http">PUT /api/v1/me/github-games/{id}/cover
+Authorization: Bearer &lt;token&gt;
+Content-Type: application/json
+
+{ "imageBase64": "iVBORw0KGgoAAAANSUhEUg..." }
+</code></pre>
+<p>一次上传 <strong>覆盖</strong> 故意地清单：重新读取的部署 <code>starhermit.txt</code> 必须
+永远不要撤销某人亲手选择的艺术。 <code>DELETE /api/v1/me/github-games/{id}/cover</code> 是回去的路——
+它会删除上传和清单 <code>cover=</code> 再次申请。</p>
+<p>PNG、JPEG、GIF、WEBP、BMP 或 SVG，最多 <strong>4MB</strong>。该类型是从字节中嗅探出来的，因此
+<code>Content-Type</code> 您断言既不需要也不相信，并且字节不是可解码的图像
+被拒绝 <code>400</code>。一个亲戚 <code>cover=</code> 路径必须结束于 <code>.png</code>, <code>.jpg</code>/<code>.jpeg</code>, <code>.gif</code>,
+<code>.webp</code> 或者 <code>.svg</code> （不 <code>..</code>, 无前导 <code>/</code>）；不可用的值被丢弃而不是失败
+游戏。</p>
+<p>封面艺术是海报艺术：两个图书馆 <strong>缩放它以填充瓷砖并中心裁剪</strong> 不管做什么
+不适合。瓷砖的形状不一样。</p>
+<table>
+<thead>
+<tr>
+<th>表面</th>
+<th>瓦</th>
+<th>庄稼</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Windows客户端</td>
+<td>96×128 肖像 (3:4)</td>
+<td>填充肖像；更广泛的艺术失去了侧面</td>
+</tr>
+<tr>
+<td>网络仪表板</td>
+<td>正方形</td>
+<td>填满正方形；更高的艺术失去了顶部和底部</td>
+</tr>
+</tbody>
+</table>
+<p>将主题保持在中心，这样两种裁剪看起来都正确。 SVG 涵盖了网络库中的显示；的
+Windows 客户端无法解码 SVG，因此该图块显示的是网站图标。一款没有封面的游戏
+一切都回到它的图标（<code>GET /api/v1/github-games/{id}/icon</code>）。该图标是从
+您提交的 URL，以及当平台托管游戏时，来自其提供的副本的 URL
+<code>&lt;uid&gt;.starhermit.com</code> - 因此，文件中带有网站图标的上传包仍然会获得一个图标。</p>
+<h3 id="audience-figures-for-your-game">您的游戏的观众人数</h3>
+<p><code>GET /api/v1/me/github-games/{id}/stats</code> → <code>GameStatsDto</code></p>
+<p>一个游戏有多少人玩 <strong>你添加了</strong>。仅限游戏所有者 - 其他任何人都可以获得 <code>404</code>,
+与不存在的游戏相同的答案。</p>
+<pre><code class="language-json">{
+  "totalPlayers": 42,
+  "playingNow": 3,
+  "totalSessions": 130,
+  "totalPlaytimeMinutes": 8140,
+  "lastPlayedAt": "2026-07-29T08:45:24Z",
+  "livenessWindowHours": 4
+}
+</code></pre>
+<ul>
+<li><strong>仅聚合。</strong> 你了解的是你的受众的规模，而不是其中的人员。</li>
+<li><code>totalPlayers</code> 计数 <strong>不同的人</strong>，而不是会话——玩过六次的人就是一次
+玩家。</li>
+<li><code>playingNow</code> 统计会话尚未结束的不同玩家 <em>和</em> 开始在里面
+<code>livenessWindowHours</code>。窗口很重要：崩溃或丢失网络的客户端永远不会发送
+会话结束，如果没有它，这些行将被视为人们仍在无限期地玩。</li>
+<li><code>totalPlaytimeMinutes</code> 计数 <strong>仅已完成的会话</strong>，匹配每个用户的游戏时间数字
+在 <a href="/zh-CN/docs/api/activity.html">activity.md</a>。飞行中的会话还没有做出任何贡献。</li>
+<li><code>lastPlayedAt</code> 是 <code>null</code> 对于一个没有人玩过的游戏。</li>
+</ul>
+<p>数字来自每个客户写入的同一个启动分类账（请参阅 <a href="/zh-CN/docs/api/activity.html">activity.md</a>），所以一个
+玩家从未报告启动的游戏将读取为零。</p>
+<h3 id="claim-ownership">主张所有权</h3>
+<p><code>POST /api/v1/me/github-games/{id}/claim</code> → <code>GitHubGameDto</code></p>
+<p>当您控制现有列表的存储库时，接管该列表。通过链接来证明所有权
+与存储库所有者匹配的个人 GitHub 登录，或通过提交
+<code>owner=&lt;your StarHermit user ID&gt;</code> 到存储库的 <code>starhermit.txt</code>. <code>owner</code> 应该是
+不可变的 UUID 返回为 <code>id</code> 经过 <code>GET /api/v1/me</code>, <strong>不是</strong> 用户名或昵称。清单
+方法支持组织拥有的存储库，这些存储库不是从个人 GitHub 组织推断的
+会员资格。</p>
+<p>成功后，现有列表保留其 ID/历史记录，由索赔人管理，刷新
+存储库控制的元数据和后端声明，以及可用的队列托管。的
+先前的提交者失去了所有者范围的管理访问权限。认领您已经管理的列表
+重新同步它而不是返回冲突。</p>
+<p>GitHub 身份元数据存储 <code>{"login":"…"}</code>;通过 OAuth 流程链接您的 GitHub 帐户（请参阅
+<a href="/zh-CN/docs/api/auth.html">auth.md</a>）。检查链接状态 <code>GET /api/v1/me/github</code> → <code>{ linked, login }</code>。请参阅
+<a href="/zh-CN/docs/tutorials/claim-existing-game.html">分步索赔教程</a> 为了发现，两个证明
+方法、验证、接管和故障排除。</p>
+<h3 id="transfer-ownership">转让所有权</h3>
+<p><code>POST /api/v1/me/github-games/{id}/transfer</code></p>
+<pre><code class="language-json">{ "toUserId": "&lt;user id&gt;" }
+</code></pre>
+<h3 id="push-a-game-bundle">推送游戏捆绑包</h3>
+<p><code>POST /api/v1/me/github-games/{id}/bundle</code> 无需询问 StarHermit 即可发布构建的输出
+再次克隆它。调用者必须拥有已注册的游戏。发送 <code>.tar.gz</code> 直接字节——不是
+多部分表单数据—带有 <code>Content-Type: application/gzip</code>:</p>
+<pre><code class="language-text">client/            optional static client files; must include the registered launch file
+server/image.tar   optional output from `docker save`
+starhermit.txt     optional manifest copy for bundle portability
+remove.txt         merge only: client-relative paths to delete, one per line
+</code></pre>
+<p>至少 <code>client/</code> 或者 <code>server/image.tar</code> 必须存在（合并也可能只是 <code>remove.txt</code>）。客户端文件以原子方式交换。一个
+服务器映像已加载，由平台摘要固定，并将容器部署排队到
+在该图像上重新启动。上传的图像优先于清单的注册表引用，
+并超过一个 <code>server=</code> 线;声明两者的清单 <code>server=</code> 和 <code>container.image=</code> 被拒绝
+在加载任何内容之前。存档中的任何其他内容都将被忽略。</p>
+<p><strong>上传图片本身就是一种声明。</strong> 如果游戏还没有服务器后端 -
+已上传声明无的文件夹 — 推送 <code>server/image.tar</code> 文摘中的规定之一
+已加载，下 <code>gameSlug</code> 游戏已经有了。您不必在文件中命名摘要固定图像
+首先体现出来，这是循环的：定义必须先存在才能接收图像，
+图像是唯一可以描述它的东西。</p>
+<p><strong>重新推送会应用其清单声明的容器旋钮，并且仅应用这些旋钮。</strong> 包括
+<code>starhermit.txt</code> 在捆绑包中进行了更改 <code>container.port</code>, <code>container.health</code>,
+<code>container.memory_mb</code> 或者 <code>container.cpu</code> 并且部署会在重新启动时拾取它；留下一个旋钮并
+它会保留您上次设置的内容。完全省略清单，不涉及部署
+除了图像之外的变化。</p>
+<p>StarHermit 客户端从文件夹中为您构建此捆绑包 <strong>或单个 <code>.tar</code></strong>:</p>
+<ul>
+<li><strong>客户文件</strong> — 游戏的分发文件夹，或 <code>.tar</code> 它的。下有一个文件夹打包
+<code>client/</code>; a <code>.tar</code>的条目被重新放置在那里（存档已经在 <code>client/</code> 剩下
+独自）。仅限 ustar — GNU 长名称和 PAX 档案被拒绝，因为重新定位它们意味着
+重写命名以下条目的元数据块。</li>
+<li><strong>专用服务器</strong> — 服务器的分发文件夹，或 <code>docker save</code> <code>.tar</code> 靠它自己。
+仅来自文件夹的清单和 <code>image.tar</code> 已上传：图像已包含您的
+服务器自己的文件，因此打包其余文件将发送千兆字节供平台丢弃。</li>
+</ul>
+<p>在这两种情况下 <a href="/zh-CN/docs/starhermit-txt.html"><code>starhermit.txt</code></a> 可以在对话框中编辑。不管怎样
+选择的构建携带预填充字段，并且它们保存的任何内容都写在包根中 - 所以
+没有清单的构建是可发布的，并且作为 <code>.tar</code> 仍然可以有它的清单
+已更新。</p>
+<pre><code class="language-bash">docker save my-game-server:release -o image.tar
+mkdir -p bundle/server
+mv image.tar bundle/server/image.tar
+cp starhermit.txt bundle/
+tar -C bundle -czf game-bundle.tar.gz .
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @game-bundle.tar.gz
+</code></pre>
+<pre><code class="language-json">{
+  "clientPublished": false,
+  "serverImageLoaded": true,
+  "imageDigest": "sha256:...",
+  "bytesReceived": 318767104,
+  "mode": "replace",
+  "filesRemoved": 0
+}
+</code></pre>
+<h4 id="partial-updates-modemerge">部分更新： <code>?mode=merge</code></h4>
+<p>推是一个 <strong>代替</strong> 除非您另有要求：存档是整个游戏，以及任何不在其中的内容
+它消失了。 <code>?mode=merge</code> （HTTP 和上传套接字类似）使其成为 <strong>修补</strong> 现场客户的
+文件 — 重新上传千兆字节未更改的资源以进行单文件修复的答案。</p>
+<pre><code class="language-bash">printf '%s\n' '# one client-relative path per line; a directory removes everything under it' \
+    'assets/old-music.ogg' 'levels/cut/' &gt; remove.txt
+tar czf patch.tar.gz client/index.html client/js/app.js remove.txt
+
+curl -X POST "https://api.starhermit.com/api/v1/me/github-games/$GAME_ID/bundle?mode=merge" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/gzip" \
+  --data-binary @patch.tar.gz
+</code></pre>
+<p>和 <code>mode=merge</code>:</p>
+<ul>
+<li>文件下 <code>client/</code> 被添加或覆盖</li>
+<li>根中的路径 <code>remove.txt</code> (<code>#</code> 评论;目录删除其整个子树）被删除</li>
+<li>所有其他实时文件都保持原样</li>
+</ul>
+<p>合并的树作为副本上演并自动交换 - 玩家看到旧游戏或新游戏
+全新的，绝不混合。结果有界于 <strong>游戏的</strong> 津贴，而不是上传的，所以
+一款游戏的发展不能一次一小部分地超出其限制。合并仅涉及客户端文件；一个
+<code>server/image.tar</code> 加载方式与替换时完全相同。补丁没有携带 <code>starhermit.txt</code> 叶子
+封面艺术原样。</p>
+<p>合并被拒绝 (<code>409</code>/<code>422</code>，没有任何变化）当游戏还没有发布任何内容时，当它
+会删除启动文件，或者当 <code>remove.txt</code> 游戏外的分数。一个 <code>remove.txt</code> 在一个
+普通替换也被拒绝（<code>422</code>），因为在那里它只能代表你不代表的东西
+打算。 <code>mode</code> 必须是 <code>replace</code> （默认）或 <code>merge</code>;其他的都是 <code>400</code>.</p>
+<p>相同的参数适用于套接字： <code>ws/v1/game-upload?gameId=…&amp;mode=merge</code>。这 <code>ready</code> 框架
+呼应它作为 <code>"apply":"merge"</code>.</p>
+<p>终端更新已注册的游戏；它永远不会创造游戏记录——为此，请参阅
+<a href="#add-a-game-from-a-local-folder">从本地文件夹添加游戏</a>。它 <em>能</em> 提供游戏的
+服务器后端，作为将服务器图像加载到没有服务器图像的游戏中的副作用。请参阅
+<a href="/zh-CN/docs/tutorials/dedicated-server-onboarding.html">专用服务器发布教程</a>.</p>
+<h3 id="upload-from-cicd">从 CI/CD 上传</h3>
+<p>不要将交互式 OAuth 令牌保密存储在存储库中。通过OAuth登录一次并使用
+该会话添加单独标记的部署密钥 <code>POST /api/v1/me/public-keys</code>。 CI
+然后就可以签署工作 <code>/auth/public-key/challenge</code>, 兑换于 <code>/auth/public-key/complete</code>，并使用
+此捆绑端点上返回的 15 分钟访问令牌。</p>
+<p>部署密钥充当其所属帐户，因此该帐户必须拥有目标游戏。它不能
+添加另一个密钥或撤销其他密钥。它可以通过以下方式撤销自身 <code>/me/public-keys/current</code>;
+管理 OAuth 身份验证会话中的注册和其他密钥。每人使用一把钥匙
+环境，以便可以禁用一个工作流程而不停止其他工作流程。档案大致已过
+100 MB 必须使用下面的 WebSocket 传输。</p>
+<p>看 <a href="/zh-CN/docs/tutorials/ci-cd-build-upload.html">使用 OAuth 注册的公钥从 CI/CD 上传构建</a>
+用于密钥生成、GitHub 秘密设置、完整的质询签名/上传脚本、静态和
+容器包布局和 GitHub Actions 工作流程。</p>
+<h3 id="upload-over-a-websocket">通过 WebSocket 上传</h3>
+<p><code>GET /ws/v1/game-upload</code> （升级） - <strong>将此用于任何超过 100 MB 的内容。</strong></p>
+<p>API 前面的 CDN 大致拒绝 HTTP 请求正文 <strong>100MB</strong> 与一个 <code>413</code> 其
+拥有。该拒绝从未到达平台，因此它不包含任何内容 <code>limitBytes</code> 并且出现在没有日志中
+可以阅读——a <code>413</code> 没有 <code>limitBytes</code> 字段是 CDN，不是你的游戏的限额，是两个
+大了几个数量级。任何现实的 <code>docker save</code> 会击中它。</p>
+<p>WebSocket 升级后发送的帧不是请求正文，因此不适用上限。
+<strong>只是运输方式不同。</strong> 二进制帧准确地连接成 HTTP 路由的字节
+读取，通过相同的管道，并且每个拒绝、允许和成功主体都是 HTTP 主体
+路线会产生 - 因此客户端可以在两者之间共享一个代码路径。</p>
+<pre><code class="language-text">wss://api.starhermit.com/ws/v1/game-upload?gameId=$GAME_ID&amp;access_token=$TOKEN
+wss://api.starhermit.com/ws/v1/game-upload?gameId=$GAME_ID&amp;mode=merge&amp;access_token=$TOKEN
+wss://api.starhermit.com/ws/v1/game-upload?displayName=My%20Game&amp;launchPath=index.html&amp;access_token=$TOKEN
+</code></pre>
+<p>经过 <code>gameId</code> 推送到您拥有的游戏（ <code>/{id}/bundle</code> 路线）;省略它并通过
+<code>displayName</code>/<code>launchPath</code> 从文件夹（ <code>/upload</code> 路线）。令牌进入
+查询字符串，因为浏览器无法设置 <code>Authorization</code> WebSocket 握手的标头；是的
+在握手时检查一次，因此超过其访问令牌的上传仍然会完成。</p>
+<table>
+<thead>
+<tr>
+<th>方向</th>
+<th>框架</th>
+<th>意义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>服务器 →</td>
+<td><code>{"type":"ready","mode":"bundle","apply":"replace","limitBytes":N,"heartbeatSeconds":15}</code></td>
+<td>已结算津贴并检查可用空间。开始发送。 <code>mode</code> 是 <code>bundle</code> 或者 <code>create</code>. <code>apply</code> 是 <code>merge</code> 当您要求部分更新时。</td>
+</tr>
+<tr>
+<td>→ 服务器</td>
+<td><em>二进制</em></td>
+<td>存档字节，无论您喜欢如何分块 - 服务器永远不会重新组装消息，因此 256 KB - 1 MB 是一个很好的默认值。连接起来，你的帧必须完全是 <code>.tar.gz</code>.</td>
+</tr>
+<tr>
+<td>服务器 →</td>
+<td><code>{"type":"ack","bytesReceived":N}</code></td>
+<td>接收进度，大约每 8 MB。由此驱动你的进度条。</td>
+</tr>
+<tr>
+<td>→ 服务器</td>
+<td><code>{"type":"complete"}</code></td>
+<td>档案已完整发送。</td>
+</tr>
+<tr>
+<td>→ 服务器</td>
+<td><code>{"type":"abort"}</code></td>
+<td>放弃。回答为 <code>status: 499</code>;没有任何内容被发布。</td>
+</tr>
+<tr>
+<td>服务器 →</td>
+<td><code>{"type":"progress","phase":"publishing","bytesReceived":N}</code></td>
+<td>上传落地时每 15 秒心跳一次。忽略它们，但期待它们。</td>
+</tr>
+<tr>
+<td>服务器 →</td>
+<td><code>{"type":"result","status":200,...}</code></td>
+<td>成功。对象的其余部分是逐字的 HTTP 响应正文 (<code>status</code> 是 <code>201</code> 用于创建）。</td>
+</tr>
+<tr>
+<td>服务器 →</td>
+<td><code>{"type":"error","status":413,"error":"...","limitBytes":N}</code></td>
+<td>拒绝。 <code>status</code> 正文是 HTTP 路由会回答的内容。</td>
+</tr>
+</tbody>
+</table>
+<p><strong>直到 <code>{"type":"complete"}</code> 到达。</strong> 这是没有 HTTP 的一种行为
+等效的，并且是故意的：存档结束标记存在 <em>里面</em> 一个 tar 的字节，所以
+平台完成读取完整的档案，而连接不会终止。一个插座
+在最后一个字节之后简单地丢弃，否则会像完成的那样发布 -
+默默地用废弃的推送替换实时游戏。关闭套接字而不上传帧
+什么也没有。</p>
+<p>最后一个字节之后的发布可能需要一些时间，尤其是对于服务器映像而言。预计 <code>progress</code>
+完成时心跳；不要将安静间隔视为上传失败。</p>
+<h3 id="upload-limits">上传限制</h3>
+<p>所有上传路由（HTTP 端点和 WebSocket）都共享相同的规则。</p>
+<table>
+<thead>
+<tr>
+<th>限制</th>
+<th>价值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>每场比赛的磁盘限额</td>
+<td><strong>2GB</strong> 在 starhermit.com 上（津贴可能因游戏/部署而异）</td>
+</tr>
+<tr>
+<td>每个帐户托管文件</td>
+<td><strong>20GB</strong> 跨帐户的所有游戏（每个帐户的操作员可调）</td>
+</tr>
+<tr>
+<td>存储库部署</td>
+<td><strong>50MB</strong> 档案</td>
+</tr>
+<tr>
+<td><code>starhermit.txt</code> / <code>remove.txt</code></td>
+<td><strong>256KB</strong> 每个; <code>remove.txt</code> 最多列出 10,000 条路径 (<code>422</code>)</td>
+</tr>
+<tr>
+<td>执行</td>
+<td>应用 <strong>流式传输时</strong>，因此过大的推力会在飞行途中被切断</td>
+</tr>
+</tbody>
+</table>
+<p>上传或推送将在帐户托管限额剩余的情况下被切断（<code>413</code> 和
+<code>limitBytes</code>），并且将通过它的存储库部署失败，并给出了配额的原因。
+每次推送和每次游戏的次数在更换时是相同的。合并的范围是 <strong>结果</strong>
+游戏大小，因此会拒绝使活树超出限额的小补丁。</p>
+<table>
+<thead>
+<tr>
+<th>地位</th>
+<th>意义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td><code>mode</code> 两者都不是 <code>replace</code> 也不 <code>merge</code>.</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>针对尚未发布文件的游戏的合并。</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>超过津贴了。身体承载 <code>{ "error", "limitBytes" }</code>. A <code>413</code> <strong>没有</strong> <code>limitBytes</code> 是 CDN 的 ~100 MB 主体上限，而不是这个 — <a href="#upload-over-a-websocket">使用上传套接字</a>.</td>
+</tr>
+<tr>
+<td><code>422</code></td>
+<td>存档格式错误或内容不可用（缺少启动文件，没有 <code>client/</code>, a <code>server/image.tar</code> 在创建路线上，合并将删除启动文件， <code>remove.txt</code> 更换时）。还有一个 <strong>被截断的</strong> 存档 — 上传过程中连接断开的普通结果。</td>
+</tr>
+<tr>
+<td><code>507</code></td>
+<td>服务器现在没有空间。拒绝 <strong>在阅读正文之前</strong> 当出版能力不可用时；稍后重试。</td>
+</tr>
+</tbody>
+</table>
+<p>档案可能无法逃脱其根目录或包含链接，并且只有常规文件和目录是
+提取 — 符号链接、硬链接和设备节点被拒绝。 <code>git archive</code> PAX 全局标头，
+<code>./</code>- 前缀名称来自 <code>tar -czf game.tgz .</code>，以及仅包含的文件名 <code>..</code>
+(<code>sprite..png</code>）被接受。一个 <code>..</code> 路径段仍然被拒绝。</p>
+<h3 id="rate-limit">速率限制</h3>
+<p>提交、认领、更改 URL、托管和部署都通过平台的一个 token 到达 GitHub，因此
+每个帐户每分钟总共限制 10 个请求（<code>429</code>， 和 <code>Retry-After</code>）。安
+运营商可以为一个账户筹集资金。</p>
+<h3 id="enable-hosting">启用托管</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/hosting</code> → <code>GameHostingView</code> ("部署到星隐士")</p>
+<pre><code class="language-json">{ "enabled": true }
+</code></pre>
+<h3 id="pin-a-deployment">固定部署</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/deployment</code> → <code>GameHostingView</code></p>
+<pre><code class="language-json">{ "commit": "&lt;sha or branch&gt;" }
+</code></pre>
+<p><code>commit</code> 是可选的。固定 sha/分支对重新部署进行排队；轮询 <code>GET /api/v1/me/github-games/{id}/deployment</code> 为了状态。</p>
+<p>对于没有命名存储库（上传的捆绑包）的游戏来说，这是被拒绝的：固定提交是什么
+将游戏移至其存储库，而捆绑创建的游戏则没有。重新部署已上传的游戏
+验证文件是否仍在卷上，而不是获取 github.com。</p>
+<h3 id="move-a-game-to-a-new-url">将游戏移至新 URL</h3>
+<p><code>PUT /api/v1/me/github-games/{id}/url</code></p>
+<pre><code class="language-json">{ "repoUrl": "https://github.com/you/new-repo", "displayName": "optional for a hosted URL" }
+</code></pre>
+<p>该行幸存下来——uid， <code>&lt;uid&gt;.starhermit.com</code>、游戏时间、收视率——并且是从
+目的地。 github 目的地必须是调用者可以证明他们控制的目的地（<code>403</code> 否则），
+和它的 <code>starhermit.txt</code> 不得命名 <em>不同的</em> <code>owner=</code> (<code>403</code>）。脚本化或容器
+除非目的地声明后端，否则后端被禁用。</p>
+<h3 id="live-sessions-owner">现场会议（所有者）</h3>
+<p><code>GET /api/v1/me/github-games/{id}/sessions</code> 列出游戏服务器的活动会话。
+<code>DELETE .../sessions/{sessionId}</code> 最终通过平台放弃路径结束（没有赢家，没有
+伊洛，理由 <code>operator_ended</code>）。这将返回卡住的会话所持有的容量席位。</p>
+<h3 id="leaderboards-and-achievements-owner">排行榜和成就（所有者）</h3>
+<p>游戏的所有者是其发行商：您可以创建 <strong>排行榜</strong> 和 <strong>成就</strong> 为了它
+下 <code>/me/github-games/{id}/leaderboards</code> 和 <code>/achievements</code> 没有发布者帐户。仅
+您的游戏服务器会写入它们，因此游戏需要 <code>server=</code> 脚本或 <code>container.image=</code>
+后端 - 仅限浏览器的游戏 <code>409</code>。看 <a href="/zh-CN/docs/api/leaderboards.html#your-games-own-leaderboards">排行榜</a>,
+<a href="/zh-CN/docs/api/achievements.html#achievements-created-by-the-games-owner">成就</a> 和
+<a href="/zh-CN/docs/tutorials/game-leaderboards-achievements.html">教程</a>.</p>
+<h2 id="dtos">DTO</h2>
+<pre><code class="language-json">// GitHubGameDto
+{
+  "id": "...",
+  "repoUrl": "...",
+  "ownerLogin": "...",
+  "repoName": "...",
+  "displayName": "...",
+  "launchPath": "index.html",
+  "serverScriptPath": "server.js",
+  "gameSlug": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "serverRuntime": "script",
+  "isVerifiedOwner": true,
+  "metadataSource": "...",
+  "createdAt": "...",
+  "coverArtSource": "manifest",
+  "coverArtUpdatedAt": "...",
+  "hosting": { "hostingEnabled": true },
+  "description": "Tend a garden on a drifting asteroid.",
+  "releaseNotesUpdatedAt": "..."
+}
+</code></pre>
+<ul>
+<li><code>serverScriptPath</code> 仅适用于 JavaScript 后端。当前的 DTO 不公开容器映像引用。</li>
+<li><code>gameSlug</code> 对于从本地文件夹添加的每个游戏以及经过验证的所有者添加的每个游戏都存在， <strong>有或没有服务器后端</strong> — 它涉及游戏的控制、设置、云保存槽、房间和启动令牌。这是 <code>null</code> 仅适用于未证明所有者的存储库提交。它不会告诉你游戏是否有后端； <code>serverRuntime</code> 做。</li>
+<li><code>serverRuntime</code> 说明游戏是否有服务器后端： <code>"script"</code>, <code>"container"</code>， 或者 <code>null</code> 对于仅限浏览器的游戏。它同意 <code>GET /api/v1/games/{gameSlug}</code>，这回答了 <code>404</code> 正是在这个时候 <code>null</code>.</li>
+<li>对于从本地文件夹添加的游戏， <code>repoUrl</code> 是一种合成的 <code>upload:&lt;id&gt;</code> 标记和 <code>ownerLogin</code>/<code>repoName</code> 是空的——没有可命名的存储库，空的所有者使得列表无法被认领。</li>
+<li><code>coverArtSource</code> 是 <code>"upload"</code>, <code>"manifest"</code> 或者 <code>null</code>， 和 <code>coverArtUpdatedAt</code> 是该封面最后一次更改的时间 - 用它来缓存破坏 <code>/cover</code> 网址。任何非空值都意味着游戏有封面艺术可供获取； <code>null</code> 意味着回落到 <code>/icon</code>。这两个来源并不相等：上传总是获胜，而且是唯一的 <code>DELETE /cover</code> 可以删除。</li>
+<li><code>description</code> 是清单的描述，或者 <code>null</code>. <code>releaseNotesUpdatedAt</code> 发行说明最后发布的时间 <em>更改文本</em> (<code>null</code> 当游戏没有时）。重新部署相同的音符不会移动它，因此驾驶是安全的 "什么是新的" 徽章：记住玩家最后看到的值并进行比较。注释本身并不在列表中；看 <a href="#description-and-release-notes">描述和发行说明</a>.</li>
+<li><code>SharedGitHubGameDto</code> 延伸 <code>GitHubGameDto</code> 和 <code>submittedByUserId</code> 和 <code>submittedByUsername</code>.</li>
+</ul>
+<h3 id="description-and-release-notes">描述和发行说明</h3>
+<p>两者均来自游戏 <code>starhermit.txt</code>;看
+<a href="/zh-CN/docs/starhermit-txt.html#description-and-release-notes">明显参考</a> 如何编写它们。
+描述在上面的游戏列表中。发行说明最多可以包含 20,000 个字符，因此
+被保留在浏览列表之外，浏览列表会立即返回每个游戏，并按游戏获取：</p>
+<pre><code class="language-http">GET /api/v1/github-games/{id}/release-notes
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<pre><code class="language-json">// GitHubGameReleaseNotesDto
+{
+  "id": "...",
+  "releaseNotes": "- New: night cycle\n- Fixed: seeds vanishing after a reload",
+  "updatedAt": "2026-09-27T10:15:00+00:00",
+  "commitSha": "4f2a…"
+}
+</code></pre>
+<ul>
+<li><code>releaseNotes</code> 和 <code>updatedAt</code> 是 <code>null</code> 当游戏声明没有注释时。</li>
+<li><code>commitSha</code> 是存储库游戏的已部署提交，并且 <code>null</code> 对于上传的版本。</li>
+<li>只问什么时候 <code>releaseNotesUpdatedAt</code> 列表中的内容比您上次显示的内容更新。</li>
+<li>返回的文本与开发人员编写的文本完全相同（通常是 Markdown）。渲染出来就是
+客户端的选择，它应该像任何用户文本一样被视为不受信任的输入。</li>
+</ul>
+<pre><code class="language-json">// GameHostingView
+{
+  "hostingEnabled": true,
+  "hostedUrl": "https://yourgame.starhermit.com",
+  "deployStatus": "...",
+  "pinnedCommitSha": "...",
+  "deployedCommitSha": "...",
+  "deployError": null,
+  "deployedAt": "..."
+}
+</code></pre>
+<p><code>hostedUrl</code>, <code>pinnedCommitSha</code>, <code>deployedCommitSha</code>, <code>deployError</code>， 和 <code>deployedAt</code> 是可选的。</p>
+<pre><code class="language-json">// GameStatsDto  (GET /api/v1/me/github-games/{id}/stats — owner only)
+{
+  "totalPlayers": 42,
+  "playingNow": 3,
+  "totalSessions": 130,
+  "totalPlaytimeMinutes": 8140,
+  "lastPlayedAt": "2026-07-29T08:45:24Z",
+  "livenessWindowHours": 4
+}
+</code></pre>
+<h2 id="publish-your-own-game-walkthrough">发布您自己的游戏：演练</h2>
+<p>有两条路线。如果您的游戏位于 git 存储库中，请按照下面的编号步骤操作。
+如果它只是您计算机上的一个文件夹，则一次调用即可完成所有操作：
+<a href="#add-a-game-from-a-local-folder">从本地文件夹添加游戏</a> 注册游戏，发布
+文件，并使其保持活动状态 - 没有托管切换，也没有提交 pin，因为没有存储库
+轨道。</p>
+<ol>
+<li><strong>选择来源</strong>：推送包含以下内容的存储库 <code>starhermit.txt</code> 在根（可选地声明一个 <code>server.js</code> 脚本或容器图像），或准备已托管的浏览器游戏的公共 URL。</li>
+<li><strong>链接您的 GitHub 身份</strong> 通过 OAuth 流程（请参阅 <a href="/zh-CN/docs/api/auth.html">auth.md</a>）；验证与 <code>GET /api/v1/me/github</code>.</li>
+<li><strong>注册游戏</strong>: <code>POST /api/v1/me/github-games</code> 存储库或托管游戏 URL 位于 <code>repoUrl</code>.</li>
+<li><strong>仅限存储库游戏 - 启用托管</strong>: <code>PUT /api/v1/me/github-games/{id}/hosting</code> 和 <code>{ "enabled": true }</code>.</li>
+<li><strong>仅限存储库游戏 - 固定提交</strong>: <code>PUT /api/v1/me/github-games/{id}/deployment</code> 和 <code>{ "commit": "&lt;sha&gt;" }</code>。固定提交控制实时版本。</li>
+<li><strong>玩家启动游戏</strong>：部署的存储库游戏位于 <code>&lt;slug&gt;.starhermit.com</code>;直接托管的游戏会打开其提交的 URL。每场比赛都有一个 <code>gameSlug</code> — 无论是否后端 — 从以下位置接收启动令牌 <code>POST /api/v1/games/&lt;slug&gt;/launch-token</code> 在 URL 片段中（可选 <code>&amp;session_id=&lt;guid&gt;</code> 用于邀请深层链接）。</li>
+</ol>
+<p>有关完整的客户端合约 - 游戏如何读取启动令牌并与 API 对话 - 请参阅 <a href="/zh-CN/docs/tutorials/chess-walkthrough.html">国际象棋演练</a> 参考实现。</p>
+<h2 id="see-also">参见</h2>
+<ul>
+<li><a href="/zh-CN/docs/api/games.html">games.md</a> — 游戏端点、启动代币</li>
+<li><a href="/zh-CN/docs/api/game-scripts.html">game-scripts.md</a> — 沙盒 JavaScript 游戏服务器</li>
+<li><a href="/zh-CN/docs/api/container-games.html">container-games.md</a> — 容器托管的游戏服务器</li>
+<li><a href="/zh-CN/docs/api/auth.html">auth.md</a> — JWT 和 OAuth 身份链接</li>
+<li><a href="/zh-CN/docs/tutorials/chess-walkthrough.html">教程/chess-walkthrough.md</a> — 端到端参考实现</li>
+<li><a href="/zh-CN/docs/tutorials/claim-existing-game.html">教程/claim-existing-game.md</a> — 接管您拥有的现有列表</li>
+</ul>
+<p>共享 <a href="/zh-CN/docs/api/conventions.html">API约定</a> 描述响应解析、时间戳、分页和重试。</p>
+<p>看 <a href="/zh-CN/docs/credentials.html">凭证兼容性</a> 和 <a href="/zh-CN/docs/api/contracts.html">机器可读的合同</a>.</p>
+
+{% endraw %}

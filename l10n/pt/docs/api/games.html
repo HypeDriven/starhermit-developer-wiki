@@ -1,0 +1,949 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "API de jogos"
+source_url: "/docs/api/games.html"
+source_path: "docs/api/games.md"
+source_hash: "e470bcc739248f71e3ff63290f133d01b1b9deb11aa638ef8f1c4d640d43ae5a"
+translation: "machine"
+permalink: "/pt/docs/api/games.html"
+---
+{% raw %}
+<h1 id="games-api">API de jogos</h1>
+<p>O subsistema de jogos é o núcleo do StarHermit: jogos multijogador com autoridade de servidor cujas regras são executadas em um arquivo JavaScript em área restrita ou em um contêiner fornecido pelo desenvolvedor. Ambos os tempos de execução compartilham esta API REST voltada para o jogador (<code>api/v1/games/{slug}</code>) e jogabilidade WebSocket (<code>ws/v1/games</code>). Para autoria de servidor, consulte <a href="/pt/docs/api/game-scripts.html">Scripts de jogos</a> ou <a href="/pt/docs/api/container-games.html">Servidores de jogos hospedados em contêineres</a>. Para obter um exemplo completo de tempo de execução de script, consulte o <a href="/pt/docs/tutorials/chess-walkthrough.html">Passo a passo de xadrez</a> e <a href="https://github.com/HypeDriven/starhermit-chess">HypeDriven/starhermit-chess</a>.</p>
+<p><strong>URL base:</strong> <code>https://api.starhermit.com</code>.</p>
+<p>Os endpoints do jogador exigem autenticação e funcionam com tokens de usuário completos e inicialização no escopo do jogo
+fichas. Os dois <code>/server/...</code> endpoints são somente contêineres: a reconciliação de sessão usa um limite
+token portador do servidor, enquanto a renovação do token usa a chave de atualização de implantação.</p>
+<h2 id="what-slug-is">O que <code>{slug}</code> é</h2>
+<p>A lesma de um jogo é a sua <strong>UID</strong> - o mesmo valor que o seu <code>&lt;uid&gt;.starhermit.com</code> endereço, por ex.
+<code>83fd04b1-3cbe-4b09-a251-3733ad4b9d94</code>. É derivado do id imutável do jogo e <strong>nada
+pode configurá-lo</strong>: não <code>starhermit.txt</code>, não o nome do repositório, não um operador. Um nome que um desenvolvedor poderia
+escolher seria algo pelo qual dois jogos poderiam competir e precisaria da plataforma para arbitrar quem
+entendi; um uid não pode colidir nem ser solicitado.</p>
+<p><strong>Um slug não é um backend de servidor.</strong> Cada jogo adicionado de uma pasta local e cada jogo de repositório
+um proprietário verificado adicionado, tem um - com ou sem <code>server=</code> ou <code>container.image=</code> - porque é
+o endereço da superfície voltada para o jogador do jogo: <a href="#launch-tokens">tokens de lançamento</a>,
+<a href="#per-player-control-bindings">controles</a>, <a href="#per-player-game-settings">configurações</a>, isso é
+<a href="/pt/docs/api/catalog.html#saving-from-inside-a-game-launch-token">slot para salvar na nuvem</a> e <a href="/pt/docs/api/realtime.html">quartos</a>. Um
+o jogo somente para navegador precisa disso tanto quanto qualquer outro. Os únicos jogos sem slug são repositório
+envios cujo proprietário não foi verificado (<code>gameSlug</code> é <code>null</code> em <code>GET /api/v1/me/github-games</code>).</p>
+<p>Os pontos finais sobre o servidor de um jogo — informações do jogo, conquistas, sessões, matchmaking, convites,
+replays – precisa de um back-end. <code>GET /api/v1/games/{slug}</code> respostas <code>404</code> para um jogo que tem um slug e não
+backend, que é a maneira de diferenciar os dois.</p>
+<p>Não codifique-o. Leia no token de lançamento <code>game_scope</code> reivindicação, ou - por um
+jogo de navegador hospedado na plataforma — de <code>location.hostname</code>, já que o subdomínio é o uid.</p>
+<h2 id="endpoints">Pontos finais</h2>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Caminho</th>
+<th>Autenticação</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}</code></td>
+<td>Portador</td>
+<td>Informações do jogo + estatísticas do chamador</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/games/{slug}/launch-token</code></td>
+<td>Portador</td>
+<td>Crie um token de lançamento com escopo de jogo</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/achievements</code></td>
+<td>Portador</td>
+<td>As conquistas do jogo + o estado de desbloqueio do chamador</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/linked-achievements/{otherSlug}</code></td>
+<td>Portador</td>
+<td>O que o chamador desbloqueou em outro jogo</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/controls</code></td>
+<td>Portador</td>
+<td>Obtenha as ligações de controle efetivas do chamador</td>
+</tr>
+<tr>
+<td>COLOCAR</td>
+<td><code>/api/v1/games/{slug}/controls</code></td>
+<td>Portador</td>
+<td>Substituir as substituições de controle do chamador</td>
+</tr>
+<tr>
+<td>EXCLUIR</td>
+<td><code>/api/v1/games/{slug}/controls</code></td>
+<td>Portador</td>
+<td>Redefinir os controles do chamador para os padrões do manifesto</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>Portador</td>
+<td>As configurações armazenadas do chamador para este jogo, além dos limites de tamanho</td>
+</tr>
+<tr>
+<td>COLOCAR</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>Portador</td>
+<td>Substitua todo o mapa de configurações do chamador</td>
+</tr>
+<tr>
+<td>CORREÇÃO</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>Portador</td>
+<td>Mesclar no mapa armazenado; <code>null</code> remove uma chave</td>
+</tr>
+<tr>
+<td>EXCLUIR</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>Portador</td>
+<td>Limpe todas as configurações armazenadas pelo chamador para este jogo</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/settings/{key}</code></td>
+<td>Portador</td>
+<td>Uma configuração ou <code>404</code></td>
+</tr>
+<tr>
+<td>COLOCAR</td>
+<td><code>/api/v1/games/{slug}/settings/{key}</code></td>
+<td>Portador</td>
+<td>Armazene uma configuração</td>
+</tr>
+<tr>
+<td>EXCLUIR</td>
+<td><code>/api/v1/games/{slug}/settings/{key}</code></td>
+<td>Portador</td>
+<td>Remover uma configuração</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/sessions/mine</code></td>
+<td>Portador</td>
+<td>Sessões ativas do chamador</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/sessions/{sessionId}</code></td>
+<td>Portador</td>
+<td>Detalhes da sessão (somente participantes)</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/sessions/{sessionId}/recovery</code></td>
+<td>Portador (participante ou proprietário)</td>
+<td>Dados de recuperação, validade e limites efetivos de transporte</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/games/{slug}/sessions/{sessionId}/leave</code></td>
+<td>Portador (participante)</td>
+<td>Deixe um mundo persistente sem espaço → <code>204</code></td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/leaderboards</code></td>
+<td>Portador</td>
+<td>Tabuleiros ativos criados pelo proprietário do próprio jogo</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/games/{slug}/sessions/ai</code></td>
+<td>Portador</td>
+<td>Crie uma sessão prática versus a plataforma AI</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/queues</code></td>
+<td>Portador</td>
+<td>Formas de correspondência que este jogo aceita</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/games/{slug}/matchmaking</code></td>
+<td>Portador</td>
+<td>Enfileirar para matchmaking mais próximo-elo (<code>?queues=</code> subconjunto)</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/matchmaking</code></td>
+<td>Portador</td>
+<td>Último ticket enquanto ainda pode ser associado</td>
+</tr>
+<tr>
+<td>EXCLUIR</td>
+<td><code>/api/v1/games/{slug}/matchmaking</code></td>
+<td>Portador</td>
+<td>Cancelar tickets na fila</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/diagnostics</code></td>
+<td>JWT (proprietário)</td>
+<td>Sessões ao vivo, medição de scripts, fila, integridade do webhook</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/webhooks</code></td>
+<td>JWT (proprietário)</td>
+<td>Listar endpoints de webhook</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/games/{slug}/webhooks</code></td>
+<td>JWT (proprietário)</td>
+<td>Crie um webhook; segredo retornado uma vez</td>
+</tr>
+<tr>
+<td>EXCLUIR</td>
+<td><code>/api/v1/games/{slug}/webhooks/{id}</code></td>
+<td>JWT (proprietário)</td>
+<td>Excluir um webhook</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/games/{slug}/webhooks/{id}/resume</code></td>
+<td>JWT (proprietário)</td>
+<td>Limpe o disjuntor após consertar o endpoint</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/games/{slug}/invites</code></td>
+<td>Portador</td>
+<td>Convide um amigo para um novo jogo ou para um que você esteja jogando</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/invites</code></td>
+<td>Portador</td>
+<td>Entrada pendente + todos os convites enviados</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/games/{slug}/invites/{inviteId}/accept</code></td>
+<td>Portador</td>
+<td>Aceitar um convite (cria a sessão ou ingressa naquela que ele nomeia)</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/games/{slug}/invites/{inviteId}/decline</code></td>
+<td>Portador</td>
+<td>Recusar um convite</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/me/game-invites</code></td>
+<td>JWT da conta</td>
+<td>Todos os convites pendentes — todos os jogos, ambos os sistemas de convites (máximo de 50)</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/replays/mine</code></td>
+<td>Portador</td>
+<td>Sessões finalizadas do chamador (jogos com replays)</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/replays/{sessionId}</code></td>
+<td>Portador</td>
+<td>Estado de repetição completo (somente participantes)</td>
+</tr>
+<tr>
+<td>WS</td>
+<td><code>/ws/v1/games?sessionId={guid}</code></td>
+<td>Portador</td>
+<td>Jogabilidade WebSocket</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/games/{slug}/server/sessions/{sessionId}</code></td>
+<td>Token do servidor de jogo</td>
+<td>Reconciliação de sessão de back-end de contêiner; não disponível para tokens de jogador</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/games/{slug}/server/token</code></td>
+<td>Chave de atualização</td>
+<td>Renovar o token de servidor expirado de um contêiner</td>
+</tr>
+</tbody>
+</table>
+<p>Os corpos de erro variam; ver <a href="/pt/docs/api/conventions.html#requests-and-responses">Convenções de API</a>.</p>
+<h2 id="game-info">Informações do jogo</h2>
+<h3 id="get-apiv1gamesslug"><code>GET /api/v1/games/{slug}</code></h3>
+<p>Retorna a definição do jogo mais as estatísticas do chamador para esse jogo. <code>404</code> se tal jogo não existir,
+ou se o jogo for apenas para navegador (tem um slug, mas não possui back-end de servidor).</p>
+<pre><code class="language-json">{
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "name": "Chess",
+  "enabled": true,
+  "leaderboardId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "maxConcurrentSessionsPerPlayer": 20,
+  "replaysEnabled": true,
+  "buildId": "s12",
+  "me": {
+    "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "elo": 1200,
+    "wins": 4,
+    "losses": 2,
+    "draws": 1,
+    "activeSessionCount": 2
+  }
+}
+</code></pre>
+<ul>
+<li><code>leaderboardId</code> é opcional.</li>
+<li><code>me.elo</code> o padrão é <code>1200</code>; <code>wins</code>/<code>losses</code>/<code>draws</code> são lidos no documento por jogador de propriedade do tempo de execução do servidor.</li>
+<li><code>replaysEnabled</code> diz se as sessões finalizadas deste jogo são mantidas - leia em vez de presumir e oculte sua IU de replay quando for <code>false</code>. Ver <a href="#replays">Repetições</a>.</li>
+<li><code>buildId</code> nomeia a lógica do servidor atualmente servindo o jogo (<code>s</code> + versão do script ou <code>c</code> + prefixo de resumo da imagem). Envie de volta como <code>ws/v1/games?build=…</code> então um cliente obsoleto é recusado <code>409 {"error":"build_mismatch"}</code> antes de agir nos campos movidos. Omitindo <code>build</code> conecta como antes.</li>
+</ul>
+<h2 id="launch-tokens">Tokens de lançamento</h2>
+<h3 id="post-apiv1gamessluglaunch-token"><code>POST /api/v1/games/{slug}/launch-token</code></h3>
+<p>Cria um JWT com escopo de jogo (vida útil padrão de 60 minutos) carregando <code>game_scope={slug}</code> e nenhuma reivindicação de permissão. Um token com escopo definido pode cunhar novamente um token para seu próprio jogo — este é o padrão de atualização do cliente — mas a renovação é limitada por <code>launch_chain</code> (padrão 12 horas a partir da sessão original do usuário). Além dessa renovação do teto é <code>403</code>. Os clientes devem atualizar antes que o token expire; o cliente de referência de xadrez, por exemplo, é atualizado a cada 45 minutos. Renove também antes de reconectar uma tomada - consulte <a href="#gameplay-websocket">Jogabilidade WebSocket</a>.</p>
+<pre><code class="language-json">{
+  "token": "eyJhbGciOi...",
+  "expiresInSeconds": 3600
+}
+</code></pre>
+<h2 id="achievements">Conquistas</h2>
+<h3 id="get-apiv1gamesslugachievements"><code>GET /api/v1/games/{slug}/achievements</code></h3>
+<p>Cada conquista declarada pelo back-end oficial do jogo, com o estado de desbloqueio do chamador. Segredo
+as conquistas permanecem ocultas até que o chamador as desbloqueie. Aceita um JWT de usuário completo ou um JWT com escopo de jogo
+token de lançamento. <code>404</code> quando o slug não tem uma definição de jogo oficial.</p>
+<pre><code class="language-json">[
+  {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "key": "first-win",
+    "name": "First Win",
+    "description": "Win a match.",
+    "icon": null,
+    "secret": false,
+    "points": 10,
+    "unlocked": true,
+    "unlockedAt": "2026-07-25T09:14:02Z"
+  }
+]
+</code></pre>
+<p>As conquistas do jogo são <strong>autoridade do servidor</strong>: apenas o script ou contêiner do jogo os concede,
+e o cliente reivindicou <code>POST /api/v1/me/achievements/unlock</code> endpoint os recusa. Desbloqueios ao vivo
+chegar no soquete do jogo como <code>{"type":"achievement"}</code> quadros. Os contratos completos estão em
+<a href="/pt/docs/api/achievements.html">Conquistas</a>, <a href="/pt/docs/api/game-scripts.html#achievements">Scripts de jogos</a>, e
+<a href="/pt/docs/api/container-games.html#control-channel">Servidores de jogos em contêiner</a>.</p>
+<h3 id="get-apiv1gamessluglinked-achievementsotherslug"><code>GET /api/v1/games/{slug}/linked-achievements/{otherSlug}</code></h3>
+<p>Os próprios desbloqueios do chamador em <strong>outro</strong> jogo, para que este jogo possa abrir recursos baseados neles. Funciona
+com o token de lançamento deste jogo. Ver
+<a href="/pt/docs/api/achievements.html#achievements-from-other-games">Conquistas — Conquistas de outros jogos</a>.</p>
+<h2 id="per-player-control-bindings">Ligações de controle por jogador</h2>
+<p>Os jogos podem declarar controles do navegador de desktop com <code>control.*</code> entradas em
+<a href="/pt/docs/api/github-games.html#default-control-bindings"><code>starhermit.txt</code></a>. A API de controles armazena um
+substituição separada para cada usuário e jogo. JWTs de usuário completo e tokens de lançamento no escopo do jogo são
+aceito; um token de lançamento <code>game_scope</code> deve corresponder <code>{slug}</code>.</p>
+<h3 id="get-apiv1gamesslugcontrols"><code>GET /api/v1/games/{slug}/controls</code></h3>
+<p>Retorna as ligações efetivas na ordem manifesta. <code>codes</code> contém a substituição do usuário quando
+existe um, caso contrário <code>defaultCodes</code>. Devoluções <code>404</code> <code>"This game declares no controls."</code> quando o
+construção ao vivo <code>starhermit.txt</code> não tem validade <code>control.*</code> line — declare-os e publique uma compilação; ver
+<a href="/pt/docs/tutorials/game-controls.html">Tutorial: adicione controles ao seu jogo</a>.</p>
+<pre><code class="language-json">{
+  "actions": [
+    {
+      "action": "up",
+      "label": "Run forward",
+      "defaultCodes": ["KeyW", "ArrowUp"],
+      "codes": ["KeyW", "ArrowUp"]
+    },
+    {
+      "action": "shoot",
+      "label": "Shoot",
+      "defaultCodes": ["Space"],
+      "codes": ["KeyJ"]
+    }
+  ]
+}
+</code></pre>
+<h3 id="put-apiv1gamesslugcontrols"><code>PUT /api/v1/games/{slug}/controls</code></h3>
+<p>Substitui as substituições do chamador. O <code>bindings</code> objeto pode conter um subconjunto do declarado
+ações; as ações omitidas continuam a usar seus padrões.</p>
+<pre><code class="language-json">{
+  "bindings": {
+    "up": ["KeyW", "ArrowUp"],
+    "shoot": ["KeyJ"]
+  }
+}
+</code></pre>
+<p>Cada ação deve ser declarada pelo jogo. Cada ação deve ter 1–4 válidas
+<code>KeyboardEvent.code</code> valores, e nenhum código pode ser atribuído a duas ações no resultado
+mapa eficaz. Ações, códigos ou conflitos inválidos retornam <code>400</code>.</p>
+<h3 id="delete-apiv1gamesslugcontrols"><code>DELETE /api/v1/games/{slug}/controls</code></h3>
+<p>Exclui todas as substituições do chamador e restaura os padrões do manifesto. Devoluções <code>204</code>.
+As gravações do token de lançamento são intencionais, portanto, um jogo hospedado pode fornecer sua própria tela de religação.</p>
+<h2 id="per-player-game-settings">Configurações de jogo por jogador</h2>
+<p>Onde seu jogo continua <strong>suas próprias opções</strong> para um jogador — volume mestre, detalhes gráficos, legenda
+tamanho, câmera preferida, último carregamento escolhido – então eles seguem o jogador até qualquer máquina em que fizerem login
+de. Um armazenamento de chave/valor com escopo para um jogador e um jogo.</p>
+<p><strong>Nada declara um esquema.</strong> A plataforma armazena suas chaves e valores e nunca os lê,
+então você adiciona uma opção escrevendo-a: nenhuma entrada de manifesto, nenhuma reimplantação, nenhuma liberação de plataforma. Isso também
+significa que a plataforma não pode validá-los para você – um erro de digitação no nome de uma chave é uma nova configuração, não uma
+erro.</p>
+<p>Assim como a API de controles, um token de inicialização no escopo do jogo é aceito (seu <code>game_scope</code> deve corresponder <code>{slug}</code>),
+portanto, uma tela de opções do jogo funciona apenas com o token que o jogo já possui. Ao contrário
+controles, nenhuma declaração de manifesto é necessária: todo jogo possui armazenamento de configurações a partir do momento em que
+existe, incluindo um jogo somente para navegador, sem nenhuma lógica de servidor.</p>
+<p>Escolha a loja certa - <a href="/pt/docs/api/catalog.html#saving-from-inside-a-game-launch-token">salva na nuvem</a> manter o progresso (um arquivo opaco por título, 10 MB, acessível também com o token de lançamento),
+e o estado do player do próprio back-end de um script ou contêiner é autoritativo do servidor e não pode ser gravado a partir de um
+cliente. As configurações são as pequenas preferências intermediárias de propriedade do cliente.</p>
+<h3 id="get-apiv1gamesslugsettings"><code>GET /api/v1/games/{slug}/settings</code></h3>
+<p>Tudo o que o chamador armazenou para este jogo. <code>settings</code> está vazio para um jogador que nunca salvou
+qualquer coisa - isso é um <code>200</code>, não um <code>404</code>. As chaves voltam ordenadas.</p>
+<pre><code class="language-json">{
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "settings": {
+    "audio.master": 0.8,
+    "graphics.detail": "ultra",
+    "graphics.options": { "shadows": true, "msaa": 4 }
+  },
+  "count": 3,
+  "bytes": 118,
+  "updatedAt": "2026-08-07T15:04:11Z",
+  "limits": { "maxKeys": 200, "maxKeyLength": 128, "maxTotalBytes": 2097152, "maxAccountBytes": 67108864 }
+}
+</code></pre>
+<p><code>bytes</code> é o custo atual das configurações deste jogador <code>limits.maxTotalBytes</code>. Leia o
+limites em vez de codificá-los: a permissão é uma configuração do operador e um jogo pode ser concedido
+seu próprio. <code>maxKeys</code> (200 por padrão) também pode ser definido por jogo, e <code>maxAccountBytes</code> limita um
+configurações da conta em todos os jogos (64 MB por padrão).</p>
+<h3 id="put-apiv1gamesslugsettings"><code>PUT /api/v1/games/{slug}/settings</code></h3>
+<p>Substitui todo o mapa. <strong>Chaves que o corpo omite são excluídas</strong> - envie tudo ou use <code>PATCH</code>.</p>
+<pre><code class="language-json">{ "settings": { "audio.master": 0.8, "graphics.detail": "ultra" } }
+</code></pre>
+<p>Um vazio <code>settings</code> object limpa as configurações do jogo para o chamador. Retorna a mesma forma que
+<code>GET</code>.</p>
+<h3 id="patch-apiv1gamesslugsettings"><code>PATCH /api/v1/games/{slug}/settings</code></h3>
+<p>Mescla-se com o que está armazenado, deixando as chaves que não menciona sozinhas. UM <code>null</code> valor <strong>remove</strong> é
+chave. Isso mescla chaves de configuração de nível superior; um valor de objeto substitui todo o valor em sua chave,
+incluindo suas propriedades aninhadas. Isso é o que
+tela de opções deve usar - pode salvar o controle deslizante que se moveu sem primeiro ler e
+reescrevendo todo o resto.</p>
+<pre><code class="language-json">{ "settings": { "audio.music": 0.25, "graphics.options": null } }
+</code></pre>
+<h3 id="get--put--delete-apiv1gamesslugsettingskey"><code>GET</code> / <code>PUT</code> / <code>DELETE /api/v1/games/{slug}/settings/{key}</code></h3>
+<p>Uma configuração de cada vez. <code>GET</code> retorna <code>{ "key", "value", "updatedAt" }</code>, ou <code>404</code> se o chamador tiver
+nunca guardei. <code>PUT</code> leva <code>{ "value": &lt;any JSON&gt; }</code> e armazena o valor <strong>literalmente</strong> - incluindo
+um explícito <code>null</code>, que aqui é um valor como qualquer outro, não uma exclusão. <code>DELETE</code> retorna <code>204</code>e
+remover algo que não existe é um não-op em vez de um erro.</p>
+<pre><code class="language-bash">curl -X PUT "https://api.starhermit.com/api/v1/games/$SLUG/settings/audio.master" \
+  -H "Authorization: Bearer $LAUNCH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"value": 0.35}'
+</code></pre>
+<h3 id="rules">Regras</h3>
+<table>
+<thead>
+<tr>
+<th>Regra</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Configurando nomes</td>
+<td>1–128 caracteres de <code>A-Z a-z 0-9 . _ - :</code> - namespace livremente (<code>audio.master</code>, <code>graphics:shadows</code>)</td>
+</tr>
+<tr>
+<td>Valores</td>
+<td>Qualquer JSON: número, string, booleano, array, objeto, <code>null</code></td>
+</tr>
+<tr>
+<td>Configurações por jogador, por jogo</td>
+<td>200</td>
+</tr>
+<tr>
+<td>Bytes por jogador, por jogo</td>
+<td><strong>2 MB por padrão</strong> — um operador pode aumentá-lo ou diminuí-lo e conceder a um jogo uma franquia diferente</td>
+</tr>
+</tbody>
+</table>
+<p>Uma única configuração pode usar toda a permissão de bytes; não há limite menor por valor separado.</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td>Nome de configuração incorreto ou corpo que não é <code>{"settings": {...}}</code> / <code>{"value": ...}</code></td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>Nenhum jogo responde a esse slug, ou (tecla única <code>GET</code>) nada é armazenado sob essa chave</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>Acima do limite — muitas configurações ou muitos bytes. A mensagem indica o limite</td>
+</tr>
+</tbody>
+</table>
+<p>Um lote que contém uma chave incorreta não grava nenhuma das chaves boas. As configurações são por jogador e por
+jogo: nada vaza entre dois jogadores ou entre dois jogos do mesmo jogador. Eles sobrevivem a um
+jogo sendo desativado ou removido da lista, porque são dados do jogador e não do jogo.</p>
+<h2 id="sessions">Sessões</h2>
+<h3 id="get-apiv1gamesslugsessionsmine"><code>GET /api/v1/games/{slug}/sessions/mine</code></h3>
+<p>As sessões ativas do chamador para este jogo. <code>myTurn</code> e <code>deadline</code> são analisados ​​a partir do estado do script <code>summary</code> objeto (ver <a href="/pt/docs/api/game-scripts.html#the-platform-readable-window">Scripts de jogos</a>). <code>pausedAt</code> é definido enquanto um <a href="/pt/docs/tutorials/persistent-sessions.html">persistente</a> a sessão é pausada sem ninguém nela e <code>null</code> de outra forma.</p>
+<p><strong>Sessões vinculadas à sala estão incluídas.</strong> A <a href="/pt/docs/api/realtime.html#room-bound-sessions">sala em tempo real</a>A sessão vinculada de lista todos os humanos que estavam sentados quando a sala começou, então aparece aqui para cada um deles enquanto está <code>active</code>. Assentos AI não estão disponíveis <code>players</code>. Sair da sala, ou fechar a sala, não remove ninguém da sessão, por isso permanece nesta lista até que a sessão termine - exceto em um <a href="/pt/docs/api/realtime.html#join-in-progress">adesão em andamento</a> sala, onde um jogador que sai cede seu lugar e é retirado da sessão, e um recém-chegado admitido no meio da partida é adicionado a ela. Não há ID de sala na resposta: use <code>GET /api/v1/realtime/rooms/joined</code> para os quartos do chamador e combine seus <code>gameSessionId</code> contra <code>sessionId</code>.</p>
+<pre><code class="language-json">[
+  {
+    "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "status": "active",
+    "players": [
+      { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+      { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" }
+    ],
+    "createdAt": "2026-07-20T14:03:11Z",
+    "finishedAt": null,
+    "myTurn": true,
+    "deadline": 1784642591000,
+    "pausedAt": null
+  }
+]
+</code></pre>
+<h3 id="get-apiv1gamesslugsessionssessionid"><code>GET /api/v1/games/{slug}/sessions/{sessionId}</code></h3>
+<p>Detalhe da sessão. Apenas participantes - <code>403</code> de outra forma.</p>
+<pre><code class="language-json">{
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "status": "active",
+  "players": [
+    { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+    { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" }
+  ],
+  "createdAt": "2026-07-20T14:03:11Z",
+  "finishedAt": null,
+  "chatConversationId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+  "result": null
+}
+</code></pre>
+<h3 id="recovery-and-explicit-leaving">Recuperação e saída explícita</h3>
+<p><code>GET /api/v1/games/{slug}/sessions/{sessionId}/recovery</code> retorna instantâneo efetivo, restauração,
+valores de retenção e transporte. Os participantes e o proprietário do jogo podem lê-lo. Unidades de tempo e tudo
+campos de resposta são descritos em <a href="/pt/docs/session-lifecycle.html#read-recovery-information">Ciclo de vida e recuperação da sessão</a>.</p>
+<p><code>POST /api/v1/games/{slug}/sessions/{sessionId}/leave</code> desiste de ser membro de um mundo persistente
+sem uma sala em tempo real. Não leva corpo e retorna <code>204</code>; a partida humana final acaba com o mundo.
+<code>403</code> significa que não é membro, <code>404</code> significa nenhuma sessão, <code>410</code> significa terminado, e <code>409</code> significa um não persistente
+sessão ou uma sessão vinculada à sala. Para uma sessão vinculada à sala, use o <code>/leave</code> ponto final. Fechando
+apenas um soquete preserva a associação. Ver <a href="/pt/docs/session-lifecycle.html#disconnecting-and-leaving-are-different">desconectando e saindo</a>.</p>
+<h3 id="post-apiv1gamesslugsessionsai"><code>POST /api/v1/games/{slug}/sessions/ai</code></h3>
+<p>Cria uma sessão prática na plataforma AI: ID de usuário fixo <code>00000000-0000-4000-8000-00000000a1a1</code>, nome de usuário <strong>"A casa"</strong>. O back-end oficial do jogo reproduz a IA – não há serviço de bot externo.</p>
+<pre><code class="language-json">{ "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e" }
+</code></pre>
+<h2 id="matchmaking">Organização de partidas</h2>
+<p>Um script declara as formas de correspondência que aceita por meio <code>game.queues</code>. Um jogo sem aceitação
+declarações tem um implícito <code>default</code> fila (duas equipes de uma). O contêiner atual
+<code>/describe</code> leitor faz <strong>não</strong> importar <code>queues</code>, então os jogos de contêiner usam esse formato 1v1 implícito.
+Um cliente que não nomeia nenhuma fila recebe o jogo primeiro.</p>
+<p>Até oito filas de script são retidas. As teclas são cortadas, minúsculas, não vazias e no máximo 32
+personagens; chaves duplicadas mantêm a primeira. <code>teams</code> é fixado em 2–8 e <code>teamSize</code> para 1–16;
+formas que excedam 32 jogadores no total são descartadas. Declarações inválidas podem voltar ao implícito
+1v1, então verifique as formas efetivas com <code>GET /queues</code> após a publicação.</p>
+<h3 id="get-apiv1gamesslugqueues"><code>GET /api/v1/games/{slug}/queues</code></h3>
+<pre><code class="language-json">[
+  { "key": "duos", "teams": 2, "teamSize": 2, "players": 4 }
+]
+</code></pre>
+<h3 id="post-apiv1gamesslugmatchmaking"><code>POST /api/v1/games/{slug}/matchmaking</code></h3>
+<p>Coloca o chamador na fila para o emparelhamento elo mais próximo. Repetível <code>?queues=</code> chaves de consulta nomeiam um <strong>subconjunto</strong> de
+essas formas (por exemplo, 1v1 e 2v2, não 3v3). A correspondência apenas preenche um ticket em relação a uma forma permitida.
+Por exemplo:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/matchmaking?queues=solo&amp;queues=duos
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<p>Use chaves retornadas por <code>GET /queues</code>. <code>?queue=solo</code> seleciona uma única forma; se ambos <code>queue</code> e
+<code>queues</code> são fornecidos, suas chaves são combinadas e desduplicadas sem distinção entre maiúsculas e minúsculas. Uma chave desconhecida
+é <code>404</code>; uma lista vazia após a validação é <code>400</code>. Devoluções <code>409</code> se o chamador já estiver na fila
+ou no limite de sessões simultâneas.</p>
+<p>A pesquisa começa em uma banda elo estreita e se amplia enquanto o ticket aguarda (padrão 100, +10/s).
+Status: <code>queued</code>, <code>matched</code>, <code>cancelled</code>, <code>expired</code> (esperou além do limite, padrão 300 s, sem
+encontrar alguém - ofereça um jogo de treino em vez de girar). Uma festa é um <a href="/pt/docs/api/realtime.html">sala em tempo real</a>:
+<code>POST /api/v1/realtime/rooms/{id}/matchmake</code> (anfitrião, lobby) entra em toda a escalação como uma equipe.</p>
+<pre><code class="language-json">{
+  "ticketId": "b3b7c8d2-5c1e-4f3a-9e2d-1a2b3c4d5e6f",
+  "status": "queued",
+  "sessionId": null,
+  "waitedSeconds": 12,
+  "searchEloBand": 220,
+  "maxWaitSeconds": 300
+}
+</code></pre>
+<p>Os jogos podem optar por <a href="/pt/docs/starhermit-txt.html#starting-matchmaking-before-every-human-seat-is-filled">o prazo começa em <code>starhermit.txt</code></a>:
+<code>matchmaking.max_wait_seconds</code> inicia uma partida com preenchimento insuficiente após a espera e
+<code>matchmaking.ai_players</code> limita quantos assentos vagos se tornam IA. Outros assentos permanecem vazios. Humano completo
+as partidas começam cedo. <code>maxWaitSeconds</code> relata a configuração desse jogo; esses ingressos ficam <code>queued</code>
+até que o matchmaking os inicie, em vez de expirar no limite de espera global.</p>
+<h3 id="get-apiv1gamesslugmatchmaking"><code>GET /api/v1/games/{slug}/matchmaking</code></h3>
+<p>Retorna o último ticket do chamador ou <code>404</code>. A <code>matched</code> ticket é reportado <strong>apenas enquanto estiver
+sessão ainda está <code>active</code></strong>. Depois que a partida terminar, isso é <code>404</code> então o lobby oferece uma nova partida
+em vez de apontar para um ID de sessão inoperante.</p>
+<h3 id="delete-apiv1gamesslugmatchmaking"><code>DELETE /api/v1/games/{slug}/matchmaking</code></h3>
+<p>Cancela os tickets na fila do chamador. Devoluções <code>204</code>.</p>
+<h2 id="invites">Convites</h2>
+<h3 id="post-apiv1gamessluginvites"><code>POST /api/v1/games/{slug}/invites</code></h3>
+<p>Corpo da solicitação:</p>
+<pre><code class="language-json">{ "toUserId": "9b2f8c1a-1111-4222-8333-444455556666" }
+</code></pre>
+<p>O alvo deve ser um amigo (<code>403</code> caso contrário - veja <a href="/pt/docs/api/friends.html">Amigos</a>); <code>409</code> em um convite duplicado ou quando um dos jogadores estiver no limite da sessão. O convidado também recebe um <a href="/pt/docs/api/chat.html#game_invite-one-event-for-both-invite-systems"><code>game_invite</code> evento</a> empurrado em seu soquete de bate-papo, com <code>kind: "session"</code>.</p>
+<h4 id="inviting-a-friend-into-a-game-in-progress">Convidando um amigo para um jogo em andamento</h4>
+<p>Adicione a sessão em que você está jogando:</p>
+<pre><code class="language-json">{ "toUserId": "9b2f8c1a-1111-4222-8333-444455556666", "sessionId": "3f0c…" }
+</code></pre>
+<p>Aceitando então <strong>admite o amigo naquela sessão de corrida</strong> em vez de começar um novo - eles se tornam jogadores em todos os sentidos (socket, <code>ctx.players</code>, restaura, reconecta). Seu jogo decide se os aceita: a plataforma pede um script <code>game.onMembershipChange(ctx)</code> ou um contêiner <a href="/pt/docs/api/container-games.html"><code>POST /sessions/{id}/members</code></a>, e um jogo que não recusa todas essas associações. Regras:</p>
+<ul>
+<li>A sessão deve ser uma sessão ativa deste jogo que <strong>você</strong> jogar em (<code>403</code> de outra forma, <code>410</code> se tiver terminado), seu amigo ainda não deve estar nele (<code>409</code>) e não deve pertencer a uma sala em tempo real (<code>409</code> — convidar através da sala, cujos assentos são a escalação).</li>
+<li>A resposta carrega <code>targetSessionId</code>; <code>sessionId</code> fica <code>null</code> até que o convite seja aceito.</li>
+<li>Ao aceitar tudo é verificado novamente. Se o jogo recusar (completo, fechado…) a aceitação é uma <code>409</code> e o convite <strong>permanece pendente</strong>. Se a partida terminou o convite é <strong>cancelado</strong> e as respostas aceitas <code>410</code> - nunca se transforma em um novo jogo.</li>
+<li>Somente o limite de sessões simultâneas do convidado se aplica. Você pode manter um convite pendente por amigo e por destino, para que um convite para sua partida e um convite para um novo jogo possam coexistir.</li>
+</ul>
+<p>Uma construção de plataforma anterior a esse recurso ignora <code>sessionId</code> e inicia uma nova sessão ao aceitar; <code>targetSessionId</code> na resposta informa qual você obteve.</p>
+<p><strong>Qual convite você deve enviar?</strong> Aceitar um convite simples (não <code>sessionId</code>) <em>cria uma nova sessão</em> para os dois jogadores. Se o autor do convite já estiver sentado em um <a href="/pt/docs/api/realtime.html">sala em tempo real</a> (um saguão com assentos), convide-os para aquela sala - <code>POST /api/v1/realtime/rooms/{id}/invites</code> - então aceitar coloca-os na mesa em que você realmente está. Ambos notificam o convidado da mesma forma, portanto nunca envie os dois para um só convite: isso notifica duas vezes.</p>
+<p>Resposta:</p>
+<pre><code class="language-json">{
+  "inviteId": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+  "from": { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+  "to": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
+  "status": "pending",
+  "createdAt": "2026-07-20T14:10:00Z",
+  "sessionId": null,
+  "targetSessionId": null,
+  "notified": true
+}
+</code></pre>
+<p><code>notified</code> informa se o push alcançou uma conexão ativa (<code>false</code> = o convidado não está conectado; o convite ainda está válido e eles o verão na caixa de entrada). Isso é <code>null</code> nas respostas listar/aceitar/recusar, onde não se aplica.</p>
+<h3 id="get-apiv1gamessluginvites"><code>GET /api/v1/games/{slug}/invites</code></h3>
+<pre><code class="language-json">{
+  "incoming": [ { "inviteId": "...", "from": { "userId": "...", "username": "bob" }, "to": { "userId": "...", "username": "alice" }, "status": "pending", "createdAt": "2026-07-20T14:10:00Z", "sessionId": null } ],
+  "outgoing": []
+}
+</code></pre>
+<p><code>incoming</code> contém apenas convites pendentes; <code>outgoing</code> contém todos os convites de saída do chamador.</p>
+<h3 id="post-apiv1gamessluginvitesinviteidaccept"><code>POST /api/v1/games/{slug}/invites/{inviteId}/accept</code></h3>
+<p>Aceita o convite e cria a sessão — ou, para um convite com um <code>targetSessionId</code>, junta-se a esse. Retorna o <code>GameInviteDto</code> com <code>status</code> <code>accepted</code> e <code>sessionId</code> definido para a sessão a ser aberta.</p>
+<h3 id="post-apiv1gamessluginvitesinviteiddecline"><code>POST /api/v1/games/{slug}/invites/{inviteId}/decline</code></h3>
+<p>Devoluções <code>204</code>.</p>
+<h3 id="get-apiv1megame-invites"><code>GET /api/v1/me/game-invites</code></h3>
+<p>Requer um token de conta completo; os tokens de inicialização do jogador não podem ler esta caixa de entrada de toda a conta.</p>
+<p>Cada convite pendente endereçado ao chamador (máximo de 50, o mais recente primeiro) — o substituto da enquete para a notificação push e o único lugar para perguntar "para que sou convidado?". Ele abrange <strong>ambos</strong> sistemas de convite: convites para sessões desta página e <a href="/pt/docs/api/realtime.html#invites">convites para salas em tempo real</a>. As entradas são exatamente as <a href="/pt/docs/api/chat.html#game_invite-one-event-for-both-invite-systems"><code>game_invite</code> cargas úteis</a>, então um cliente renderiza resultados de push e poll com o mesmo código.</p>
+<pre><code class="language-json">[
+  {
+    "inviteId": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+    "kind": "room",
+    "gameSlug": "poker",
+    "gameName": "StarHermit Poker",
+    "roomId": "b1d2c3e4-5f60-4a71-8b92-c3d4e5f60718",
+    "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
+    "createdAt": "2026-07-26T14:10:00Z",
+    "acceptPath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/accept",
+    "declinePath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/decline"
+  },
+  {
+    "inviteId": "c4a5b6d7-8e9f-4012-8345-6789abcdef01",
+    "kind": "session",
+    "gameSlug": "chess",
+    "gameName": "Chess",
+    "roomId": null,
+    "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
+    "createdAt": "2026-07-20T14:10:00Z",
+    "acceptPath": "/api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/c4a5b6d7-8e9f-4012-8345-6789abcdef01/accept",
+    "declinePath": "/api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/c4a5b6d7-8e9f-4012-8345-6789abcdef01/decline"
+  }
+]
+</code></pre>
+<p>Responda cada entrada por conta própria <code>acceptPath</code>/<code>declinePath</code> — os dois sistemas mantêm IDs de convite separados, portanto, um ID de convite de sala em <code>/games/{slug}/invites/...</code> é um <code>404</code>. Os convites de sala cuja sala foi fechada ou iniciada sem ingresso em andamento são omitidos; não há mais nada para aceitar. O mesmo acontece com os convites de sessão para uma partida que terminou. Cada entrada carrega <code>inProgress</code> (aceitar ingressos em um jogo já em andamento - um convite de sessão com um alvo ou um convite de sala para uma sala iniciada em andamento) e esse jogo <code>sessionId</code>, para que um cliente possa dizer "junte-se ao jogo deles" em vez de "jogar".</p>
+<h3 id="share-links-invite-by-url">Compartilhe links (convite por URL)</h3>
+<p>O fluxo de convite acima exige que os dois jogadores já sejam amigos. Para convidar alguém que está <strong>ainda não está na plataforma</strong> (ou ainda não é amigo), um jogo pode distribuir um <strong>compartilhar link</strong> — uma URL para o painel da web que automatiza toda a integração:</p>
+<pre><code>https://dashboard.starhermit.com/game-invite/&lt;userId&gt;/&lt;gameSlug&gt;
+</code></pre>
+<ul>
+<li><code>&lt;userId&gt;</code> — o ID de usuário do jogador que está compartilhando. Um cliente de jogo já tem: é o <code>sub</code> reivindicação de seu token de lançamento (a implementação de referência de xadrez o expõe como <code>Net.userId</code>).</li>
+<li><code>&lt;gameSlug&gt;</code> - a lesma do jogo (<code>game_scope</code> alegar). Jogos sem um script oficial ou back-end de contêiner usam o ID do jogo GitHub (um GUID); o painel também aceita.</li>
+<li><strong>String de consulta opcional — sua.</strong> Qualquer coisa depois <code>?</code> é passado para o seu jogo inalterado:
+<code>…/game-invite/&lt;userId&gt;/&lt;gameSlug&gt;?room=K7MP2X&amp;map=arena</code> abre seu jogo em
+<code>https://&lt;game-id&gt;.starhermit.com/…?room=K7MP2X&amp;map=arena</code>. Use-o para descartar o destinatário diretamente
+em uma sala, um nível ou um lobby. Ele sobrevive ao login do destinatário e é adicionado ao seu
+URL do jogo em vez de substituir qualquer coisa lá. O token de lançamento ainda chega no
+<code>#game_token=</code> fragmento, para que os dois nunca colidam. Codifique em URL os valores que você colocou nele.</li>
+</ul>
+<p>Quando o destinatário abre o link, o <strong>painel</strong> (não o jogo) faz a parte automatizada do convite de amizade — nenhum novo endpoint de back-end está envolvido, ele compõe as APIs existentes:</p>
+<ol>
+<li>Faz login (OAuth por meio de um provedor ativo) ou reutiliza a sessão existente. A intenção do link sobrevive à viagem de ida e volta de login.</li>
+<li>Mostra uma caixa de diálogo de consentimento nomeando o compartilhador e o jogo e, em seguida, <strong>amigos, o compartilhador</strong>: aceita o pedido de amizade pendente do compartilhador, se existir, caso contrário, envia um (<code>POST /api/v1/me/friend-requests</code>).</li>
+<li>Solicita que eles escolham um apelido se sua conta não tiver nenhum (os jogos exibem apelidos de perfil - consulte <a href="/pt/docs/api/profile.html">Perfil</a>).</li>
+<li>Inicia o jogo (o servidor hospedado na plataforma <code>https://&lt;game-id&gt;.starhermit.com</code> cópia, com um token de lançamento no <code>#game_token=</code> fragmento como de costume).</li>
+<li>Envia o <strong>reproduzir convidar de volta para o compartilhador</strong> com <code>POST /api/v1/games/{slug}/invites</code> - assim, um link de compartilhamento termina como um convite de jogo normal que o compartilhador aceita (torneira do painel, balão da área de trabalho ou a própria lista de convites do jogo). Se a amizade ainda for uma solicitação pendente, o painel coloca o convite para jogar na fila e o envia automaticamente assim que o compartilhador aceita.</li>
+</ol>
+<p>O que isso significa para o seu cliente de jogo:</p>
+<ul>
+<li><strong>Oferecer o link custa uma linha de construção de string</strong> - coloque um "Compartilhar link de convite" ao lado da interface de convite de um amigo e copie o URL para a área de transferência. Ver <code>shareInviteLink()</code> no <a href="https://github.com/HypeDriven/starhermit-chess">implementação de referência de xadrez</a>.</li>
+<li><strong>Nenhum manuseio especial é necessário do lado receptor.</strong> O convite do destinatário chega através do fluxo normal de convite: seu <code>GET .../invites</code> a votação mostra ao compartilhador o convite recebido, aceitá-lo cria a sessão e o destinatário vê a sessão aparecer em <code>GET .../sessions/mine</code> (mostrar convites de saída pendentes para que a espera fique visível - o cliente de xadrez "convidado - esperando" cartões).</li>
+<li>O painel também usa esses URLs: o painel de detalhes de cada jogo hospedado jogável tem um <strong>Copiar link de convite</strong> botão, e o cliente Windows oferece o mesmo no menu de contexto do jogo.</li>
+</ul>
+<h2 id="replays">Repetições</h2>
+<p>Um replay é o documento de estado final de uma sessão finalizada, mantido pela plataforma e enviado de volta ao
+jogadores que estavam nele. <strong>Replays são um recurso opcional de um jogo, desativado a menos que o jogo solicite
+eles</strong>, porque um replay é um armazenamento que a plataforma mantém enquanto existir o registro da partida.</p>
+<p>Solicite-os no código do seu servidor - <code>replays: true</code> no <code>game</code> objeto para um
+<a href="/pt/docs/api/game-scripts.html#replays">roteiro</a>, <code>"replays": true</code> de <code>/describe</code> por um
+<a href="/pt/docs/api/container-games.html#get-describe">servidor de contêiner</a> – e publicar uma atualização para aplicá-la. Uma plataforma
+operador também pode responder por um jogo específico de qualquer maneira, então trate o <code>replaysEnabled</code> campo de
+<code>GET /api/v1/games/{slug}</code> como resposta, em vez de assumir que sua declaração é a última palavra.</p>
+<p>Ambos os pontos de extremidade abaixo retornam <code>404</code> para um jogo cujos replays estão desligados e nada é impedido disso
+sessões finalizadas do jogo - então um cliente que oferece uma tela de replay deve ler <code>replaysEnabled</code>
+primeiro.</p>
+<h3 id="get-apiv1gamesslugreplaysminelimit"><code>GET /api/v1/games/{slug}/replays/mine?limit=</code></h3>
+<p>As sessões concluídas do chamador. <code>limit</code> o padrão é <code>10</code> e é fixado em 1–50.</p>
+<pre><code class="language-json">[
+  {
+    "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "players": [
+      { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+      { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" }
+    ],
+    "finishedAt": "2026-07-20T15:42:37Z",
+    "result": { "kind": "white-win", "reason": "checkmate" },
+    "moveCount": 41
+  }
+]
+</code></pre>
+<h3 id="get-apiv1gamesslugreplayssessionid"><code>GET /api/v1/games/{slug}/replays/{sessionId}</code></h3>
+<p>O JSON do estado final completo conforme arquivado pela plataforma. Somente participantes. <code>recordedWith</code> é o que
+produziu o documento (versão do script, tempo de execução, taxa de ticks), carimbado no final - para uma reimplantação posterior
+não faz com que os replays antigos pareçam com o código atual que os escreveu. As partidas terminaram antes disso
+relatório existente <code>null</code>.</p>
+<pre><code class="language-json">{
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [ { "userId": "...", "username": "alice" }, { "userId": "...", "username": "bob" } ],
+  "finishedAt": "2026-07-20T15:42:37Z",
+  "result": { "kind": "white-win", "reason": "checkmate" },
+  "state": { "...": "game-specific final session state" },
+  "recordedWith": { "scriptVersion": 12, "runtime": "script", "tickRateHz": 0.25 }
+}
+</code></pre>
+<h2 id="session-model">Modelo de sessão</h2>
+<ul>
+<li>Sessão <code>status</code> é <code>"active"</code> ou <code>"finished"</code>.</li>
+<li>Cada sessão recebe uma conversa de chat por sessão (digite <code>"game"</code>) para que os oponentes possam conversar e fazer chamadas de voz <strong>sem ser amigos</strong> (ver <a href="/pt/docs/api/chat.html">Bater papo</a> e <a href="/pt/docs/api/voice.html">Voz</a>).</li>
+<li>O limite de sessões simultâneas por jogador é padronizado como <code>20</code>.</li>
+<li>Um jogo que declara <code>persistent</code> mantém sessões vazias <strong>pausado</strong> em vez de acabar com eles; conectar-se a um o retoma. As sessões pausadas contam para o limite. Veja o <a href="/pt/docs/tutorials/persistent-sessions.html">tutorial de sessões persistentes</a>.</li>
+<li>Uma sessão ativa que ninguém está jogando é <strong>aposentado</strong> (status <code>finished</code>, abandonado): 5 minutos após o último <code>ws/v1/games</code> o soquete fecha sem que ninguém volte ou após 24 horas sem nenhuma ação do jogador. Em vez disso, as sessões persistentes são pausadas. Isso também se aplica a sessões vinculadas à sala; fechar o quarto não acaba com eles.</li>
+<li>Status dos ingressos de matchmaking: <code>queued</code> | <code>matched</code> | <code>cancelled</code> | <code>expired</code>.</li>
+<li>Status de convite: <code>pending</code> | <code>accepted</code> | <code>declined</code> | <code>cancelled</code>.</li>
+<li><strong>As sessões são criadas por meio de matchmaking, aceitação de convite, ponto final de IA ou início de sala em tempo real</strong> (sessões ligadas à sala - consulte <a href="/pt/docs/api/realtime.html#room-bound-sessions">Salas em tempo real</a>) - não há "criar lobby" ponto final.</li>
+<li>As atualizações do Elo vêm do script oficial (<code>eloUpdates</code>) ou canal de controle de contêiner, definem as classificações usadas para matchmaking e são publicadas na tabela de classificação do jogo (tipo de pontuação <code>elo</code>). <strong>Os clientes nunca podem enviar pontuações diretamente para uma tabela de classificação de jogo</strong> (ver <a href="/pt/docs/api/leaderboards.html">Tabelas de classificação</a>).</li>
+</ul>
+<h2 id="gameplay-websocket">Jogabilidade WebSocket</h2>
+<p><code>ws/v1/games?sessionId={guid}</code> (rota de versão neutra). Autenticar com o <code>Authorization</code> cabeçalho, <code>?ticket=</code>, ou <code>?access_token=</code>. Somente participantes (<code>403</code>); ao se conectar com um token de lançamento, seu <code>game_scope</code> deve corresponder ao jogo da sessão. Uma sessão concluída é <code>410 {"error":"session_not_active"}</code>. Opcional <code>?build=</code> é o <code>buildId</code> de <code>GET /games/{slug}</code> - incompatibilidade é <code>409 {"error":"build_mismatch"}</code>.</p>
+<ul>
+<li>Apenas quadros de texto, máximo de 16 KB por quadro.</li>
+<li>Uma conexão mais recente substitui a antiga: a conexão anterior é fechada com <code>PolicyViolation</code>.</li>
+<li>Conectando-se a uma pausa <a href="/pt/docs/tutorials/persistent-sessions.html">persistente</a> session o retoma antes do seu primeiro comando. Se não puder ser retomado (normalmente um contêiner ainda em inicialização), você receberá uma mensagem <code>error</code> quadro e o soquete fecha com código <code>1001</code>; a sessão permanece pausada – reconecte com espera.</li>
+<li><strong>Renove o token antes de cada reconexão.</strong> Um token expirado é recusado com <code>401</code> antes da atualização, que o navegador relata apenas como código fechado <code>1006</code> - indistinguível de uma queda de rede - portanto, uma falha na reconexão pode ser uma falha de autenticação e a reabertura da mesma <code>?access_token=</code> O URL nunca pode ser recuperado. Renovar através <a href="#post-apiv1gamessluglaunch-token"><code>POST /api/v1/games/{slug}/launch-token</code></a> e reconecte-se com o novo token. A renovação funciona apenas enquanto o token atual for válido e dentro de 12 horas (padrão) após o lançamento original; uma vez recusado (<code>401</code>/<code>403</code>), pare de reconectar e envie o jogador de volta ao lançador para obter um novo token de lançamento.</li>
+</ul>
+<h3 id="client--server">Cliente → servidor</h3>
+<p>O <code>cmd</code> envelope é o contrato da plataforma; o conteúdo de <code>data</code> são definidos pelo back-end oficial de cada jogo. Por exemplo, a implementação de referência de xadrez envia um movimento como este:</p>
+<pre><code class="language-json">{ "type": "cmd", "data": { "type": "move", "from": "e2", "to": "e4" } }
+</code></pre>
+<p>Para um tempo de execução de script, comandos duráveis ​​são executados <code>onPlayerMessage</code>; explicitamente marcado <code>{ "type": "input", "realtime": true, ... }</code> os dados usam lotes de vitórias mais recentes para o próximo <code>onTick</code>. Para um tempo de execução de contêiner, a plataforma encaminha comandos autenticados por meio de seu fluxo binário e o contêiner possui seu loop de simulação. Em ambos os casos, a plataforma fornece a identidade do remetente confiável e os clientes nunca podem retransmitir o estado diretamente. Ver <a href="/pt/docs/api/game-scripts.html#context-object">Scripts de jogo — objeto de contexto</a> e <a href="/pt/docs/api/container-games.html#gameplay-stream">Container Game Servers — Fluxo de jogo</a>.</p>
+<h3 id="server--client">Servidor → cliente</h3>
+<pre><code class="language-json">{ "type": "game", "data": { "...": "server-authorized message addressed to you" } }
+{ "type": "error", "error": "Illegal move" }
+{ "type": "presence", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "online": true }
+{ "type": "membership", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "change": "joined", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol", "team": 0, "slot": 1 }
+{ "type": "achievement", "data": { "key": "first-win", "name": "First Win", "description": "Win a match.", "icon": null, "points": 10, "unlockedAt": "2026-07-25T09:14:02Z" } }
+{ "type": "resumed", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "lostMs": 750 }
+{ "type": "abandoned", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "reason": "server_failure" }
+</code></pre>
+<ul>
+<li><code>game</code> — uma mensagem autorizada pelo servidor endereçada a você.</li>
+<li><code>error</code> — um erro da plataforma ou do seu último comando.</li>
+<li><code>presence</code> — transmitir para os outros participantes quando alguém entra ou sai.</li>
+<li><code>membership</code> — alguém se tornou jogador nesta sessão no meio da partida (<code>joined</code>) ou cederam seu assento (<code>left</code>); enviado a todos os participantes conectados. Ver <a href="/pt/docs/api/container-games.html#post-sessionssessionidmembers">Servidores de jogos de contêiner — membros</a>.</li>
+<li><code>achievement</code> — uma conquista que o roteiro do jogo acabou de conceder <strong>você</strong>, enviado para o jogador ganhador
+apenas. Um tipo de quadro separado propositalmente: esta é a verdade da plataforma, não dados de jogo retransmitidos por script.
+Emitido dos caminhos de atualização duráveis ​​de ambos os tempos de execução. Ver
+<a href="/pt/docs/api/achievements.html#server-authoritative-game-achievements">Conquistas</a>.</li>
+<li><code>resumed</code> — a sessão mudou de mãos (restauração do contêiner ou outro processo da API assumiu o controle
+arrendamento de propriedade). Descarte a previsão local; <code>lostMs</code> é a lacuna desde a última gravação durável.
+A primeira anexação após uma transferência é anunciada uma vez por jogador.</li>
+<li><code>abandoned</code> — a plataforma encerrou a sessão sem vencedor ou atualização elo. Razões:
+<code>players_left</code>, <code>idle_no_players</code>, <code>superseded</code> (o jogador pediu um novo jogo deste título),
+<code>server_failure</code>, <code>restore_failed</code>, <code>operator_ended</code> (o dono do jogo encerrou),
+<code>retention_expired</code> (decorreu uma retenção de recuperação do mundo em pausa). Armazenado como
+<code>{ "kind": "abandoned", "reason": "…" }</code>. A <a href="/pt/docs/tutorials/persistent-sessions.html">persistente</a> as sessões do jogo nunca são
+terminou apenas por desconexão ou inatividade - em vez disso, eles fazem uma pausa. O último humano saindo explicitamente
+um mundo autônomo ainda pode acabar com isso como <code>players_left</code>; a expiração da recuperação configurada pode encerrá-la como
+<code>retention_expired</code>.</li>
+</ul>
+<h2 id="limits">Limites</h2>
+<p>O que a plataforma impõe <code>ws/v1/games</code> e nas classificações. Os números são os padrões da plataforma;
+um operador pode ajustá-los.</p>
+<h3 id="messages-on-wsv1games">Mensagens ativadas <code>ws/v1/games</code></h3>
+<table>
+<thead>
+<tr>
+<th>Limite</th>
+<th>Valor</th>
+<th>O que acontece depois disso</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tamanho do quadro</td>
+<td>16 KB por quadro de texto</td>
+<td>A tomada é fechada com <code>1009</code> (mensagem muito grande).</td>
+</tr>
+<tr>
+<td>Tipo de quadro</td>
+<td>Somente texto</td>
+<td>Um quadro binário recebe um <code>error</code> quadro; a tomada permanece aberta.</td>
+</tr>
+<tr>
+<td>Conexões</td>
+<td>Um por jogador por sessão</td>
+<td>Uma conexão mais recente fecha a mais antiga com <code>1008</code>.</td>
+</tr>
+<tr>
+<td>Entradas em tempo real (<code>{"type":"input","realtime":true,…}</code>)</td>
+<td><strong>60 por segundo</strong> por conexão, rajadas de até 120</td>
+<td>Quadros extras são <strong>caiu silenciosamente</strong> - não <code>error</code> quadro.</td>
+</tr>
+<tr>
+<td>Comandos duráveis ​​para scripts (todos os outros <code>cmd</code>)</td>
+<td><strong>20 por segundo</strong> por jogador por sessão, com uma permissão de curto intervalo</td>
+<td>Recusado com um <code>error</code> quadro: <code>"Too many commands; slow down."</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Entradas em tempo real</strong> são amostrados, não enfileirados: a plataforma mantém as últimas entradas e mãos de cada jogador
+o lote para o próximo do seu script <code>onTick</code> em <code>ctx.inputs</code>. Enviando mais rápido que o do seu jogo
+<a href="/pt/docs/api/game-scripts.html#tick-rate">taxa de tick</a> não ganha nada, porque as entradas entre dois ticks se fundem em
+um. Envie de acordo com sua taxa de tick ou quando a entrada mudar.</p>
+<p><strong>Comandos duráveis ​​para scripts</strong> são processados em ordem e limitados separadamente do tempo real
+entradas. Envie ações discretas quando elas acontecerem; enviar movimento contínuo através do tempo real marcado
+caminho de entrada. O limite de comando pode variar de acordo com o jogo. As invocações de script também são limitadas pelas características do jogo.
+<a href="/pt/docs/api/game-scripts.html#budgets">orçamentos</a>. O quadro de erro do WebSocket carrega uma mensagem, não um status HTTP.
+Seu script deve rejeitar comandos que não fazem sentido, como um movimento fora de hora.</p>
+<p>Por um <strong>recipiente</strong> jogo, os comandos são retransmitidos para o seu contêiner assim que chegam, sem plataforma
+limite de taxa para eles. Seu servidor impõe o seu próprio. A limitação da taxa de entrada em tempo real se aplica a scripts
+apenas jogos.</p>
+<h3 id="elo-per-match">Elo por partida</h3>
+<p>A plataforma faz <strong>não</strong> limitar o quão longe uma classificação pode se mover em uma partida. <code>eloUpdates</code> (roteiro) e o
+<code>elo</code> mensagem de controle (contêiner) carrega a mensagem de cada jogador <strong>nova classificação absoluta</strong>, não uma mudança, e o
+plataforma os aplica conforme enviados. O que ele impõe:</p>
+<ul>
+<li><strong>Apenas jogadores na sessão</strong> estão atualizados. Os IDs de qualquer outra pessoa e o assento da IA ​​são descartados.</li>
+<li>As atualizações são aplicadas sempre que seu servidor as retorna. Uma sessão o <strong>plataforma</strong> termina
+(<code>abandoned</code>: jogadores deixados, inativos, substituídos, falha no servidor, encerrados pelo proprietário) publica <strong>não</strong>
+elo mudança.</li>
+<li>A classificação é escrita na coluna pares de matchmaking e no tabuleiro elo do jogo como um
+entrada por jogador (sua classificação mais recente).</li>
+<li>O dono do jogo pode <a href="/pt/docs/api/leaderboards.html#resetting-a-players-rating">redefinir a classificação de um jogador</a> para 1200.</li>
+</ul>
+<p>Portanto, o tamanho de um swing é uma decisão do seu jogo. Use um fator K padrão e fixe em seu código. O
+<a href="#example-chess-command-shapes">implementação de referência de xadrez</a> usa K = 32, então um jogo move um
+classificação em no máximo 32 pontos:</p>
+<pre><code class="language-js">function eloAfter(mine, theirs, score /* 1 win, 0.5 draw, 0 loss */, K = 32) {
+  const expected = 1 / (1 + Math.pow(10, (theirs - mine) / 400));
+  const next = mine + K * (score - expected);
+  return Math.round(Math.max(100, next));      // your floor, if you want one
+}
+</code></pre>
+<h2 id="owner-diagnostics-and-webhooks">Diagnóstico do proprietário e webhooks</h2>
+<p>Somente proprietário. Um token de lançamento no escopo do jogo não pode alcançá-los.</p>
+<h3 id="get-apiv1gamesslugdiagnostics"><code>GET /api/v1/games/{slug}/diagnostics</code></h3>
+<p>Um instantâneo de sessões ao vivo (conexões ativas, concluídas e ao vivo), medição de script em relação à CPU/
+orçamentos de memória / extrato, a fila de matchmaking (espera mais longa e até que ponto ela aumentou),
+e integridade do endpoint do webhook.</p>
+<h3 id="webhooks">Webhooks</h3>
+<p><code>GET/POST/DELETE /api/v1/games/{slug}/webhooks</code> e <code>POST .../{id}/resume</code>. Até 5 pontos de extremidade por
+jogo. Eventos: <code>session.created</code>, <code>session.finished</code> (omitir <code>events</code> para assinar ambos). O
+o segredo de assinatura é retornado <strong>uma vez</strong>, ao criar.</p>
+<p>A plataforma POSTs JSON com:</p>
+<ul>
+<li><code>X-Starhermit-Signature: t=&lt;unix&gt;,v1=&lt;hmac-sha256&gt;</code> sobre <code>"&lt;t&gt;.&lt;body&gt;"</code></li>
+<li><code>X-Starhermit-Event-Id</code> — o evento (chave de idempotência; repete-se entre novas tentativas)</li>
+<li><code>X-Starhermit-Delivery</code> - esta tentativa</li>
+</ul>
+<p>O URL deve ser https e não deve ser resolvido para um intervalo privado/loopback/CGNAT (marcado em
+registro e novamente antes de cada envio). Redirecionamentos não são seguidos. Endpoints com falha recuam
+e são desativados após falhas consecutivas; <code>resume</code> limpa o disjuntor.</p>
+<h3 id="runtime-timing">Tempo de execução</h3>
+<p>Para jogos JavaScript, a plataforma roda <code>onTick</code> varreduras na taxa fixa solicitada através
+<code>game.tickRateHz</code>; <code>0</code> desativa os ticks, e um jogo que não solicita nada é marcado em <strong>0,25Hz</strong> -
+declare uma taxa se sua jogabilidade depender do tick. Um contêiner conduz seu próprio loop de simulação e
+declara sua taxa solicitada por meio <code>/describe</code>; a plataforma usa essa taxa para agendamento e
+política de instantâneo, para não pisar no jogo. Ver <a href="/pt/docs/api/game-scripts.html#tick-rate">Scripts de jogo – Taxa de ticks</a> e
+<a href="/pt/docs/api/container-games.html#protocol-v1">Servidores de jogos em contêiner</a>.</p>
+<h2 id="lifecycle-of-a-game">Ciclo de vida de um jogo</h2>
+<ol>
+<li><strong>Crie um token de lançamento</strong> — <code>POST /api/v1/games/{slug}/launch-token</code>. Os clientes devem atualizá-lo antes de expirar (o cliente de referência de xadrez é atualizado a cada 45 minutos).</li>
+<li><strong>Buscar estado do jogo</strong> — <code>GET /api/v1/games/{slug}</code> para informações + suas estatísticas; <code>GET .../sessions/mine</code> para jogos em andamento; <code>GET .../invites</code> e <code>GET /api/v1/realtime/rooms/invites</code> para convites pendentes; <code>GET .../replays/mine</code> para a história quando <code>replaysEnabled</code>; <code>GET .../achievements</code> para a tela de conquistas.</li>
+<li><strong>Encontre um oponente</strong>, uma das três maneiras:
+<ul>
+<li><strong>Combinação:</strong> <code>POST .../matchmaking</code>, então enquete <code>GET .../matchmaking</code> a cada 3 s até <code>status</code> é <code>matched</code> (a resposta carrega <code>sessionId</code>). <code>DELETE .../matchmaking</code> para cancelar.</li>
+<li><strong>Fluxo de convite:</strong> escolha um amigo de <code>GET /api/v1/me/friends</code> (ver <a href="/pt/docs/api/friends.html">Amigos</a>), <code>POST .../invites</code> com <code>{ "toUserId": "..." }</code>; o convidado chama <code>POST .../invites/{inviteId}/accept</code>, que cria a sessão. (Se o seu jogo acomoda jogadores em um <a href="/pt/docs/api/realtime.html">sala em tempo real</a> primeiro, convide-os para a sala — a mesma notificação, mas aceitar os coloca na mesa em que você já está.)</li>
+<li><strong>Prática de IA:</strong> <code>POST .../sessions/ai</code>.</li>
+</ul>
+</li>
+<li><strong>Carregar a sessão</strong> — <code>GET .../sessions/{sessionId}</code>.</li>
+<li><strong>Conecte o WebSocket</strong> — <code>ws/v1/games?sessionId={guid}</code> com o token de lançamento e, em seguida, envie qualquer comando de sincronização inicial definido pelo back-end do jogo - a implementação de referência de xadrez, por exemplo, envia <code>{"type":"cmd","data":{"type":"sync"}}</code>.</li>
+<li><strong>Jogar</strong> - intercâmbio <code>cmd</code>/<code>game</code> quadros conforme definido pelo back-end, superfície <code>achievement</code> molduras e alça <code>resumed</code> descartando a previsão e solicitando um estado completo.</li>
+<li><strong>Resultado</strong> — o backend oficial encerra o jogo; a plataforma publica atualizações elo na tabela de classificação e, para um jogo com <a href="#replays">replays</a>, arquiva o estado final.</li>
+<li><strong>Repetir</strong> — <code>GET .../replays/{sessionId}</code> para o estado final completo.</li>
+</ol>
+<h3 id="example-chess-command-shapes">Exemplo: formas de comando de xadrez</h3>
+<p>Os seguintes formatos de carga útil são o exemplo: como o xadrez <a href="https://github.com/HypeDriven/starhermit-chess">implementação de referência</a> preenche <code>data</code>. <strong>Eles são definidos pelo script do xadrez, não pela plataforma</strong> - cada jogo define seu próprio conjunto de comandos e cargas úteis de transmissão em seu back-end oficial. O envelope de comando do cliente é <code>cmd</code>; envelopes de servidor comuns incluem <code>game</code>, <code>error</code>, <code>presence</code>, e <code>achievement</code>, com <code>resumed</code>/<code>abandoned</code> adicionalmente usado para recuperação de contêineres. O conteúdo de <code>data</code> são de propriedade do back-end.</p>
+<p>Comandos do cliente (enviados como <code>{"type":"cmd","data":{...}}</code>):</p>
+<pre><code class="language-json">{ "type": "move", "from": "e2", "to": "e4", "promo": "q" }
+{ "type": "resign" }
+{ "type": "offer-draw" }
+{ "type": "accept-draw" }
+{ "type": "decline-draw" }
+{ "type": "sync" }
+</code></pre>
+<p>(<code>promo</code> é opcional em <code>move</code>.)</p>
+<p>Mensagens do servidor (entregues como <code>{"type":"game","data":{...}}</code>):</p>
+<pre><code class="language-json">{
+  "type": "state",
+  "white": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "black": "9b2f8c1a-1111-4222-8333-444455556666",
+  "ratings": { "white": 1200, "black": 1187 },
+  "board": "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr",
+  "turn": "w",
+  "moves": [],
+  "status": "active",
+  "result": null,
+  "deadline": 1784642591000,
+  "drawOfferBy": null,
+  "ai": false,
+  "aiName": null
+}
+</code></pre>
+<pre><code class="language-json">{ "type": "moved", "...": "move details + updated state" }
+{ "type": "draw-offered" }
+{ "type": "draw-declined" }
+{ "type": "game-over", "result": { "kind": "white-win", "reason": "checkmate", "at": "2026-07-20T15:42:37Z" }, "view": { "...": "final state view" } }
+</code></pre>
+<p>Ver <a href="/pt/docs/api/game-scripts.html">Scripts de jogos</a> para saber como o script define essas mensagens e o <a href="/pt/docs/tutorials/chess-walkthrough.html">Passo a passo de xadrez</a> para uma construção de ponta a ponta.</p>
+<p>Ver <a href="/pt/docs/credentials.html">compatibilidade de credenciais</a> e <a href="/pt/docs/api/contracts.html">contratos legíveis por máquina</a>.</p>
+
+{% endraw %}

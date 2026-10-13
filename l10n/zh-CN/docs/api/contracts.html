@@ -1,0 +1,132 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "REST 和 WebSocket 合约"
+source_url: "/docs/api/contracts.html"
+source_path: "docs/api/contracts.md"
+source_hash: "373c7589e9304a2144060efd06d29237e3468f3d33f187e151dba7bb1212148c"
+translation: "machine"
+permalink: "/zh-CN/docs/api/contracts.html"
+---
+{% raw %}
+<h1 id="rest-and-websocket-contracts">REST 和 WebSocket 合约</h1>
+<p>这些可下载的合同是对参考页面的补充。用它们来检查操作，
+验证示例有效负载，或将 REST 请求导入 OpenAPI 兼容客户端。</p>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>覆盖范围</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="/docs/contracts/openapi.json">OpenAPI REST 合约</a></td>
+<td>公共 REST 方法、路径、参数、JSON 请求模型、成功响应和凭证系列；保留生成操作被标记为不可用</td>
+</tr>
+<tr>
+<td><a href="/docs/contracts/websocket.schema.json">WebSocket JSON 模式</a></td>
+<td>按协议和方向已知的文本框架；应用程序拥有的游戏/信号数据保持开放</td>
+</tr>
+<tr>
+<td><a href="/docs/contracts/binary-protocols.json">二进制布局</a></td>
+<td>实时发送者前缀、语音前缀、非成帧中继、容器流标头和上传块</td>
+</tr>
+</tbody>
+</table>
+<h2 id="rest-contracts">REST 合约</h2>
+<p>REST 文件使用 <a href="https://spec.openapis.org/oas/v3.0.3.html">开放API 3.0.3</a> 以及公共 API 来源。每个操作都链接到其参考页面，
+它携带完整的授权、验证、限制和错误规则。 <code>x-credentials</code>
+确定接受的证书系列；它不能取代所有权或成员资格检查。
+<code>x-required-policies</code> 描述 API 在何处应用命名权限。</p>
+<p>响应可能包括附加字段。游戏特定的 JSON、元数据、诊断和上传
+结果使用开放形状，其中游戏或端点参考定义其内容。成功
+模式并不保证每个调用者都被授权。端点错误可以是 JSON、纯文本、
+空响应，或验证问题详细信息；使用 <a href="/zh-CN/docs/api/conventions.html#requests-and-responses">防御性响应解析</a>.</p>
+<p>不要将预留生成操作视为工作服务。他们的合同描述了
+当前 <code>503 overloaded</code> 响应，而不是未来的请求字段或生成行为。</p>
+<h2 id="websocket-contracts">WebSocket 合约</h2>
+<p>选择一个 <code>$defs</code> 套接字协议和方向的架构。例如，验证客户端
+运动框架对抗 <code>GameRealtimeInput</code>，而不是一般的耐用 <code>GameCommand</code>:</p>
+<pre><code class="language-json">{ "type": "cmd", "data": { "type": "input", "realtime": true, "seq": 1, "x": 0.5 } }
+</code></pre>
+<p><code>realtime</code> 属于 <strong>里面 <code>data</code></strong>。它后面的游戏字段是您的游戏合同。
+使用一个 <a href="https://json-schema.org/draft/2020-12/json-schema-core">JSON 架构 2020-12</a> 具有完整架构文档的验证器，以便解析本地引用。
+根文档包含定义；验证框架需要选择定义。</p>
+<table>
+<thead>
+<tr>
+<th>协议</th>
+<th>客户端文本定义</th>
+<th>服务器文本定义</th>
+<th>二进制数据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>游戏</td>
+<td><code>GameCommand</code> / <code>GameRealtimeInput</code></td>
+<td><code>GameServerFrame</code></td>
+<td>仅限文字游戏</td>
+</tr>
+<tr>
+<td>实时房间</td>
+<td><code>RealtimeClientControl</code></td>
+<td><code>RealtimeServerFrame</code></td>
+<td>主机路由的游戏数据，接收时的 16 字节发送者参与者前缀</td>
+</tr>
+<tr>
+<td>嗓音</td>
+<td><code>VoiceClientControl</code></td>
+<td><code>VoiceServerEvent</code></td>
+<td>音频，接收时的 16 字节发送者用户前缀</td>
+</tr>
+<tr>
+<td>聊天</td>
+<td>无客户端命令；使用休息</td>
+<td><code>ChatServerPush</code></td>
+<td>没有任何</td>
+</tr>
+<tr>
+<td>对等中继</td>
+<td>无 JSON 框架</td>
+<td>无 JSON 框架</td>
+<td>有效载荷不变；无身份前缀</td>
+</tr>
+<tr>
+<td>游戏上传</td>
+<td><code>UploadClientControl</code></td>
+<td><code>UploadServerFrame</code></td>
+<td>存档块</td>
+</tr>
+<tr>
+<td>容器控制</td>
+<td><code>ContainerControl</code> 从服务器</td>
+<td>没有一般确认信封</td>
+<td>游戏玩法使用单独的容器 <code>/stream</code></td>
+</tr>
+</tbody>
+</table>
+<p>未来的帧类型应该到达客户端的未知帧处理程序，而不是使接收崩溃
+循环。 JSON 形状验证不验证游戏规则、授权成员身份或强制执行率
+限制。参考页定义角色和大小/速率限制。</p>
+<h2 id="guid-byte-order">GUID 字节顺序</h2>
+<p>前三个 UUID 组在 .NET GUID 字节标头中是小端字节序。例如：</p>
+<pre><code class="language-text">UUID:  00112233-4455-6677-8899-aabbccddeeff
+Bytes: 33 22 11 00 55 44 77 66 88 99 aa bb cc dd ee ff
+</code></pre>
+<p>16 字节前缀的浏览器解码器：</p>
+<pre><code class="language-js">function guidFromDotNet(bytes) {
+  if (bytes.length !== 16) throw new Error('Expected a 16-byte GUID');
+  const hex = i =&gt; bytes[i].toString(16).padStart(2, '0');
+  return `${hex(3)}${hex(2)}${hex(1)}${hex(0)}-${hex(5)}${hex(4)}-${hex(7)}${hex(6)}-` +
+    `${hex(8)}${hex(9)}-${hex(10)}${hex(11)}${hex(12)}${hex(13)}${hex(14)}${hex(15)}`;
+}
+</code></pre>
+<p>实时前缀识别 <strong>参与者</strong>，而语音前缀标识 <strong>用户</strong>。一个容器
+流具有一字节类型，后跟会话/用户 UUID，因此其 JSON 从 byte 开始 <strong>33</strong>。的
+中继不添加前缀。将每个套接字读取为相同的二进制布局会破坏有效负载和身份。</p>
+<p>看 <a href="/zh-CN/docs/credentials.html">凭证和标识符</a>, <a href="/zh-CN/docs/session-lifecycle.html">会话生命周期</a>，
+和 <a href="/zh-CN/docs/troubleshooting.html#websockets">WebSocket 故障排除</a>.</p>
+
+{% endraw %}

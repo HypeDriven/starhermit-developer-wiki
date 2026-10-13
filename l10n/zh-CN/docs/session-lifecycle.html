@@ -1,0 +1,152 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "会话、世界和恢复"
+source_url: "/docs/session-lifecycle.html"
+source_path: "docs/session-lifecycle.md"
+source_hash: "ce490b04789602ff10857e6496e4e3847230ac0bd33619cb5beb61051dc65c85"
+translation: "machine"
+permalink: "/zh-CN/docs/session-lifecycle.html"
+---
+{% raw %}
+<h1 id="sessions-worlds-and-recovery">会话、世界和恢复</h1>
+<p>通过匹配、接受邀请、练习或启动来创建权威会话
+具有服务器后端的实时房间。房间是一个有座位的大厅；它是 <code>gameSessionId</code> 识别
+单独的会话运行游戏。看 <a href="/zh-CN/docs/api/games.html">游戏</a> 和 <a href="/zh-CN/docs/api/realtime.html">实时房间</a>.</p>
+<h2 id="lifecycle">生命周期</h2>
+<p><img src="/docs/images/zh-CN/session-lifecycle.svg" alt="会话从活动状态变为暂停状态，然后返回，或者通过结果、明确离开、所有者操作或保留到期来结束。"></p>
+<p><code>status</code> 是 <code>active</code> 或者 <code>finished</code>。暂停不会引入第三种状态： <code>pausedAt</code> 标记一个
+暂停持久会话。已完成的会话无法再次播放。如果启用，则会读取重播
+通过他们自己的端点。</p>
+<table>
+<thead>
+<tr>
+<th>事件</th>
+<th>普通比赛</th>
+<th>持续会话</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>最后一个游戏套接字断开连接</td>
+<td>约5分钟后结束，不返回</td>
+<td>约15秒后暂停</td>
+</tr>
+<tr>
+<td>24小时无玩家活动</td>
+<td>可以退休</td>
+<td>暂停而不是因不活动而结束</td>
+</tr>
+<tr>
+<td>玩家请求另一个会话</td>
+<td>可以退掉一场空的旧比赛</td>
+<td>不会退休他们停放的世界</td>
+</tr>
+<tr>
+<td>玩家重新连接</td>
+<td>仅当仍处于活动状态时</td>
+<td>在第一个命令之前恢复</td>
+</tr>
+<tr>
+<td>后端返回结果</td>
+<td>饰面</td>
+<td>饰面</td>
+</tr>
+<tr>
+<td>所有者结束会话</td>
+<td>获胜者/评级没有变化的情况下结束</td>
+<td>相同的</td>
+</tr>
+</tbody>
+</table>
+<p>时间和恢复限制可能因部署而异。暂停的世界对每个玩家进行计数
+并发会话限制。提供一种明确离开或结束世界的方法。</p>
+<h2 id="disconnecting-and-leaving-are-different">断线和离开是不同的</h2>
+<p>关闭套接字可以保留成员资格，以便玩家可以返回。明确的 <strong>离开世界</strong> 给出
+会员资格并访问其游戏套接字。</p>
+<p>对于持久会话 <strong>没有房间</strong>:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/sessions/{sessionId}/leave
+Authorization: Bearer &lt;player-token&gt;
+</code></pre>
+<p>没有请求正文。成功是 <code>204</code>。游戏将收到关于会员变更的通知以及
+离开者的游戏插槽关闭。当最后一个人类成员离开时，世界就结束了
+<code>players_left</code>. <code>404</code> 意味着没有会话， <code>403</code> 表示不是会员， <code>410</code> 意味着已经结束，并且
+<code>409</code> 意味着这不是一个持久的世界或者它属于一个房间。</p>
+<p>对于一个 <strong>房间内会话</strong>， 使用 <code>POST /api/v1/realtime/rooms/{roomId}/leave</code>。在一个
+加入进行中的房间，这将腾出席位并删除会话成员资格。在固定阵容的比赛中，
+该席位变为AI，会议可以保留其原来的成员资格。遵守房间规则；
+不要调用独立的会话离开端点。</p>
+<p>正在运行的正在进行的世界可以在最后一个访问者离开后保持列出状态。一个成员
+持久世界也可以使用另一个普通大厅。通过以下方式发现当前会员资格
+<code>GET /api/v1/realtime/rooms/joined</code>，不仅仅是 <code>/rooms/mine</code>.</p>
+<h2 id="read-recovery-information">读取恢复信息</h2>
+<p>会话中的玩家和游戏所有者可以调用：</p>
+<pre><code class="language-http">GET /api/v1/games/{slug}/sessions/{sessionId}/recovery
+Authorization: Bearer &lt;player-or-owner-token&gt;
+</code></pre>
+<p>响应描述了此会话的有效恢复和传输限制：</p>
+<table>
+<thead>
+<tr>
+<th>领域</th>
+<th>含义/单位</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sessionId</code>, <code>status</code>, <code>runtime</code>, <code>persistent</code></td>
+<td>会话标识和类型；运行时间是 <code>script</code> 或者 <code>container</code></td>
+</tr>
+<tr>
+<td><code>pausedAt</code>, <code>pausedMillis</code></td>
+<td>暂停开始ISO时间戳；累计暂停时间（以毫秒为单位）</td>
+</tr>
+<tr>
+<td><code>snapshotBytes</code>, <code>stateBudgetBytes</code>, <code>lastSnapshotAt</code></td>
+<td>恢复文档大小/预算（以字节为单位）和最新快照 ISO 时间</td>
+</tr>
+<tr>
+<td><code>snapshotIntervalSeconds</code>, <code>maxSnapshotPushHz</code></td>
+<td>集装箱检查站节奏和推顶； <code>null</code> 对于脚本</td>
+</tr>
+<tr>
+<td><code>maxRestoreStalenessSeconds</code></td>
+<td>容器匹配的最大快照年龄； <code>null</code> 不适用的地方，包括持久世界</td>
+</tr>
+<tr>
+<td><code>maxRestores</code>, <code>restoreWindowMinutes</code>, <code>restoreCount</code></td>
+<td>恢复尝试限额、其窗口和报告的恢复计数</td>
+</tr>
+<tr>
+<td><code>retentionDays</code>, <code>recoveryDataExpiresAt</code></td>
+<td>暂停世界保留； <code>0</code> 和 <code>null</code> 表示没有配置过期时间</td>
+</tr>
+<tr>
+<td><code>transport.maxMessageBytes</code>, <code>transport.maxRealtimeInputsPerSecond</code></td>
+<td>游戏帧/输入限制</td>
+</tr>
+<tr>
+<td><code>transport.tickRateHz</code>, <code>transport.pacingRateHz</code></td>
+<td>有效滴答和传输起搏率（以 Hz 为单位）</td>
+</tr>
+</tbody>
+</table>
+<p>请阅读这些值，而不是承诺无限期保留或固定的崩溃倒带窗口。一个
+积极的 <code>retentionDays</code> 允许暂停的世界过期。展示 <code>recoveryDataExpiresAt</code> 设置时；
+到期结束会话 <code>retention_expired</code>.</p>
+<h2 id="restoring-client-and-server-state">恢复客户端和服务器状态</h2>
+<p>在套接字重新连接时，请求游戏的完整状态消息。在 <code>resumed</code>，丢弃插值
+以及基于早期状态的预测； <code>lostMs</code> 报告恢复差距。不要假设移动
+其确认丢失可以安全地重新发送。</p>
+<p>脚本返回完整的状态文档。容器必须从快照重建整个会话
+以及当前的名单，包括自之前快照以来承认的球员。之后推送检查点
+重要事件，在报告的上限内。暂停会删除容器的实时会话以及稍后的会话
+从保存的快照重新创建它。暂停的游戏时间可以使用 <code>ctx.now - ctx.pausedMs</code>.</p>
+<p>失败的恢复会让世界暂停，并在错误后关闭套接字；退出并重试。
+失败的恢复可以结束会话。终端 <code>abandoned</code> 原因包括 <code>players_left</code>,
+<code>idle_no_players</code>, <code>superseded</code>, <code>server_failure</code>, <code>restore_failed</code>, <code>operator_ended</code>， 和
+<code>retention_expired</code>。显示原因并停止重新连接。放弃不会授予任何获胜者或 Elo 更改。</p>
+<p>看 <a href="/zh-CN/docs/tutorials/persistent-sessions.html">持续会话</a> 对于服务器代码和
+<a href="/zh-CN/docs/troubleshooting.html#websockets">故障排除</a> 用于重新连接决策。</p>
+
+{% endraw %}

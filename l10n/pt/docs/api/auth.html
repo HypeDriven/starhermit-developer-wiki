@@ -1,0 +1,550 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Autenticação"
+source_url: "/docs/api/auth.html"
+source_path: "docs/api/auth.md"
+source_hash: "7c5d28fbaf648ef5811fa8660eb49076563e9f4b439f256cf9632e72ae1130ed"
+translation: "machine"
+permalink: "/pt/docs/api/auth.html"
+---
+{% raw %}
+<h1 id="authentication">Autenticação</h1>
+<p>StarHermit tem <strong>sem autenticação de senha</strong>. Existem dois fluxos de login: autenticação de chave pública (Ed25519, ECDSA-P256 ou RSA-PSS, com registro verificado por e-mail) e OAuth. Todas as rotas de autenticação residem em <code>api/v1/auth</code> e são anônimos, exceto quando indicado. Esta página também aborda ciclos de vida de tokens, tokens de inicialização no escopo do jogo e tickets de conexão WebSocket.</p>
+<p>Os corpos de erro variam; ver <a href="/pt/docs/api/conventions.html#requests-and-responses">Convenções de API</a>.</p>
+<h2 id="endpoints">Pontos finais</h2>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Caminho</th>
+<th>Autenticação</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/auth/public-key/register</code></td>
+<td>Anônimo</td>
+<td>Comece o registro da chave pública; envia um e-mail de verificação</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/auth/public-key/verify</code></td>
+<td>Token único enviado por e-mail</td>
+<td>A página que o e-mail de verificação abre; não muda nada</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/auth/public-key/verify</code></td>
+<td>Token único enviado por e-mail</td>
+<td>Concluir registro</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/auth/public-key/challenge</code></td>
+<td>Anônimo</td>
+<td>Solicite um desafio de login para assinar</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/auth/public-key/complete</code></td>
+<td>Anônimo</td>
+<td>Envie um desafio assinado para fazer login</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/auth/refresh</code></td>
+<td>Anônimo</td>
+<td>Girar um token de atualização para um novo par de tokens</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/auth/logout</code></td>
+<td>Anônimo</td>
+<td>Revogar um token de atualização</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/auth/public-key/revoke-request</code></td>
+<td>Anônimo</td>
+<td>Envie por e-mail um link que revoga todas as chaves ativas na conta correspondente</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/auth/public-key/revoke/confirm</code></td>
+<td>Token único enviado por e-mail</td>
+<td>A página que o e-mail de revogação abre; não muda nada</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/auth/public-key/revoke/confirm</code></td>
+<td>Token único enviado por e-mail</td>
+<td>Confirme essa revogação; não emite nenhuma sessão</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/auth/games/{gameId}/sign-in</code></td>
+<td>Anônimo</td>
+<td>Faça login ou crie uma conta e retorne diretamente para um jogo hospedado</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/auth/oauth/providers</code></td>
+<td>Anônimo</td>
+<td>Provedores Live OAuth com os quais esta implantação pode conectar pessoas</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/auth/oauth/{provider}/authorize</code></td>
+<td>Anônimo</td>
+<td>Redirecionar para o provedor OAuth</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/auth/oauth/{provider}/callback</code></td>
+<td>Anônimo</td>
+<td>Retorno de chamada OAuth; redireciona para o frontend com tokens</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/auth/oauth/link/confirm</code></td>
+<td>Token único enviado por e-mail</td>
+<td>A página que o email do link de identidade abre; não muda nada</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/auth/oauth/link/confirm</code></td>
+<td>Token único enviado por e-mail</td>
+<td>Confirmar um link de identidade retido para aprovação do proprietário da conta</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/games/{slug}/launch-token</code></td>
+<td>JWT</td>
+<td>Crie um token de lançamento no escopo do jogo (veja abaixo)</td>
+</tr>
+<tr>
+<td>PUBLICAR</td>
+<td><code>/api/v1/realtime/connection-tickets</code></td>
+<td>JWT</td>
+<td>Bilhete único para abertura de um <code>/ws/**</code> tomada</td>
+</tr>
+</tbody>
+</table>
+<h2 id="after-sign-in-current-terms">Após o login: termos atuais</h2>
+<p>O login bem-sucedido não implica permissão para usar APIs protegidas. Os titulares de contas devem
+<a href="/pt/docs/api/profile.html#terms-acceptance">aceite os termos atuais do StarHermit</a> antes de chamadas REST protegidas ou
+As atualizações do WebSocket foram bem-sucedidas. Os clientes da conta podem verificar <code>GET /api/v1/me</code>, buscar <code>GET /api/v1/terms</code>,
+e registrar aceitação explícita com <code>POST /api/v1/me/terms/accept</code>. OAuth e chave pública
+sessões de conta suportam esse fluxo. A atualização de credenciais não resolve a aceitação pendente.</p>
+<p>Um jogo de navegador aberto diretamente pode receber um token com escopo antes que a conta seja aceita.
+Se uma chamada de jogo retornar <code>403</code> com <code>error: "terms_acceptance_required"</code>, buscar <code>GET /api/v1/terms</code>,
+exibir seu texto e oferecer uma ação Aceitar explícita. Um token de lançamento de jogador pode enviar o exibido
+hash para <code>POST /api/v1/me/terms/accept</code>; tente novamente a solicitação original após a aceitação. Não trate isso
+resposta como um loop de login de token expirado.</p>
+<h2 id="public-key-registration">Registro de chave pública</h2>
+<p>Passo a passo, com código de cliente testado: <a href="/pt/docs/tutorials/public-key-onboarding.html">Tutorial: jogadores integrados com chave pública</a>.</p>
+<table>
+<thead>
+<tr>
+<th><code>keyType</code></th>
+<th><code>keyData</code> (Base64 padrão)</th>
+<th>Assinatura</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Ed25519</code></td>
+<td>Chave pública bruta de 32 bytes</td>
+<td>Assinatura Ed25519 bruta de 64 bytes</td>
+</tr>
+<tr>
+<td><code>ECDSA-P256</code></td>
+<td>Ponto público, descompactado de 65 bytes ou compactado de 33 bytes</td>
+<td>ECDSA-SHA256, ASN.1 DER (não bruto <code>r‖s</code>)</td>
+</tr>
+<tr>
+<td><code>RSA-PSS</code></td>
+<td><code>SubjectPublicKeyInfo</code> DER, 2.048–8.192 bits, expoente ≤ 32 bits</td>
+<td>RSASSA-PSS, SHA-256, MGF1-SHA-256, sal de 32 bytes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="post-apiv1authpublic-keyregister"><code>POST /api/v1/auth/public-key/register</code></h3>
+<p>Inicia o registro da chave pública e envia um e-mail de verificação. O registro de registro pendente expira após 4 horas. Se <code>userId</code> estiver definido, o e-mail deverá corresponder a essa conta. Limitado a 1 e-mail por endereço e por IP a cada 24 horas — quando limitado, a resposta é 429 com um <code>Retry-After</code> cabeçalho.</p>
+<p>Quando <code>userId</code> estiver definido e o par não fizer check-out, a resposta será <code>403</code> com uma única mensagem
+independentemente de <em>por que</em>: uma conta desconhecida e um endereço errado respondem de forma idêntica. Este ponto final leva
+sem credenciais - é necessário, já que é assim que uma nova chave é anexada - então diferenciá-las seria
+torne-o um oráculo para o qual existam IDs de usuários e, em seguida, para seus endereços. Um chamador que possui o
+conta já sabe qual dos dois errou.</p>
+<p>Solicitar:</p>
+<pre><code class="language-json">{
+  "email": "dev@example.com",
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;",
+  "userId": null
+}
+</code></pre>
+<p>Resposta - 202:</p>
+<pre><code class="language-json">{
+  "registrationId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "email": "dev@example.com",
+  "emailSent": true,
+  "deferralReason": null,
+  "message": "A verification email has been sent. The key will be attached once you confirm."
+}
+</code></pre>
+<p><code>emailSent: false</code> significa que o e-mail está na fila para nova tentativa (<code>deferralReason</code> diz porquê); o registro
+ainda é aceito. E-mail ou material chave inválido é <code>400</code>.</p>
+<h3 id="get--post-apiv1authpublic-keyverifytoken"><code>GET</code> / <code>POST /api/v1/auth/public-key/verify?token=</code></h3>
+<p><strong>Abrir o link enviado por e-mail não muda nada.</strong> <code>GET</code> mostra uma página dizendo o que a confirmação faria -
+criar uma conta ou <strong>adicione uma chave à conta existente</strong> que já usa o endereço - com um
+Botão de confirmação. Os scanners de e-mail buscam links para visualizá-los, portanto, um link enviado por e-mail que agiu <code>GET</code>
+seria resgatado por qualquer pessoa que o escaneasse. O mesmo se aplica ao
+<a href="#emailed-key-revocation">revogação</a> e <a href="#get-apiv1authoauthproviderauthorizelinkclient">link de identidade</a>
+confirmações abaixo.</p>
+<p><code>POST</code> para a mesma URL resgata: anexa a chave, criando o usuário (nome de usuário <code>pk-&lt;hex12&gt;</code>, papel
+<code>User</code>), a menos que uma conta já use esse endereço de email; nesse caso, a chave ingressa nessa conta.
+O e-mail está marcado como verificado. O link é de uso único e expira após 4 horas; um desconhecido, usado ou
+token expirado é <code>400</code>, assim como um link cujo endereço não é mais o da conta — isso prova
+controle da caixa de entrada para a qual foi enviado, e somente enquanto esse endereço ainda for o da conta.</p>
+<p>Quando o jogador pressiona Confirmar na página e os conjuntos de implantação
+<code>PublicKeyAuth:VerificationSuccessRedirectUri</code> - starhermit.com faz, para o painel - eles são
+enviado para lá com os tokens no fragmento
+(<code>#access_token=…&amp;refresh_token=…&amp;token_type=Bearer&amp;expires_in=900</code>), conectado ao painel. Um
+o cliente nativo, portanto, não recebe esses tokens; ele entra com sua chave assim que o jogador tiver
+confirmado. Um cliente API que <code>POST</code>o próprio URL recebe JSON:</p>
+<pre><code class="language-json">{
+  "userId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "keyId": "9b2f5c74-1d2e-4a6b-8c0d-1e2f3a4b5c6d",
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "dGhpcyBpcyBh..."
+}
+</code></pre>
+<h2 id="public-key-login">Login de chave pública</h2>
+<h3 id="post-apiv1authpublic-keychallenge"><code>POST /api/v1/auth/public-key/challenge</code></h3>
+<p>Emite um desafio de login, válido por 5 minutos e de uso único.</p>
+<p><strong>A assinatura cobre a serialização do próprio servidor de <code>payload</code>, não o JSON que você recebeu:</strong>
+compacto, nomes PascalCase na ordem <code>ChallengeId</code>, <code>Fingerprint</code>, <code>Issuer</code>, <code>Audience</code>, <code>Expiry</code>,
+<code>Nonce</code>, <code>ClientTimestamp</code>, valores copiados exatamente como veiculados e cada <code>+</code> no nonce escrito como
+<code>\u002B</code> (as datas mantêm a sua <code>+</code>). Veja o
+<a href="/pt/docs/tutorials/public-key-onboarding.html#3-sign-in-with-the-key">exemplo trabalhado</a>.</p>
+<p>Solicitar:</p>
+<pre><code class="language-json">{
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;"
+}
+</code></pre>
+<p>Resposta:</p>
+<pre><code class="language-json">{
+  "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "payload": {
+    "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "fingerprint": "4d9f3c...",
+    "issuer": "starhermit",
+    "audience": "starhermit",
+    "expiry": "2026-07-22T07:24:44.1234567+00:00",
+    "nonce": "NmL+tgMum6HXU/pa3T9xjQ==",
+    "clientTimestamp": "2026-07-22T07:19:44.1235521+00:00"
+  },
+  "expiresIn": 300
+}
+</code></pre>
+<h3 id="post-apiv1authpublic-keycomplete"><code>POST /api/v1/auth/public-key/complete</code></h3>
+<p>Verifica a assinatura em relação a uma chave registrada e não revogada e retorna um par de tokens. Uma falha é
+<code>401</code>: <code>"Public key not registered or revoked."</code> (incluindo uma chave cujo link enviado por e-mail não foi
+aberto ainda), <code>"Invalid signature."</code>, ou <code>"Challenge not found or expired."</code>. Desafie e complete
+compartilham um limite de 60 solicitações por minuto por IP (<code>429</code>).</p>
+<p>Solicitar:</p>
+<pre><code class="language-json">{
+  "challengeId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "signature": "base64-signature...",
+  "keyType": "Ed25519",
+  "keyData": "&lt;base64-raw-32-byte-public-key&gt;"
+}
+</code></pre>
+<p>Resposta:</p>
+<pre><code class="language-json">{
+  "userId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "dGhpcyBpcyBh..."
+}
+</code></pre>
+<h2 id="token-lifecycle">Ciclo de vida do token</h2>
+<h3 id="post-apiv1authrefresh"><code>POST /api/v1/auth/refresh</code></h3>
+<p>Atualização rotativa: o token antigo é revogado e substituído. A reutilização de um token de atualização revogado revoga toda a família de tokens.</p>
+<p>Solicitar:</p>
+<pre><code class="language-json">{ "refreshToken": "dGhpcyBpcyBh..." }
+</code></pre>
+<p>Resposta:</p>
+<pre><code class="language-json">{
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "bmV3IHJlZnJlc2g..."
+}
+</code></pre>
+<h4 id="when-refresh-stops-working">Quando a atualização para de funcionar</h4>
+<p>Um token de atualização registra o estado da conta sob a qual foi emitido e a atualização o verifica. Duas respostas
+seu cliente deve lidar em vez de tentar novamente:</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Significado</th>
+<th>O que o cliente deve fazer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>401</code></td>
+<td>A sessão foi revogada na plataforma – um "sair em todos os lugares"ou uma resposta de compromisso. Toda a família de tokens é queimada, incluindo o token que acabamos de apresentar.</td>
+<td>Descarte os dois tokens e inicie um novo login.</td>
+</tr>
+<tr>
+<td><code>403</code></td>
+<td>A conta é <strong>suspenso</strong>.</td>
+<td>Parar. Fazer login novamente não ajudará; o mesmo <code>403</code> retorna de todas as rotas de login até que a suspensão seja suspensa.</td>
+</tr>
+</tbody>
+</table>
+<p>O <code>403</code> é deliberadamente distinto de <code>401</code>, porque os dois precisam de reações opostas: um significa
+"autenticar novamente", o outro significa "autenticar novamente é inútil". Uma conta suspensa é
+recusado por <em>todo</em> rota de criação de credenciais - atualização, conclusão de chave pública, retorno de chamada OAuth,
+e tokens de lançamento de jogos – não apenas por atualização.</p>
+<h3 id="post-apiv1authlogout"><code>POST /api/v1/auth/logout</code></h3>
+<p>Revoga o token de atualização fornecido. Retorna 200.</p>
+<pre><code class="language-json">{ "refreshToken": "dGhpcyBpcyBh..." }
+</code></pre>
+<h2 id="oauth">OAuth</h2>
+<p>A plataforma envia sete provedores: <code>google</code>, <code>github</code>, <code>discord</code>, <code>twitch</code>, <code>gitlab</code>, <code>linkedin</code>,
+<code>bitbucket</code>. <strong>Somente os provedores para os quais esta implantação tem credenciais estão ativos.</strong> Um cliente não deve
+codifique a lista.</p>
+<h3 id="get-apiv1authoauthproviders"><code>GET /api/v1/auth/oauth/providers</code></h3>
+<p>Anônimo. Retorna os provedores ativos na ordem em que devem ser oferecidos:</p>
+<pre><code class="language-json">{
+  "providers": [
+    {
+      "provider": "google",
+      "displayName": "Google",
+      "authorizeUrl": "/api/v1/auth/oauth/google/authorize",
+      "linksExistingAccountsByEmail": true
+    }
+  ]
+}
+</code></pre>
+<p><code>linksExistingAccountsByEmail</code> é se um login nesse provedor pode encontrar uma conta que a pessoa
+já possui (a configuração de confiança da operadora para esse provedor). Pedindo para autorizar um nome que não é
+viver é <code>404</code>, não um redirecionamento para a página de erro do próprio provedor.</p>
+<h3 id="get-apiv1authoauthproviderauthorizelinkclient"><code>GET /api/v1/auth/oauth/{provider}/authorize?link=&amp;client=</code></h3>
+<p>Retorna um redirecionamento 302 para o provedor e define um <code>oauth_state</code> cookie (HttpOnly, SameSite=Lax, 10
+minutos). <code>link=true</code> começa a vincular a identidade ao usuário conectado no momento; a vinculação requer
+autenticação recente (dentro de 5 minutos). <code>client</code> seleciona um redirecionamento de cliente compatível. Por um
+jogo aberto diretamente, use <code>gameId</code> e opcional <code>returnUrl</code> em vez de; ver
+<a href="#sign-in-from-a-directly-opened-browser-game">Faça login em um jogo de navegador aberto diretamente</a>.</p>
+<h3 id="get-apiv1authoauthprovidercallbackcodestate"><code>GET /api/v1/auth/oauth/{provider}/callback?code=&amp;state=</code></h3>
+<p>Para login normal na conta, retorna um redirecionamento 302 para o URL de front-end com os tokens no
+fragmento (o login no jogo retorna um token com escopo diretamente para o jogo, conforme descrito abaixo):</p>
+<pre><code>#access_token=…&amp;refresh_token=…&amp;token_type=Bearer&amp;expires_in=900
+</code></pre>
+<p>Se o provedor recusar a troca de tokens, o retorno de chamada responderá <code>409</code> nomeando o erro do provedor
+<strong>código</strong> (a descrição permanece no log do servidor).</p>
+<p>Um login normal encontra ou cria o usuário (nome de usuário <code>oauth-{provider}-{guid}</code>, papel <code>User</code>) e o
+novos registros de sessão <code>auth_method=oauth</code>. Um login cujo <code>(provider, providerUserId)</code> é desconhecido é
+<strong>adotado em uma conta existente</strong> somente quando a afirmação do provedor é confiável, exatamente um
+a conta já contém esse e-mail verificado e essa conta ainda não tem identidade deste provedor.
+Qualquer outra coisa provisiona uma conta separada. A adoção envia um e-mail para a conta nomeando o provedor.</p>
+<p>Isso é importante porque apenas uma sessão autenticada por OAuth
+pode realizar alterações de credenciais de alto impacto:</p>
+<ul>
+<li>adicionar ou revogar chaves públicas da conta;</li>
+<li>alterar o e-mail da conta;</li>
+<li>remover uma identidade gerenciada pelo OAuth.</li>
+</ul>
+<p>Os tokens com escopo de jogo nunca podem realizar essas operações. Um token de atualização mantém o original
+método de autenticação da sessão, portanto, atualizar uma sessão OAuth não remove esse recurso e
+atualizar uma sessão de chave pública não a adiciona.</p>
+<p>Quando <code>link=true</code>, o retorno de chamada não promove automaticamente a sessão apenas porque ela visitou
+um provedor OAuth. Um link iniciado em uma sessão OAuth é anexado imediatamente. Um link começou em
+uma sessão de chave pública, verificação de e-mail ou herdada é mantida até que o proprietário da conta abra o
+confirmação enviada para o e-mail verificado da conta; os relatórios de fragmentos de redirecionamento
+<code>link=pending_email_confirmation</code>. O e-mail único é aberto <code>GET /api/v1/auth/oauth/link/confirm?token=…</code>,
+uma página com o nome da conta do provedor que não altera nada; seu botão Confirmar <code>POST</code>é o mesmo URL,
+que cria a identidade (<code>{ "provider", "linked": true }</code> para um cliente API). Um link cujo endereço
+não é mais a conta é recusada. Isto evita que uma chave pública roubada ligue o
+conta do provedor do invasor e transformando isso em um login OAuth permanente.</p>
+<p>Armazenamentos de metadados de identidade do GitHub <code>{"login":"…"}</code> — isto é usado para verificações de propriedade de repositório em
+<a href="/pt/docs/api/github-games.html">Jogos GitHub</a>.</p>
+<h3 id="oauth-enrolled-public-keys-for-automation">Chaves públicas registradas em OAuth para automação</h3>
+<p>Uma sessão OAuth pode chamar <code>POST /api/v1/me/public-keys</code> anexar imediatamente uma chave de máquina etiquetada.
+Mais tarde, a CI assina o desafio normal de chave pública e usa seu token de acesso de curta duração para carregar um
+pacote de jogo próprio; a chave privada nunca sai do armazenamento secreto do CI. Ver
+<a href="/pt/docs/tutorials/ci-cd-build-upload.html">o tutorial de upload de build de CI/CD</a> para configuração, um auxiliar de assinatura e
+um fluxo de trabalho do GitHub Actions.</p>
+<h2 id="tokens">Fichas</h2>
+<ul>
+<li><strong>Token de acesso</strong> — JWT, vida útil de 15 minutos (<code>expires_in=900</code>). As reivindicações incluem <code>sub</code> (o ID do usuário) mais <code>permission</code> e reivindicações de função. A revogação entra em vigor imediatamente.</li>
+<li><strong>Atualizar token</strong> — Um token rotativo opaco com vida útil de 7 dias. Cada atualização emite um novo token de atualização e revoga o antigo; reutilizar um token revogado revoga toda a família de tokens.</li>
+</ul>
+<h2 id="sign-in-from-a-directly-opened-browser-game">Faça login em um jogo de navegador aberto diretamente</h2>
+<p>Um jogo hospedado aberto fora do painel pode mostrar um <strong>Entrar</strong> botão com link para:</p>
+<pre><code class="language-text">https://api.starhermit.com/api/v1/auth/games/{gameId}/sign-in
+</code></pre>
+<p><code>gameId</code> é o UUID imutável do jogo (o subdomínio em <code>{gameId}.starhermit.com</code>). Eremita Estelar
+mostra seus provedores de login habilitados. Continuar assina um jogador existente ou cria um novo
+conta usando as regras normais de correspondência de conta do OAuth e, em seguida, redireciona <strong>direto de volta para o
+jogo</strong>, sem visitar o painel.</p>
+<p>O opcional <code>returnUrl</code> preserva uma página específica do jogo, string de consulta ou rota hash. Deve ser
+um URL HTTPS absoluto exatamente na origem hospedada do jogo; outros jogos, hosts externos,
+credenciais na URL e portas alternativas são rejeitadas com <code>400</code>. Omita-o para retornar ao
+arquivo de lançamento publicado. Jogos desconhecidos, removidos, não hospedados ou nunca publicados retornam <code>404</code>. Ambos
+implantações de repositório e jogos carregados são suportados; URLs externos/locais arbitrários não são.</p>
+<p>Navegue no navegador até o <strong>origem da API pública</strong> acima, em vez de buscar a página ou iniciar
+através do jogo <code>/api</code> procuração. O cookie de estado OAuth e o retorno de chamada do provedor devem usar o mesmo
+Anfitrião de API. Use este fluxo quando o jogo não tiver um token válido fornecido pelo inicializador ou obtido anteriormente.</p>
+<h3 id="button-and-return-token-example">Exemplo de botão e token de retorno</h3>
+<pre><code class="language-html">&lt;button id="starhermit-sign-in"&gt;Sign in&lt;/button&gt;
+&lt;script type="module"&gt;
+const api = 'https://api.starhermit.com';
+const gameId = 'YOUR_GAME_UID';
+const signIn = document.querySelector('#starhermit-sign-in');
+let gameToken = null; // Or your existing launcher-provided game token.
+
+// Read this before your game router or third-party scripts consume the fragment.
+const auth = new URLSearchParams(location.hash.slice(1));
+if (auth.has('access_token')) {
+  gameToken = auth.get('access_token');
+  const originalHash = auth.get('game_fragment');
+  history.replaceState(null, '', location.pathname + location.search +
+    (originalHash ? '#' + originalHash : ''));
+}
+signIn.hidden = Boolean(gameToken);
+signIn.addEventListener('click', () =&gt; {
+  const url = new URL(`/api/v1/auth/games/${gameId}/sign-in`, api);
+  url.searchParams.set('returnUrl', location.href);
+  location.assign(url.href);
+});
+
+// Pass gameToken to your game's API client as Authorization: Bearer &lt;gameToken&gt;.
+// This example keeps it in memory; a reload can require sign-in again.
+&lt;/script&gt;
+</code></pre>
+<p>O fragmento de retorno é:</p>
+<pre><code class="language-text">#access_token=…&amp;token_type=Bearer&amp;expires_in=3600
+</code></pre>
+<p><code>access_token</code> é um <strong>token de lançamento no escopo do jogo</strong>, não um token de acesso para toda a conta. Nenhum token de atualização
+é emitido. <code>expires_in</code> usa o tempo de vida do token de inicialização configurado da implantação (padrão 3600
+segundos). Um fragmento de URL de retorno original é codificado no formato opcional <code>game_fragment</code> campo;
+restaure-o após capturar o token e remover os dados de autenticação do histórico do navegador.
+Não registre ou encaminhe o token.</p>
+<p>Renove antes de expirar usando <code>POST /api/v1/games/{gameId}/launch-token</code> com o token atual como
+Autorização do portador e, em seguida, substitua-a pela retornada <code>token</code>. O teto habitual da cadeia de renovação
+aplica-se (padrão 12 horas). Se o token expirar ou a renovação for recusada, limpe-o e mostre Entrar
+novamente. Ver <a href="#game-launch-tokens">Tokens de lançamento de jogo</a>.</p>
+<h3 id="choosing-a-provider-yourself">Escolhendo você mesmo um provedor</h3>
+<p>Em vez disso, os jogos podem ler <code>GET /api/v1/auth/oauth/providers</code> e navegue até um oferecido <code>authorizeUrl</code>
+na origem da API pública, adicionando <code>gameId</code> e opcionalmente <code>returnUrl</code>. A etapa de autorização
+valida e armazena o destino no estado OAuth existente de dez minutos; parâmetros de consulta de retorno de chamada
+não posso mudar isso. O cookie do navegador inicial ainda é necessário e o jogo é verificado novamente
+antes de emitir um token. Contas suspensas não podem receber token.</p>
+<p>Não combine login no jogo com <code>client</code> ou <code>link</code> (<code>400</code>). A <code>returnUrl</code> sem <code>gameId</code> também é
+<code>400</code>. O login normal no painel e na área de trabalho continua usando seus destinos de front-end configurados
+e pares de tokens de conta comuns.</p>
+<h2 id="game-launch-tokens">Tokens de lançamento de jogo</h2>
+<p><code>POST /api/v1/games/{slug}/launch-token</code> (JWT) cria um JWT com escopo de jogo:</p>
+<pre><code class="language-json">{
+  "token": "eyJhbGciOi...",
+  "expiresInSeconds": 3600
+}
+</code></pre>
+<p>O token carrega um <code>game_scope</code> reivindicação e o padrão é uma vida útil de 60 minutos. A renovação copia um
+<code>launch_chain</code> hora de início adiantada; a renovação das últimas 12 horas (padrão) é <code>403</code> e o titular deve ir
+de volta a uma sessão completa da conta. Detalhes completos estão em <a href="/pt/docs/api/games.html">Jogos</a>.</p>
+<p><strong>Reconectando soquetes.</strong> Um soquete aberto com um token de lançamento (<code>?access_token=</code> sobre <code>ws/v1/games</code>,
+<code>ws/v1/realtime</code>, <code>ws/v1/voice</code>) carrega esse token em sua URL e um handshake com um token expirado
+é recusado com <code>401</code> antes da atualização — o navegador reporta apenas código fechado <code>1006</code>, o mesmo que um
+queda de rede. Trate uma falha na reconexão como possivelmente uma falha de autenticação: antes de reabrir, renove através
+<code>POST /api/v1/games/{slug}/launch-token</code> (possível apenas enquanto o token atual ainda for válido e
+dentro de 12 horas após o lançamento original) e crie a URL com o novo token. Assim que a renovação for
+recusado, envie o jogador de volta ao inicializador, ou através
+<a href="#sign-in-from-a-directly-opened-browser-game">login no jogo</a> se foi assim que o jogo foi aberto.
+Tentar novamente o mesmo URL nunca poderá ser recuperado.</p>
+<h3 id="game-scope-fencing">Esgrima de escopo de jogo</h3>
+<p>Um token com escopo de jogo só pode alcançar:</p>
+<ul>
+<li>próprio <code>/api/v1/games/{scope}</code> árvore,</li>
+<li><code>/ws/v1/games</code>,</li>
+<li><a href="/pt/docs/api/realtime.html">sala em tempo real</a> Rotas REST e <code>/ws/v1/realtime</code> para seu próprio jogo, incluindo ingressos de conexão,</li>
+<li><code>GET /api/v1/time</code> e <code>GET /api/v1/terms</code>,</li>
+<li><code>POST /api/v1/me/terms/accept</code> para o consentimento explícito do jogador autenticado,</li>
+<li><code>GET /api/v1/me/friends</code>,</li>
+<li><code>GET /api/v1/users/{id}/avatar</code> e <code>GET /api/v1/users/{id}/profile</code>,</li>
+<li>a tabela de classificação do seu jogo,</li>
+<li>o jogador <a href="/pt/docs/api/catalog.html#saving-from-inside-a-game-launch-token">salvar na nuvem</a> para seu próprio jogo (<code>/api/v1/me/cloud-saves/game:&lt;scope&gt;</code> e seu <code>/info</code>) - nenhuma outra chave,</li>
+<li>os endpoints REST e WebSocket de bate-papo/voz anexados às suas próprias sessões de jogo,</li>
+<li><code>GET /api/v1/github-games/{id}/icon</code> e <code>/cover</code> para qualquer jogo (ambos são públicos de qualquer maneira),</li>
+<li><code>POST /api/v1/me/heartbeat</code>, que marca apenas o jogador online,</li>
+<li><code>GET /api/v1/github-games/{id}/release-notes</code> para seu próprio jogo,</li>
+<li><a href="/pt/docs/api/relay.html">relé</a> rotas, para revezamentos vinculados a uma de suas próprias sessões ou salas de jogo.</li>
+</ul>
+<p><code>/ws/v1/chat</code> está bloqueado para tokens de lançamento. Todo o resto retorna 403.</p>
+<h2 id="typical-login-flow-curl">Fluxo de login típico (curl)</h2>
+<p>Login com chave pública, do desafio à chamada autenticada:</p>
+<pre><code class="language-bash"># 1. Request a challenge
+curl -s -X POST https://api.starhermit.com/api/v1/auth/public-key/challenge \
+  -H "Content-Type: application/json" \
+  -d '{"keyType":"Ed25519","keyData":"&lt;base64-raw-32-byte-public-key&gt;"}'
+# → { "challengeId": "...", "payload": { ... }, "expiresIn": 300 }
+
+# 2. Sign the serialized payload JSON with your private key, then complete
+curl -s -X POST https://api.starhermit.com/api/v1/auth/public-key/complete \
+  -H "Content-Type: application/json" \
+  -d '{"challengeId":"...","signature":"base64-signature...","keyType":"Ed25519","keyData":"&lt;base64-raw-32-byte-public-key&gt;"}'
+# → { "userId": "...", "accessToken": "...", "refreshToken": "..." }
+
+# 3. Call the API with the access token
+curl -s https://api.starhermit.com/api/v1/me \
+  -H "Authorization: Bearer eyJhbGciOi..."
+
+# 4. When the access token expires (after 15 min), rotate the refresh token
+curl -s -X POST https://api.starhermit.com/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"dGhpcyBpcyBh..."}'
+
+# 5. On logout, revoke the refresh token
+curl -s -X POST https://api.starhermit.com/api/v1/auth/logout \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"dGhpcyBpcyBh..."}'
+</code></pre>
+<p>O login do OAuth é orientado pelo navegador: leia <code>GET /api/v1/auth/oauth/providers</code>, abra um provedor ativo
+<code>authorizeUrl</code>, consentimento completo e o retorno de chamada leva o usuário ao front-end com
+<code>#access_token=…&amp;refresh_token=…</code> no fragmento de URL.</p>
+<h2 id="emailed-key-revocation">Revogação de chave enviada por e-mail</h2>
+<p>Para um proprietário que não consegue alcançar <code>DELETE /me/public-keys</code> (sem sessão OAuth ou bloqueado por um roubo
+chave). <code>POST /api/v1/auth/public-key/revoke-request</code> com <code>{ "email": "…" }</code> detém um pedido e
+e-mail com um link. Abrindo (<code>GET /api/v1/auth/public-key/revoke/confirm?token=…</code>) mostra uma página que
+não muda nada; seu botão Confirmar <code>POST</code>é o mesmo URL, que revoga <strong>todo</strong> chave ativa nisso
+conta e encerra as sessões que autenticaram. Ambos não são autenticados e <strong>questão não
+sessão</strong>. O pedido sempre responde <code>202</code> com o mesmo corpo, seja o que for que encontre; um pedido por
+conta a cada 15 minutos e o link expira após 4 horas. A confirmação <code>POST</code> respostas <code>200</code>
+<code>{ "revoked": &lt;count&gt;, "sessionsEnded": &lt;count&gt; }</code> para um cliente API ou <code>400</code> para um desconhecido, usado ou
+token expirado ou cujo endereço não seja mais o da conta.</p>
+<h2 id="websocket-connection-tickets">Bilhetes de conexão WebSocket</h2>
+<p><code>POST /api/v1/realtime/connection-tickets</code> troca o token do portador do chamador por um ticket único
+válido por cerca de 30 segundos. Passe como <code>?ticket=</code> em qualquer <code>/ws/v1/*</code> aperto de mão. Ele carrega o chamador
+afirma textualmente (incluindo <code>game_scope</code> e <code>pk</code>), é recusado no REST e gasto no primeiro uso.
+Qualquer chamador autenticado pode perguntar, incluindo um token de lançamento no escopo do jogo. <code>?access_token=</code> ainda funciona
+até que os clientes se mudem.</p>
+<p><strong>Um soquete aberto termina quando sua credencial é revogada.</strong> A revogação da chave pública que a abriu termina
+imediatamente; uma suspensão ou saída em qualquer lugar encerra em cerca de 30 segundos. Expiração do token
+não encerra um soquete aberto — atualize antes de reconectar.</p>
+<h2 id="embedded-onboarding-for-nativestorefront-games">Integração incorporada para jogos nativos/de loja</h2>
+<p>Um cliente Steam, Epic, GOG ou independente pode gerar uma chave no dispositivo do jogador e apresentar o
+fluxo de registro de chave pública dentro de sua própria UI, evitando OAuth e uma visita ao StarHermit
+painel. O registro não é silencioso: o jogador deve consentir, fornecer um e-mail e seguir as
+link de verificação único. Um token de servidor de jogo não pode criar ou representar jogadores. Ver
+<a href="/pt/docs/tutorials/public-key-onboarding.html">Tutorial: jogadores integrados com chave pública</a>, e o
+<a href="/pt/docs/tutorials/dedicated-server-onboarding.html">tutorial de servidor dedicado</a> para um jogo que também vem com um servidor.</p>
+<p>Ver <a href="/pt/docs/credentials.html">compatibilidade de credenciais</a> e <a href="/pt/docs/api/contracts.html">contratos legíveis por máquina</a>.</p>
+
+{% endraw %}

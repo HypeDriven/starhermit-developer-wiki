@@ -1,0 +1,331 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Tutorial: papan peringkat dan pencapaian untuk game Anda"
+source_url: "/docs/tutorials/game-leaderboards-achievements.html"
+source_path: "docs/tutorials/game-leaderboards-achievements.md"
+source_hash: "96ac3993941c25c39514f47fc1c97e41e66138bc4e9b8d819a8bb8bb12108f31"
+translation: "machine"
+permalink: "/id/docs/tutorials/game-leaderboards-achievements.html"
+---
+{% raw %}
+<h1 id="tutorial-leaderboards-and-achievements-for-your-game">Tutorial: papan peringkat dan pencapaian untuk game Anda</h1>
+<p>Jika Anda memiliki game di StarHermit, Anda adalah penerbitnya. Anda bisa memberikannya <strong>papan peringkat</strong> (skor tinggi,
+lari tercepat, pukulan terpanjang) dan <strong>prestasi</strong> tanpa akun penerbit atau akun khusus apa pun
+izin. Hanya dibutuhkan kepemilikan atas game ini.</p>
+<p>Ada satu aturan di balik semua yang ada di halaman ini: <strong>Anda mendefinisikannya, tulis server game Anda
+mereka.</strong> Klien pemain tidak pernah dapat memposting skor atau mengklaim pencapaian untuk hal ini, dan server Anda harus memvalidasi gameplay yang menghasilkan skor tersebut. Menolak pengiriman API langsung
+sendiri tidak menghentikan klien yang dimodifikasi untuk menciptakan event game. Itulah sebabnya game ini membutuhkan backend yang otoritatif: a
+<code>server=</code> naskah atau a <code>container.image=</code> di dalam <a href="/id/docs/starhermit-txt.html"><code>starhermit.txt</code></a>.</p>
+<p>Tutorial ini dibuat untuk game arcade kecil, <em>Kolektor Bintang</em>: lari berakhir ketika pemain
+crash, dan memiliki total poin dan waktu berjalan.</p>
+<ol>
+<li><a href="#before-you-start">Sebelum Anda mulai</a></li>
+<li><a href="#1-create-the-leaderboards">Buat papan peringkat</a></li>
+<li><a href="#2-create-the-achievements">Ciptakan prestasi</a></li>
+<li><a href="#3-post-scores-and-unlock-achievements-from-your-script">Posting skor dan buka pencapaian dari skrip Anda</a></li>
+<li><a href="#3b-the-same-from-a-container">Hal yang sama dari sebuah wadah</a></li>
+<li><a href="#4-show-them-in-your-game">Tunjukkan pada game Anda</a></li>
+<li><a href="#5-look-after-them">Jagalah mereka</a></li>
+</ol>
+<h2 id="before-you-start">Sebelum Anda mulai</h2>
+<p>Anda membutuhkan:</p>
+<ul>
+<li><strong>Sebuah game dengan backend server</strong> yang Anda miliki: yang Anda tambahkan dari repositori Anda sendiri, unggah
+sebagai folder, atau <a href="/id/docs/tutorials/claim-existing-game.html">diklaim</a>. Jawaban permainan khusus browser <code>409</code> untuk setiap panggilan
+di bawah, dengan pesan yang menyatakan alasannya.</li>
+<li><strong>Token akses pengguna penuh</strong>, bukan token peluncuran game. Token peluncuran dipagari ke dalam game
+permukaan pemain dan tidak dapat menjangkau <code>/me/...</code>.</li>
+<li><strong>ID permainan Anda</strong> (itu juga miliknya <code>&lt;id&gt;.starhermit.com</code> alamat):</li>
+</ul>
+<pre><code class="language-bash">ACCESS_TOKEN='your-full-user-access-token'
+API=https://api.starhermit.com
+
+curl -s "$API/api/v1/me/github-games" -H "Authorization: Bearer $ACCESS_TOKEN" |
+  jq '.[] | {id, displayName, gameSlug}'
+</code></pre>
+<pre><code class="language-bash">GAME_ID='the-id-from-above'
+</code></pre>
+<p><code>gameSlug</code> adalah apa yang klien Anda sebut sebagai permainan <code>/api/v1/games/{slug}/...</code>. Setiap game yang Anda tambahkan
+atau yang diunggah memiliki satu, game khusus browser yang disertakan, sehingga tidak memberi tahu Anda apakah ada server:
+<code>GET /api/v1/games/{slug}</code> tidak - itu menjawab <code>404</code> sampai game memiliki backend.</p>
+<h2 id="1-create-the-leaderboards">1. Buat papan peringkat</h2>
+<p>Star Collector mendapat dua papan: poin terbanyak (lebih tinggi lebih baik) dan lari tercepat hingga 100 poin (lebih rendah
+lebih baik).</p>
+<pre><code class="language-bash">curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/leaderboards" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "high-score", "name": "High score",
+        "scoreType": "integer", "sortDirection": "desc",
+        "minScore": 0, "maxScore": 1000000 }'
+
+curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/leaderboards" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "fastest-100", "name": "Fastest to 100",
+        "scoreType": "time-ms", "sortDirection": "asc" }'
+</code></pre>
+<p>Setiap panggilan kembali <code>201</code> dan dewan, termasuk dewannya <code>id</code> Dan <code>key</code>. Server Anda menggunakan <strong>kunci</strong>,
+jadi pilihlah dengan hati-hati. Kuncinya, <code>scoreType</code> Dan <code>sortDirection</code> tidak dapat diubah nanti.</p>
+<table>
+<thead>
+<tr>
+<th><code>scoreType</code></th>
+<th>Menerima</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>integer</code></td>
+<td>bilangan bulat</td>
+</tr>
+<tr>
+<td><code>decimal</code></td>
+<td>nomor berapa pun</td>
+</tr>
+<tr>
+<td><code>time-ms</code></td>
+<td>keseluruhan, milidetik non-negatif</td>
+</tr>
+</tbody>
+</table>
+<p>Mengatur <code>minScore</code>/<code>maxScore</code> dengan apa yang sebenarnya dapat dihasilkan oleh game Anda. Skor di luar mereka dijatuhkan,
+yang merupakan pelindung murah terhadap bug di logika server Anda sendiri.</p>
+<h2 id="2-create-the-achievements">2. Ciptakan prestasi</h2>
+<p>Anda dapat memberikan pencapaian game dengan dua cara, dan Anda dapat menggunakan keduanya sekaligus:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Dideklarasikan dalam kode</th>
+<th>Dibuat melalui API</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Di mana</td>
+<td><code>game.achievements</code> dalam skrip Anda, atau <code>/describe</code> dalam wadah Anda</td>
+<td><code>POST /me/github-games/{id}/achievements</code></td>
+</tr>
+<tr>
+<td>Diubah oleh</td>
+<td>menerbitkan pembaruan</td>
+<td>panggilan API, yang segera berlaku</td>
+</tr>
+<tr>
+<td>Bagus untuk</td>
+<td>pencapaian yang dibangun oleh kode Anda</td>
+<td>menambahkan atau menulis ulang beberapa tanpa rilis</td>
+</tr>
+</tbody>
+</table>
+<p>Kedua jenis tersebut dibuka dengan cara yang sama, oleh server Anda yang mengembalikan kuncinya. Di sini kita membuat dua tembus
+APInya:</p>
+<pre><code class="language-bash">curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/achievements" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "century", "name": "Century",
+        "description": "Collect 100 stars in one run.", "points": 10 }'
+
+curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/achievements" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "untouchable", "name": "Untouchable",
+        "description": "Reach 500 points without losing a shield.",
+        "points": 50, "secret": true }'
+</code></pre>
+<p>A <code>secret</code> pencapaian tetap tersembunyi dari pemain sampai mereka membukanya.</p>
+<p>Untuk melihat semua yang dimiliki game, termasuk pencapaian yang diumumkan kode Anda, cantumkan pencapaian tersebut:</p>
+<pre><code class="language-bash">curl -s "$API/api/v1/me/github-games/$GAME_ID/achievements" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" | jq '.[] | {key, origin, unlocks}'
+</code></pre>
+<p><code>origin</code> adalah <code>declared</code> untuk pencapaian dari kode Anda dan <code>owner</code> atas pencapaian yang Anda buat
+di sini. Anda hanya dapat mengedit dan menghapus <code>owner</code> yang. A <code>declared</code> yang satu akan dikembalikan oleh yang berikutnya
+perbarui, jadi API menolak (<code>409</code>) dan Anda mengubahnya dalam kode.</p>
+<h2 id="3-post-scores-and-unlock-achievements-from-your-script">3. Posting skor dan buka pencapaian dari skrip Anda</h2>
+<p>Skrip Anda melaporkan kedua jenis hasil dalam nilai kembaliannya. Ia dapat melakukan ini dari kait apa pun:
+<code>createSession</code>, <code>onPlayerMessage</code> atau <code>onTick</code>.</p>
+<ul>
+<li><code>scores</code>: kunci papan → id pemain → nomor.</li>
+<li><code>achievements</code>: id pemain → kunci untuk membuka kunci.</li>
+</ul>
+<pre><code class="language-js">'use strict';
+
+function endRun(ctx, s, playerId) {
+  var run = s.runs[playerId];
+  var scores = { "high-score": {} };
+  scores["high-score"][playerId] = run.points;
+  if (run.reached100At) {
+    scores["fastest-100"] = {};
+    scores["fastest-100"][playerId] = run.reached100At - run.startedAt;
+  }
+
+  var unlocked = [];
+  if (run.stars &gt;= 100) unlocked.push("century");
+  if (run.points &gt;= 500 &amp;&amp; !run.lostShield) unlocked.push("untouchable");
+  var achievements = {};
+  achievements[playerId] = unlocked;
+
+  run.over = true;
+  return {
+    ok: true,
+    sessionState: s,
+    scores: scores,
+    achievements: achievements,
+    broadcast: [{ to: [playerId], data: { type: "run-over", points: run.points } }]
+  };
+}
+
+globalThis.game = {
+  tickRateHz: 10,
+
+  createSession(ctx) {
+    var runs = {};
+    ctx.players.forEach(function (p) {
+      runs[p.id] = { points: 0, stars: 0, lostShield: false, startedAt: ctx.now,
+                     reached100At: null, over: false };
+    });
+    return { ok: true, sessionState: { runs: runs } };
+  },
+
+  onPlayerMessage(ctx) {
+    var s = ctx.sessionState;
+    var from = ctx.message.from;
+    var run = s.runs[from];
+    var msg = ctx.message.data || {};
+    if (!run || run.over) return { ok: false, error: "No run in progress" };
+
+    // The client reports what happened; the script decides what it is worth.
+    if (msg.type === "collect") {
+      run.stars += 1;
+      run.points += 5;
+      if (run.points &gt;= 100 &amp;&amp; !run.reached100At) run.reached100At = ctx.now;
+      return { ok: true, sessionState: s };
+    }
+    if (msg.type === "shield-lost") {
+      run.lostShield = true;
+      return { ok: true, sessionState: s };
+    }
+    if (msg.type === "crash") return endRun(ctx, s, from);
+    return { ok: false, error: "Unknown command" };
+  },
+
+  onTick(ctx) { return { ok: true }; }
+};
+</code></pre>
+<p>Hal-hal yang Anda lakukan <strong>bukan</strong> perlu menangani:</p>
+<ul>
+<li><strong>Skor yang lebih buruk.</strong> Setiap pemain menyimpan skor terbaiknya di setiap papan, dinilai oleh dewan
+<code>sortDirection</code>. Laporkan setiap proses dan platform akan menyimpan yang terbaik.</li>
+<li><strong>Ulangi pembukaan kunci.</strong> Membuka kunci sesuatu yang sudah dimiliki pemain tidak akan menghasilkan apa-apa, jadi kembalikan kuncinya
+kapanpun kondisinya bertahan.</li>
+<li><strong>ID orang lain.</strong> Mencetak skor dan membuka kunci untuk orang-orang yang tidak berada dalam sesi tersebut, termasuk AI
+kursi, diabaikan.</li>
+</ul>
+<p>Kunci yang tidak diketahui, papan yang tidak aktif, dan skor di luar jangkauan akan dijatuhkan secara diam-diam. Skrip Anda mendapat no
+kesalahan bagi mereka, jadi periksa papan Anda sekali, seperti pada <a href="#4-show-them-in-your-game">bagian 4</a>.</p>
+<p>Game sebenarnya seharusnya membuat server menentukan poin dan waktu dari status otoritatifnya sendiri, bukan
+kepercayaan <code>collect</code> pesan sebagaimana adanya. Contoh ini dibuat singkat untuk menunjukkan pelaporan.
+<a href="/id/docs/api/game-scripts.html#leaderboards">Skrip Permainan</a> memiliki kontrak bentuk pengembalian penuh.</p>
+<h2 id="3b-the-same-from-a-container">3b. Hal yang sama dari sebuah wadah</h2>
+<p>Sebuah game container mengirimkan dua hal yang sama pada kontrolnya WebSocket:</p>
+<pre><code class="language-json">{ "type": "scores", "sessionId": "…",
+  "scores": { "high-score": { "&lt;userId&gt;": 740 }, "fastest-100": { "&lt;userId&gt;": 41250 } } }
+
+{ "type": "achievements", "sessionId": "…",
+  "unlocks": { "&lt;userId&gt;": ["century"] } }
+</code></pre>
+<p><code>scores</code> juga dapat disertakan dalam amplop respons apa pun yang menjadi asal pengembalian kontainer Anda <code>/sessions</code>. Itu
+aturan yang sama berlaku: hanya peserta, skor terbaik disimpan, kunci yang tidak diketahui diabaikan. Melihat
+<a href="/id/docs/api/container-games.html#control-channel">Server Game Kontainer</a>.</p>
+<h2 id="4-show-them-in-your-game">4. Tunjukkan pada game Anda</h2>
+<p>Klien Anda membaca semuanya dengan token peluncuran yang sudah dimilikinya. Tidak ada apa pun di sini yang membutuhkan
+token pemilik.</p>
+<p><strong>Temukan papannya.</strong></p>
+<pre><code class="language-js">const boards = await api(`/api/v1/games/${slug}/leaderboards`);
+// [{ id, key: "high-score", name: "High score", sortDirection: "desc", ... }, ...]
+const high = boards.find(b =&gt; b.key === "high-score");
+</code></pre>
+<p>Hanya papan aktif yang terdaftar.</p>
+<p><strong>Membaca papan.</strong></p>
+<pre><code class="language-js">const page = await api(`/api/v1/leaderboards/${high.id}/entries?page=1&amp;pageSize=10`);
+// { items: [{ rank, username, score, ... }], total, page, pageSize }
+const friends = await api(`/api/v1/leaderboards/${high.id}/entries?friendsOnly=true&amp;pageSize=10`);
+</code></pre>
+<p>Untuk a <code>time-ms</code> papan, format skor sebagai waktu: <code>41250</code> → <code>0:41.25</code>.</p>
+<p><strong>Prestasi.</strong></p>
+<ul>
+<li><code>GET /api/v1/games/{slug}/achievements</code> mencantumkan setiap pencapaian dengan milik pemain <code>unlocked</code>
+negara. Rahasia tetap tersembunyi sampai diperoleh.</li>
+<li>Pembukaannya sendiri akan berlangsung secara langsung <code>ws/v1/games</code> sebagai
+<code>{"type":"achievement","data":{key,name,description,points,...}}</code>. Bersulanglah saat itu terjadi.
+Panggilan daftar saat memuat menangkap apa pun yang tidak terkunci saat soket ditutup.</li>
+</ul>
+<p>Melihat <a href="/id/docs/api/achievements.html#3-the-player-is-notified-over-the-gameplay-socket">Prestasi</a> untuk
+bingkai.</p>
+<h2 id="5-look-after-them">5. Jagalah mereka</h2>
+<p><strong>Ganti nama papan atau ubah batasnya.</strong></p>
+<pre><code class="language-bash">curl -s -X PUT "$API/api/v1/me/github-games/$GAME_ID/leaderboards/$BOARD_ID" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "name": "All-time high score", "maxScore": 2000000 }'
+</code></pre>
+<p>Batasan baru hanya berlaku untuk skor baru.</p>
+<p><strong>Pensiunkan dewan tetapi pertahankan skornya.</strong> Mengirim <code>{ "isActive": false }</code>. Dewan berhenti menerima
+mencetak gol dan menghilang dari daftar permainan. Entrinya masih bisa dibaca oleh id.</p>
+<p><strong>Atur ulang sesuai jadwal.</strong> Berikan papan <code>"resetSchedule": "daily"</code>, <code>"weekly"</code> atau <code>"monthly"</code> (pada
+buat, atau nanti dengan <code>PUT</code>) dan dimulai pada pukul 00:00 UTC setiap periode — cocok untuk a "ini
+minggu terbaik" papan di samping papan sepanjang masa. Tidak ada yang perlu dilakukan dalam skrip Anda: laporkan skor seperti biasa, dan
+skor pertama setiap pemain pada periode baru dihitung. Melihat
+<a href="/id/docs/api/leaderboards.html#reset-schedules">Atur ulang jadwal</a>.</p>
+<p><strong>Mulailah musim baru dengan tangan.</strong> Untuk musim yang hanya satu kali saja, bukan jadwal, buatlah papan baru
+(<code>high-score-s2</code>), arahkan skrip Anda ke sana, dan pensiunkan yang lama.</p>
+<p><strong>Hapus papan.</strong> <code>DELETE .../leaderboards/{id}</code> menghapus papan dan semua entrinya, dan
+tidak dapat dibatalkan.</p>
+<p><strong>Edit pencapaian.</strong> <code>PUT .../achievements/{achievementId}</code> dengan salah satu dari <code>name</code>,
+<code>description</code>, <code>icon</code>, <code>secret</code> Dan <code>points</code>. Kuncinya tidak pernah berubah.</p>
+<p><strong>Hapus pencapaian.</strong> Ini hanya berfungsi untuk yang Anda buat yang belum dibuka oleh siapa pun.
+Prestasi yang diperoleh bersifat permanen.</p>
+<p><strong>Pindahkan pencapaian ke dalam kode.</strong> Deklarasikan kunci yang sama <code>game.achievements</code> dan mempublikasikan. Itu
+deklarasi mengambil alih pencapaian yang ada, dan pemain yang memilikinya mempertahankannya.</p>
+<table>
+<thead>
+<tr>
+<th>Tanggapan</th>
+<th>Arti</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>404</code></td>
+<td>Game tersebut bukan milik Anda, atau papan atau pencapaiannya bukan miliknya</td>
+</tr>
+<tr>
+<td><code>409</code> "…bagian belakang server…"</td>
+<td>Permainan tidak memiliki <code>server=</code> atau <code>container.image=</code></td>
+</tr>
+<tr>
+<td><code>409</code> "sudah memiliki…"</td>
+<td>Kuncinya diambil, oleh dewan atau oleh prestasi yang dinyatakan atau diciptakan</td>
+</tr>
+<tr>
+<td><code>409</code> "dideklarasikan oleh server game"</td>
+<td>Ubah pencapaian itu dalam kode Anda</td>
+</tr>
+<tr>
+<td><code>409</code> "sudah terbuka"</td>
+<td>Pemain menahannya, jadi tidak bisa dihapus</td>
+</tr>
+<tr>
+<td><code>400</code></td>
+<td>Kunci dengan karakter lain, nama yang hilang, atau <code>minScore</code> &gt; <code>maxScore</code></td>
+</tr>
+</tbody>
+</table>
+<p>Batasan: 2048 papan peringkat dan 200 pencapaian yang dibuat per game, ditambah hingga 100 pencapaian yang diumumkan.</p>
+<h2 id="checklist">Daftar periksa</h2>
+<ul>
+<li>[ ] Permainan ini memiliki <code>server=</code> naskah atau <code>container.image=</code>, Dan <code>gameSlug</code> sudah diatur <code>GET /me/github-games</code>.</li>
+<li>[ ] Setiap papan memiliki kunci stabil dan kanan <code>scoreType</code> Dan <code>sortDirection</code> (mereka tidak dapat mengubahnya nanti).</li>
+<li>[ ] Server kembali <code>scores</code> Dan <code>achievements</code> (skrip) atau mengirimkan pesan kontrol (wadah), dikerjakan dari keadaan otoritatif.</li>
+<li>[ ] Klien menemukan papan dengan <code>GET /games/{slug}/leaderboards</code>, tidak pernah melakukan hard-code id mereka, dan membaca entri berdasarkan id.</li>
+<li>[ ] Klien memuat <code>GET /games/{slug}/achievements</code> dan bersulang di <code>achievement</code> bingkai.</li>
+<li>[ ] Papan lama sudah tidak digunakan lagi <code>isActive: false</code> daripada dihapus, kecuali Anda benar-benar ingin skornya hilang.</li>
+</ul>
+
+{% endraw %}

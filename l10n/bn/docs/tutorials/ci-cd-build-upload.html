@@ -1,0 +1,284 @@
+---
+layout: "wiki"
+lang: "bn"
+title: "একটি OAuth-ভুক্ত পাবলিক কী সহ CI/CD থেকে বিল্ডগুলি আপলোড করুন৷"
+source_url: "/docs/tutorials/ci-cd-build-upload.html"
+source_path: "docs/tutorials/ci-cd-build-upload.md"
+source_hash: "0f3e9f3e48bf88125b2110acdd92ab62aeb0840f0bbc758e7c52b911a434e718"
+translation: "machine"
+permalink: "/bn/docs/tutorials/ci-cd-build-upload.html"
+---
+{% raw %}
+<h1 id="upload-builds-from-cicd-with-an-oauth-enrolled-public-key">একটি OAuth-ভুক্ত পাবলিক কী সহ CI/CD থেকে বিল্ডগুলি আপলোড করুন৷</h1>
+<p>এই টিউটোরিয়ালটি আপনার Google সঞ্চয় না করে একটি স্থাপনার পাইপলাইনের নিজস্ব StarHermit শংসাপত্র দেয়
+অথবা CI-তে GitHub OAuth টোকেন। এককালীন সেটআপ ইন্টারেক্টিভ:</p>
+<ol>
+<li>OAuth এর মাধ্যমে সাইন ইন করুন এবং বর্তমান StarHermit শর্তাবলী গ্রহণ করুন।</li>
+<li>আপনার StarHermit অ্যাকাউন্টে একটি ডেডিকেটেড পাবলিক কী যোগ করুন।</li>
+<li>CI গোপন দোকানে শুধুমাত্র সেই চাবির ব্যক্তিগত অর্ধেক রাখুন।</li>
+</ol>
+<p>প্রতিটি পাইপলাইন চালানো তারপর একটি স্বল্পস্থায়ী StarHermit চ্যালেঞ্জ স্বাক্ষর করে, একটি সাধারণ 15-মিনিট পায়
+অ্যাক্সেস টোকেন, এবং নতুন বিল্ড আপলোড করে। পাইপলাইন কী আপনার অ্যাকাউন্ট হিসাবে কাজ করে এবং শুধুমাত্র আপডেট করতে পারে
+অ্যাকাউন্টের মালিকানাধীন গেম।</p>
+<h2 id="why-use-a-separate-deployment-key">কেন একটি পৃথক স্থাপনার কী ব্যবহার করবেন?</h2>
+<p>CI-তে OAuth অ্যাক্সেস বা রিফ্রেশ টোকেন সংরক্ষণ করবেন না। একটি StarHermit পাবলিক কী একটি ভাল মেশিন
+শংসাপত্র কারণ এটি স্বাধীনভাবে লেবেল, নিরীক্ষিত এবং প্রত্যাহার করা যেতে পারে। একটি সেশন প্রমাণীকৃত
+যে চাবি দ্বারা <strong>কী যোগ করতে পারে না বা অন্য কী প্রত্যাহার করতে পারে না</strong>; এই অপারেশনগুলির জন্য একটি OAuth-প্রমাণিত প্রয়োজন
+অধিবেশন এটা মাধ্যমে নিজেকে প্রত্যাহার করতে পারেন <code>/api/v1/me/public-keys/current</code>. যদি CI গোপন ফাঁস হয়, তাহলে Google বা GitHub দিয়ে সাইন ইন করুন এবং স্থাপনার কী প্রত্যাহার করুন।
+প্রত্যাহার সেই কী দ্বারা তৈরি রিফ্রেশ সেশনগুলিও শেষ করে এবং এর বিদ্যমান অ্যাক্সেস টোকেনগুলিকে ব্যর্থ করে দেয়
+তাদের পরবর্তী API অনুরোধে।</p>
+<p>উদাহরণস্বরূপ, সংগ্রহস্থল/পরিবেশ প্রতি একটি কী ব্যবহার করুন <code>orbit-league-production</code>, শেয়ার করার পরিবর্তে
+প্রতিটি কর্মপ্রবাহের মধ্যে একটি ব্যক্তিগত কী।</p>
+<h2 id="prerequisites">পূর্বশর্ত</h2>
+<ul>
+<li>একটি StarHermit অ্যাকাউন্ট Google বা GitHub OAuth এর মাধ্যমে সাইন ইন করা হয়েছে।</li>
+<li>সেই অ্যাকাউন্টের মালিকানাধীন একটি বিদ্যমান গেম। এটি সংরক্ষণ করুন <code>id</code> হিসাবে <code>GAME_ID</code>; বান্ডিল এন্ডপয়েন্ট আপডেট ক
+খেলা কিন্তু একটি তৈরি করে না।</li>
+<li>একটি বিতরণযোগ্য ক্লায়েন্ট বিল্ড এবং/অথবা একটি ডকার-সামঞ্জস্যপূর্ণ <code>docker save</code> ইমেজ দেখুন
+<a href="/bn/docs/api/github-games.html#push-a-game-bundle">গিটহাব গেমস</a> সংরক্ষণাগার বিন্যাসের জন্য।</li>
+<li>সেটআপ কমান্ড এবং উদাহরণ কর্মপ্রবাহের জন্য পাইথন 3; <code>curl</code> এবং <code>jq</code> তালিকাভুক্তির উদাহরণের জন্য।</li>
+</ul>
+<p>একটি পাইপলাইন সফলভাবে সাইন ইন করতে পারে এবং এখনও গ্রহণ করতে পারে <code>403 terms_acceptance_required</code> যখন এটা
+আপলোড করে বা একটি আপলোড সকেট খোলে। অ্যাকাউন্ট মালিক পর্যালোচনা করুন এবং <a href="/bn/docs/api/profile.html#terms-acceptance">বর্তমান শর্তাবলী গ্রহণ করুন</a>
+ইন্টারেক্টিভভাবে, তারপর কাজ পুনরায় চালান। পদ পরিবর্তন হলে এটি পুনরাবৃত্তি হতে পারে; স্বয়ংক্রিয়ভাবে গ্রহণ করবেন না
+CI থেকে শর্তাবলী।</p>
+<h2 id="one-time-setup">এককালীন সেটআপ</h2>
+<h3 id="1-generate-a-deployment-key-locally">1. স্থানীয়ভাবে একটি স্থাপনার কী তৈরি করুন</h3>
+<p>উদাহরণ Ed25519 ব্যবহার করে। এটি একটি বিশ্বস্ত ওয়ার্কস্টেশনে চালান, CI কাজে নয়:</p>
+<pre><code class="language-bash">python -m pip install cryptography
+python - &lt;&lt;'PY'
+import base64
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat, PublicFormat
+
+key = Ed25519PrivateKey.generate()
+private = key.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())
+public = key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+print("STARHERMIT_PRIVATE_KEY=" + base64.b64encode(private).decode())
+print("STARHERMIT_PUBLIC_KEY=" + base64.b64encode(public).decode())
+PY
+</code></pre>
+<p>ব্যক্তিগত মান হল 32-বাইট বীজ এবং এই বিশ্বস্ত স্থানীয় টার্মিনালে একবার দেখানো হয়। কখনই কমিট করবেন না
+এটি, এটি CI লগগুলিতে মুদ্রণ করুন, এটিকে একটি আর্টিফ্যাক্টে রাখুন বা StarHermit-এ পাঠান৷ জন্য পাবলিক মান রাখুন
+পরবর্তী ধাপ এবং ওয়ার্কফ্লো ভেরিয়েবলের জন্য।</p>
+<h3 id="2-sign-in-with-oauth-and-add-the-public-key">2. OAuth দিয়ে সাইন ইন করুন এবং সর্বজনীন কী যোগ করুন</h3>
+<p>একটি ব্রাউজারে এই URLগুলির একটি খুলুন:</p>
+<pre><code class="language-text">https://api.starhermit.com/api/v1/auth/oauth/github/authorize
+https://api.starhermit.com/api/v1/auth/oauth/google/authorize
+</code></pre>
+<p>কলব্যাকের পরে, অবিলম্বে ফিরে আসা OAuth-প্রমাণিত অ্যাক্সেস টোকেন ব্যবহার করুন। এটি একটি স্থানীয় মধ্যে রাখুন
+শেল ইতিহাসের পরিবর্তে পরিবেশ পরিবর্তনশীল:</p>
+<pre><code class="language-bash">read -rsp 'OAuth access token: ' OAUTH_ACCESS_TOKEN; echo
+read -rp  'Public key: ' STARHERMIT_PUBLIC_KEY
+
+curl -sS -X POST https://api.starhermit.com/api/v1/me/public-keys \
+  -H "Authorization: Bearer $OAUTH_ACCESS_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data "$(jq -n \
+    --arg keyData "$STARHERMIT_PUBLIC_KEY" \
+    --arg label 'orbit-league-production' \
+    '{keyType:"Ed25519", keyData:$keyData, label:$label}')"
+</code></pre>
+<p>কল ফিরে আসে <code>201</code> এবং মূল রেকর্ড। ক <code>403</code> মানে এই টোকেনটি OAuth থেকে আসেনি
+সেশন (একটি ইমেল-যাচাই, পাবলিক-কী, বা গেম লঞ্চ টোকেন যথেষ্ট নয়)। ক <code>409</code> মানে
+কী ইতিমধ্যে সক্রিয় বা অ্যাকাউন্টটি সক্রিয়-কী সীমায় পৌঁছেছে।</p>
+<p>সঙ্গে ফলাফল পরীক্ষা করুন <code>GET /api/v1/me/public-keys</code>. তালিকায় লেবেল, আঙুলের ছাপ, সর্বশেষ ব্যবহার অন্তর্ভুক্ত রয়েছে
+বার, এবং প্রত্যাহার করা কী, তাই এটি শংসাপত্রের অডিট ট্রেইলও।</p>
+<h3 id="3-configure-the-repository">3. সংগ্রহস্থল কনফিগার করুন</h3>
+<p>GitHub এ, যোগ করুন:</p>
+<ul>
+<li>কাজ গোপন <code>STARHERMIT_PRIVATE_KEY</code>: বেস64 ব্যক্তিগত বীজ।</li>
+<li>কর্ম পরিবর্তনশীল <code>STARHERMIT_PUBLIC_KEY</code>: বেস64 কাঁচা পাবলিক কী।</li>
+<li>কর্ম পরিবর্তনশীল <code>STARHERMIT_GAME_ID</code>: মালিকানাধীন গেমের আইডি।</li>
+</ul>
+<p>অনুমোদনের প্রয়োজন হলে একটি GitHub পরিবেশের সাথে উত্পাদন রক্ষা করুন। সমতুল্য মান হতে পারে
+GitLab সুরক্ষিত ভেরিয়েবল, Azure Key Vault বা অন্য কোনো CI গোপন স্টোরে সংরক্ষিত।</p>
+<h2 id="add-the-authenticationupload-helper">প্রমাণীকরণ/আপলোড সহায়ক যোগ করুন</h2>
+<p>নিম্নলিখিত হিসাবে প্রতিশ্রুতিবদ্ধ <code>ci/starhermit_upload.py</code>. এটা JSON যে সঠিক চ্যালেঞ্জ পুনর্গঠন
+StarHermit অভ্যন্তরীণভাবে স্বাক্ষর করে, Ed25519 এর সাথে প্রমাণীকরণ করে এবং ছোট আর্কাইভের জন্য HTTP বেছে নেয় বা
+90 MB এর বেশি আর্কাইভের জন্য WebSocket আপলোড করুন। WebSocket CDN এর মোটামুটি 100 MB HTTP-বডি এড়িয়ে যায়
+সীমা</p>
+<pre><code class="language-python">#!/usr/bin/env python3
+import argparse, asyncio, base64, json, os
+from pathlib import Path
+from urllib.parse import quote, urlparse, urlunparse
+
+import requests
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+
+def authenticate(api, public_key, private_key):
+    challenge = requests.post(
+        f"{api}/api/v1/auth/public-key/challenge",
+        json={"keyType": "Ed25519", "keyData": public_key}, timeout=30)
+    challenge.raise_for_status()
+    body = challenge.json()
+    p = body["payload"]
+
+    # Public JSON is camelCase; the server verifies its ChallengePayload serialization, whose
+    # property names and order are the PascalCase sequence below.
+    payload = {
+        "ChallengeId": p["challengeId"],
+        "Fingerprint": p["fingerprint"],
+        "Issuer": p["issuer"],
+        "Audience": p["audience"],
+        "Expiry": p["expiry"],
+        "Nonce": p["nonce"],
+        "ClientTimestamp": p["clientTimestamp"],
+    }
+    # System.Text.Json escapes '+' in string fields (the Base64 nonce) as \u002B.
+    # DateTimeOffset fields keep literal '+' in their offsets: do not replace globally.
+    fields = []
+    for name, value in payload.items():
+        encoded = json.dumps(value)
+        if name == "Nonce":
+            encoded = encoded.replace("+", r"\u002B")
+        fields.append(json.dumps(name) + ":" + encoded)
+    signed_payload = ("{" + ",".join(fields) + "}").encode("utf-8")
+
+    seed = base64.b64decode(private_key, validate=True)
+    signature = Ed25519PrivateKey.from_private_bytes(seed).sign(signed_payload)
+    complete = requests.post(
+        f"{api}/api/v1/auth/public-key/complete",
+        json={"challengeId": body["challengeId"],
+              "signature": base64.b64encode(signature).decode(),
+              "keyType": "Ed25519", "keyData": public_key}, timeout=30)
+    complete.raise_for_status()
+    return complete.json()["accessToken"]
+
+
+def upload_http(api, game_id, token, archive, mode):
+    with archive.open("rb") as stream:
+        response = requests.post(
+            f"{api}/api/v1/me/github-games/{game_id}/bundle",
+            params={"mode": mode} if mode != "replace" else None,
+            headers={"Authorization": f"Bearer {token}",
+                     "Content-Type": "application/gzip"},
+            data=stream, timeout=1800)
+    response.raise_for_status()
+    print(json.dumps(response.json()))
+
+
+async def upload_websocket(api, game_id, token, archive, mode):
+    import websockets
+    parsed = urlparse(api)
+    query = f"gameId={quote(game_id)}&amp;access_token={quote(token)}"
+    if mode != "replace":
+        query += f"&amp;mode={quote(mode)}"
+    uri = urlunparse(("wss" if parsed.scheme == "https" else "ws", parsed.netloc,
+                      "/ws/v1/game-upload", "", query, ""))
+    async with websockets.connect(uri, max_size=None, ping_interval=20) as ws:
+        ready = json.loads(await ws.recv())
+        if ready.get("type") != "ready":
+            raise RuntimeError(ready)
+        with archive.open("rb") as stream:
+            while chunk := stream.read(512 * 1024):
+                await ws.send(chunk)
+        await ws.send(json.dumps({"type": "complete"}))
+        while True:
+            message = json.loads(await ws.recv())
+            if message.get("type") == "result":
+                print(json.dumps(message))
+                return
+            if message.get("type") == "error":
+                raise RuntimeError(message)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("archive", type=Path)
+    parser.add_argument("--api", default="https://api.starhermit.com")
+    parser.add_argument("--mode", choices=("replace", "merge"), default="replace",
+                        help="replace the live client files (default) or patch them")
+    args = parser.parse_args()
+    game_id = os.environ["STARHERMIT_GAME_ID"]
+    token = authenticate(args.api.rstrip("/"), os.environ["STARHERMIT_PUBLIC_KEY"],
+                         os.environ["STARHERMIT_PRIVATE_KEY"])
+    if args.archive.stat().st_size &lt; 90 * 1024 * 1024:
+        upload_http(args.api.rstrip("/"), game_id, token, args.archive, args.mode)
+    else:
+        asyncio.run(upload_websocket(args.api.rstrip("/"), game_id, token, args.archive, args.mode))
+
+
+if __name__ == "__main__":
+    main()
+</code></pre>
+<p>একটি ব্যর্থ স্থাপনার হিসাবে একটি অ-শূন্য প্রস্থান বিবেচনা করুন. অ্যাক্সেস টোকেন বা সম্পূর্ণ অনুরোধ বডি লগ করবেন না.
+অ্যাক্সেস টোকেনটি 15 মিনিট স্থায়ী হয়, তাই আপলোড করার আগে অবিলম্বে প্রমাণীকরণ করুন; ওয়েবসকেট
+হ্যান্ডশেকের সময় এটি পরীক্ষা করে এবং টোকেনের মেয়াদ শেষ হওয়ার পরে শেষ হতে পারে।</p>
+<h2 id="github-actions-example">গিটহাব অ্যাকশন উদাহরণ</h2>
+<p>এই উদাহরণের বিষয়বস্তু প্রকাশ করে <code>dist/</code> প্রতি ধাক্কায় <code>main</code>:</p>
+<p>{% কাঁচা %}</p>
+<pre><code class="language-yaml">name: Deploy to StarHermit
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Package StarHermit bundle
+        run: |
+          mkdir -p bundle/client
+          cp -R dist/. bundle/client/
+          cp starhermit.txt bundle/starhermit.txt
+          tar -C bundle -czf game-bundle.tar.gz .
+
+      - name: Install uploader dependencies
+        run: python -m pip install 'cryptography&gt;=42,&lt;45' 'requests&gt;=2.31,&lt;3' 'websockets&gt;=12,&lt;13'
+
+      - name: Upload build
+        env:
+          STARHERMIT_PRIVATE_KEY: ${{ secrets.STARHERMIT_PRIVATE_KEY }}
+          STARHERMIT_PUBLIC_KEY: ${{ vars.STARHERMIT_PUBLIC_KEY }}
+          STARHERMIT_GAME_ID: ${{ vars.STARHERMIT_GAME_ID }}
+        run: python ci/starhermit_upload.py game-bundle.tar.gz
+</code></pre>
+<p>{% এন্দ্রো %}</p>
+<p>একটি ডেডিকেটেড সার্ভারের জন্য, যোগ করুন <code>docker build</code>, ইমেজ সংরক্ষণ করুন <code>bundle/server/image.tar</code>, এবং ধরে রাখা
+<code>starhermit.txt</code> বান্ডিল রুটে:</p>
+<pre><code class="language-bash">docker build -t my-game-server:${GITHUB_SHA} -f Dockerfile.server .
+mkdir -p bundle/server
+docker save my-game-server:${GITHUB_SHA} -o bundle/server/image.tar
+tar -C bundle -czf game-bundle.tar.gz .
+</code></pre>
+<p>একটি সফল বান্ডেল আপলোড মানে StarHermit গৃহীত এবং পরমাণুভাবে বান্ডিল প্রকাশ করেছে; এটা করে
+এর মানে এই নয় যে একটি নতুন পাত্র স্বাস্থ্য পরীক্ষা পাস করেছে। পোল
+<code>GET /api/v1/me/github-games/{id}/deployment</code> একই সদ্য প্রমাণীকৃত টোকেন দিয়ে এবং চালান a
+রিলিজ প্রচার করার আগে ধোঁয়া পরীক্ষা.</p>
+<h2 id="rotation-and-incident-response">ঘূর্ণন এবং ঘটনার প্রতিক্রিয়া</h2>
+<ol>
+<li>OAuth এর মাধ্যমে সাইন ইন করুন এবং বর্তমান StarHermit শর্তাবলী গ্রহণ করুন।</li>
+<li>একটি নতুন উৎপন্ন, স্বতন্ত্রভাবে লেবেলযুক্ত কী যোগ করুন।</li>
+<li>CI গোপন এবং পরিবর্তনশীল প্রতিস্থাপন করুন, তারপর একটি স্থাপনা চালান।</li>
+<li>সঙ্গে পুরানো কী প্রত্যাহার করুন <code>DELETE /api/v1/me/public-keys/{keyId}</code>.</li>
+</ol>
+<p>একটি সন্দেহজনক বিস্তৃত সমঝোতার জন্য, <code>DELETE /api/v1/me/public-keys/all</code> প্রতিটি সক্রিয় কী প্রত্যাহার করে।
+উভয় ডিলিট অপারেশনের জন্য একটি OAuth-প্রমাণিত সেশন প্রয়োজন। একটি পাইপলাইন তার নিজস্ব দ্বারা প্রমাণীকৃত
+কী অন্যান্য কী প্রত্যাহার করতে পারে না, একটি প্রতিস্থাপন যোগ করতে পারে, অ্যাকাউন্ট ইমেল পরিবর্তন করতে পারে না বা একটি OAuth পরিচয় মুছে ফেলতে পারে না।
+এটি দিয়ে নিজেকে প্রত্যাহার করতে পারে <code>DELETE /api/v1/me/public-keys/current</code>; পরে তার সংরক্ষিত টোকেন বাদ দিন।</p>
+<h2 id="see-also">এছাড়াও দেখুন</h2>
+<ul>
+<li><a href="/bn/docs/api/profile.html#public-keys">প্রোফাইল: পাবলিক-কী ব্যবস্থাপনা</a></li>
+<li><a href="/bn/docs/api/auth.html#public-key-login">প্রমাণীকরণ: পাবলিক-কী লগইন</a></li>
+<li><a href="/bn/docs/api/github-games.html#push-a-game-bundle">গিটহাব গেমস: একটি গেম বান্ডিল পুশ করুন</a></li>
+<li><a href="/bn/docs/api/github-games.html#upload-over-a-websocket">গিটহাব গেমস: একটি ওয়েবসকেটের মাধ্যমে আপলোড করুন</a></li>
+</ul>
+
+{% endraw %}

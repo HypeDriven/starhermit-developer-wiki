@@ -1,0 +1,331 @@
+---
+layout: "wiki"
+lang: "ur"
+title: "ٹیوٹوریل: لیڈر بورڈز اور آپ کے گیم کے لیے کامیابیاں"
+source_url: "/docs/tutorials/game-leaderboards-achievements.html"
+source_path: "docs/tutorials/game-leaderboards-achievements.md"
+source_hash: "96ac3993941c25c39514f47fc1c97e41e66138bc4e9b8d819a8bb8bb12108f31"
+translation: "machine"
+permalink: "/ur/docs/tutorials/game-leaderboards-achievements.html"
+---
+{% raw %}
+<h1 id="tutorial-leaderboards-and-achievements-for-your-game">ٹیوٹوریل: لیڈر بورڈز اور آپ کے گیم کے لیے کامیابیاں</h1>
+<p>اگر آپ StarHermit پر ایک گیم کے مالک ہیں، تو آپ اس کے پبلشر ہیں۔ آپ دے سکتے ہیں۔ <strong>لیڈر بورڈز</strong> (اعلی اسکور،
+تیز ترین دوڑ، سب سے طویل سلسلہ) اور <strong>کامیابیاں</strong> پبلشر اکاؤنٹ یا کسی خاص کے بغیر
+اجازت کھیل کا مالک ہونا بس اتنا ہی ہوتا ہے۔</p>
+<p>اس صفحے پر ہر چیز کے پیچھے ایک اصول ہے: <strong>آپ ان کی وضاحت کرتے ہیں، آپ کے گیم کا سرور لکھتا ہے۔
+انہیں</strong> کسی کھلاڑی کا کلائنٹ کبھی بھی اسکور پوسٹ نہیں کر سکتا اور نہ ہی ان کے لیے کامیابی کا دعویٰ کر سکتا ہے، اور آپ کے سرور کو اس گیم پلے کی توثیق کرنی چاہیے جو انہیں کماتا ہے۔ براہ راست API جمع کرانے سے انکار
+اکیلے ترمیم شدہ کلائنٹ کو گیم ایونٹس ایجاد کرنے سے نہیں روکتا۔ اسی لیے گیم کو ایک مستند پسدید کی ضرورت ہے: a
+<code>server=</code> سکرپٹ یا a <code>container.image=</code> میں <a href="/ur/docs/starhermit-txt.html"><code>starhermit.txt</code></a>.</p>
+<p>یہ ٹیوٹوریل ایک چھوٹے سے آرکیڈ گیم کے لیے دونوں بناتا ہے، <em>اسٹار کلیکٹر</em>: ایک رن اس وقت ختم ہوتا ہے جب کھلاڑی
+کریش ہو جاتا ہے، اور اس میں کل پوائنٹس اور رن ٹائم ہوتا ہے۔</p>
+<ol>
+<li><a href="#before-you-start">اس سے پہلے کہ آپ شروع کریں۔</a></li>
+<li><a href="#1-create-the-leaderboards">لیڈر بورڈز بنائیں</a></li>
+<li><a href="#2-create-the-achievements">کامیابیاں بنائیں</a></li>
+<li><a href="#3-post-scores-and-unlock-achievements-from-your-script">اسکور پوسٹ کریں اور اپنی اسکرپٹ سے کامیابیوں کو غیر مقفل کریں۔</a></li>
+<li><a href="#3b-the-same-from-a-container">ایک کنٹینر سے وہی</a></li>
+<li><a href="#4-show-them-in-your-game">انہیں اپنے کھیل میں دکھائیں۔</a></li>
+<li><a href="#5-look-after-them">ان کا خیال رکھیں</a></li>
+</ol>
+<h2 id="before-you-start">اس سے پہلے کہ آپ شروع کریں۔</h2>
+<p>آپ کو ضرورت ہے:</p>
+<ul>
+<li><strong>سرور پسدید کے ساتھ ایک کھیل</strong> جو آپ کے مالک ہیں: ایک جو آپ نے اپنے ذخیرے سے شامل کیا، اپ لوڈ کیا۔
+ایک فولڈر کے طور پر، یا <a href="/ur/docs/tutorials/claim-existing-game.html">دعوی کیا</a>. صرف براؤزر گیم جواب دیتا ہے۔ <code>409</code> ہر کال پر
+نیچے، ایک پیغام کے ساتھ کہ کیوں۔</li>
+<li><strong>ایک مکمل صارف تک رسائی کا ٹوکن</strong>، گیم کا لانچ ٹوکن نہیں۔ لانچ ٹوکن گیمز پر باڑ لگے ہوئے ہیں۔
+کھلاڑی کی سطح اور پہنچ نہیں سکتے <code>/me/...</code>.</li>
+<li><strong>آپ کے گیم کی آئی ڈی</strong> (یہ بھی اس کا ہے۔ <code>&lt;id&gt;.starhermit.com</code> پتہ):</li>
+</ul>
+<pre><code class="language-bash">ACCESS_TOKEN='your-full-user-access-token'
+API=https://api.starhermit.com
+
+curl -s "$API/api/v1/me/github-games" -H "Authorization: Bearer $ACCESS_TOKEN" |
+  jq '.[] | {id, displayName, gameSlug}'
+</code></pre>
+<pre><code class="language-bash">GAME_ID='the-id-from-above'
+</code></pre>
+<p><code>gameSlug</code> وہی ہے جسے آپ کا کلائنٹ گیم کہتا ہے۔ <code>/api/v1/games/{slug}/...</code>. ہر گیم جو آپ نے شامل کیا۔
+یا اپ لوڈ کردہ میں ایک، صرف براؤزر والے گیمز شامل ہیں، لہذا یہ آپ کو نہیں بتاتا کہ آیا کوئی سرور موجود ہے:
+<code>GET /api/v1/games/{slug}</code> کرتا ہے - یہ جواب دیتا ہے۔ <code>404</code> جب تک کہ گیم کا بیک اینڈ نہ ہو۔</p>
+<h2 id="1-create-the-leaderboards">1. لیڈر بورڈز بنائیں</h2>
+<p>سٹار کلیکٹر کو دو بورڈ ملتے ہیں: زیادہ تر پوائنٹس (زیادہ بہتر ہے) اور تیز ترین 100 پوائنٹس (کم)
+بہتر ہے)۔</p>
+<pre><code class="language-bash">curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/leaderboards" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "high-score", "name": "High score",
+        "scoreType": "integer", "sortDirection": "desc",
+        "minScore": 0, "maxScore": 1000000 }'
+
+curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/leaderboards" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "fastest-100", "name": "Fastest to 100",
+        "scoreType": "time-ms", "sortDirection": "asc" }'
+</code></pre>
+<p>ہر کال واپس آتی ہے۔ <code>201</code> اور بورڈ، بشمول اس کے <code>id</code> اور <code>key</code>. آپ کا سرور استعمال کرتا ہے۔ <strong>کلید</strong>,
+تو اسے احتیاط سے منتخب کریں. چابی، <code>scoreType</code> اور <code>sortDirection</code> بعد میں تبدیل نہیں کیا جا سکتا.</p>
+<table>
+<thead>
+<tr>
+<th><code>scoreType</code></th>
+<th>قبول کرتا ہے۔</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>integer</code></td>
+<td>پورے نمبر</td>
+</tr>
+<tr>
+<td><code>decimal</code></td>
+<td>کوئی بھی نمبر</td>
+</tr>
+<tr>
+<td><code>time-ms</code></td>
+<td>مکمل، غیر منفی ملی سیکنڈ</td>
+</tr>
+</tbody>
+</table>
+<p>سیٹ <code>minScore</code>/<code>maxScore</code> آپ کا گیم اصل میں کیا پیدا کر سکتا ہے۔ ان کے باہر ایک سکور گرا دیا جاتا ہے،
+جو آپ کے اپنے سرور کی منطق میں بگ کے خلاف سستا محافظ ہے۔</p>
+<h2 id="2-create-the-achievements">2. کامیابیاں بنائیں</h2>
+<p>آپ گیم کی کامیابیاں دو طریقوں سے دے سکتے ہیں، اور آپ دونوں کو ایک ساتھ استعمال کر سکتے ہیں:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>کوڈ میں بیان کیا گیا ہے۔</th>
+<th>API کے ذریعے تخلیق کیا گیا۔</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>جہاں</td>
+<td><code>game.achievements</code> آپ کے اسکرپٹ میں، یا <code>/describe</code> آپ کے کنٹینر میں</td>
+<td><code>POST /me/github-games/{id}/achievements</code></td>
+</tr>
+<tr>
+<td>کی طرف سے تبدیل</td>
+<td>اپ ڈیٹ شائع کرنا</td>
+<td>ایک API کال، فوری طور پر نافذ ہو رہی ہے۔</td>
+</tr>
+<tr>
+<td>کے لیے اچھا ہے۔</td>
+<td>کامیابیاں جن کے ارد گرد آپ کا کوڈ بنایا گیا ہے۔</td>
+<td>بغیر کسی ریلیز کے کچھ کو شامل کرنا یا دوبارہ لکھنا</td>
+</tr>
+</tbody>
+</table>
+<p>آپ کے سرور کے ذریعہ کلید واپس کرنے کے ذریعہ دونوں قسمیں اسی طرح غیر مقفل ہیں۔ یہاں ہم دو کے ذریعے تخلیق کرتے ہیں۔
+API:</p>
+<pre><code class="language-bash">curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/achievements" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "century", "name": "Century",
+        "description": "Collect 100 stars in one run.", "points": 10 }'
+
+curl -s -X POST "$API/api/v1/me/github-games/$GAME_ID/achievements" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "key": "untouchable", "name": "Untouchable",
+        "description": "Reach 500 points without losing a shield.",
+        "points": 50, "secret": true }'
+</code></pre>
+<p>A <code>secret</code> کامیابی کھلاڑیوں سے اس وقت تک پوشیدہ رہتی ہے جب تک کہ وہ اسے کھول نہ لیں۔</p>
+<p>گیم کے پاس موجود ہر چیز کو دیکھنے کے لیے، بشمول آپ کے کوڈ کا اعلان کردہ کامیابیاں، ان کی فہرست بنائیں:</p>
+<pre><code class="language-bash">curl -s "$API/api/v1/me/github-games/$GAME_ID/achievements" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" | jq '.[] | {key, origin, unlocks}'
+</code></pre>
+<p><code>origin</code> ہے <code>declared</code> آپ کے کوڈ سے کامیابیوں کے لیے اور <code>owner</code> آپ کی تخلیق کردہ کامیابیوں کے لیے
+یہاں آپ صرف ترمیم اور حذف کر سکتے ہیں۔ <code>owner</code> والے اے <code>declared</code> ایک آپ کے اگلے کی طرف سے واپس کر دیا جائے گا
+اپ ڈیٹ کریں، لہذا API انکار کرتا ہے (<code>409</code>) اور آپ اس کے بجائے اسے کوڈ میں تبدیل کرتے ہیں۔</p>
+<h2 id="3-post-scores-and-unlock-achievements-from-your-script">3. اسکور پوسٹ کریں اور اپنی اسکرپٹ سے کامیابیوں کو غیر مقفل کریں۔</h2>
+<p>آپ کا اسکرپٹ اپنی واپسی کی قیمت میں دونوں قسم کے نتائج کی اطلاع دیتا ہے۔ یہ کسی بھی ہک سے کر سکتا ہے:
+<code>createSession</code>, <code>onPlayerMessage</code> یا <code>onTick</code>.</p>
+<ul>
+<li><code>scores</code>: بورڈ کی کلید → پلیئر آئی ڈی → نمبر۔</li>
+<li><code>achievements</code>: پلیئر آئی ڈی → انلاک کرنے کے لیے کیز۔</li>
+</ul>
+<pre><code class="language-js">'use strict';
+
+function endRun(ctx, s, playerId) {
+  var run = s.runs[playerId];
+  var scores = { "high-score": {} };
+  scores["high-score"][playerId] = run.points;
+  if (run.reached100At) {
+    scores["fastest-100"] = {};
+    scores["fastest-100"][playerId] = run.reached100At - run.startedAt;
+  }
+
+  var unlocked = [];
+  if (run.stars &gt;= 100) unlocked.push("century");
+  if (run.points &gt;= 500 &amp;&amp; !run.lostShield) unlocked.push("untouchable");
+  var achievements = {};
+  achievements[playerId] = unlocked;
+
+  run.over = true;
+  return {
+    ok: true,
+    sessionState: s,
+    scores: scores,
+    achievements: achievements,
+    broadcast: [{ to: [playerId], data: { type: "run-over", points: run.points } }]
+  };
+}
+
+globalThis.game = {
+  tickRateHz: 10,
+
+  createSession(ctx) {
+    var runs = {};
+    ctx.players.forEach(function (p) {
+      runs[p.id] = { points: 0, stars: 0, lostShield: false, startedAt: ctx.now,
+                     reached100At: null, over: false };
+    });
+    return { ok: true, sessionState: { runs: runs } };
+  },
+
+  onPlayerMessage(ctx) {
+    var s = ctx.sessionState;
+    var from = ctx.message.from;
+    var run = s.runs[from];
+    var msg = ctx.message.data || {};
+    if (!run || run.over) return { ok: false, error: "No run in progress" };
+
+    // The client reports what happened; the script decides what it is worth.
+    if (msg.type === "collect") {
+      run.stars += 1;
+      run.points += 5;
+      if (run.points &gt;= 100 &amp;&amp; !run.reached100At) run.reached100At = ctx.now;
+      return { ok: true, sessionState: s };
+    }
+    if (msg.type === "shield-lost") {
+      run.lostShield = true;
+      return { ok: true, sessionState: s };
+    }
+    if (msg.type === "crash") return endRun(ctx, s, from);
+    return { ok: false, error: "Unknown command" };
+  },
+
+  onTick(ctx) { return { ok: true }; }
+};
+</code></pre>
+<p>چیزیں جو آپ کرتے ہیں۔ <strong>نہیں</strong> سنبھالنے کی ضرورت ہے:</p>
+<ul>
+<li><strong>بدتر سکور۔</strong> ہر کھلاڑی ہر بورڈ پر اپنا بہترین اسکور رکھتا ہے، جس کا فیصلہ بورڈ کے ذریعے کیا جاتا ہے۔
+<code>sortDirection</code>. ہر رن کی اطلاع دیں اور پلیٹ فارم بہترین رکھتا ہے۔</li>
+<li><strong>انلاک کو دہرائیں۔</strong> کسی کھلاڑی کے پاس پہلے سے موجود کسی چیز کو غیر مقفل کرنے سے کچھ نہیں ہوتا، لہذا کلید واپس کریں۔
+جب بھی حالت برقرار رہتی ہے۔</li>
+<li><strong>کسی اور کی آئی ڈی۔</strong> ان لوگوں کے لیے سکور اور انلاک جو سیشن میں نہیں ہیں، بشمول AI
+نشست، نظر انداز کر رہے ہیں.</li>
+</ul>
+<p>نامعلوم کلیدیں، غیر فعال بورڈز اور رینج سے باہر کے سکور خاموشی سے چھوڑ دیے جاتے ہیں۔ آپ کا اسکرپٹ نمبر ملتا ہے۔
+ان کے لیے غلطی، اس لیے اپنے بورڈز کو ایک بار چیک کریں۔ <a href="#4-show-them-in-your-game">سیکشن 4</a>.</p>
+<p>ایک حقیقی گیم میں سرور کو اپنی مستند حالت سے پوائنٹس اور اوقات کا کام کرنا چاہیے، نہیں۔
+اعتماد <code>collect</code> پیغامات جیسے وہ ہیں۔ رپورٹنگ کو دکھانے کے لیے اس مثال کو مختصر رکھا گیا ہے۔
+<a href="/ur/docs/api/game-scripts.html#leaderboards">کھیل ہی کھیل میں سکرپٹ</a> مکمل واپسی کی شکل کا معاہدہ ہے۔</p>
+<h2 id="3b-the-same-from-a-container">3b. ایک کنٹینر سے وہی</h2>
+<p>ایک کنٹینر گیم اپنے کنٹرول WebSocket پر ایک ہی دو چیزیں بھیجتا ہے:</p>
+<pre><code class="language-json">{ "type": "scores", "sessionId": "…",
+  "scores": { "high-score": { "&lt;userId&gt;": 740 }, "fastest-100": { "&lt;userId&gt;": 41250 } } }
+
+{ "type": "achievements", "sessionId": "…",
+  "unlocks": { "&lt;userId&gt;": ["century"] } }
+</code></pre>
+<p><code>scores</code> کسی بھی جوابی لفافے میں بھی شامل کیا جا سکتا ہے جس سے آپ کا کنٹینر واپس آتا ہے۔ <code>/sessions</code>. دی
+وہی اصول لاگو ہوتے ہیں: صرف شرکاء، بہترین سکور رکھا گیا، نامعلوم کلیدوں کو نظر انداز کر دیا گیا۔ دیکھیں
+<a href="/ur/docs/api/container-games.html#control-channel">کنٹینر گیم سرورز</a>.</p>
+<h2 id="4-show-them-in-your-game">4. انہیں اپنے کھیل میں دکھائیں۔</h2>
+<p>آپ کا کلائنٹ پہلے سے موجود لانچ ٹوکن کے ساتھ سب کچھ پڑھتا ہے۔ یہاں کسی چیز کی ضرورت نہیں ہے۔
+مالک کا نشان</p>
+<p><strong>بورڈز تلاش کریں۔</strong></p>
+<pre><code class="language-js">const boards = await api(`/api/v1/games/${slug}/leaderboards`);
+// [{ id, key: "high-score", name: "High score", sortDirection: "desc", ... }, ...]
+const high = boards.find(b =&gt; b.key === "high-score");
+</code></pre>
+<p>صرف فعال بورڈز درج ہیں۔</p>
+<p><strong>ایک بورڈ پڑھیں۔</strong></p>
+<pre><code class="language-js">const page = await api(`/api/v1/leaderboards/${high.id}/entries?page=1&amp;pageSize=10`);
+// { items: [{ rank, username, score, ... }], total, page, pageSize }
+const friends = await api(`/api/v1/leaderboards/${high.id}/entries?friendsOnly=true&amp;pageSize=10`);
+</code></pre>
+<p>کے لیے <code>time-ms</code> بورڈ، اسکور کو ایک وقت کے طور پر فارمیٹ کریں: <code>41250</code> → <code>0:41.25</code>.</p>
+<p><strong>کامیابیاں۔</strong></p>
+<ul>
+<li><code>GET /api/v1/games/{slug}/achievements</code> کھلاڑی کے ساتھ ہر کامیابی کی فہرست <code>unlocked</code>
+ریاست راز اس وقت تک پوشیدہ رہتے ہیں جب تک وہ حاصل نہ کر لیں۔</li>
+<li>انلاک خود براہ راست پہنچتا ہے۔ <code>ws/v1/games</code> کے طور پر
+<code>{"type":"achievement","data":{key,name,description,points,...}}</code>. جب ایسا ہو تو ٹوسٹ دکھائیں۔
+لوڈ پر فہرست کال ساکٹ کے بند ہونے کے دوران غیر مقفل کسی بھی چیز کو پکڑتی ہے۔</li>
+</ul>
+<p>دیکھیں <a href="/ur/docs/api/achievements.html#3-the-player-is-notified-over-the-gameplay-socket">کامیابیاں</a> کے لیے
+فریم</p>
+<h2 id="5-look-after-them">5. ان کی دیکھ بھال کریں۔</h2>
+<p><strong>بورڈ کا نام تبدیل کریں یا اس کی حدود کو تبدیل کریں۔</strong></p>
+<pre><code class="language-bash">curl -s -X PUT "$API/api/v1/me/github-games/$GAME_ID/leaderboards/$BOARD_ID" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{ "name": "All-time high score", "maxScore": 2000000 }'
+</code></pre>
+<p>نئی حدیں صرف نئے سکور پر لاگو ہوتی ہیں۔</p>
+<p><strong>بورڈ کو ریٹائر کریں لیکن اس کے اسکور رکھیں۔</strong> بھیجیں۔ <code>{ "isActive": false }</code>. بورڈ قبول کرنا چھوڑ دیتا ہے۔
+اسکور کرتا ہے اور گیم کی فہرست سے غائب ہوجاتا ہے۔ اس کے اندراجات اب بھی id کے ذریعے پڑھے جا سکتے ہیں۔</p>
+<p><strong>شیڈول پر دوبارہ ترتیب دیں۔</strong> ایک بورڈ دیں۔ <code>"resetSchedule": "daily"</code>, <code>"weekly"</code> یا <code>"monthly"</code> (پر
+بنائیں، یا بعد میں اس کے ساتھ <code>PUT</code>) اور یہ ہر دور میں 00:00 UTC پر شروع ہوتا ہے — a کے لیے بہترین "یہ
+ہفتے کا بہترین" ہر وقت کے ساتھ بورڈ۔ آپ کے اسکرپٹ میں کرنے کے لیے کچھ نہیں: معمول کے مطابق اسکورز رپورٹ کریں، اور
+ہر کھلاڑی کے نئے پیریڈ کا پہلا سکور شمار ہوتا ہے۔ دیکھیں
+<a href="/ur/docs/api/leaderboards.html#reset-schedules">نظام الاوقات کو دوبارہ ترتیب دیں۔</a>.</p>
+<p><strong>ہاتھ سے ایک تازہ سیزن شروع کریں۔</strong> شیڈول کے بجائے ایک بار کے سیزن کے لیے، ایک نیا بورڈ بنائیں
+(<code>high-score-s2</code>)، اپنی اسکرپٹ کو اس کی طرف اشارہ کریں، اور پرانے کو ریٹائر کریں۔</p>
+<p><strong>بورڈ کو حذف کریں۔</strong> <code>DELETE .../leaderboards/{id}</code> بورڈ اور اس کے تمام اندراجات کو ہٹاتا ہے، اور
+کالعدم نہیں کیا جا سکتا۔</p>
+<p><strong>کسی کارنامے میں ترمیم کریں۔</strong> <code>PUT .../achievements/{achievementId}</code> کسی کے ساتھ <code>name</code>,
+<code>description</code>, <code>icon</code>, <code>secret</code> اور <code>points</code>. چابی کبھی نہیں بدلتی۔</p>
+<p><strong>ایک کارنامہ حذف کریں۔</strong> یہ صرف اس کے لیے کام کرتا ہے جسے آپ نے بنایا ہے جسے ابھی تک کسی نے غیر مقفل نہیں کیا ہے۔
+حاصل کردہ کامیابیاں مستقل ہیں۔</p>
+<p><strong>ایک کامیابی کو کوڈ میں منتقل کریں۔</strong> میں اسی کلید کا اعلان کریں۔ <code>game.achievements</code> اور شائع کریں. دی
+اعلان موجودہ کامیابی پر قبضہ کرتا ہے، اور جن کھلاڑیوں کے پاس یہ ہے وہ اسے برقرار رکھتے ہیں۔</p>
+<table>
+<thead>
+<tr>
+<th>جواب</th>
+<th>مطلب</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>404</code></td>
+<td>کھیل آپ کا نہیں ہے، یا بورڈ یا کارنامہ اس کا نہیں ہے۔</td>
+</tr>
+<tr>
+<td><code>409</code> "…سرور پسدید…"</td>
+<td>کھیل نہیں ہے <code>server=</code> یا <code>container.image=</code></td>
+</tr>
+<tr>
+<td><code>409</code> "پہلے ہی ہے…"</td>
+<td>کلید ایک بورڈ کے ذریعہ یا اعلان کردہ یا تخلیق شدہ کامیابی کے ذریعہ لی جاتی ہے۔</td>
+</tr>
+<tr>
+<td><code>409</code> "گیم کے سرور کے ذریعہ اعلان کیا گیا۔"</td>
+<td>اس کامیابی کو اپنے کوڈ میں تبدیل کریں۔</td>
+</tr>
+<tr>
+<td><code>409</code> "پہلے سے ہی کھلا"</td>
+<td>کھلاڑی اسے پکڑتے ہیں، لہذا اسے حذف نہیں کیا جا سکتا</td>
+</tr>
+<tr>
+<td><code>400</code></td>
+<td>دوسرے حروف کے ساتھ ایک کلید، غائب نام، یا <code>minScore</code> &gt; <code>maxScore</code></td>
+</tr>
+</tbody>
+</table>
+<p>حدود: 2048 لیڈر بورڈز اور فی گیم 200 تخلیق کردہ کامیابیاں، نیز 100 تک اعلان کردہ۔</p>
+<h2 id="checklist">چیک لسٹ</h2>
+<ul>
+<li>کھیل ایک ہے <code>server=</code> سکرپٹ یا <code>container.image=</code>، اور <code>gameSlug</code> میں مقرر ہے <code>GET /me/github-games</code>.</li>
+<li>ہر بورڈ میں ایک مستحکم کلید اور دائیں ہوتی ہے۔ <code>scoreType</code> اور <code>sortDirection</code> (وہ بعد میں تبدیل نہیں ہو سکتے)۔</li>
+<li>سرور واپس آتا ہے۔ <code>scores</code> اور <code>achievements</code> (اسکرپٹ) یا کنٹرول پیغامات (کنٹینر) بھیجتا ہے، مستند ریاست سے کام کیا جاتا ہے۔</li>
+<li>کلائنٹ اس کے ساتھ بورڈ تلاش کرتا ہے۔ <code>GET /games/{slug}/leaderboards</code>، ان کی آئی ڈی کو کبھی ہارڈ کوڈ نہیں کرتا ہے، اور آئی ڈی کے ذریعہ اندراجات پڑھتا ہے۔</li>
+<li>کلائنٹ لوڈ کرتا ہے۔ <code>GET /games/{slug}/achievements</code> اور پر ٹوسٹ دکھاتا ہے۔ <code>achievement</code> فریم</li>
+<li>پرانے بورڈز کے ساتھ ریٹائرڈ ہیں۔ <code>isActive: false</code> حذف کرنے کے بجائے، جب تک کہ آپ واقعی اسکور ختم نہیں کرنا چاہتے۔</li>
+</ul>
+
+{% endraw %}

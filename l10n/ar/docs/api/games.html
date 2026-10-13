@@ -1,0 +1,949 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "واجهة برمجة تطبيقات الألعاب"
+source_url: "/docs/api/games.html"
+source_path: "docs/api/games.md"
+source_hash: "e470bcc739248f71e3ff63290f133d01b1b9deb11aa638ef8f1c4d640d43ae5a"
+translation: "machine"
+permalink: "/ar/docs/api/games.html"
+---
+{% raw %}
+<h1 id="games-api">واجهة برمجة تطبيقات الألعاب</h1>
+<p>النظام الفرعي للألعاب هو جوهر StarHermit: ألعاب متعددة اللاعبين موثوقة بالخادم والتي تعمل قواعدها إما في ملف JavaScript معزول أو في حاوية يوفرها المطور. يشترك كلا وقتي التشغيل في REST API الذي يواجه اللاعب (<code>api/v1/games/{slug}</code>) وطريقة اللعب WebSocket (<code>ws/v1/games</code>). للحصول على تأليف الخادم، راجع <a href="/ar/docs/api/game-scripts.html">مخطوطات اللعبة</a> أو <a href="/ar/docs/api/container-games.html">خوادم الألعاب المستضافة بالحاويات</a>. للحصول على مثال كامل لوقت تشغيل البرنامج النصي، راجع ملف <a href="/ar/docs/tutorials/chess-walkthrough.html">تجول الشطرنج</a> و <a href="https://github.com/HypeDriven/starhermit-chess">HypeDriven/starhermit-الشطرنج</a>.</p>
+<p><strong>عنوان URL الأساسي:</strong> <code>https://api.starhermit.com</code>.</p>
+<p>تتطلب نقاط نهاية اللاعب المصادقة والعمل مع كل من الرموز المميزة للمستخدم الكامل والتشغيل على نطاق اللعبة
+الرموز. الاثنان <code>/server/...</code> نقاط النهاية مخصصة للحاوية فقط: تستخدم تسوية الجلسة نطاقًا ضيقًا
+الرمز المميز لحامل الخادم، بينما يستخدم تجديد الرمز المميز مفتاح تحديث النشر.</p>
+<h2 id="what-slug-is">ماذا <code>{slug}</code> يكون</h2>
+<p>سبيكة اللعبة هي <strong>uid</strong> - نفس قيمته <code>&lt;uid&gt;.starhermit.com</code> العنوان، على سبيل المثال.
+<code>83fd04b1-3cbe-4b09-a251-3733ad4b9d94</code>. إنه مشتق من معرف اللعبة غير القابل للتغيير و <strong>لا شيء
+يمكن ضبطه</strong>: لا <code>starhermit.txt</code>، وليس اسم الريبو، وليس عامل التشغيل. اسم يمكن للمطور
+سيكون الاختيار شيئًا يمكن أن تتنافس عليه لعبتان، وسيحتاج إلى منصة للحكم على من
+حصلت عليه؛ لا يمكن أن يتصادم UID ولا يُطلب منه.</p>
+<p><strong>سبيكة ليست الواجهة الخلفية للخادم.</strong> كل لعبة تتم إضافتها من مجلد محلي، وكل لعبة من المستودع
+تمت إضافة مالك تم التحقق منه، لديه واحد - مع أو بدون <code>server=</code> أو <code>container.image=</code> - لأنه كذلك
+عنوان السطح المواجه للاعب في اللعبة: <a href="#launch-tokens">إطلاق الرموز</a>,
+<a href="#per-player-control-bindings">الضوابط</a>, <a href="#per-player-game-settings">إعدادات</a>، إنه
+<a href="/ar/docs/api/catalog.html#saving-from-inside-a-game-launch-token">فتحة الحفظ السحابي</a> و <a href="/ar/docs/api/realtime.html">غرف</a>. أ
+لعبة المتصفح فقط تحتاج إلى تلك الأشياء مثل أي لعبة أخرى. الألعاب الوحيدة التي لا تحتوي على سبيكة ثابتة هي المستودعات
+التقديمات التي لم يتم التحقق من مالكها (<code>gameSlug</code> يكون <code>null</code> في <code>GET /api/v1/me/github-games</code>).</p>
+<p>نقاط النهاية الخاصة بخادم اللعبة — معلومات اللعبة، والإنجازات، والجلسات، والتوفيق، والدعوات،
+الإعادة - بحاجة إلى الخلفية. <code>GET /api/v1/games/{slug}</code> إجابات <code>404</code> للعبة التي تحتوي على سبيكة ولا
+الواجهة الخلفية، وهي الطريقة للتمييز بين الاثنين.</p>
+<p>لا تقم بتشفيرها. اقرأها من رمز الإطلاق <code>game_scope</code> المطالبة، أو - ل
+لعبة متصفح مستضافة على النظام الأساسي - من <code>location.hostname</code>، نظرًا لأن النطاق الفرعي هو uid.</p>
+<h2 id="endpoints">نقاط النهاية</h2>
+<table>
+<thead>
+<tr>
+<th>طريقة</th>
+<th>طريق</th>
+<th>مصادقة</th>
+<th>وصف</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}</code></td>
+<td>حامل</td>
+<td>معلومات اللعبة + احصائيات المتصل</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/games/{slug}/launch-token</code></td>
+<td>حامل</td>
+<td>سك رمز إطلاق على نطاق اللعبة</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/achievements</code></td>
+<td>حامل</td>
+<td>إنجازات اللعبة + حالة فتح المتصل</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/linked-achievements/{otherSlug}</code></td>
+<td>حامل</td>
+<td>ما فتحه المتصل في لعبة أخرى</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/controls</code></td>
+<td>حامل</td>
+<td>احصل على روابط التحكم الفعالة للمتصل</td>
+</tr>
+<tr>
+<td>يضع</td>
+<td><code>/api/v1/games/{slug}/controls</code></td>
+<td>حامل</td>
+<td>استبدال تجاوزات التحكم الخاصة بالمتصل</td>
+</tr>
+<tr>
+<td>يمسح</td>
+<td><code>/api/v1/games/{slug}/controls</code></td>
+<td>حامل</td>
+<td>إعادة ضبط عناصر تحكم المتصل لبيان الإعدادات الافتراضية</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>حامل</td>
+<td>الإعدادات المخزنة للمتصل لهذه اللعبة، بالإضافة إلى حدود الحجم</td>
+</tr>
+<tr>
+<td>يضع</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>حامل</td>
+<td>استبدل خريطة إعدادات المتصل بالكامل</td>
+</tr>
+<tr>
+<td>رقعة</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>حامل</td>
+<td>دمج في الخريطة المخزنة. <code>null</code> يزيل المفتاح</td>
+</tr>
+<tr>
+<td>يمسح</td>
+<td><code>/api/v1/games/{slug}/settings</code></td>
+<td>حامل</td>
+<td>امسح كل الإعدادات التي قام المتصل بتخزينها لهذه اللعبة</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/settings/{key}</code></td>
+<td>حامل</td>
+<td>إعداد واحد، أو <code>404</code></td>
+</tr>
+<tr>
+<td>يضع</td>
+<td><code>/api/v1/games/{slug}/settings/{key}</code></td>
+<td>حامل</td>
+<td>قم بتخزين إعداد واحد</td>
+</tr>
+<tr>
+<td>يمسح</td>
+<td><code>/api/v1/games/{slug}/settings/{key}</code></td>
+<td>حامل</td>
+<td>إزالة إعداد واحد</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/sessions/mine</code></td>
+<td>حامل</td>
+<td>جلسات المتصل النشطة</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/sessions/{sessionId}</code></td>
+<td>حامل</td>
+<td>تفاصيل الجلسة (للمشاركين فقط)</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/sessions/{sessionId}/recovery</code></td>
+<td>حامل (مشارك أو مالك)</td>
+<td>بيانات الاسترداد وانتهاء الصلاحية وحدود النقل الفعالة</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/games/{slug}/sessions/{sessionId}/leave</code></td>
+<td>حامل (مشارك)</td>
+<td>اترك عالمًا مستمرًا بدون غرفة → <code>204</code></td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/leaderboards</code></td>
+<td>حامل</td>
+<td>اللوحات النشطة التي أنشأها مالك اللعبة الخاصة</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/games/{slug}/sessions/ai</code></td>
+<td>حامل</td>
+<td>قم بإنشاء جلسة تدريب مقابل منصة AI</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/queues</code></td>
+<td>حامل</td>
+<td>قم بمطابقة الأشكال التي تقبلها هذه اللعبة</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/games/{slug}/matchmaking</code></td>
+<td>حامل</td>
+<td>قائمة الانتظار للتوفيق بين أقرب إيلو (<code>?queues=</code> مجموعة فرعية)</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/matchmaking</code></td>
+<td>حامل</td>
+<td>أحدث تذكرة بينما لا تزال قابلة للانضمام</td>
+</tr>
+<tr>
+<td>يمسح</td>
+<td><code>/api/v1/games/{slug}/matchmaking</code></td>
+<td>حامل</td>
+<td>إلغاء التذاكر في قائمة الانتظار</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/diagnostics</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td>الجلسات المباشرة، وقياس النص، وقائمة الانتظار، وصحة الخطاف على الويب</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/webhooks</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td>قائمة نقاط نهاية webhook</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/games/{slug}/webhooks</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td>إنشاء خطاف ويب؛ عاد السر مرة واحدة</td>
+</tr>
+<tr>
+<td>يمسح</td>
+<td><code>/api/v1/games/{slug}/webhooks/{id}</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td>حذف خطاف على الويب</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/games/{slug}/webhooks/{id}/resume</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td>قم بمسح الكسارة بعد تحديد نقطة النهاية</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/games/{slug}/invites</code></td>
+<td>حامل</td>
+<td>قم بدعوة صديق إلى لعبة جديدة، أو إلى لعبة تلعبها</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/invites</code></td>
+<td>حامل</td>
+<td>الواردة المعلقة + جميع الدعوات الصادرة</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/games/{slug}/invites/{inviteId}/accept</code></td>
+<td>حامل</td>
+<td>قبول دعوة (إنشاء الجلسة، أو الانضمام إلى الجلسة التي يسميها)</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/games/{slug}/invites/{inviteId}/decline</code></td>
+<td>حامل</td>
+<td>رفض دعوة</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/game-invites</code></td>
+<td>حساب جي دبليو تي</td>
+<td>جميع الدعوات المعلقة - كل لعبة، كلا نظامي الدعوة (بحد أقصى 50)</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/replays/mine</code></td>
+<td>حامل</td>
+<td>جلسات المتصل المنتهية (الألعاب مع الإعادة)</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/replays/{sessionId}</code></td>
+<td>حامل</td>
+<td>حالة إعادة التشغيل الكاملة (للمشاركين فقط)</td>
+</tr>
+<tr>
+<td>دبليو اس</td>
+<td><code>/ws/v1/games?sessionId={guid}</code></td>
+<td>حامل</td>
+<td>طريقة اللعب WebSocket</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/games/{slug}/server/sessions/{sessionId}</code></td>
+<td>رمز خادم اللعبة</td>
+<td>تسوية جلسة الواجهة الخلفية للحاوية؛ غير متوفر لرموز اللاعب</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/games/{slug}/server/token</code></td>
+<td>تحديث المفتاح</td>
+<td>تجديد الرمز المميز لخادم الحاوية الذي تنتهي صلاحيته</td>
+</tr>
+</tbody>
+</table>
+<p>تختلف أجسام الخطأ؛ يرى <a href="/ar/docs/api/conventions.html#requests-and-responses">اتفاقيات API</a>.</p>
+<h2 id="game-info">معلومات اللعبة</h2>
+<h3 id="get-apiv1gamesslug"><code>GET /api/v1/games/{slug}</code></h3>
+<p>إرجاع تعريف اللعبة بالإضافة إلى إحصائيات المتصل لتلك اللعبة. <code>404</code> إذا لم تكن هناك مثل هذه اللعبة،
+أو إذا كانت اللعبة مخصصة للمتصفح فقط (تحتوي على سبيكة ثابتة ولكن لا توجد واجهة خلفية للخادم).</p>
+<pre><code class="language-json">{
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "name": "Chess",
+  "enabled": true,
+  "leaderboardId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "maxConcurrentSessionsPerPlayer": 20,
+  "replaysEnabled": true,
+  "buildId": "s12",
+  "me": {
+    "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "elo": 1200,
+    "wins": 4,
+    "losses": 2,
+    "draws": 1,
+    "activeSessionCount": 2
+  }
+}
+</code></pre>
+<ul>
+<li><code>leaderboardId</code> هو اختياري.</li>
+<li><code>me.elo</code> الافتراضي ل <code>1200</code>; <code>wins</code>/<code>losses</code>/<code>draws</code> تتم قراءتها من المستند المملوك لكل لاعب في وقت تشغيل الخادم.</li>
+<li><code>replaysEnabled</code> يوضح ما إذا كان سيتم الاحتفاظ بالجلسات النهائية لهذه اللعبة أم لا - اقرأها بدلاً من الافتراض، وقم بإخفاء واجهة المستخدم الخاصة بإعادة التشغيل عندما تكون كذلك <code>false</code>. يرى <a href="#replays">الاعادة</a>.</li>
+<li><code>buildId</code> يقوم بتسمية منطق الخادم الذي يخدم اللعبة حاليًا (<code>s</code> + نسخة البرنامج النصي، أو <code>c</code> + بادئة ملخص الصورة). إرسالها مرة أخرى كما <code>ws/v1/games?build=…</code> لذلك يتم رفض العميل الذي لا معنى له <code>409 {"error":"build_mismatch"}</code> قبل أن يعمل على الحقول المنقولة. الحذف <code>build</code> يتصل كما كان من قبل.</li>
+</ul>
+<h2 id="launch-tokens">إطلاق الرموز المميزة</h2>
+<h3 id="post-apiv1gamessluglaunch-token"><code>POST /api/v1/games/{slug}/launch-token</code></h3>
+<p>Mints حمل JWT على نطاق اللعبة (العمر الافتراضي 60 دقيقة). <code>game_scope={slug}</code> ولا توجد مطالبات إذن. قد يقوم الرمز المميز المحدد بإعادة إصدار رمز مميز للعبته الخاصة - وهذا هو نمط تحديث العميل - ولكن التجديد مقيد بـ <code>launch_chain</code> (الافتراضي 12 ساعة من جلسة المستخدم الأصلية). الماضي هو تجديد السقف <code>403</code>. يجب على العملاء التحديث قبل انتهاء صلاحية الرمز المميز؛ على سبيل المثال، يتم تحديث العميل المرجعي للشطرنج كل 45 دقيقة. قم بالتجديد قبل إعادة توصيل المقبس أيضًا - راجع <a href="#gameplay-websocket">طريقة اللعب WebSocket</a>.</p>
+<pre><code class="language-json">{
+  "token": "eyJhbGciOi...",
+  "expiresInSeconds": 3600
+}
+</code></pre>
+<h2 id="achievements">الإنجازات</h2>
+<h3 id="get-apiv1gamesslugachievements"><code>GET /api/v1/games/{slug}/achievements</code></h3>
+<p>كل إنجاز تعلنه الواجهة الخلفية الرسمية للعبة، مع حالة إلغاء القفل الخاصة بالمتصل. سر
+تظل الإنجازات مخفية حتى يفتحها المتصل. يقبل JWT للمستخدم الكامل أو نطاق اللعبة
+رمز الإطلاق. <code>404</code> عندما لا يكون للعبة البزاقة تعريف رسمي للعبة.</p>
+<pre><code class="language-json">[
+  {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "key": "first-win",
+    "name": "First Win",
+    "description": "Win a match.",
+    "icon": null,
+    "secret": false,
+    "points": 10,
+    "unlocked": true,
+    "unlockedAt": "2026-07-25T09:14:02Z"
+  }
+]
+</code></pre>
+<p>إنجازات اللعبة هي <strong>خادم موثوق</strong>: فقط البرنامج النصي للعبة أو الحاوية هي التي تمنحها،
+وادعى العميل <code>POST /api/v1/me/achievements/unlock</code> نقطة النهاية ترفضهم. يفتح الحية
+تصل إلى مأخذ اللعب كما <code>{"type":"achievement"}</code> إطارات. العقود الكاملة موجودة
+<a href="/ar/docs/api/achievements.html">الإنجازات</a>, <a href="/ar/docs/api/game-scripts.html#achievements">مخطوطات اللعبة</a>، و
+<a href="/ar/docs/api/container-games.html#control-channel">خوادم ألعاب الحاويات</a>.</p>
+<h3 id="get-apiv1gamessluglinked-achievementsotherslug"><code>GET /api/v1/games/{slug}/linked-achievements/{otherSlug}</code></h3>
+<p>يتم فتح قفل المتصل الخاص به <strong>آخر</strong> اللعبة، لذلك يمكن لهذه اللعبة فتح الميزات بناءً عليها. يعمل
+مع رمز إطلاق هذه اللعبة. يرى
+<a href="/ar/docs/api/achievements.html#achievements-from-other-games">الإنجازات - إنجازات من الألعاب الأخرى</a>.</p>
+<h2 id="per-player-control-bindings">روابط التحكم لكل لاعب</h2>
+<p>يمكن للألعاب الإعلان عن عناصر التحكم في متصفح سطح المكتب باستخدام <code>control.*</code> الإدخالات في
+<a href="/ar/docs/api/github-games.html#default-control-bindings"><code>starhermit.txt</code></a>. تقوم واجهة برمجة تطبيقات التحكم بتخزين أ
+تجاوز منفصل لكل مستخدم ولعبة. JWTs للمستخدم الكامل ورموز الإطلاق المميزة على مستوى اللعبة هي
+مقبول؛ رمز الإطلاق <code>game_scope</code> يجب أن تتطابق <code>{slug}</code>.</p>
+<h3 id="get-apiv1gamesslugcontrols"><code>GET /api/v1/games/{slug}/controls</code></h3>
+<p>إرجاع الارتباطات الفعالة بترتيب واضح. <code>codes</code> يحتوي على تجاوز المستخدم متى
+أحدهما موجود، وإلا <code>defaultCodes</code>. المرتجعات <code>404</code> <code>"This game declares no controls."</code> عندما
+البناء المباشر <code>starhermit.txt</code> لا يوجد لديه صالح <code>control.*</code> سطر - أعلن عنها وانشر البناء؛ يرى
+<a href="/ar/docs/tutorials/game-controls.html">البرنامج التعليمي: إضافة عناصر التحكم إلى لعبتك</a>.</p>
+<pre><code class="language-json">{
+  "actions": [
+    {
+      "action": "up",
+      "label": "Run forward",
+      "defaultCodes": ["KeyW", "ArrowUp"],
+      "codes": ["KeyW", "ArrowUp"]
+    },
+    {
+      "action": "shoot",
+      "label": "Shoot",
+      "defaultCodes": ["Space"],
+      "codes": ["KeyJ"]
+    }
+  ]
+}
+</code></pre>
+<h3 id="put-apiv1gamesslugcontrols"><code>PUT /api/v1/games/{slug}/controls</code></h3>
+<p>يستبدل تجاوزات المتصل. ال <code>bindings</code> قد يحتوي الكائن على مجموعة فرعية من المعلن عنها
+الإجراءات؛ تستمر الإجراءات المحذوفة في استخدام إعداداتها الافتراضية.</p>
+<pre><code class="language-json">{
+  "bindings": {
+    "up": ["KeyW", "ArrowUp"],
+    "shoot": ["KeyJ"]
+  }
+}
+</code></pre>
+<p>يجب أن تعلن اللعبة عن كل إجراء. يجب أن يكون لكل إجراء 1-4 صالحًا
+<code>KeyboardEvent.code</code> القيم، ولا يجوز تعيين أي رمز لإجراءين في النتيجة
+خريطة فعالة. يتم إرجاع الإجراءات أو الرموز أو التعارضات غير الصالحة <code>400</code>.</p>
+<h3 id="delete-apiv1gamesslugcontrols"><code>DELETE /api/v1/games/{slug}/controls</code></h3>
+<p>يحذف جميع تجاوزات المتصل ويستعيد إعدادات البيان الافتراضية. المرتجعات <code>204</code>.
+تعد عمليات كتابة رمز الإطلاق مقصودة، لذلك قد توفر اللعبة المستضافة شاشة إعادة الربط الخاصة بها.</p>
+<h2 id="per-player-game-settings">إعدادات اللعبة لكل لاعب</h2>
+<p>حيث تبقى لعبتك <strong>خياراتها الخاصة</strong> للاعب — الحجم الرئيسي، وتفاصيل الرسومات، والعنوان الفرعي
+الحجم، والكاميرا المفضلة، وآخر عملية تحميل تم اختيارها - لذا فهم يتبعون هذا اللاعب إلى أي جهاز يقومون بتسجيل الدخول إليه
+من. متجر مفاتيح/قيمة مخصص للاعب واحد ولعبة واحدة.</p>
+<p><strong>لا شيء يعلن المخطط.</strong> تقوم المنصة بتخزين مفاتيحك وقيمك ولا تقرأها أبدًا،
+لذلك يمكنك إضافة خيار عن طريق كتابته: لا يوجد إدخال بيان، لا إعادة نشر، لا يوجد إصدار للنظام الأساسي. ذلك أيضا
+يعني أن النظام الأساسي لا يمكنه التحقق من صحتها نيابةً عنك - الخطأ المطبعي في اسم المفتاح هو إعداد جديد، وليس إعدادًا
+خطأ.</p>
+<p>مثل واجهة برمجة تطبيقات عناصر التحكم، يتم قبول رمز الإطلاق المميز على مستوى اللعبة ( <code>game_scope</code> يجب أن تتطابق <code>{slug}</code>)،
+لذا فإن شاشة الخيارات داخل اللعبة لا تعمل إلا مع الرمز المميز الذي تحمله اللعبة بالفعل. على عكس
+عناصر التحكم، ليست هناك حاجة إلى إعلان بيان: تحتوي كل لعبة على مساحة تخزين للإعدادات منذ لحظة ظهورها
+موجودة، بما في ذلك لعبة للمتصفح فقط بدون منطق خادم على الإطلاق.</p>
+<p>اختر المتجر المناسب — <a href="/ar/docs/api/catalog.html#saving-from-inside-a-game-launch-token">يحفظ السحابة</a> الحفاظ على التقدم (أرشيف واحد غير شفاف لكل عنوان، 10 ميجابايت، يمكن الوصول إليه باستخدام رمز الإطلاق المميز أيضًا)،
+وحالة المشغل الخاصة بالبرنامج النصي أو الواجهة الخلفية للحاوية هي مخولة بالخادم وغير قابلة للكتابة من ملف
+العميل. الإعدادات هي التفضيلات الصغيرة المملوكة للعميل بينهما.</p>
+<h3 id="get-apiv1gamesslugsettings"><code>GET /api/v1/games/{slug}/settings</code></h3>
+<p>كل ما قام المتصل بتخزينه لهذه اللعبة. <code>settings</code> فارغ للاعب لم يحفظ مطلقًا
+أي شيء - وهذا هو <code>200</code>، وليس أ <code>404</code>. تعود المفاتيح مرتبة.</p>
+<pre><code class="language-json">{
+  "slug": "83fd04b1-3cbe-4b09-a251-3733ad4b9d94",
+  "settings": {
+    "audio.master": 0.8,
+    "graphics.detail": "ultra",
+    "graphics.options": { "shadows": true, "msaa": 4 }
+  },
+  "count": 3,
+  "bytes": 118,
+  "updatedAt": "2026-08-07T15:04:11Z",
+  "limits": { "maxKeys": 200, "maxKeyLength": 128, "maxTotalBytes": 2097152, "maxAccountBytes": 67108864 }
+}
+</code></pre>
+<p><code>bytes</code> هو ما تكلفه إعدادات هذا اللاعب حاليًا <code>limits.maxTotalBytes</code>. اقرأ
+الحدود بدلاً من ترميزها بشكل صارم: البدل هو إعداد المشغل، ويمكن منح اللعبة
+خاص بها. <code>maxKeys</code> (200 افتراضيًا) يمكن أيضًا تعيينها لكل لعبة، و <code>maxAccountBytes</code> حدود واحدة
+إعدادات الحساب في كل لعبة (64 ميجابايت افتراضيًا).</p>
+<h3 id="put-apiv1gamesslugsettings"><code>PUT /api/v1/games/{slug}/settings</code></h3>
+<p>يستبدل الخريطة بأكملها. <strong>يتم حذف المفاتيح التي يحذفها الجسم</strong> — إرسال كل شيء، أو استخدام <code>PATCH</code>.</p>
+<pre><code class="language-json">{ "settings": { "audio.master": 0.8, "graphics.detail": "ultra" } }
+</code></pre>
+<p>فارغة <code>settings</code> يقوم الكائن بمسح إعدادات اللعبة للمتصل. إرجاع نفس الشكل كما
+<code>GET</code>.</p>
+<h3 id="patch-apiv1gamesslugsettings"><code>PATCH /api/v1/games/{slug}/settings</code></h3>
+<p>يدمج في ما تم تخزينه، ويترك المفاتيح التي لا يذكرها بمفردها. أ <code>null</code> قيمة <strong>يزيل</strong> لها
+مفتاح. يؤدي هذا إلى دمج مفاتيح الإعداد ذات المستوى الأعلى؛ تحل قيمة الكائن محل القيمة بأكملها في مفتاحها،
+بما في ذلك خصائصه المتداخلة. هذا ما
+يجب استخدام شاشة الخيارات - يمكنها حفظ شريط التمرير الوحيد الذي تم تحريكه دون القراءة الأولى و
+إعادة كتابة كل شيء آخر.</p>
+<pre><code class="language-json">{ "settings": { "audio.music": 0.25, "graphics.options": null } }
+</code></pre>
+<h3 id="get--put--delete-apiv1gamesslugsettingskey"><code>GET</code> / <code>PUT</code> / <code>DELETE /api/v1/games/{slug}/settings/{key}</code></h3>
+<p>إعداد واحد في كل مرة. <code>GET</code> يعود <code>{ "key", "value", "updatedAt" }</code>، أو <code>404</code> إذا كان لدى المتصل
+لم تقم بتخزينه أبدًا. <code>PUT</code> يأخذ <code>{ "value": &lt;any JSON&gt; }</code> ويخزن القيمة <strong>حرفي</strong> - بما في ذلك
+صريحة <code>null</code>، وهي هنا قيمة مثل أي قيمة أخرى، وليست حذفًا. <code>DELETE</code> يعود <code>204</code>، و
+إن إزالة شيء غير موجود يعد أمرًا محظورًا وليس خطأ.</p>
+<pre><code class="language-bash">curl -X PUT "https://api.starhermit.com/api/v1/games/$SLUG/settings/audio.master" \
+  -H "Authorization: Bearer $LAUNCH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"value": 0.35}'
+</code></pre>
+<h3 id="rules">قواعد</h3>
+<table>
+<thead>
+<tr>
+<th>قاعدة</th>
+<th>قيمة</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>تحديد الأسماء</td>
+<td>1-128 حرفًا <code>A-Z a-z 0-9 . _ - :</code> - مساحة الاسم بحرية (<code>audio.master</code>, <code>graphics:shadows</code>)</td>
+</tr>
+<tr>
+<td>قيم</td>
+<td>أي JSON: رقم، سلسلة، منطقية، صفيف، كائن، <code>null</code></td>
+</tr>
+<tr>
+<td>الإعدادات لكل لاعب، لكل لعبة</td>
+<td>200</td>
+</tr>
+<tr>
+<td>بايت لكل لاعب، لكل لعبة</td>
+<td><strong>2 ميجابايت بشكل افتراضي</strong> - يجوز للمشغل رفعه أو خفضه، ويجوز له منح لعبة واحدة بدلًا مختلفًا</td>
+</tr>
+</tbody>
+</table>
+<p>قد يستخدم إعداد واحد بدل البايت بأكمله؛ لا يوجد سقف منفصل أصغر لكل قيمة.</p>
+<table>
+<thead>
+<tr>
+<th>حالة</th>
+<th>معنى</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>400</code></td>
+<td>اسم إعداد غير صحيح، أو نص ليس كذلك <code>{"settings": {...}}</code> / <code>{"value": ...}</code></td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>لا توجد إجابات للعبة على تلك سبيكة، أو (مفتاح واحد <code>GET</code>) لا يتم تخزين أي شيء تحت هذا المفتاح</td>
+</tr>
+<tr>
+<td><code>413</code></td>
+<td>تجاوز الحد المسموح به - إما عدد كبير جدًا من الإعدادات، أو عدد كبير جدًا من البايتات. الرسالة تنص على الحد</td>
+</tr>
+</tbody>
+</table>
+<p>الدفعة التي تحتوي على مفتاح واحد سيئ لا تكتب أيًا من المفاتيح الجيدة. الإعدادات لكل لاعب ولكل
+اللعبة: لا شيء يتسرب بين لاعبين، أو بين لعبتين لنفس اللاعب. إنهم ينجون أ
+يتم تعطيل اللعبة أو حذفها، لأنها بيانات اللاعب وليست بيانات اللعبة.</p>
+<h2 id="sessions">الجلسات</h2>
+<h3 id="get-apiv1gamesslugsessionsmine"><code>GET /api/v1/games/{slug}/sessions/mine</code></h3>
+<p>جلسات المتصل النشطة لهذه اللعبة. <code>myTurn</code> و <code>deadline</code> يتم تحليلها من حالة البرنامج النصي <code>summary</code> كائن (انظر <a href="/ar/docs/api/game-scripts.html#the-platform-readable-window">مخطوطات اللعبة</a>). <code>pausedAt</code> تم ضبطه أثناء أ <a href="/ar/docs/tutorials/persistent-sessions.html">مثابر</a> تم إيقاف الجلسة مؤقتًا مع عدم وجود أحد فيها، و <code>null</code> خلاف ذلك.</p>
+<p><strong>يتم تضمين الجلسات المرتبطة بالغرفة.</strong> A <a href="/ar/docs/api/realtime.html#room-bound-sessions">غرفة الوقت الحقيقي</a>تسرد الجلسة المقيدة كل إنسان شغل مقعدًا عند بدء الغرفة، لذلك يظهر هنا لكل منهم أثناء وجوده <code>active</code>. مقاعد منظمة العفو الدولية ليست في <code>players</code>. إن مغادرة الغرفة، أو إغلاق الغرفة، لا يؤدي إلى إزالة أي شخص من الجلسة، لذلك يبقى في هذه القائمة حتى تنتهي الجلسة نفسها - إلا في حالة <a href="/ar/docs/api/realtime.html#join-in-progress">الانضمام قيد التقدم</a> الغرفة، حيث يتخلى اللاعب الذي يغادر عن مقعده ويتم إزالته من الجلسة، ويضاف إليها الوافد الجديد الذي تم قبوله في منتصف المباراة. لا يوجد معرف غرفة في الرد: استخدم <code>GET /api/v1/realtime/rooms/joined</code> لغرف المتصلين، وتطابقها <code>gameSessionId</code> ضد <code>sessionId</code>.</p>
+<pre><code class="language-json">[
+  {
+    "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "status": "active",
+    "players": [
+      { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+      { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" }
+    ],
+    "createdAt": "2026-07-20T14:03:11Z",
+    "finishedAt": null,
+    "myTurn": true,
+    "deadline": 1784642591000,
+    "pausedAt": null
+  }
+]
+</code></pre>
+<h3 id="get-apiv1gamesslugsessionssessionid"><code>GET /api/v1/games/{slug}/sessions/{sessionId}</code></h3>
+<p>تفاصيل الجلسة. المشاركون فقط - <code>403</code> خلاف ذلك.</p>
+<pre><code class="language-json">{
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "status": "active",
+  "players": [
+    { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+    { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" }
+  ],
+  "createdAt": "2026-07-20T14:03:11Z",
+  "finishedAt": null,
+  "chatConversationId": "d290f1ee-6c54-4b01-90e6-d701748f0851",
+  "result": null
+}
+</code></pre>
+<h3 id="recovery-and-explicit-leaving">الانتعاش والمغادرة الصريحة</h3>
+<p><code>GET /api/v1/games/{slug}/sessions/{sessionId}/recovery</code> إرجاع لقطة فعالة، واستعادة،
+قيم الحفظ والنقل. يمكن للمشاركين وصاحب اللعبة قراءتها. الوحدات الزمنية وجميع
+تم وصف حقول الاستجابة في <a href="/ar/docs/session-lifecycle.html#read-recovery-information">دورة حياة الجلسة والانتعاش</a>.</p>
+<p><code>POST /api/v1/games/{slug}/sessions/{sessionId}/leave</code> يتخلى عن العضوية في عالم مستمر
+بدون غرفة حقيقية. لا يأخذ جسدًا ويعود <code>204</code>; الرحيل البشري الأخير ينهي العالم.
+<code>403</code> يعني ليس عضوا <code>404</code> يعني لا يوجد جلسة <code>410</code> يعني انتهى، و <code>409</code> يعني غير دائم
+جلسة أو جلسة مقيدة بالغرفة. لجلسة مقيدة بالغرفة، استخدم الغرفة <code>/leave</code> نقطة النهاية. إغلاق
+المقبس وحده يحافظ على العضوية. يرى <a href="/ar/docs/session-lifecycle.html#disconnecting-and-leaving-are-different">قطع الاتصال والمغادرة</a>.</p>
+<h3 id="post-apiv1gamesslugsessionsai"><code>POST /api/v1/games/{slug}/sessions/ai</code></h3>
+<p>إنشاء جلسة تدريب على مقعد الذكاء الاصطناعي الخاص بالمنصة: معرف مستخدم ثابت <code>00000000-0000-4000-8000-00000000a1a1</code>، اسم المستخدم <strong>"البيت"</strong>. تعمل الواجهة الخلفية الرسمية للعبة على تشغيل الذكاء الاصطناعي، ولا توجد خدمة روبوت خارجية.</p>
+<pre><code class="language-json">{ "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e" }
+</code></pre>
+<h2 id="matchmaking">التوفيق بين</h2>
+<p>يعلن البرنامج النصي عن أشكال المطابقة التي يقبلها <code>game.queues</code>. لعبة بدون قبول
+التصريحات لديها واحد ضمني <code>default</code> قائمة الانتظار (فريقان من فريق واحد). الحاوية الحالية
+<code>/describe</code> القارئ يفعل <strong>لا</strong> يستورد <code>queues</code>، لذا تستخدم ألعاب الحاوية هذا الشكل الضمني 1 ضد 1.
+العميل الذي لم يذكر قائمة انتظار يحصل على اللعبة أولاً.</p>
+<p>يتم الاحتفاظ بما يصل إلى ثمانية قوائم انتظار للبرنامج النصي. المفاتيح مشذبة، بأحرف صغيرة، غير فارغة، وبحد أقصى 32
+الشخصيات؛ المفاتيح المكررة تحتفظ بالأولى. <code>teams</code> تم تثبيته على 2-8 و <code>teamSize</code> إلى 1-16؛
+يتم تجاهل الأشكال التي تتجاوز إجمالي 32 لاعبًا. يمكن أن تعود الإعلانات غير الصالحة إلى الضمنية
+1 ضد 1، لذا تحقق من الأشكال الفعالة باستخدام <code>GET /queues</code> بعد النشر.</p>
+<h3 id="get-apiv1gamesslugqueues"><code>GET /api/v1/games/{slug}/queues</code></h3>
+<pre><code class="language-json">[
+  { "key": "duos", "teams": 2, "teamSize": 2, "players": 4 }
+]
+</code></pre>
+<h3 id="post-apiv1gamesslugmatchmaking"><code>POST /api/v1/games/{slug}/matchmaking</code></h3>
+<p>يدرج المتصل في قائمة الانتظار لإقران أقرب إيلو. قابل للتكرار <code>?queues=</code> اسم مفاتيح الاستعلام أ <strong>مجموعة فرعية</strong> من
+تلك الأشكال (على سبيل المثال 1 ضد 1 و2 ضد 2، وليس 3 ضد 3). المطابقة تملأ التذكرة فقط مقابل الشكل المسموح به.
+على سبيل المثال:</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/matchmaking?queues=solo&amp;queues=duos
+Authorization: Bearer &lt;token&gt;
+</code></pre>
+<p>استخدم المفاتيح التي تم إرجاعها بواسطة <code>GET /queues</code>. <code>?queue=solo</code> يختار شكلاً واحدًا؛ إذا كان كلاهما <code>queue</code> و
+<code>queues</code> يتم توفيرها، ويتم دمج مفاتيحها وإلغاء تكرارها دون مراعاة حالة الأحرف. مفتاح غير معروف
+هو <code>404</code>; قائمة فارغة بعد التحقق من الصحة <code>400</code>. المرتجعات <code>409</code> إذا كان المتصل في قائمة الانتظار بالفعل
+أو في الحد الأقصى للجلسة المتزامنة.</p>
+<p>يبدأ البحث في نطاق إيلو ضيق ويتسع أثناء انتظار التذكرة (الافتراضي 100، +10/s).
+الحالات: <code>queued</code>, <code>matched</code>, <code>cancelled</code>, <code>expired</code> (انتظر بعد الحد الأقصى، الافتراضي 300 ثانية، بدون
+العثور على أي شخص - تقديم لعبة تدريبية بدلاً من الدوران). الحفلة هي أ <a href="/ar/docs/api/realtime.html">غرفة الوقت الحقيقي</a>:
+<code>POST /api/v1/realtime/rooms/{id}/matchmake</code> (المضيف، الردهة) يدخل القائمة بأكملها كفريق واحد.</p>
+<pre><code class="language-json">{
+  "ticketId": "b3b7c8d2-5c1e-4f3a-9e2d-1a2b3c4d5e6f",
+  "status": "queued",
+  "sessionId": null,
+  "waitedSeconds": 12,
+  "searchEloBand": 220,
+  "maxWaitSeconds": 300
+}
+</code></pre>
+<p>قد يتم الاشتراك في الألعاب <a href="/ar/docs/starhermit-txt.html#starting-matchmaking-before-every-human-seat-is-filled">الموعد النهائي يبدأ في <code>starhermit.txt</code></a>:
+<code>matchmaking.max_wait_seconds</code> يبدأ مباراة غير ممتلئة بعد الانتظار، و
+<code>matchmaking.ai_players</code> يحد من عدد المقاعد الشاغرة التي تصبح منظمة العفو الدولية. تبقى المقاعد الأخرى فارغة. إنسان كامل
+تبدأ المباريات في وقت مبكر. <code>maxWaitSeconds</code> تقارير إعداد تلك اللعبة؛ تبقى هذه التذاكر <code>queued</code>
+حتى تبدأ عملية التوفيق بينهما، بدلاً من انتهاء صلاحيتها عند حد الانتظار العالمي.</p>
+<h3 id="get-apiv1gamesslugmatchmaking"><code>GET /api/v1/games/{slug}/matchmaking</code></h3>
+<p>إرجاع أحدث تذكرة للمتصل، أو <code>404</code>. A <code>matched</code> تم الإبلاغ عن التذكرة <strong>فقط في حين
+الجلسة لا تزال <code>active</code></strong>. بعد انتهاء المباراة هذا هو <code>404</code> لذلك يقدم الردهة مباراة جديدة
+بدلاً من الإشارة إلى معرف الجلسة الميتة.</p>
+<h3 id="delete-apiv1gamesslugmatchmaking"><code>DELETE /api/v1/games/{slug}/matchmaking</code></h3>
+<p>إلغاء التذاكر الموجودة في قائمة انتظار المتصل. المرتجعات <code>204</code>.</p>
+<h2 id="invites">يدعو</h2>
+<h3 id="post-apiv1gamessluginvites"><code>POST /api/v1/games/{slug}/invites</code></h3>
+<p>هيئة الطلب:</p>
+<pre><code class="language-json">{ "toUserId": "9b2f8c1a-1111-4222-8333-444455556666" }
+</code></pre>
+<p>يجب أن يكون الهدف صديقًا (<code>403</code> خلاف ذلك – انظر <a href="/ar/docs/api/friends.html">أصدقاء</a>); <code>409</code> في دعوة مكررة أو عندما يكون أي من اللاعبين في الحد الأقصى للجلسة. يتلقى المدعو أيضًا أ <a href="/ar/docs/api/chat.html#game_invite-one-event-for-both-invite-systems"><code>game_invite</code> حدث</a> دفعت عبر مأخذ الدردشة الخاصة بهم، مع <code>kind: "session"</code>.</p>
+<h4 id="inviting-a-friend-into-a-game-in-progress">دعوة صديق إلى لعبة قيد التقدم</h4>
+<p>أضف الجلسة التي تلعب فيها:</p>
+<pre><code class="language-json">{ "toUserId": "9b2f8c1a-1111-4222-8333-444455556666", "sessionId": "3f0c…" }
+</code></pre>
+<p>القبول إذن <strong>يسمح للصديق بجلسة التشغيل تلك</strong> فبدلاً من بدء لعبة جديدة — يصبحون لاعبين بكل معنى الكلمة (المقبس، <code>ctx.players</code>، يستعيد، يعيد الاتصال). تقرر لعبتك ما إذا كانت ستأخذهم أم لا: تطلب المنصة نصًا <code>game.onMembershipChange(ctx)</code> أو حاوية <a href="/ar/docs/api/container-games.html"><code>POST /sessions/{id}/members</code></a>، ولعبة لا ترفض كل انضمام من هذا القبيل. قواعد:</p>
+<ul>
+<li>يجب أن تكون الجلسة جلسة نشطة لهذه اللعبة <strong>أنت</strong> العب في (<code>403</code> خلاف ذلك، <code>410</code> إذا انتهت)، فيجب ألا يكون صديقك موجودًا فيها بالفعل (<code>409</code>)، ويجب ألا ينتمي إلى غرفة حقيقية (<code>409</code> — دعوة من خلال الغرفة، التي مقاعدها هي القائمة).</li>
+<li>يحمل الرد <code>targetSessionId</code>; <code>sessionId</code> يبقى <code>null</code> حتى يتم قبول الدعوة.</li>
+<li>عند قبول يتم فحص كل شيء مرة أخرى. إذا رفضت اللعبة (كاملة، مغلقة...) يكون القبول أ <code>409</code> والدعوة <strong>يبقى معلقا</strong>. إذا انتهت المباراة فإن الدعوة تكون <strong>تم الإلغاء</strong> وقبول الإجابات <code>410</code> - لا تتحول أبدًا إلى لعبة جديدة.</li>
+<li>ينطبق فقط الحد الأقصى للجلسة المتزامنة للمدعو. يمكنك الاحتفاظ بدعوة معلقة واحدة لكل صديق لكل وجهة، لذلك يمكن أن تتواجد دعوة إلى المباراة الخاصة بك ودعوة إلى لعبة جديدة معًا.</li>
+</ul>
+<p>تم إنشاء النظام الأساسي قبل تجاهل هذه الميزة <code>sessionId</code> ويبدأ جلسة جديدة عند القبول؛ <code>targetSessionId</code> في الرد يخبرك بما حصلت عليه.</p>
+<p><strong>ما هي الدعوة التي يجب عليك إرسالها؟</strong> قبول دعوة واضحة (لا <code>sessionId</code>) <em>يخلق جلسة جديدة</em> للاعبين. إذا كان المدعو جالسًا بالفعل في <a href="/ar/docs/api/realtime.html">غرفة الوقت الحقيقي</a> (ردهة بها مقاعد)، قم بدعوتهم إلى تلك الغرفة بدلاً من ذلك — <code>POST /api/v1/realtime/rooms/{id}/invites</code> - لذا قم بقبولهم على الطاولة التي أنت عليها بالفعل. يقوم كلاهما بإخطار المدعو بنفس الطريقة، لذلك لا ترسل كلاهما أبدًا لدعوة واحدة: فهذا يتم الإخطار مرتين.</p>
+<p>إجابة:</p>
+<pre><code class="language-json">{
+  "inviteId": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+  "from": { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+  "to": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
+  "status": "pending",
+  "createdAt": "2026-07-20T14:10:00Z",
+  "sessionId": null,
+  "targetSessionId": null,
+  "notified": true
+}
+</code></pre>
+<p><code>notified</code> تقارير ما إذا كانت الدفعة قد وصلت إلى اتصال مباشر (<code>false</code> = المدعو غير متصل؛ لا تزال الدعوة قائمة وسيشاهدونها في صندوق الوارد الخاص بهم). إنها <code>null</code> في القائمة/قبول/رفض الردود، حيث لا ينطبق ذلك.</p>
+<h3 id="get-apiv1gamessluginvites"><code>GET /api/v1/games/{slug}/invites</code></h3>
+<pre><code class="language-json">{
+  "incoming": [ { "inviteId": "...", "from": { "userId": "...", "username": "bob" }, "to": { "userId": "...", "username": "alice" }, "status": "pending", "createdAt": "2026-07-20T14:10:00Z", "sessionId": null } ],
+  "outgoing": []
+}
+</code></pre>
+<p><code>incoming</code> يحتوي على دعوات معلقة فقط؛ <code>outgoing</code> يحتوي على جميع الدعوات الصادرة للمتصل.</p>
+<h3 id="post-apiv1gamessluginvitesinviteidaccept"><code>POST /api/v1/games/{slug}/invites/{inviteId}/accept</code></h3>
+<p>يقبل الدعوة وينشئ الجلسة — أو لدعوة ذات <code>targetSessionId</code>، ينضم إلى ذلك. إرجاع <code>GameInviteDto</code> مع <code>status</code> <code>accepted</code> و <code>sessionId</code> تعيين على الجلسة لفتح.</p>
+<h3 id="post-apiv1gamessluginvitesinviteiddecline"><code>POST /api/v1/games/{slug}/invites/{inviteId}/decline</code></h3>
+<p>المرتجعات <code>204</code>.</p>
+<h3 id="get-apiv1megame-invites"><code>GET /api/v1/me/game-invites</code></h3>
+<p>يتطلب رمزًا مميزًا للحساب الكامل؛ لا يمكن لرموز إطلاق اللاعب قراءة البريد الوارد على مستوى الحساب.</p>
+<p>كل دعوة معلقة موجهة إلى المتصل (بحد أقصى 50، الأحدث أولاً) — الاستقصاء الاحتياطي لإشعار الدفع، والمكان الوحيد الذي يمكن طرحه فيه "إلى ماذا أنا مدعو؟". يمتد <strong>كلاهما</strong> أنظمة الدعوة: دعوات الجلسة من هذه الصفحة و <a href="/ar/docs/api/realtime.html#invites">دعوات الغرفة الحقيقية</a>. الإدخالات هي بالضبط <a href="/ar/docs/api/chat.html#game_invite-one-event-for-both-invite-systems"><code>game_invite</code> الحمولات</a>، لذلك يعرض العميل نتائج الدفع والاستقصاء بنفس الكود.</p>
+<pre><code class="language-json">[
+  {
+    "inviteId": "e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b",
+    "kind": "room",
+    "gameSlug": "poker",
+    "gameName": "StarHermit Poker",
+    "roomId": "b1d2c3e4-5f60-4a71-8b92-c3d4e5f60718",
+    "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
+    "createdAt": "2026-07-26T14:10:00Z",
+    "acceptPath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/accept",
+    "declinePath": "/api/v1/realtime/rooms/invites/e7f1a2b3-4c5d-4e6f-8a9b-0c1d2e3f4a5b/decline"
+  },
+  {
+    "inviteId": "c4a5b6d7-8e9f-4012-8345-6789abcdef01",
+    "kind": "session",
+    "gameSlug": "chess",
+    "gameName": "Chess",
+    "roomId": null,
+    "from": { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" },
+    "createdAt": "2026-07-20T14:10:00Z",
+    "acceptPath": "/api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/c4a5b6d7-8e9f-4012-8345-6789abcdef01/accept",
+    "declinePath": "/api/v1/games/83fd04b1-3cbe-4b09-a251-3733ad4b9d94/invites/c4a5b6d7-8e9f-4012-8345-6789abcdef01/decline"
+  }
+]
+</code></pre>
+<p>الإجابة على كل إدخال في حد ذاته <code>acceptPath</code>/<code>declinePath</code> - يحتفظ النظامان بمعرفات دعوة منفصلة، ​​لذلك يتم تحديد معرف دعوة الغرفة <code>/games/{slug}/invites/...</code> هو أ <code>404</code>. يتم حذف دعوات الغرفة التي تم إغلاق غرفتها، أو التي بدأت دون تسجيل قيد التقدم؛ لم يبق شيء لقبوله. وكذلك هي دعوات الجلسة إلى المباراة التي انتهت. يحمل كل إدخال <code>inProgress</code> (قبول الانضمام إلى لعبة يتم لعبها بالفعل - دعوة لجلسة مع هدف، أو دعوة غرفة إلى غرفة انضمام قيد التقدم بدأت) وتلك اللعبة <code>sessionId</code>، لذلك يمكن للعميل أن يقول "انضم إلى لعبتهم" بدلا من "يلعب".</p>
+<h3 id="share-links-invite-by-url">مشاركة الروابط (الدعوة عن طريق عنوان URL)</h3>
+<p>يتطلب تدفق الدعوة أعلاه أن يكون اللاعبان صديقين بالفعل. لدعوة شخص ما <strong>ليس على المنصة بعد</strong> (أو ليس صديقًا بعد)، يمكن للعبة أن توزع أ <strong>رابط المشاركة</strong> - عنوان URL للوحة تحكم الويب التي تعمل على أتمتة عملية الإعداد بالكامل:</p>
+<pre><code>https://dashboard.starhermit.com/game-invite/&lt;userId&gt;/&lt;gameSlug&gt;
+</code></pre>
+<ul>
+<li><code>&lt;userId&gt;</code> — معرف المستخدم الخاص بالمشغل المشارك. عميل اللعبة لديه بالفعل: إنه <code>sub</code> المطالبة برمز الإطلاق المميز (يكشف تنفيذ مرجع الشطرنج أنه <code>Net.userId</code>).</li>
+<li><code>&lt;gameSlug&gt;</code> - سبيكة اللعبة (<code>game_scope</code> مطالبة). تستخدم الألعاب التي لا تحتوي على برنامج نصي موثوق أو واجهة خلفية للحاوية معرف لعبة GitHub (المعرف الفريد العمومي) بدلاً من ذلك؛ تقبل لوحة القيادة إما.</li>
+<li><strong>سلسلة استعلام اختيارية - لك.</strong> أي شيء بعد <code>?</code> يتم تمريره إلى لعبتك دون تغيير:
+<code>…/game-invite/&lt;userId&gt;/&lt;gameSlug&gt;?room=K7MP2X&amp;map=arena</code> يفتح لعبتك في
+<code>https://&lt;game-id&gt;.starhermit.com/…?room=K7MP2X&amp;map=arena</code>. استخدمه لإسقاط المستلم مباشرة
+في غرفة أو مستوى أو ردهة. ويظل موجودًا بعد تسجيل دخول المستلم، ويتم إضافته إلى حسابك
+عنوان URL الخاص باللعبة بدلاً من استبدال أي شيء هناك. لا يزال رمز الإطلاق يصل إلى
+<code>#game_token=</code> قطعة، بحيث لا يتصادم الاثنان أبدًا. URL-ترميز القيم التي وضعتها فيه.</li>
+</ul>
+<p>عندما يفتح المستلم الرابط، <strong>لوحة القيادة</strong> (وليست اللعبة) تقوم بجزء دعوة الأصدقاء التلقائية - لا توجد نقاط نهاية خلفية جديدة، فهي تتكون من واجهات برمجة التطبيقات الحالية:</p>
+<ol>
+<li>تسجيل دخولهم (OAuth عبر موفر مباشر)، أو إعادة استخدام جلستهم الحالية. يبقى هدف الارتباط بعد تسجيل الدخول ذهابًا وإيابًا.</li>
+<li>يعرض مربع حوار الموافقة مع تسمية المشارك واللعبة <strong>الأصدقاء المشارك</strong>: يقبل طلب الصداقة المعلق الخاص بالمشارك في حالة وجوده، وإلا فإنه يرسل واحدًا (<code>POST /api/v1/me/friend-requests</code>).</li>
+<li>يطالبهم باختيار لقب إذا كان حسابهم لا يحتوي على أي لقب (تعرض الألعاب ألقاب الملف الشخصي - راجع <a href="/ar/docs/api/profile.html">حساب تعريفي</a>).</li>
+<li>تطلق اللعبة (المنصة المستضافة <code>https://&lt;game-id&gt;.starhermit.com</code> نسخة، مع رمز الإطلاق في <code>#game_token=</code> قطعة كالعادة).</li>
+<li>يرسل <strong>تشغيل دعوة العودة إلى المشارك</strong> مع <code>POST /api/v1/games/{slug}/invites</code> — وبذلك ينتهي رابط المشاركة كدعوة عادية للعبة يقبلها المشارك (لوحة المعلومات، أو بالون سطح المكتب، أو قائمة الدعوات الخاصة باللعبة). إذا كانت الصداقة لا تزال طلبًا معلقًا، فستضع لوحة المعلومات دعوة التشغيل في قائمة الانتظار وترسلها تلقائيًا بمجرد قبول المشارك.</li>
+</ol>
+<p>ماذا يعني هذا بالنسبة لعميل اللعبة الخاص بك:</p>
+<ul>
+<li><strong>تقديم الارتباط يكلف سطرًا واحدًا من بناء السلسلة</strong> — ضع أ "مشاركة رابط الدعوة" الموجود بجوار واجهة المستخدم الخاصة بدعوة الأصدقاء وانسخ عنوان URL إلى الحافظة. يرى <code>shareInviteLink()</code> في <a href="https://github.com/HypeDriven/starhermit-chess">تنفيذ مرجع الشطرنج</a>.</li>
+<li><strong>ليست هناك حاجة إلى معالجة خاصة على الجانب المتلقي.</strong> تصل دعوة المستلم من خلال تدفق الدعوة العادي: الخاص بك <code>GET .../invites</code> يُظهر الاقتراع للمشارك الدعوة الواردة، ويؤدي قبولها إلى إنشاء الجلسة، ويرى المستلم أن الجلسة تظهر فيها <code>GET .../sessions/mine</code> (أظهر الدعوات الصادرة المعلقة حتى يكون الانتظار مرئيًا - عميل الشطرنج "مدعو - في انتظار" البطاقات).</li>
+<li>تستخدم لوحة المعلومات أيضًا عناوين URL هذه نفسها: يحتوي جزء تفاصيل كل لعبة مستضافة قابلة للتشغيل على <strong>انسخ رابط الدعوة</strong> الزر، ويقدم عميل Windows نفس الشيء من قائمة سياق اللعبة.</li>
+</ul>
+<h2 id="replays">الاعادة</h2>
+<p>الإعادة هي وثيقة الحالة النهائية للجلسة المنتهية، والتي تحتفظ بها المنصة ويتم تقديمها مرة أخرى إلى
+اللاعبين الذين كانوا فيه. <strong>تعد عمليات إعادة العرض إحدى ميزات الاشتراك في اللعبة، ويتم إيقافها ما لم تطلب اللعبة ذلك
+لهم</strong>لأن الإعادة عبارة عن تخزين يحتفظ به النظام الأساسي طالما كان سجل المباراة موجودًا.</p>
+<p>اطلبها في رمز الخادم الخاص بك - <code>replays: true</code> على <code>game</code> كائن ل
+<a href="/ar/docs/api/game-scripts.html#replays">script</a>, <code>"replays": true</code> من <code>/describe</code> ل
+<a href="/ar/docs/api/container-games.html#get-describe">خادم الحاويات</a> - ونشر تحديث لتطبيقه. منصة
+يمكن للمشغل أيضًا الإجابة عن لعبة معينة في كلتا الحالتين، لذا تعامل مع <code>replaysEnabled</code> مجال
+<code>GET /api/v1/games/{slug}</code> كإجابة بدلاً من افتراض أن إعلانك هو الكلمة الأخيرة.</p>
+<p>كلتا نقطتي النهاية أدناه تعود <code>404</code> لمباراة تم إيقاف إعادة تشغيلها، ولا يُحفظ من ذلك شيء
+الجلسات النهائية للعبة - لذلك يجب على العميل الذي يقدم شاشة إعادة التشغيل أن يقرأ <code>replaysEnabled</code>
+أولاً.</p>
+<h3 id="get-apiv1gamesslugreplaysminelimit"><code>GET /api/v1/games/{slug}/replays/mine?limit=</code></h3>
+<p>انتهاء جلسات المتصل. <code>limit</code> الافتراضي ل <code>10</code> ويتم تثبيته على 1-50.</p>
+<pre><code class="language-json">[
+  {
+    "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+    "players": [
+      { "userId": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "username": "alice" },
+      { "userId": "9b2f8c1a-1111-4222-8333-444455556666", "username": "bob" }
+    ],
+    "finishedAt": "2026-07-20T15:42:37Z",
+    "result": { "kind": "white-win", "reason": "checkmate" },
+    "moveCount": 41
+  }
+]
+</code></pre>
+<h3 id="get-apiv1gamesslugreplayssessionid"><code>GET /api/v1/games/{slug}/replays/{sessionId}</code></h3>
+<p>الحالة النهائية الكاملة لـ JSON كما تمت أرشفتها بواسطة النظام الأساسي. المشاركون فقط. <code>recordedWith</code> ما هو
+أنتج المستند (إصدار البرنامج النصي، وقت التشغيل، معدل التجزئة)، وختمه عند الانتهاء - وبالتالي إعادة النشر لاحقًا
+لا يجعل عمليات الإعادة القديمة تبدو وكأن الكود الحالي كتبها. المباريات انتهت قبل هذا
+تقرير موجود <code>null</code>.</p>
+<pre><code class="language-json">{
+  "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
+  "players": [ { "userId": "...", "username": "alice" }, { "userId": "...", "username": "bob" } ],
+  "finishedAt": "2026-07-20T15:42:37Z",
+  "result": { "kind": "white-win", "reason": "checkmate" },
+  "state": { "...": "game-specific final session state" },
+  "recordedWith": { "scriptVersion": 12, "runtime": "script", "tickRateHz": 0.25 }
+}
+</code></pre>
+<h2 id="session-model">نموذج الجلسة</h2>
+<ul>
+<li>حصة <code>status</code> يكون <code>"active"</code> أو <code>"finished"</code>.</li>
+<li>تحصل كل جلسة على محادثة دردشة لكل جلسة (نوع <code>"game"</code>) حتى يتمكن المعارضون من الدردشة والمكالمات الصوتية <strong>دون أن نكون أصدقاء</strong> (يرى <a href="/ar/docs/api/chat.html">محادثة</a> و <a href="/ar/docs/api/voice.html">صوت</a>).</li>
+<li>يتم تحديد الحد الأقصى للجلسة المتزامنة لكل لاعب بشكل افتراضي <code>20</code>.</li>
+<li>لعبة تعلن <code>persistent</code> يبقي جلسات فارغة <strong>متوقف مؤقتا</strong> بدلاً من إنهاءها؛ الاتصال بأحد يستأنفه. يتم احتساب الجلسات المتوقفة مؤقتًا ضمن الحد الأقصى. انظر <a href="/ar/docs/tutorials/persistent-sessions.html">البرنامج التعليمي للجلسات المستمرة</a>.</li>
+<li>جلسة نشطة لا يلعبها أحد <strong>متقاعد</strong> (حالة <code>finished</code>، مهجور): بعد 5 دقائق من آخر مرة <code>ws/v1/games</code> يتم إغلاق المقبس دون عودة أي شخص، أو بعد 24 ساعة دون أي إجراء من جانب اللاعب. تتوقف الجلسات المستمرة بدلاً من ذلك. وينطبق هذا على الجلسات المقيدة بالغرفة أيضًا؛ إغلاق غرفتهم لا ينهاهم.</li>
+<li>حالات تذكرة التوفيق: <code>queued</code> | <code>matched</code> | <code>cancelled</code> | <code>expired</code>.</li>
+<li>حالات الدعوة: <code>pending</code> | <code>accepted</code> | <code>declined</code> | <code>cancelled</code>.</li>
+<li><strong>يتم إنشاء الجلسات عبر التوفيق أو قبول الدعوة أو نقطة نهاية الذكاء الاصطناعي أو بدء الغرفة في الوقت الفعلي</strong> (جلسات مقيدة بالغرفة - انظر <a href="/ar/docs/api/realtime.html#room-bound-sessions">غرف الوقت الحقيقي</a>) - لا يوجد "إنشاء اللوبي" نقطة النهاية.</li>
+<li>تأتي تحديثات Elo من البرنامج النصي الرسمي (<code>eloUpdates</code>) أو قناة التحكم في الحاوية، قم بتعيين التقييمات المستخدمة في التوفيق ويتم نشرها على لوحة صدارة اللعبة (نوع النتيجة <code>elo</code>). <strong>لا يمكن للعملاء مطلقًا إرسال النتائج إلى لوحة صدارة اللعبة مباشرةً</strong> (يرى <a href="/ar/docs/api/leaderboards.html">المتصدرين</a>).</li>
+</ul>
+<h2 id="gameplay-websocket">طريقة اللعب WebSocket</h2>
+<p><code>ws/v1/games?sessionId={guid}</code> (طريق محايد للإصدار). المصادقة مع <code>Authorization</code> رأس, <code>?ticket=</code>، أو <code>?access_token=</code>. المشاركون فقط (<code>403</code>); عند الاتصال برمز الإطلاق، فإنه <code>game_scope</code> يجب أن تتطابق مع لعبة الجلسة. الجلسة النهائية هي <code>410 {"error":"session_not_active"}</code>. خياري <code>?build=</code> هو <code>buildId</code> من <code>GET /games/{slug}</code> - عدم التطابق هو <code>409 {"error":"build_mismatch"}</code>.</p>
+<ul>
+<li>إطارات نصية فقط، بحد أقصى 16 كيلو بايت لكل إطار.</li>
+<li>يحل الاتصال الأحدث محل الاتصال القديم: يتم إغلاق الاتصال السابق به <code>PolicyViolation</code>.</li>
+<li>الاتصال متوقف مؤقتا <a href="/ar/docs/tutorials/persistent-sessions.html">مثابر</a> تستأنف الجلسة قبل أمرك الأول. إذا تعذر استئنافه (عادةً ما تكون الحاوية لا تزال قيد التشغيل)، فستحصل على رسالة خطأ <code>error</code> يتم إغلاق الإطار والمقبس بالكود <code>1001</code>; تظل الجلسة متوقفة مؤقتًا — أعد الاتصال مع التراجع.</li>
+<li><strong>قم بتجديد الرمز المميز قبل كل عملية إعادة اتصال.</strong> تم رفض الرمز المميز منتهي الصلاحية <code>401</code> قبل الترقية، والتي يبلغ عنها المتصفح كرمز إغلاق فقط <code>1006</code> - لا يمكن تمييزه عن انقطاع الشبكة - لذلك قد تكون إعادة الاتصال الفاشلة بمثابة فشل في المصادقة، وإعادة فتح نفس الشيء <code>?access_token=</code> لا يمكن استرداد عنوان URL أبدًا. تجديد من خلال <a href="#post-apiv1gamessluglaunch-token"><code>POST /api/v1/games/{slug}/launch-token</code></a> وأعد الاتصال بالرمز الجديد. يعمل التجديد فقط عندما يكون الرمز المميز الحالي صالحًا وفي غضون 12 ساعة (افتراضيًا) من الإطلاق الأصلي؛ بمجرد رفضه (<code>401</code>/<code>403</code>)، توقف عن إعادة الاتصال وأرسل المشغل مرة أخرى إلى المشغل للحصول على رمز إطلاق جديد.</li>
+</ul>
+<h3 id="client--server">العميل → الخادم</h3>
+<p>ال <code>cmd</code> المغلف هو عقد المنصة؛ محتويات <code>data</code> يتم تعريفها من خلال الواجهة الخلفية الرسمية لكل لعبة. على سبيل المثال، يرسل تطبيق مرجع الشطرنج حركة مثل هذا:</p>
+<pre><code class="language-json">{ "type": "cmd", "data": { "type": "move", "from": "e2", "to": "e4" } }
+</code></pre>
+<p>بالنسبة لوقت تشغيل البرنامج النصي، يتم تنفيذ الأوامر الدائمة من خلاله <code>onPlayerMessage</code>; تم وضع علامة صراحة <code>{ "type": "input", "realtime": true, ... }</code> تستخدم البيانات تجميع أحدث المكاسب في المرحلة التالية <code>onTick</code>. بالنسبة لوقت تشغيل الحاوية، يقوم النظام الأساسي بإعادة توجيه الأوامر المصادق عليها عبر دفقها الثنائي وتمتلك الحاوية حلقة المحاكاة الخاصة بها. في كلتا الحالتين، يوفر النظام الأساسي هوية المرسل الموثوق به ولا يمكن للعملاء أبدًا ترحيل الحالة مباشرة. يرى <a href="/ar/docs/api/game-scripts.html#context-object">مخطوطات اللعبة — كائن السياق</a> و <a href="/ar/docs/api/container-games.html#gameplay-stream">خوادم ألعاب الحاوية – دفق اللعب</a>.</p>
+<h3 id="server--client">الخادم → العميل</h3>
+<pre><code class="language-json">{ "type": "game", "data": { "...": "server-authorized message addressed to you" } }
+{ "type": "error", "error": "Illegal move" }
+{ "type": "presence", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "online": true }
+{ "type": "membership", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "change": "joined", "userId": "9b2f8c1a-1111-4222-8333-444455556666", "name": "carol", "team": 0, "slot": 1 }
+{ "type": "achievement", "data": { "key": "first-win", "name": "First Win", "description": "Win a match.", "icon": null, "points": 10, "unlockedAt": "2026-07-25T09:14:02Z" } }
+{ "type": "resumed", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "lostMs": 750 }
+{ "type": "abandoned", "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e", "reason": "server_failure" }
+</code></pre>
+<ul>
+<li><code>game</code> — رسالة معتمدة من الخادم موجهة إليك.</li>
+<li><code>error</code> — خطأ من النظام الأساسي أو من أمرك الأخير.</li>
+<li><code>presence</code> - البث للمشاركين الآخرين عندما ينضم شخص ما أو يغادر.</li>
+<li><code>membership</code> — أصبح شخص ما لاعبًا في هذه الجلسة في منتصف المباراة (<code>joined</code>) أو تخلوا عن مقعدهم (<code>left</code>); يتم إرسالها إلى كل مشارك متصل. يرى <a href="/ar/docs/api/container-games.html#post-sessionssessionidmembers">خوادم ألعاب الحاويات — الأعضاء</a>.</li>
+<li><code>achievement</code> - وهو الإنجاز الذي منحه سيناريو اللعبة للتو <strong>أنت</strong>، يتم إرسالها إلى اللاعب الذي يكسب
+فقط. نوع إطار منفصل عن قصد: هذه هي حقيقة النظام الأساسي، وليست بيانات اللعبة التي يتم ترحيلها بواسطة البرنامج النصي.
+ينبعث من مسارات التحديث الدائمة في كلا وقتي التشغيل. يرى
+<a href="/ar/docs/api/achievements.html#server-authoritative-game-achievements">الإنجازات</a>.</li>
+<li><code>resumed</code> - تم تغيير الجلسة (استعادة الحاوية، أو أخذت عملية API أخرى
+عقد إيجار ملكية). تجاهل التنبؤ المحلي؛ <code>lostMs</code> هي الفجوة منذ آخر كتابة دائمة.
+يتم الإعلان عن الإرفاق الأول بعد عملية التسليم مرة واحدة لكل لاعب.</li>
+<li><code>abandoned</code> - أنهت المنصة الجلسة دون فائز أو تحديث إيلو. الأسباب:
+<code>players_left</code>, <code>idle_no_players</code>, <code>superseded</code> (طلب اللاعب لعبة جديدة بهذا العنوان)،
+<code>server_failure</code>, <code>restore_failed</code>, <code>operator_ended</code> ( أنهى صاحب اللعبة الأمر )،
+<code>retention_expired</code> (انقضت فترة احتفاظ العالم بالانتعاش مؤقتًا). مخزنة ك
+<code>{ "kind": "abandoned", "reason": "…" }</code>. A <a href="/ar/docs/tutorials/persistent-sessions.html">مثابر</a> جلسات اللعبة ليست أبدا
+انتهت لمجرد قطع الاتصال أو عدم النشاط - فهي تتوقف مؤقتًا بدلاً من ذلك. آخر إنسان يغادر صراحة
+لا يزال بإمكان العالم المستقل إنهاء الأمر كما هو <code>players_left</code>; يمكن لانتهاء صلاحية الاسترداد المكوّن إنهاء الأمر على النحو التالي
+<code>retention_expired</code>.</li>
+</ul>
+<h2 id="limits">حدود</h2>
+<p>ما تفرضه المنصة <code>ws/v1/games</code> وعلى التقييمات. الأرقام هي الإعدادات الافتراضية للمنصة؛
+يمكن للمشغل ضبطها.</p>
+<h3 id="messages-on-wsv1games">الرسائل على <code>ws/v1/games</code></h3>
+<table>
+<thead>
+<tr>
+<th>حد</th>
+<th>قيمة</th>
+<th>ماذا يحدث بعد ذلك</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>حجم الإطار</td>
+<td>16 كيلو بايت لكل إطار نص</td>
+<td>المقبس مغلق ب <code>1009</code> (الرسالة كبيرة جدًا).</td>
+</tr>
+<tr>
+<td>نوع الإطار</td>
+<td>النص فقط</td>
+<td>يحصل الإطار الثنائي على <code>error</code> إطار؛ يبقى المقبس مفتوحا.</td>
+</tr>
+<tr>
+<td>اتصالات</td>
+<td>واحد لكل لاعب في كل جلسة</td>
+<td>اتصال أحدث يغلق الاتصال الأقدم <code>1008</code>.</td>
+</tr>
+<tr>
+<td>المدخلات في الوقت الحقيقي (<code>{"type":"input","realtime":true,…}</code>)</td>
+<td><strong>60 في الثانية</strong> لكل اتصال، رشقات نارية تصل إلى 120</td>
+<td>الإطارات الإضافية هي <strong>انخفض بصمت</strong> - لا <code>error</code> إطار.</td>
+</tr>
+<tr>
+<td>أوامر دائمة للبرامج النصية (كل أخرى <code>cmd</code>)</td>
+<td><strong>20 في الثانية</strong> لكل لاعب في كل جلسة، مع بدل انفجار قصير</td>
+<td>رفض مع <code>error</code> إطار: <code>"Too many commands; slow down."</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>المدخلات في الوقت الحقيقي</strong> يتم أخذ عينات منها، وليس وضعها في قائمة الانتظار: تحتفظ المنصة بأحدث مدخلات وأيدي كل لاعب
+الدفعة إلى البرنامج النصي الخاص بك المقبل <code>onTick</code> في <code>ctx.inputs</code>. إرسال أسرع من لعبتك
+<a href="/ar/docs/api/game-scripts.html#tick-rate">معدل القراد</a> لا يكسب شيئًا، لأن المدخلات بين علامتين تندمج في
+واحد. أرسل بمعدل التجزئة الخاص بك، أو عندما يتغير الإدخال.</p>
+<p><strong>أوامر دائمة للبرامج النصية</strong> تتم معالجتها بالترتيب وتكون محدودة بشكل منفصل عن الوقت الفعلي
+المدخلات. إرسال إجراءات منفصلة عند حدوثها؛ إرسال حركة مستمرة من خلال الوقت الحقيقي المحدد
+مسار الإدخال. قد يختلف حد الأوامر حسب اللعبة. استدعاءات البرنامج النصي مقيدة أيضًا بدعوات اللعبة
+<a href="/ar/docs/api/game-scripts.html#budgets">الميزانيات</a>. يحمل إطار خطأ WebSocket رسالة، وليس حالة HTTP.
+يجب أن يرفض البرنامج النصي الخاص بك الأوامر التي لا معنى لها، مثل الابتعاد عن الدور.</p>
+<p>ل <strong>حاوية</strong> اللعبة، يتم ترحيل الأوامر إلى الحاوية الخاصة بك عند وصولها، بدون منصة
+حد المعدل عليهم. الخادم الخاص بك يفرض نفسه. ينطبق تحديد معدل الإدخال في الوقت الفعلي على البرامج النصية
+الألعاب فقط.</p>
+<h3 id="elo-per-match">إيلو لكل مباراة</h3>
+<p>المنصة تفعل ذلك <strong>لا</strong> تحديد المدى الذي يمكن أن يتحرك فيه التصنيف في مباراة واحدة. <code>eloUpdates</code> (السيناريو) و
+<code>elo</code> رسالة التحكم (الحاوية) تحمل كل لاعب <strong>تصنيف مطلق جديد</strong>، وليس التغيير، و
+منصة تطبقها كما أرسلت. ما الذي يفرضه:</p>
+<ul>
+<li><strong>اللاعبين فقط في الدورة</strong> يتم تحديثها. يتم إسقاط معرفات أي شخص آخر ومقعد الذكاء الاصطناعي.</li>
+<li>يتم تطبيق التحديثات عندما يقوم الخادم الخاص بك بإرجاعها. جلسة ال <strong>منصة</strong> ينتهي
+(<code>abandoned</code>: اللاعبون اليسارون، الخمول، تم استبدالهم، فشل الخادم، انتهى من قبل المالك) ينشر <strong>لا</strong>
+تغيير إيلو.</li>
+<li>يتم كتابة التصنيف في العمود التوفيق بين الأزواج، وعلى لوحة elo الخاصة باللعبة كواحد
+الدخول لكل لاعب (أحدث تقييم لهم).</li>
+<li>يمكن لصاحب اللعبة <a href="/ar/docs/api/leaderboards.html#resetting-a-players-rating">إعادة تعيين تقييم لاعب واحد</a> إلى 1200.</li>
+</ul>
+<p>لذا فإن حجم الأرجوحة هو القرار الذي ستتخذه لعبتك. استخدم عامل K القياسي والمشبك في التعليمات البرمجية الخاصة بك. ال
+<a href="#example-chess-command-shapes">تنفيذ مرجع الشطرنج</a> يستخدم K = 32، لذلك تتحرك لعبة واحدة أ
+التقييم بـ 32 نقطة على الأكثر:</p>
+<pre><code class="language-js">function eloAfter(mine, theirs, score /* 1 win, 0.5 draw, 0 loss */, K = 32) {
+  const expected = 1 / (1 + Math.pow(10, (theirs - mine) / 400));
+  const next = mine + K * (score - expected);
+  return Math.round(Math.max(100, next));      // your floor, if you want one
+}
+</code></pre>
+<h2 id="owner-diagnostics-and-webhooks">تشخيصات المالك وخطافات الويب</h2>
+<p>المالك فقط. لا يمكن لرمز الإطلاق المميز على مستوى اللعبة الوصول إلى هذه العناصر.</p>
+<h3 id="get-apiv1gamesslugdiagnostics"><code>GET /api/v1/games/{slug}/diagnostics</code></h3>
+<p>لقطة من الجلسات المباشرة (الاتصالات النشطة والمنتهية والمباشرة)، وقياس البرنامج النصي مقابل وحدة المعالجة المركزية/
+ميزانيات الذاكرة/البيان، وقائمة انتظار التوفيق (أطول فترة انتظار ومدى اتساعها)،
+وصحة نقطة النهاية عبر الويب.</p>
+<h3 id="webhooks">خطافات الويب</h3>
+<p><code>GET/POST/DELETE /api/v1/games/{slug}/webhooks</code> و <code>POST .../{id}/resume</code>. ما يصل إلى 5 نقاط النهاية لكل
+لعبة. الأحداث: <code>session.created</code>, <code>session.finished</code> (حذف <code>events</code> للاشتراك في كليهما). ال
+يتم إرجاع سر التوقيع <strong>مرة واحدة</strong>، على الخلق.</p>
+<p>تنشر المنصة JSON مع:</p>
+<ul>
+<li><code>X-Starhermit-Signature: t=&lt;unix&gt;,v1=&lt;hmac-sha256&gt;</code> زيادة <code>"&lt;t&gt;.&lt;body&gt;"</code></li>
+<li><code>X-Starhermit-Event-Id</code> - الحدث (مفتاح العجز، يتكرر عبر المحاولات)</li>
+<li><code>X-Starhermit-Delivery</code> - هذه المحاولة</li>
+</ul>
+<p>يجب أن يكون عنوان URL https ويجب ألا يتحول إلى نطاق خاص / استرجاع / CGNAT (تم تحديده في
+التسجيل ومرة أخرى قبل كل إرسال). لا يتم اتباع عمليات إعادة التوجيه. نقاط النهاية الفاشلة تتراجع
+ويتم تعطيلها بعد حالات الفشل المتتالية؛ <code>resume</code> يمسح الكسارة.</p>
+<h3 id="runtime-timing">توقيت وقت التشغيل</h3>
+<p>بالنسبة لألعاب JavaScript، يتم تشغيل النظام الأساسي <code>onTick</code> الاحتلالات في معدل فرضت المطلوبة من خلال
+<code>game.tickRateHz</code>; <code>0</code> تعطيل القراد، ويتم وضع علامة على اللعبة التي لا تطلب شيئًا <strong>0.25 هرتز</strong> —
+أعلن عن السعر إذا كانت طريقة لعبك تعتمد على علامة التجزئة. تقود الحاوية حلقة المحاكاة الخاصة بها و
+تعلن عن المعدل المطلوب من خلال <code>/describe</code>; تستخدم المنصة هذا المعدل للجدولة و
+سياسة لقطة، وليس لخطوة اللعبة. يرى <a href="/ar/docs/api/game-scripts.html#tick-rate">نصوص اللعبة - معدل القراد</a> و
+<a href="/ar/docs/api/container-games.html#protocol-v1">خوادم ألعاب الحاويات</a>.</p>
+<h2 id="lifecycle-of-a-game">دورة حياة اللعبة</h2>
+<ol>
+<li><strong>صك رمز الإطلاق</strong> — <code>POST /api/v1/games/{slug}/launch-token</code>. يجب على العملاء تحديثه قبل انتهاء الصلاحية (يتم تحديث العميل المرجعي للشطرنج كل 45 دقيقة).</li>
+<li><strong>جلب حالة اللعبة</strong> — <code>GET /api/v1/games/{slug}</code> للحصول على معلومات + إحصائياتك؛ <code>GET .../sessions/mine</code> للألعاب الجارية؛ <code>GET .../invites</code> و <code>GET /api/v1/realtime/rooms/invites</code> للدعوات المعلقة؛ <code>GET .../replays/mine</code> للتاريخ متى <code>replaysEnabled</code>; <code>GET .../achievements</code> لشاشة الإنجاز.</li>
+<li><strong>العثور على الخصم</strong>، إحدى الطرق الثلاث:
+<ul>
+<li><strong>التوفيق:</strong> <code>POST .../matchmaking</code>، ثم الاستطلاع <code>GET .../matchmaking</code> كل 3 ثواني حتى <code>status</code> يكون <code>matched</code> (الرد يحمل <code>sessionId</code>). <code>DELETE .../matchmaking</code> للإلغاء.</li>
+<li><strong>تدفق الدعوة:</strong> اختر صديقًا من <code>GET /api/v1/me/friends</code> (يرى <a href="/ar/docs/api/friends.html">أصدقاء</a>), <code>POST .../invites</code> مع <code>{ "toUserId": "..." }</code>; يدعو المدعو <code>POST .../invites/{inviteId}/accept</code>، مما يؤدي إلى إنشاء الجلسة. (إذا كانت لعبتك تتسع للاعبين في ملف <a href="/ar/docs/api/realtime.html">غرفة الوقت الحقيقي</a> أولاً، قم بدعوتهم إلى الغرفة بدلاً من ذلك - نفس الإشعار، ولكن القبول يضعهم على الطاولة التي تتواجد فيها بالفعل.)</li>
+<li><strong>ممارسة الذكاء الاصطناعي:</strong> <code>POST .../sessions/ai</code>.</li>
+</ul>
+</li>
+<li><strong>قم بتحميل الجلسة</strong> — <code>GET .../sessions/{sessionId}</code>.</li>
+<li><strong>قم بتوصيل WebSocket</strong> — <code>ws/v1/games?sessionId={guid}</code> باستخدام رمز الإطلاق، ثم أرسل أي أمر مزامنة أولية تحدده الواجهة الخلفية للعبة - على سبيل المثال، يرسل تطبيق مرجع الشطرنج <code>{"type":"cmd","data":{"type":"sync"}}</code>.</li>
+<li><strong>يلعب</strong> - تبادل <code>cmd</code>/<code>game</code> الإطارات كما هو محدد بواسطة الواجهة الخلفية والسطح <code>achievement</code> الإطارات، والتعامل معها <code>resumed</code> عن طريق تجاهل التنبؤ وطلب الحالة الكاملة.</li>
+<li><strong>نتيجة</strong> - الواجهة الخلفية الرسمية تنهي اللعبة؛ تنشر المنصة تحديثات elo للوحة المتصدرين ولعبة بها <a href="#replays">الاعادة</a>، أرشفة الحالة النهائية.</li>
+<li><strong>إعادة التشغيل</strong> — <code>GET .../replays/{sessionId}</code> للحالة النهائية الكاملة.</li>
+</ol>
+<h3 id="example-chess-command-shapes">مثال: أشكال أوامر الشطرنج</h3>
+<p>وأشكال الحمولة التالية هي المثال: كيفية لعب الشطرنج <a href="https://github.com/HypeDriven/starhermit-chess">التنفيذ المرجعي</a> يملأ <code>data</code>. <strong>يتم تعريفها من خلال نص الشطرنج، وليس من خلال المنصة</strong> - تحدد كل لعبة مجموعة الأوامر الخاصة بها وحمولات البث في الواجهة الخلفية الرسمية الخاصة بها. مغلف أمر العميل هو <code>cmd</code>; تتضمن مظاريف الخادم الشائعة <code>game</code>, <code>error</code>, <code>presence</code>، و <code>achievement</code>، مع <code>resumed</code>/<code>abandoned</code> تستخدم بالإضافة إلى ذلك لاستعادة الحاويات. محتويات <code>data</code> مملوكة للواجهة الخلفية.</p>
+<p>أوامر العميل (المرسلة باسم <code>{"type":"cmd","data":{...}}</code>):</p>
+<pre><code class="language-json">{ "type": "move", "from": "e2", "to": "e4", "promo": "q" }
+{ "type": "resign" }
+{ "type": "offer-draw" }
+{ "type": "accept-draw" }
+{ "type": "decline-draw" }
+{ "type": "sync" }
+</code></pre>
+<p>(<code>promo</code> اختياري على <code>move</code>.)</p>
+<p>رسائل الخادم (يتم تسليمها بتنسيق <code>{"type":"game","data":{...}}</code>):</p>
+<pre><code class="language-json">{
+  "type": "state",
+  "white": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "black": "9b2f8c1a-1111-4222-8333-444455556666",
+  "ratings": { "white": 1200, "black": 1187 },
+  "board": "RNBQKBNRPPPPPPPP................................pppppppprnbqkbnr",
+  "turn": "w",
+  "moves": [],
+  "status": "active",
+  "result": null,
+  "deadline": 1784642591000,
+  "drawOfferBy": null,
+  "ai": false,
+  "aiName": null
+}
+</code></pre>
+<pre><code class="language-json">{ "type": "moved", "...": "move details + updated state" }
+{ "type": "draw-offered" }
+{ "type": "draw-declined" }
+{ "type": "game-over", "result": { "kind": "white-win", "reason": "checkmate", "at": "2026-07-20T15:42:37Z" }, "view": { "...": "final state view" } }
+</code></pre>
+<p>يرى <a href="/ar/docs/api/game-scripts.html">مخطوطات اللعبة</a> لكيفية تعريف البرنامج النصي لهذه الرسائل، و <a href="/ar/docs/tutorials/chess-walkthrough.html">تجول الشطرنج</a> لبناء نهاية إلى نهاية.</p>
+<p>يرى <a href="/ar/docs/credentials.html">التوافق الاعتماد</a> و <a href="/ar/docs/api/contracts.html">العقود المقروءة آليا</a>.</p>
+
+{% endraw %}
