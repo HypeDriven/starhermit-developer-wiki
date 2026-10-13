@@ -103,7 +103,9 @@ patterns, not the subject of the docs.
 - `docs/tutorials/game-localization.md` — the recommended ten-language game localization policy;
   native labels and local SVG flags, a Language section alongside Graphics/Audio/Controls, Automatic
   versus explicit selection, translation packs/fallbacks, RTL/shaping, and `ui.language` per-player
-  settings with error-aware reads/writes. Includes a settings-menu SVG and browser UI/API examples.
+  settings with error-aware reads/writes. Covers the read-only platform language endpoint for games,
+  dashboard profile get/set access, and account preference before device fallback in Automatic mode.
+  Includes a settings-menu SVG and browser UI/API examples.
 - `docs/tutorials/*.md` — `browser-quickstart` (download, local play, publication, account and untracked
   entry paths, terms and conflict checks), `cloud-save-sync` (format validation/migration, ETags,
   conflicts, quotas, checkpoints and page-exit limits), `chess-walkthrough` (the full lifecycle from launch token to replay viewer),

@@ -4,7 +4,8 @@ Give your game a **Language** section in its settings menu, alongside
 [Graphics](graphics-options.md), [Audio](audio-options.md), and [Controls](game-controls.md).
 Make it available from the main menu and during play. Use the same language set and image-based
 flag selector as the StarHermit website and developer wiki. These are game-side recommendations;
-StarHermit stores your preference but does not translate the game or supply a built-in language menu.
+StarHermit stores a platform-wide preferred language and each game's own language choice, but does
+not translate the game or supply a built-in language menu.
 
 ## Supported languages and labels
 
@@ -38,7 +39,7 @@ ship separate `pt-PT` or Traditional Chinese packs when you support those varian
 
 ![A game settings menu includes Language alongside Graphics, Audio, and Controls. The Language section shows a flag and native name, an Automatic option, the effective language, and whether the choice is saved.](../images/game-language-settings.svg)
 
-Use **Settings → Language → Game language**. Include **Automatic (system language)** and show its
+Use **Settings → Language → Game language**. Include **Automatic (account or system language)** and show its
 resolved language, such as **Automatic — English**. Keep the current choice visible when the
 selector is closed. The diagram shows an explicit English selection.
 
@@ -50,8 +51,9 @@ The section should offer the following behavior:
 - Use a keyboard-accessible dropdown or disclosure, with visible focus, touch targets, and a
   scrollable list. Support the game's controller navigation as well. Close on Escape and outside
   clicks; keep native language names readable even when the rest of the interface changes.
-- Keep **Automatic** distinct from an explicit choice. Store `auto`, not the detected language, so
-  another device can use its own system language. An explicit choice must win over detection.
+- Keep **Automatic** distinct from an explicit choice. Store `auto`, not the resolved language, so
+  the game follows the account preference, falling back to the device's language when needed.
+  An explicit game choice must win over the account preference and detection.
 - Show the effective language and persistence state: **Saved to account**, **Saved on this device**,
   or **Account sync unavailable**. Translate these messages too; do not report a failed upload as saved.
 
@@ -69,7 +71,7 @@ For a browser game, a disclosure with real flag images can look like this. Copy 
     </summary>
     <div aria-labelledby="game-language-label">
       <button type="button" data-language="auto" data-i18n="settings.automatic">
-        Automatic (system language)
+        Automatic (account or system language)
       </button>
       <button type="button" data-language="en">
         <img src="flags/gb.svg" width="21" height="14" alt="">
@@ -101,7 +103,7 @@ fragments or inserting user data into translation source strings.
 {
   "settings.language": "Language",
   "settings.gameLanguage": "Game language",
-  "settings.automatic": "Automatic (system language)",
+  "settings.automatic": "Automatic (account or system language)",
   "settings.saved": "Saved to account",
   "hud.coins": "{count} coins"
 }
@@ -115,8 +117,14 @@ units, currency amounts, and game rules unchanged.
 Resolve the language in this order:
 
 1. A valid explicit choice from the player's game settings, or their current unsynced choice.
-2. For `auto`, the first supported match from the device's language preferences.
-3. English when no supported match exists; also fall back to English for individual missing keys.
+2. For `auto` or no saved choice, a supported match for the platform's `preferredLanguage`.
+3. The first supported match from the device's language preferences when the account preference
+   is unavailable or unsupported, including unsigned play.
+4. English when no supported match exists; also fall back to English for individual missing keys.
+
+The account preference defaults to `en`, so an authenticated player who has never changed it starts
+in English under this policy. Fetch failures must not overwrite a saved game choice or the account
+preference. An explicit selection in the game's menu remains a per-game override.
 
 Match locale tags case-insensitively, preferring an exact supported region/script before a configured
 base-language fallback. Map generic `zh` or `zh-Hans` to the Simplified pack only when that is your
@@ -151,10 +159,72 @@ For canvas or engine HUDs, use its supported shaping and bidirectional-text path
 cannot fix a renderer that treats text as unrelated glyphs. Allow longer labels and subtitles to wrap.
 Refresh text through render hooks when the language changes, avoiding a full UI scan every frame.
 
+## Read the platform's preferred language
+
+After sign-in and terms acceptance, a game reads the player's platform preference with its launch
+token. REST uses the normal API host and bearer header:
+
+```http
+GET https://api.starhermit.com/api/v1/me/language
+Authorization: Bearer <player-launch-token>
+```
+
+```json
+{ "preferredLanguage": "fr-CA" }
+```
+
+This response contains only the language preference, not the player's full profile. Ordinary user
+tokens can also read it; container server tokens cannot because they do not represent a player.
+Anonymous requests receive 401. Game launch tokens have read-only access: they cannot change the
+platform preference or read the full profile.
+
+With the [browser SDK](../sdk/javascript.md), after `StarHermit.init()` and the normal sign-in/terms flow:
+
+```js
+// Fetch once for the signed-in player; refresh when returning from account settings.
+// Unsigned play uses device language preferences instead of account API requests.
+let platformLanguage = null;
+if (StarHermit.signedIn) {
+  try {
+    const preference = await StarHermit.api('/api/v1/me/language');
+    if (typeof preference?.preferredLanguage === 'string') {
+      platformLanguage = preference.preferredLanguage;
+    }
+  } catch {
+    // Leave the account preference unavailable and use the fallback order above.
+  }
+}
+```
+
+Match `platformLanguage` against the packs you ship; a returned tag does not guarantee that your
+game supports it. Refetch and discard cached values when the signed-in player changes. Changing
+the language in the game saves only that game's override, described below.
+
+### Dashboard get/set access
+
+The dashboard reads `preferredLanguage` from `GET /api/v1/me` with `user.profile.read` permission,
+and changes it through the existing profile endpoint with `user.profile.update` permission:
+
+```http
+PATCH https://api.starhermit.com/api/v1/me
+Authorization: Bearer <dashboard-user-access-token>
+Content-Type: application/json
+
+{ "preferredLanguage": "fr-CA" }
+```
+
+A successful update returns 204 with no body. New and existing accounts default to `en`. Values
+must be language tags of at most 64 characters, such as `en`, `fr-CA`, or `zh-Hant`. The API trims
+surrounding whitespace and normalizes casing (`zh-hant-tw` becomes `zh-Hant-TW`). Empty or invalid
+values return 400; an omitted field or JSON null leaves the preference unchanged. Keep `auto` in
+the game's own settings and send an actual language tag from the dashboard. Game tokens cannot use
+this profile write endpoint, even if they carry profile permission claims.
+
 ## Save the choice through StarHermit
 
-Use the game's [per-player settings](../api/games.md#per-player-game-settings), not cloud-save progress
-or an account-wide profile field. A player launch token can read and write settings for its own game;
+Save an explicit game choice or `auto` in the game's
+[per-player settings](../api/games.md#per-player-game-settings), separately from the platform preference
+and cloud-save progress. A player launch token can read and write settings for its own game;
 this does not need a gameplay server or a manifest language declaration.
 
 A suggested game-owned key is `ui.language`, with a value such as `{ "choice": "fr" }` or
@@ -205,7 +275,9 @@ policy for local preference storage. Never upload defaults just because a read f
 Test every supported language on desktop and a narrow touch screen, including all start-screen
 variants, pause/settings menus, dynamic HUD messages, dialogs, tutorials, and error paths. Verify
 SVG flags on a device that lacks emoji-flag support, keyboard/controller selection, saved explicit
-choices, and Automatic on a device with a different system language. Test Arabic/Urdu shaping and
+choices, Automatic with a different account preference, and device fallback when the preference is
+unsupported or its read fails. Confirm a game choice does not change the platform preference and
+game tokens cannot write it. Test Arabic/Urdu shaping and
 mixed-direction player names, long labels, plural counts, missing keys/fonts, unavailable storage,
 failed account reads/writes, rapid selections, and account switching. Language changes must leave
 progress, match state, and gameplay connections intact.
