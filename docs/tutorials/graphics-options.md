@@ -4,6 +4,7 @@ Give your browser game a **Graphics** menu that picks a sensible quality level f
 on first launch, lets them override it, and remembers their choice across devices through StarHermit.
 
 For the corresponding Audio section, see [audio options with an auto-detected sound limit](audio-options.md).
+For a Language section, see [localize your game and add language settings](game-localization.md).
 
 [`graphics-options.js`](../sdk/graphics-options.js) is a single ES module, with no dependencies, that
 handles the bookkeeping:

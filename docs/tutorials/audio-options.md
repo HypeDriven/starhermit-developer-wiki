@@ -4,6 +4,7 @@ Give your game an **Audio** section alongside [Graphics](graphics-options.md), a
 main menu and during play. Start with the baseline below, let players override it, and enforce a
 maximum number of simultaneous playback instances to keep mixing and spatialization work bounded.
 These are recommended game-side defaults, not settings the platform enforces.
+Add a [Language section](game-localization.md) alongside these controls for translation selection.
 
 [`audio-options.js`](../sdk/audio-options.js) supplies dependency-free helpers for volume curves,
 settings validation and a conservative Auto sound limit. It creates no audio context, microphone

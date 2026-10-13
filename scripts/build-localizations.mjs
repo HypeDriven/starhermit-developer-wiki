@@ -55,7 +55,7 @@ async function markdownFiles(dir) {
 function segments(document, svg = false) {
   const result = [];
   function visit(node) {
-    if (node.nodeType === 1 && /^(PRE|CODE|SCRIPT|STYLE|SAMP|KBD)$/i.test(node.tagName)) return;
+    if (node.nodeType === 1 && (/^(PRE|CODE|SCRIPT|STYLE|SAMP|KBD)$/i.test(node.tagName) || node.getAttribute('translate') === 'no')) return;
     if (node.nodeType === 3) {
       const original = node.data.trim();
       if (/[a-z]{2}/i.test(original) && !/^https?:\/\//.test(original) && !/^[\w-]+\.(md|js|json|html|svg|txt)$/.test(original)) {

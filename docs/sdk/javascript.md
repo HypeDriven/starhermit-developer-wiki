@@ -139,6 +139,10 @@ For an Audio section, see [audio options with an auto-detected sound limit](../t
 recommended volume and voice controls, the pure [`audio-options.js`](audio-options.js) helpers,
 and a playback cap enforced by your mixer.
 
+For a Language section, see [localize your game and add language settings](../tutorials/game-localization.md):
+ten-language translation packs, SVG flags, right-to-left layouts, and a `ui.language` preference stored
+with the game's settings. Use `api()` when you need to surface settings read/write failures.
+
 ## Multiplayer, invites and social
 
 Session gameplay, matchmaking, game achievements, leaderboards, and replays need a server

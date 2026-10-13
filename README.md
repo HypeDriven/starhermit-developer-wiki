@@ -74,6 +74,9 @@ not the subject of the docs.
 - **[Tutorial: audio options with an auto-detected sound limit](docs/tutorials/audio-options.md)** —
   baseline volume and voice-chat controls, a CPU-aware Auto concurrency recommendation, and a bounded
   playback policy; includes the dependency-free [`audio-options.js`](docs/sdk/audio-options.js) helper.
+- **[Tutorial: localize your game and add language settings](docs/tutorials/game-localization.md)** —
+  the same ten languages as the wiki, native labels and SVG flags, a Language section alongside
+  Graphics/Audio/Controls, right-to-left text, translation packs, and per-player preference syncing.
 - **[Tutorial: add controls to your game](docs/tutorials/game-controls.md)** — declare rebindable
   keyboard actions in `starhermit.txt`, publish them, read the player's bindings with the launch token,
   build a rebinding screen, and fix `"This game declares no controls."`.

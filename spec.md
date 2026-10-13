@@ -11,7 +11,7 @@ shared `_layouts/wiki.html` layout with a dark-by-default granite palette, an op
 mode, responsive navigation, and a generated page outline. CSS and JavaScript live under `assets/`;
 relative Markdown links are converted by `jekyll-relative-links`. Static accessible SVG diagrams in
 `docs/images/` illustrate integration choices, hosted-game sign-in, cloud-save concurrency, multiplayer
-routing, client publication, and session lifecycle, and remain viewable in source Markdown. `npm test` validates
+routing, client publication, session lifecycle, and game language settings, and remain viewable in source Markdown. `npm test` validates
 document links, API contracts, helpers and examples; `npm run test:browser` checks the runnable
 quickstart. Pushing the repository publishes it through GitHub Pages.
 
@@ -22,7 +22,7 @@ and second-language speakers in the Ethnologue 2026 ranking. Local SVG country f
 which also works without JavaScript. Flags render as images rather than relying on emoji fonts.
 English remains at its existing URLs;
 the nine other locales have static pages at `/<language>/` and `/<language>/docs/...html`, generated
-under `l10n/`. All 45 public documents, navigation labels, accessibility labels, and six SVG diagrams
+under `l10n/`. All 46 public documents, navigation labels, accessibility labels, and seven SVG diagrams
 are translated. Arabic and Urdu use right-to-left layouts; code remains left-to-right. Heading IDs,
 code examples, API identifiers, downloadable examples, and contracts retain their original values.
 Links and the language selector keep readers on the corresponding page and preserve section anchors.
@@ -100,6 +100,10 @@ patterns, not the subject of the docs.
   the documented API from an engine; they do not restate the API itself.
 - `docs/sdk/cloud-save-store.js` — the standalone raw-JSON save recipe: validates before adoption,
   conditional writes, read/conflict failure blocks, and ambiguous-write recovery.
+- `docs/tutorials/game-localization.md` — the recommended ten-language game localization policy;
+  native labels and local SVG flags, a Language section alongside Graphics/Audio/Controls, Automatic
+  versus explicit selection, translation packs/fallbacks, RTL/shaping, and `ui.language` per-player
+  settings with error-aware reads/writes. Includes a settings-menu SVG and browser UI/API examples.
 - `docs/tutorials/*.md` — `browser-quickstart` (download, local play, publication, account and untracked
   entry paths, terms and conflict checks), `cloud-save-sync` (format validation/migration, ETags,
   conflicts, quotas, checkpoints and page-exit limits), `chess-walkthrough` (the full lifecycle from launch token to replay viewer),

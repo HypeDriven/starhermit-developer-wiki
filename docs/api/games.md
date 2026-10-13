@@ -218,7 +218,8 @@ Launch-token writes are intentional, so a hosted game may provide its own rebind
 
 Where your game keeps **its own options** for a player — master volume, graphics detail, subtitle
 size, preferred camera, last chosen loadout — so they follow that player to any machine they sign in
-from. A key/value store scoped to one player and one game.
+from. A key/value store scoped to one player and one game. For a Language section alongside Graphics,
+Audio, and Controls, see [localize your game and add language settings](../tutorials/game-localization.md).
 
 **Nothing declares a schema.** The platform stores your keys and your values and never reads them,
 so you add an option by writing it: no manifest entry, no redeploy, no platform release. That also

@@ -29,7 +29,7 @@ async function visitPages(callback){
   }
 }
 
-test('all ten languages have complete navigation and all 405 translated pages are current',()=>{
+test('all ten languages have complete navigation and all translated pages are current',()=>{
   assert.deepEqual(Object.keys(locales),languages.map(l=>l.code));
   assert.equal(generated.size,english.documents.length*9);
   for(const language of languages){
@@ -75,7 +75,7 @@ test('internal links retain the locale and resolve, including downloads and sect
   });
 });
 
-test('all six diagrams have translated text, stable geometry, and valid source fingerprints',async()=>{
+test('all diagrams have translated text, stable geometry, and valid source fingerprints',async()=>{
   for(const source of english.images){
     assert.equal(manifest.images[source.name],source.hash);
     for(const lang of languages.slice(1)){
