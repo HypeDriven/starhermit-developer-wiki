@@ -38,18 +38,20 @@ gesture and handle suspended contexts; unavailable audio must leave the game pla
 
 ## 2. Auto-detect a sensible concurrency limit
 
-Use CPU and memory hints, independently of the graphics preset or GPU. The starting policy is:
+Use device-type, CPU and memory hints, independently of the graphics preset or GPU. The starting policy is:
 
 | Available hints (evaluate top to bottom) | Starting count |
 |---|---|
-| At most two logical CPUs, or at most 2 GB reported memory | 16 |
+| A phone or tablet, at most two logical CPUs, or at most 2 GB reported memory | 16 |
 | At least four logical CPUs, without the above constraint | 64 |
 | Unknown capability, or fewer than four CPUs without the above constraint | 32 |
 
 The reference helper caps these counts at the game's hard ceiling, **64 by default**, and bounds
 custom ceilings to 1–256. A developer can allow 128 or 256 manually after profiling the game; Auto
 does not pick these from core count alone. A smaller game can set a ceiling of 16 or 32.
-Missing or invalid hints remain unknown. These numbers are initial heuristics, not measured hardware
+A phone or tablet is one whose browser reports Chromium's mobile hint or a touch screen as the primary
+(coarse) pointer, the same signal the graphics module uses; it starts at 16 whatever its core count, to
+limit heat and battery drain. Missing or invalid hints remain unknown. These numbers are initial heuristics, not measured hardware
 capacity: [logical CPU counts may be reduced by the browser](https://html.spec.whatwg.org/multipage/system-state.html#dom-navigator-hardwareconcurrency),
 and [memory hints are approximate and privacy restricted](https://www.w3.org/TR/device-memory/).
 
@@ -154,7 +156,7 @@ session membership and current microphone activity local; store the preferred vo
 from whether capture is currently enabled.
 
 - `node --test tests/audio-options.test.mjs` checks the shipped helper's unknown/constrained/stronger
-  detection, ceilings, manual choices, Auto on another device, volume bounds and voice defaults.
+  and phone/tablet detection, ceilings, manual choices, Auto on another device, volume bounds and voice defaults.
 - In your game, drive the real controls with mouse, keyboard and touch; check live volume changes,
   mute restoration, persistence and Auto/manual switching after reload.
 - Trigger overlapping music, effects, voice, fades and scheduled sounds beyond the limit. Confirm

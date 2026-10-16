@@ -12,9 +12,12 @@ const ceilingFor = value => positive(value) ? Math.max(1, Math.min(256, Math.flo
 /** Browser hints only. Unknown values remain unknown; no audio or permission prompt. */
 export function detectAudioSystem(env = globalThis) {
   const nav = env.navigator || {};
+  let coarse = false; // a touch screen as the primary pointer: a phone or tablet
+  try { coarse = !!env.matchMedia?.('(pointer: coarse)').matches; } catch { /* no media queries */ }
   return {
     cores: positive(nav.hardwareConcurrency) ? nav.hardwareConcurrency : null,
     memoryGb: positive(nav.deviceMemory) ? nav.deviceMemory : null,
+    mobile: !!nav.userAgentData?.mobile || coarse,
   };
 }
 
@@ -22,7 +25,8 @@ export function detectAudioSystem(env = globalThis) {
 export function recommendConcurrentSounds(system = {}, ceiling = 64) {
   const cores = positive(system.cores) ? system.cores : null;
   const memory = positive(system.memoryGb) ? system.memoryGb : null;
-  const constrained = (cores !== null && cores <= 2) || (memory !== null && memory <= 2);
+  // Phones and tablets start at 16 whatever their core count: heat, battery and shared audio threads.
+  const constrained = system.mobile === true || (cores !== null && cores <= 2) || (memory !== null && memory <= 2);
   const count = constrained ? 16 : cores !== null && cores >= 4 ? 64 : 32;
   return Math.min(count, ceilingFor(ceiling));
 }

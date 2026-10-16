@@ -68,11 +68,12 @@ not the subject of the docs.
   through the API, post scores and unlock achievements from your script or container, and show
   them in your client.
 - **[Tutorial: graphics options with auto-detected quality](docs/tutorials/graphics-options.md)** —
-  drop in [`graphics-options.js`](docs/sdk/graphics-options.js): quality presets picked from the
-  player's hardware, per-effect overrides, adaptive resolution, a manual maximum FPS option, an options panel, and settings that
+  drop in [`graphics-options.js`](docs/sdk/graphics-options.js): quality presets picked from a 0–20
+  hardware level (Galaxy S20 to RTX 5090), per-effect overrides, adaptive resolution, half-refresh pacing on
+  phones, a manual maximum FPS option, an options panel, and settings that
   follow the player per GPU through StarHermit; wired to a three.js renderer.
 - **[Tutorial: audio options with an auto-detected sound limit](docs/tutorials/audio-options.md)** —
-  baseline volume and voice-chat controls, a CPU-aware Auto concurrency recommendation, and a bounded
+  baseline volume and voice-chat controls, a device- and CPU-aware Auto concurrency recommendation, and a bounded
   playback policy; includes the dependency-free [`audio-options.js`](docs/sdk/audio-options.js) helper.
 - **[Tutorial: localize your game and add language settings](docs/tutorials/game-localization.md)** —
   the same ten languages as the wiki, native labels and SVG flags, a Language section alongside

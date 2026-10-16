@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createGraphics, resolve, withPreset } from '../docs/sdk/graphics-options.js';
+import { createGraphics, detectLevel, detectPreset, presetForLevel, resolve, withPreset } from '../docs/sdk/graphics-options.js';
 
 const system = { gpu: 'NVIDIA RTX', webgl: true, webgl2: true, cores: 8, memoryGb: 8 };
 const create = (opts = {}) => createGraphics({ sdk: null, storage: null, system, ...opts });
@@ -16,6 +16,87 @@ const sample = (gfx, hz, seconds = 10) => {
   }
   return rendered;
 };
+
+test('hardware levels run from a Galaxy S20 or weaker (0) to an RTX 5090 (20)', () => {
+  const desktop = { webgl: true, webgl2: true, cores: 16, memoryGb: 8 };
+  const phone = { ...desktop, mobile: true, cores: 8 };
+  for (const [s, gpu, level, preset] of [
+    [desktop, 'ANGLE (NVIDIA, NVIDIA GeForce RTX 5090 (0x00002B85) Direct3D11 vs_5_0 ps_5_0, D3D11)', 20, 'ultra'],
+    [desktop, 'NVIDIA GeForce RTX 4090/PCIe/SSE2', 19, 'ultra'],
+    [desktop, 'ANGLE (AMD, AMD Radeon RX 7900 XTX (0x0000744C) Direct3D11 vs_5_0 ps_5_0, D3D11)', 18, 'ultra'],
+    [desktop, 'ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Ti SUPER Direct3D11 vs_5_0 ps_5_0, D3D11)', 17, 'ultra'],
+    [desktop, 'ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Ti Direct3D11 vs_5_0 ps_5_0, D3D11)', 16, 'high'],
+    [desktop, 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)', 12, 'high'],
+    [desktop, 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Laptop GPU (0x00002560) Direct3D11 vs_5_0 ps_5_0, D3D11)', 10, 'high'],
+    [desktop, 'ANGLE (NVIDIA, NVIDIA GeForce GTX 1060 6GB Direct3D11 vs_5_0 ps_5_0, D3D11)', 8, 'balanced'],
+    [desktop, 'ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)', 9, 'balanced'],
+    [desktop, 'ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)', 6, 'balanced'],
+    [desktop, 'ANGLE (Intel, Intel(R) Iris(R) Xe Graphics (0x00009A49) Direct3D11 vs_5_0 ps_5_0, D3D11)', 4, 'balanced'],
+    [desktop, 'ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)', 2, 'low'],
+    [desktop, 'ANGLE (Intel, Intel(R) UHD Graphics 620 (0x00005917) Direct3D11 vs_5_0 ps_5_0, D3D11)', 0, 'low'],
+    [desktop, 'ANGLE (NVIDIA, NVIDIA GeForce GTX 980 Direct3D11 vs_5_0 ps_5_0), or similar', 10, 'high'],
+    [desktop, 'Apple GPU', 4, 'balanced'],
+    [desktop, 'Some Future GPU', 4, 'balanced'],
+    [{ ...desktop, memoryGb: 4 }, 'NVIDIA GeForce RTX 5090', 9, 'balanced'],
+    [{ ...desktop, cores: 2 }, 'NVIDIA GeForce RTX 5090', 0, 'low'],
+    [desktop, 'Google SwiftShader', 0, 'low'],
+    [phone, 'Adreno (TM) 650', 0, 'low'],
+    [phone, 'Mali-G77 MP11', 0, 'low'],
+    [phone, 'ANGLE (Qualcomm, Adreno (TM) 640, OpenGL ES 3.2)', 0, 'low'],
+    [phone, 'Mali-G710 MC10', 2, 'low'],
+    [phone, 'Adreno (TM) 740', 5, 'balanced'],
+    [phone, 'Adreno (TM) 830', 7, 'balanced'],
+    [phone, 'Apple GPU', 0, 'low'],
+    [phone, 'An Unknown Phone GPU', 0, 'low'],
+  ]) {
+    assert.equal(detectLevel({ ...s, gpu }), level, gpu);
+    assert.equal(detectPreset({ ...s, gpu }), preset, gpu);
+  }
+  assert.equal(detectLevel({ gpu: 'NVIDIA GeForce RTX 5090', webgl: false }), 0);
+  assert.deepEqual([0, 3, 4, 9, 10, 16, 17, 20].map(l => presetForLevel(l)),
+    ['low', 'low', 'balanced', 'balanced', 'high', 'high', 'ultra', 'ultra']);
+  const own = { fast: { scale: 1, dprCap: 1 }, pretty: { scale: 1, dprCap: 2 } };
+  const gfx = create({ system: { ...desktop, gpu: 'NVIDIA GeForce RTX 3060' }, table: own, categories: {},
+    levels: { fast: 0, pretty: 12 } });
+  assert.equal(gfx.level, 12);
+  assert.equal(gfx.settings.preset, 'pretty');
+});
+
+test('phones and tablets render at half the refresh rate unless the player sets a limit', () => {
+  const phone = { ...system, gpu: 'Adreno (TM) 740', mobile: true };
+  for (const [hz, expected] of [[60, 300], [90, 450], [120, 600], [144, 720], [30, 300]]) {
+    const gfx = create({ system: phone });
+    assert.equal(gfx.settings.maxFps, 0);
+    assert.equal(gfx.settings.halfRefresh, true);
+    assert.ok(Math.abs(sample(gfx, hz).length - expected) <= 1, `${hz} Hz`);
+  }
+  // Jittered timestamps and a missed refresh still render every second refresh, never every fourth.
+  const jittered = create({ system: phone });
+  let rendered = 0;
+  for (let tick = 0; tick < 600; tick++) {
+    if (tick === 301) continue;
+    if (jittered.shouldRender(tick * 1000 / 60 + (tick % 2 ? 1.5 : -1.5))) rendered++;
+  }
+  assert.ok(Math.abs(rendered - 300) <= 1, `jittered: ${rendered}`);
+  const gfx = create({ system: phone });
+  gfx.set({ maxFps: 120 });
+  assert.equal(gfx.settings.halfRefresh, false);
+  assert.ok(Math.abs(sample(gfx, 120).length - 1200) <= 1);
+  gfx.set({ maxFps: null });
+  assert.equal(gfx.settings.halfRefresh, true);
+  assert.equal(create().settings.halfRefresh, false); // desktops keep the display's refresh rate
+});
+
+test('half-refresh pacing is not mistaken for a slow GPU', () => {
+  const gfx = create({ system: { ...system, gpu: 'Adreno (TM) 740', mobile: true } });
+  let previous = 0;
+  for (const now of sample(gfx, 60, 4).slice(1)) {
+    gfx.frame(now - previous);
+    previous = now;
+  }
+  assert.equal(gfx.adaptiveScale, 1);
+  assert.equal(gfx.fps, 30);
+});
 
 test('automatic refresh is the default and invalid saved limits restore Auto', () => {
   for (const maxFps of [undefined, null, 0, -30, NaN, Infinity, '60', {}, true]) {

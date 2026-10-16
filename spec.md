@@ -128,12 +128,14 @@ patterns, not the subject of the docs.
   in the client with a launch token, and retiring/season-rolling boards), `game-controls` (declaring
   `control.*` actions, publishing them on each publish path, verifying, a client input map and
   rebinding screen, and a troubleshooting table for the controls API's 404/400s), `graphics-options` (the shipped
-  `docs/sdk/graphics-options.js` module: hardware-detected Auto preset with a runtime step-down, per-effect
-  overrides, adaptive resolution, automatic display-refresh rendering or a persistent manual maximum FPS
+  `docs/sdk/graphics-options.js` module: a 0–20 hardware level from the reported GPU — a Galaxy S20 or
+  weaker at 0, an RTX 5090 at 20, about 23% per level — that picks the Auto preset, a runtime step-down, per-effect
+  overrides, adaptive resolution, automatic display-refresh rendering (half the refresh rate on phones
+  and tablets) or a persistent manual maximum FPS
   with a render-loop pacing hook, a ready-made panel, `localStorage` plus per-player-settings persistence keyed
   by GPU identity, restoring that GPU's choices on return and using defaults for an unseen GPU,
   and a three.js renderer wiring example), `audio-options` (baseline volume and opt-in voice controls,
-  CPU/memory-aware Auto concurrent-sound recommendations, bounded playback across all buses,
+  device/CPU/memory-aware Auto concurrent-sound recommendations (16 on phones and tablets), bounded playback across all buses,
   microphone lifecycle and settings persistence; ships pure `docs/sdk/audio-options.js` helpers with
   validation/detection tests), and `claim-existing-game` (prove repository control and take over
   an existing listing).
