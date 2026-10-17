@@ -53,8 +53,8 @@ ctx = {
   sessionId: "0f8fad5b-...",       // current session id
   pausedMs: 0,                     // persistent games only: total ms this session has spent paused
   players: [                       // session participants
-    { id: "7c9e6679-...", name: "alice" },
-    { id: "00000000-0000-4000-8000-00000000a1a1", name: "The House", ai: true }
+    { id: "7c9e6679-...", name: "alice", elo: 1312 },
+    { id: "00000000-0000-4000-8000-00000000a1a1", name: "The House", ai: true, elo: 1200 }
   ],
   sessionState: { /* ... */ },     // this script's session document, or null
   playerStates: {                  // per-player documents (elo, history), or null
@@ -72,6 +72,11 @@ ctx = {
 ```
 
 - The AI seat (if present) is flagged with `ai: true` on its player entry.
+- Each player entry carries `elo`, its current rating for this game — the same number stored in
+  `playerStates[id].elo`, surfaced on the roster so a container game (which cannot read the
+  script-only `playerStates`) can seed match logic from it. A player with no rating yet reads
+  `1200`. It is identical at create, tick, message and restore; change a rating only through
+  `eloUpdates`.
 - A game that declares `linkedAchievements` also gets `ctx.linkedAchievements`: `{ <playerId>: { <otherSlug>: [unlocked keys] } }`, re-read on every invocation. See [Achievements from other games](achievements.md#achievements-from-other-games).
 - Room-bound sessions (started from a realtime room) get two additional ctx fields, `ctx.room` and `ctx.presence`, on **every** invocation — see [Room-bound sessions](#room-bound-sessions).
 - **Trust nothing from `ctx.message.data` or `ctx.inputs[].data`.** The trusted identity is the corresponding `from`, which the server attaches from the authenticated connection — the client can never supply or spoof it.

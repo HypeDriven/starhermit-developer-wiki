@@ -4,7 +4,7 @@ lang: "es"
 title: "Juegos de GitHub"
 source_url: "/docs/api/github-games.html"
 source_path: "docs/api/github-games.md"
-source_hash: "3ac05be03d6f084237353cccfe3c7a2c060046dd000d68711193907a1b4c6263"
+source_hash: "18874cfc930238321fcafd0740bf7c9cb0e342371b34c7914a4370b28218c7fb"
 translation: "machine"
 permalink: "/es/docs/api/github-games.html"
 ---
@@ -150,8 +150,38 @@ y reemplazar el empuje del paquete. Paso a paso: <a href="/es/docs/tutorials/gam
 <tr>
 <td>CORREO</td>
 <td><code>/api/v1/me/github-games/{id}/transfer</code></td>
+<td>JWT (propietario)</td>
+<td>Ofrecer un juego a otro usuario → <code>GameTransferOfferDto</code> (el juego lo hace <strong>no</strong> moverse todavía)</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/me/github-games/transfers/incoming</code></td>
 <td>JWT</td>
-<td>Transferir un juego a otro usuario → <code>GitHubGameDto</code></td>
+<td>Ofertas a la espera de tu decisión → <code>GameTransferOfferDto[]</code></td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/me/github-games/transfers/outgoing</code></td>
+<td>JWT</td>
+<td>Ofertas que has realizado y aún puedes cancelar → <code>GameTransferOfferDto[]</code></td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/accept</code></td>
+<td>JWT (destinatario)</td>
+<td>Aceptar una propuesta; el juego es tuyo ahora → <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/decline</code></td>
+<td>JWT (destinatario)</td>
+<td>Rechazar una oferta → <code>204</code></td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/cancel</code></td>
+<td>JWT (oferente)</td>
+<td>Retirar una oferta que hiciste → <code>204</code></td>
 </tr>
 <tr>
 <td>BORRAR</td>
@@ -452,9 +482,35 @@ lo vuelve a sincronizar en lugar de devolver un conflicto.</p>
 <a href="/es/docs/tutorials/claim-existing-game.html">tutorial de reclamo paso a paso</a> para el descubrimiento, ambas pruebas
 métodos, validación, adquisición y resolución de problemas.</p>
 <h3 id="transfer-ownership">Transferir propiedad</h3>
-<p><code>POST /api/v1/me/github-games/{id}/transfer</code></p>
+<p>Una transferencia es una <strong>oferta pendiente que el destinatario acepta</strong>, no un movimiento inmediato: un juego (y sus
+bytes alojados, que cuentan en contra del destinatario) no se pueden enviar a otra cuenta sin su
+decirlo.</p>
+<p><code>POST /api/v1/me/github-games/{id}/transfer</code> (propietario) registra la oferta y devuelve un
+<code>GameTransferOfferDto</code>; el juego sigue siendo tuyo hasta que sea aceptado.</p>
 <pre><code class="language-json">{ "toUserId": "&lt;user id&gt;" }
 </code></pre>
+<pre><code class="language-jsonc">// GameTransferOfferDto
+{
+  "id": "&lt;offer id&gt;",
+  "gameId": "&lt;game id&gt;",
+  "gameTitle": "StarHermit Chess",
+  "fromUserId": "&lt;guid&gt;", "fromUsername": "alice",
+  "toUserId": "&lt;guid&gt;",   "toUsername": "bob",
+  "status": "pending",
+  "createdAt": "2026-10-17T16:00:00Z"
+}
+</code></pre>
+<ul>
+<li>El destinatario lo ve debajo <code>GET /transfers/incoming</code> y acepta con
+<code>POST /transfers/{offerId}/accept</code>. La aceptación mueve el juego <strong>ahora</strong>, comprobado en ese momento
+contra el recuento de juegos y la asignación de alojamiento del propio destinatario, por lo que se puede hacer una oferta y aún así
+no aterriza si el destinatario está en su límite. Es posible que en su lugar <code>POST /transfers/{offerId}/decline</code>.</li>
+<li>El oferente ve sus ofertas pendientes en <code>GET /transfers/outgoing</code> y puede retirar uno con
+<code>POST /transfers/{offerId}/cancel</code>.</li>
+<li>Todo se vuelve a comprobar al aceptar: un juego movido, eliminado o repuntado desde que responde la oferta
+<code>GameUnavailable</code>, y ofrecer el mismo juego nuevamente reemplaza una oferta aún pendiente, por lo que dos en vivo
+No se pueden aceptar ofertas de un juego a la vez.</li>
+</ul>
 <h3 id="push-a-game-bundle">Enviar un paquete de juegos</h3>
 <p><code>POST /api/v1/me/github-games/{id}/bundle</code> publica resultados construidos sin pedirle a StarHermit que
 clonarlo de nuevo. La persona que llama debe ser propietaria del juego registrado. enviar el <code>.tar.gz</code> bytes directamente—no
@@ -479,6 +535,9 @@ y la imagen era lo único que podía describirlo.</p>
 <code>container.memory_mb</code> o <code>container.cpu</code> y la implementación lo retoma al reiniciar; deja una perilla afuera y
 Mantiene lo que estableciste la última vez. Omitir el manifiesto por completo y nada sobre la implementación.
 cambia excepto la imagen.</p>
+<p>Un paquete cuyo <code>starhermit.txt</code> lleva un utilizable <code>name=</code> también <strong>cambia el nombre de la lista del juego</strong> a eso -
+la actualización del nombre para mostrar va junto con el impulso. Dejar <code>name=</code> eliminar (u omitir el manifiesto) para mantener
+el nombre actual.</p>
 <p>Los clientes de StarHermit crean este paquete para usted, desde una carpeta <strong>o un solo <code>.tar</code></strong>:</p>
 <ul>
 <li><strong>Archivos de clientes</strong> — la carpeta de distribución del juego, o un <code>.tar</code> de ello. Una carpeta está empaquetada debajo

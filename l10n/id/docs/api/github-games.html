@@ -4,7 +4,7 @@ lang: "id"
 title: "Permainan GitHub"
 source_url: "/docs/api/github-games.html"
 source_path: "docs/api/github-games.md"
-source_hash: "3ac05be03d6f084237353cccfe3c7a2c060046dd000d68711193907a1b4c6263"
+source_hash: "18874cfc930238321fcafd0740bf7c9cb0e342371b34c7914a4370b28218c7fb"
 translation: "machine"
 permalink: "/id/docs/api/github-games.html"
 ---
@@ -150,8 +150,38 @@ dan mengganti bundle push. Langkah demi langkah: <a href="/id/docs/tutorials/gam
 <tr>
 <td>POS</td>
 <td><code>/api/v1/me/github-games/{id}/transfer</code></td>
+<td>JWT (pemilik)</td>
+<td>Tawarkan permainan ke pengguna lain → <code>GameTransferOfferDto</code> (permainannya bisa <strong>bukan</strong> belum bergerak)</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/github-games/transfers/incoming</code></td>
 <td>JWT</td>
-<td>Mentransfer game ke pengguna lain → <code>GitHubGameDto</code></td>
+<td>Penawaran menunggu keputusan Anda → <code>GameTransferOfferDto[]</code></td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/me/github-games/transfers/outgoing</code></td>
+<td>JWT</td>
+<td>Penawaran yang telah Anda buat dan masih dapat dibatalkan → <code>GameTransferOfferDto[]</code></td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/accept</code></td>
+<td>JWT (penerima)</td>
+<td>Terima tawaran; permainan menjadi milik Anda sekarang → <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/decline</code></td>
+<td>JWT (penerima)</td>
+<td>Tolak tawaran → <code>204</code></td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/cancel</code></td>
+<td>JWT (penawaran)</td>
+<td>Tarik tawaran yang Anda buat → <code>204</code></td>
 </tr>
 <tr>
 <td>MENGHAPUS</td>
@@ -452,9 +482,35 @@ menyinkronkannya kembali daripada mengembalikan konflik.</p>
 <a href="/id/docs/tutorials/claim-existing-game.html">tutorial klaim langkah demi langkah</a> untuk penemuan, keduanya bukti
 metode, validasi, pengambilalihan, dan pemecahan masalah.</p>
 <h3 id="transfer-ownership">Mentransfer kepemilikan</h3>
-<p><code>POST /api/v1/me/github-games/{id}/transfer</code></p>
+<p>Perpindahan adalah a <strong>penawaran tertunda yang diterima penerima</strong>, bukan langkah langsung — sebuah permainan (dan itu
+byte yang dihosting, yang dihitung terhadap penerima) tidak dapat dimasukkan ke akun lain tanpa byte tersebut
+katakan-begitu.</p>
+<p><code>POST /api/v1/me/github-games/{id}/transfer</code> (pemilik) mencatat penawaran dan pengembalian a
+<code>GameTransferOfferDto</code>; permainan tetap menjadi milik Anda sampai diterima.</p>
 <pre><code class="language-json">{ "toUserId": "&lt;user id&gt;" }
 </code></pre>
+<pre><code class="language-jsonc">// GameTransferOfferDto
+{
+  "id": "&lt;offer id&gt;",
+  "gameId": "&lt;game id&gt;",
+  "gameTitle": "StarHermit Chess",
+  "fromUserId": "&lt;guid&gt;", "fromUsername": "alice",
+  "toUserId": "&lt;guid&gt;",   "toUsername": "bob",
+  "status": "pending",
+  "createdAt": "2026-10-17T16:00:00Z"
+}
+</code></pre>
+<ul>
+<li>Penerima melihatnya di bawah <code>GET /transfers/incoming</code> dan menerima dengan
+<code>POST /transfers/{offerId}/accept</code>. Penerimaan menggerakkan permainan <strong>Sekarang</strong>, diperiksa pada saat itu
+terhadap jumlah permainan dan tunjangan hosting milik penerima — sehingga penawaran tetap dapat dibuat
+gagal mendarat jika penerima berada pada batasnya. Mungkin saja sebaliknya <code>POST /transfers/{offerId}/decline</code>.</li>
+<li>Penawar melihat penawaran mereka yang tertunda di bawah <code>GET /transfers/outgoing</code> dan dapat menariknya dengan
+<code>POST /transfers/{offerId}/cancel</code>.</li>
+<li>Semuanya diperiksa ulang saat diterima: permainan dipindahkan, dihapus, atau ditunjuk kembali sejak tawaran dijawab
+<code>GameUnavailable</code>, dan menawarkan permainan yang sama lagi menggantikan tawaran yang masih menunggu keputusan, jadi dua penawaran langsung ditayangkan
+tawaran satu permainan tidak bisa keduanya diterima.</li>
+</ul>
 <h3 id="push-a-game-bundle">Dorong bundel game</h3>
 <p><code>POST /api/v1/me/github-games/{id}/bundle</code> menerbitkan keluaran yang dibuat tanpa meminta StarHermit
 mengkloningnya lagi. Penelepon harus memiliki game yang terdaftar. Kirim <code>.tar.gz</code> byte secara langsung—tidak
@@ -479,6 +535,9 @@ dan gambar adalah satu-satunya hal yang dapat menggambarkannya.</p>
 <code>container.memory_mb</code> atau <code>container.cpu</code> dan penerapan mengambilnya saat restart; tinggalkan kenop dan
 itu menyimpan apa pun yang Anda atur terakhir kali. Hilangkan seluruh manifes dan jangan tinggalkan apa pun tentang penerapannya
 berubah kecuali gambar.</p>
+<p>Seikat milik siapa <code>starhermit.txt</code> membawa sesuatu yang dapat digunakan <code>name=</code> Juga <strong>mengganti nama daftar permainan</strong> untuk itu -
+pembaruan nama tampilan berjalan seiring dengan dorongan. Meninggalkan <code>name=</code> keluar (atau hilangkan manifes) untuk disimpan
+nama saat ini.</p>
 <p>Klien StarHermit membuat bundel ini untuk Anda, dari sebuah folder <strong>atau satu <code>.tar</code></strong>:</p>
 <ul>
 <li><strong>File klien</strong> — folder distribusi permainan, atau a <code>.tar</code> itu. Sebuah folder dikemas di bawah

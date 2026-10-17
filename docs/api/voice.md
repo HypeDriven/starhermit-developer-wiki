@@ -2,7 +2,7 @@
 
 StarHermit voice provides per-conversation voice rooms over a REST API (`api/v1/voice`) plus a mixed binary/text WebSocket (`ws/v1/voice`) for audio and WebRTC signaling. All REST endpoints require authentication. Voice availability may vary. Error bodies vary; see [API conventions](conventions.md#requests-and-responses).
 
-Rooms anchor to a [chat conversation](chat.md); membership in the conversation gates everything, so chat friendship rules also govern voice (game-session conversations bypass friendship). Limits: 3 active rooms per conversation, max 10 participants per room, codec `"opus"`.
+Rooms anchor to a [chat conversation](chat.md); membership in the conversation gates everything, so chat friendship rules also govern voice (game-session conversations bypass friendship). Limits: 3 active rooms per conversation, up to 32 participants per room (the default when you omit `maxParticipants`; your value is clamped to 2–32). Each room declares a `codec` the creator sets and clients may rely on: `pcm` by default — the 20 ms/16 kHz/mono/s16 convention the relay forwards opaquely — or `opus` for a room whose participants all run an Opus-capable client. The label is forwarded, never a transform the server applies.
 
 ## REST endpoints
 
@@ -11,6 +11,7 @@ Base: `https://api.starhermit.com/api/v1/voice`.
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | POST | `/rooms` | JWT | Create a voice room for a conversation |
+| POST | `/rooms/join-or-create` | JWT | Return the conversation's oldest active room with a free seat, or create one — chosen atomically |
 | GET | `/rooms?conversationId=` | JWT | List rooms for a conversation |
 | GET | `/rooms/{roomId}` | JWT | Get a room |
 | POST | `/rooms/{roomId}/join` | JWT | Join a room (required before the WS) |
@@ -24,10 +25,14 @@ Base: `https://api.starhermit.com/api/v1/voice`.
 `POST /rooms`
 
 ```json
-{ "conversationId": "<guid>", "maxParticipants": 10 }
+{ "conversationId": "<guid>", "maxParticipants": 8, "codec": "opus" }
 ```
 
-Returns a `VoiceRoomDto`.
+`maxParticipants` (optional, clamped to 2–32; defaults to 32) and `codec` (optional, `pcm` or `opus`; anything else is read as `pcm`) are both set once at creation. Returns a `VoiceRoomDto`.
+
+### Join or create a room
+
+`POST /rooms/join-or-create` with the same body returns a `VoiceRoomDto` for the conversation's **oldest active room that still has a free seat**, or creates one when none does — decided atomically under the conversation's room lock, so two members who turn voice on at the same instant land in one room rather than two they can't hear each other across. `maxParticipants`/`codec` apply only when it creates. You still call `/rooms/{roomId}/join` on the returned room before opening the WebSocket.
 
 ### Room shape
 
@@ -40,7 +45,7 @@ Returns a `VoiceRoomDto`.
   "creatorUserId": "<guid>",
   "codec": "opus",
   "status": "Active",
-  "maxParticipants": 10,
+  "maxParticipants": 8,
   "createdAt": "2026-07-22T07:00:00Z",
   "participants": [
     {
@@ -131,7 +136,7 @@ Envelope: `{ "event": "<name>", "data": { } }`.
 
 Voice is opt-in per game session. A typical client `enable()` flow:
 
-1. `GET /api/v1/voice/rooms?conversationId=<chatConversationId>` to find an existing room, else `POST /api/v1/voice/rooms` to create one.
+1. `POST /api/v1/voice/rooms/join-or-create` with `{ "conversationId": "<chatConversationId>" }` — one call that returns the room everyone else turning voice on converges into. (You can still `GET /rooms?conversationId=` then `POST /rooms` by hand, but two clients doing that at once make two rooms.)
 2. `POST /api/v1/voice/rooms/{roomId}/join`.
 3. Open `ws/v1/voice?roomId=<guid>`.
 

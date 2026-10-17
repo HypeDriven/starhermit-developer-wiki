@@ -4,7 +4,7 @@ lang: "ur"
 title: "گٹ ہب گیمز"
 source_url: "/docs/api/github-games.html"
 source_path: "docs/api/github-games.md"
-source_hash: "3ac05be03d6f084237353cccfe3c7a2c060046dd000d68711193907a1b4c6263"
+source_hash: "18874cfc930238321fcafd0740bf7c9cb0e342371b34c7914a4370b28218c7fb"
 translation: "machine"
 permalink: "/ur/docs/api/github-games.html"
 ---
@@ -150,8 +150,38 @@ control.shoot=Space | Shoot
 <tr>
 <td>پوسٹ</td>
 <td><code>/api/v1/me/github-games/{id}/transfer</code></td>
+<td>JWT (مالک)</td>
+<td>دوسرے صارف کو گیم پیش کریں → <code>GameTransferOfferDto</code> (کھیل کرتا ہے۔ <strong>نہیں</strong> ابھی منتقل کریں)</td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/api/v1/me/github-games/transfers/incoming</code></td>
 <td>جے ڈبلیو ٹی</td>
-<td>گیم کو دوسرے صارف کو منتقل کریں → <code>GitHubGameDto</code></td>
+<td>پیشکشیں آپ کے فیصلے کا انتظار کر رہی ہیں → <code>GameTransferOfferDto[]</code></td>
+</tr>
+<tr>
+<td>حاصل کریں۔</td>
+<td><code>/api/v1/me/github-games/transfers/outgoing</code></td>
+<td>جے ڈبلیو ٹی</td>
+<td>پیشکشیں جو آپ نے کی ہیں اور اب بھی منسوخ ہو سکتی ہیں → <code>GameTransferOfferDto[]</code></td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/accept</code></td>
+<td>JWT (وصول کنندہ)</td>
+<td>ایک پیشکش قبول کریں؛ کھیل اب آپ کا ہو جاتا ہے → <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/decline</code></td>
+<td>JWT (وصول کنندہ)</td>
+<td>پیشکش مسترد کریں → <code>204</code></td>
+</tr>
+<tr>
+<td>پوسٹ</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/cancel</code></td>
+<td>JWT (پیشکش)</td>
+<td>اپنی پیش کش کو واپس لیں → <code>204</code></td>
 </tr>
 <tr>
 <td>حذف کریں۔</td>
@@ -452,9 +482,35 @@ URL آپ نے جمع کرایا اور، جب پلیٹ فارم گیم کی می
 <a href="/ur/docs/tutorials/claim-existing-game.html">مرحلہ وار دعوی ٹیوٹوریل</a> دریافت کے لیے، دونوں ثبوت
 طریقے، توثیق، ٹیک اوور، اور خرابیوں کا سراغ لگانا۔</p>
 <h3 id="transfer-ownership">ملکیت منتقل کریں۔</h3>
-<p><code>POST /api/v1/me/github-games/{id}/transfer</code></p>
+<p>ایک منتقلی ہے a <strong>زیر التواء پیشکش وصول کنندہ قبول کرتا ہے۔</strong>، فوری اقدام نہیں - ایک کھیل (اور اس کا
+ہوسٹڈ بائٹس، جو وصول کنندہ کے خلاف شمار ہوتے ہیں) کو ان کے بغیر کسی دوسرے اکاؤنٹ میں نہیں ڈالا جا سکتا
+کہتے ہیں</p>
+<p><code>POST /api/v1/me/github-games/{id}/transfer</code> (مالک) پیشکش کو ریکارڈ کرتا ہے اور واپس کرتا ہے۔
+<code>GameTransferOfferDto</code>; کھیل آپ کا رہتا ہے جب تک اسے قبول نہیں کیا جاتا ہے۔</p>
 <pre><code class="language-json">{ "toUserId": "&lt;user id&gt;" }
 </code></pre>
+<pre><code class="language-jsonc">// GameTransferOfferDto
+{
+  "id": "&lt;offer id&gt;",
+  "gameId": "&lt;game id&gt;",
+  "gameTitle": "StarHermit Chess",
+  "fromUserId": "&lt;guid&gt;", "fromUsername": "alice",
+  "toUserId": "&lt;guid&gt;",   "toUsername": "bob",
+  "status": "pending",
+  "createdAt": "2026-10-17T16:00:00Z"
+}
+</code></pre>
+<ul>
+<li>وصول کنندہ اسے نیچے دیکھتا ہے۔ <code>GET /transfers/incoming</code> اور کے ساتھ قبول کرتا ہے
+<code>POST /transfers/{offerId}/accept</code>. قبولیت کھیل کو آگے بڑھاتی ہے۔ <strong>اب</strong>اس لمحے چیک کیا گیا۔
+وصول کنندہ کے اپنے گیم کاؤنٹ اور ہوسٹنگ الاؤنس کے خلاف — اس لیے پیشکش کی جا سکتی ہے اور پھر بھی
+اگر وصول کنندہ اپنی حد پر ہے تو اترنے میں ناکام۔ وہ اس کے بجائے ہو سکتے ہیں۔ <code>POST /transfers/{offerId}/decline</code>.</li>
+<li>پیشکش کرنے والا اپنی زیر التواء پیشکشوں کو دیکھتا ہے۔ <code>GET /transfers/outgoing</code> اور ایک کے ساتھ واپس لے سکتے ہیں۔
+<code>POST /transfers/{offerId}/cancel</code>.</li>
+<li>قبول کرنے پر ہر چیز کی دوبارہ جانچ پڑتال کی جاتی ہے: پیشکش کے جواب کے بعد گیم منتقل، ہٹایا یا دوبارہ اشارہ کیا جاتا ہے
+<code>GameUnavailable</code>, اور ایک ہی گیم کو دوبارہ پیش کرنے سے ابھی تک زیر التواء پیشکش کو ختم کر دیا جاتا ہے، لہذا دو زندہ رہتے ہیں۔
+ایک گیم کی پیشکش دونوں کو قبول نہیں کیا جا سکتا۔</li>
+</ul>
 <h3 id="push-a-game-bundle">گیم بنڈل کو پش کریں۔</h3>
 <p><code>POST /api/v1/me/github-games/{id}/bundle</code> StarHermit سے پوچھے بغیر بلٹ آؤٹ پٹ شائع کرتا ہے۔
 اسے دوبارہ کلون کریں. کال کرنے والے کو رجسٹرڈ گیم کا مالک ہونا چاہیے۔ بھیجیں۔ <code>.tar.gz</code> بائٹس براہ راست - نہیں
@@ -479,6 +535,9 @@ remove.txt         merge only: client-relative paths to delete, one per line
 <code>container.memory_mb</code> یا <code>container.cpu</code> اور تعیناتی اسے دوبارہ شروع کرنے پر اٹھا لیتی ہے۔ ایک دستک چھوڑ دو اور
 یہ جو کچھ بھی آپ نے آخری بار سیٹ کیا اسے رکھتا ہے۔ مینی فیسٹ کو مکمل طور پر چھوڑ دیں اور تعیناتی کے بارے میں کچھ بھی نہیں۔
 تصویر کے علاوہ تبدیلیاں۔</p>
+<p>ایک بنڈل جس کا <code>starhermit.txt</code> استعمال کے قابل لے جاتا ہے۔ <code>name=</code> بھی <strong>گیم کی فہرست کا نام تبدیل کرتا ہے۔</strong> اس کو -
+ڈسپلے نام کی تازہ کاری پش کے ساتھ ساتھ چلتی ہے۔ چھوڑو <code>name=</code> رکھنے کے لیے باہر (یا ظاہر کو چھوڑ دیں)
+موجودہ نام.</p>
 <p>StarHermit کلائنٹس آپ کے لیے ایک فولڈر سے یہ بنڈل بناتے ہیں۔ <strong>یا ایک <code>.tar</code></strong>:</p>
 <ul>
 <li><strong>کلائنٹ کی فائلیں۔</strong> - گیم کا ڈسٹری بیوشن فولڈر، یا a <code>.tar</code> اس کا ایک فولڈر کے نیچے پیک کیا گیا ہے۔

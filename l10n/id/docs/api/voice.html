@@ -4,14 +4,14 @@ lang: "id"
 title: "Suara"
 source_url: "/docs/api/voice.html"
 source_path: "docs/api/voice.md"
-source_hash: "b854ce844a33279125a6c44c43b800b3efef80cbcf31d1f74a9f17192fab0aef"
+source_hash: "2e62c810e7e3001d5fd08d03857a71dd55467740b6f524dbfa9ececa37f472a9"
 translation: "machine"
 permalink: "/id/docs/api/voice.html"
 ---
 {% raw %}
 <h1 id="voice">Suara</h1>
 <p>Suara StarHermit menyediakan ruang suara per percakapan melalui REST API (<code>api/v1/voice</code>) ditambah WebSocket biner/teks campuran (<code>ws/v1/voice</code>) untuk sinyal audio dan WebRTC. Semua titik akhir REST memerlukan autentikasi. Ketersediaan suara mungkin berbeda. Badan kesalahan bervariasi; melihat <a href="/id/docs/api/conventions.html#requests-and-responses">konvensi API</a>.</p>
-<p>Kamar berlabuh ke a <a href="/id/docs/api/chat.html">percakapan obrolan</a>; keanggotaan dalam percakapan adalah gerbang segalanya, jadi aturan pertemanan obrolan juga mengatur suara (percakapan sesi permainan mengabaikan persahabatan). Batasan: 3 ruang aktif per percakapan, maksimal 10 peserta per ruang, codec <code>"opus"</code>.</p>
+<p>Kamar berlabuh ke a <a href="/id/docs/api/chat.html">percakapan obrolan</a>; keanggotaan dalam percakapan adalah gerbang segalanya, jadi aturan pertemanan obrolan juga mengatur suara (percakapan sesi permainan mengabaikan persahabatan). Batasan: 3 ruang aktif per percakapan, hingga 32 peserta per ruang (default jika Anda menghilangkannya <code>maxParticipants</code>; nilai Anda dibatasi menjadi 2–32). Setiap ruangan menyatakan a <code>codec</code> set pencipta dan klien dapat mengandalkan: <code>pcm</code> secara default — konvensi 20 ms/16 kHz/mono/s16 yang diteruskan relai secara buram — atau <code>opus</code> untuk ruangan yang semua pesertanya menjalankan klien berkemampuan Opus. Label diteruskan, tidak pernah ada perubahan yang diterapkan server.</p>
 <h2 id="rest-endpoints">titik akhir REST</h2>
 <p>Basis: <code>https://api.starhermit.com/api/v1/voice</code>.</p>
 <table>
@@ -29,6 +29,12 @@ permalink: "/id/docs/api/voice.html"
 <td><code>/rooms</code></td>
 <td>JWT</td>
 <td>Buat ruang suara untuk percakapan</td>
+</tr>
+<tr>
+<td>POS</td>
+<td><code>/rooms/join-or-create</code></td>
+<td>JWT</td>
+<td>Kembalikan ruang aktif terlama dalam percakapan dengan kursi kosong, atau buat ruang — dipilih secara atomik</td>
 </tr>
 <tr>
 <td>MENDAPATKAN</td>
@@ -76,9 +82,11 @@ permalink: "/id/docs/api/voice.html"
 </table>
 <h3 id="create-a-room">Buat sebuah ruangan</h3>
 <p><code>POST /rooms</code></p>
-<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 10 }
+<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 8, "codec": "opus" }
 </code></pre>
-<p>Pengembalian a <code>VoiceRoomDto</code>.</p>
+<p><code>maxParticipants</code> (opsional, dijepit ke 2–32; defaultnya ke 32) dan <code>codec</code> (opsional, <code>pcm</code> atau <code>opus</code>; apa pun dibaca sebagai <code>pcm</code>) keduanya disetel satu kali pada saat pembuatan. Pengembalian a <code>VoiceRoomDto</code>.</p>
+<h3 id="join-or-create-a-room">Bergabunglah atau buat ruangan</h3>
+<p><code>POST /rooms/join-or-create</code> dengan tubuh yang sama mengembalikan a <code>VoiceRoomDto</code> untuk percakapan itu <strong>ruang aktif tertua yang masih memiliki kursi kosong</strong>, atau membuat satu suara ketika tidak ada yang melakukannya — diputuskan secara atomik di bawah kunci ruangan percakapan, sehingga dua anggota yang mengaktifkan suara secara bersamaan akan mendarat di satu ruangan, bukan di dua ruangan yang mereka seberangi, tidak dapat mendengar satu sama lain. <code>maxParticipants</code>/<code>codec</code> berlaku hanya ketika itu dibuat. Anda masih menelepon <code>/rooms/{roomId}/join</code> di ruang kembali sebelum membuka WebSocket.</p>
 <h3 id="room-shape">Bentuk ruangan</h3>
 <p><code>GET /rooms?conversationId=&lt;guid&gt;</code> → <code>VoiceRoomDto[]</code>; <code>GET /rooms/{roomId}</code> → <code>VoiceRoomDto</code>:</p>
 <pre><code class="language-json">{
@@ -87,7 +95,7 @@ permalink: "/id/docs/api/voice.html"
   "creatorUserId": "&lt;guid&gt;",
   "codec": "opus",
   "status": "Active",
-  "maxParticipants": 10,
+  "maxParticipants": 8,
   "createdAt": "2026-07-22T07:00:00Z",
   "participants": [
     {
@@ -175,7 +183,7 @@ menyambungkan kembali dan memulihkan bisu yang diinginkan sebelum mengirim audio
 <h2 id="example-integration-pattern-from-the-chess-reference-implementation">Contoh pola integrasi (dari implementasi referensi catur)</h2>
 <p>Suara diikutsertakan per sesi permainan. Klien yang khas <code>enable()</code> mengalir:</p>
 <ol>
-<li><code>GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;</code> untuk menemukan ruangan yang ada, lain-lain <code>POST /api/v1/voice/rooms</code> untuk membuatnya.</li>
+<li><code>POST /api/v1/voice/rooms/join-or-create</code> dengan <code>{ "conversationId": "&lt;chatConversationId&gt;" }</code> — satu panggilan yang mengembalikan ruangan tempat semua orang mengaktifkan suara berkumpul. (Kamu masih bisa <code>GET /rooms?conversationId=</code> Kemudian <code>POST /rooms</code> dengan tangan, tapi dua klien yang melakukan itu sekaligus membuat dua ruangan.)</li>
 <li><code>POST /api/v1/voice/rooms/{roomId}/join</code>.</li>
 <li>Membuka <code>ws/v1/voice?roomId=&lt;guid&gt;</code>.</li>
 </ol>

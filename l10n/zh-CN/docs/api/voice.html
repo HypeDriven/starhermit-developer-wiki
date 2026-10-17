@@ -4,14 +4,14 @@ lang: "zh-CN"
 title: "嗓音"
 source_url: "/docs/api/voice.html"
 source_path: "docs/api/voice.md"
-source_hash: "b854ce844a33279125a6c44c43b800b3efef80cbcf31d1f74a9f17192fab0aef"
+source_hash: "2e62c810e7e3001d5fd08d03857a71dd55467740b6f524dbfa9ececa37f472a9"
 translation: "machine"
 permalink: "/zh-CN/docs/api/voice.html"
 ---
 {% raw %}
 <h1 id="voice">嗓音</h1>
 <p>StarHermit 语音通过 REST API 提供每次对话语音室（<code>api/v1/voice</code>）加上混合的二进制/文本 WebSocket（<code>ws/v1/voice</code>）用于音频和 WebRTC 信号传输。所有 REST 端点都需要身份验证。语音可用性可能会有所不同。错误体各不相同；看 <a href="/zh-CN/docs/api/conventions.html#requests-and-responses">API约定</a>.</p>
-<p>客房锚定于 <a href="/zh-CN/docs/api/chat.html">聊天对话</a>;对话中的成员资格决定了一切，因此聊天友谊规则也控制语音（游戏会话对话绕过友谊）。限制：每个对话 3 个活动房间，每个房间最多 10 名参与者，编解码器 <code>"opus"</code>.</p>
+<p>客房锚定于 <a href="/zh-CN/docs/api/chat.html">聊天对话</a>;对话中的成员资格决定了一切，因此聊天友谊规则也控制语音（游戏会话对话绕过友谊）。限制：每个对话 3 个活动房间，每个房间最多 32 名参与者（省略时的默认值） <code>maxParticipants</code>;您的值被限制在 2–32）。每个房间声明一个 <code>codec</code> 创建者集和客户可以依赖： <code>pcm</code> 默认情况下 - 中继不透明转发的 20 ms/16 kHz/mono/s16 约定 - 或 <code>opus</code> 对于一个房间，其参与者都运行支持 Opus 的客户端。标签被转发，服务器不会应用转换。</p>
 <h2 id="rest-endpoints">REST 端点</h2>
 <p>根据： <code>https://api.starhermit.com/api/v1/voice</code>.</p>
 <table>
@@ -29,6 +29,12 @@ permalink: "/zh-CN/docs/api/voice.html"
 <td><code>/rooms</code></td>
 <td>智威汤逊</td>
 <td>创建对话语音室</td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/rooms/join-or-create</code></td>
+<td>智威汤逊</td>
+<td>返回对话中最旧的活动房间并提供空闲座位，或创建一个 - 以原子方式选择</td>
 </tr>
 <tr>
 <td>得到</td>
@@ -76,9 +82,11 @@ permalink: "/zh-CN/docs/api/voice.html"
 </table>
 <h3 id="create-a-room">创建一个房间</h3>
 <p><code>POST /rooms</code></p>
-<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 10 }
+<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 8, "codec": "opus" }
 </code></pre>
-<p>返回一个 <code>VoiceRoomDto</code>.</p>
+<p><code>maxParticipants</code> （可选，限制为 2–32；默认为 32）以及 <code>codec</code> （选修的， <code>pcm</code> 或者 <code>opus</code>;其他任何内容都被读作 <code>pcm</code>) 都在创建时设置一次。返回一个 <code>VoiceRoomDto</code>.</p>
+<h3 id="join-or-create-a-room">加入或创建房间</h3>
+<p><code>POST /rooms/join-or-create</code> 具有相同的主体返回 <code>VoiceRoomDto</code> 对于对话的 <strong>仍然有空闲座位的最旧的活动房间</strong>，或者在没有人这样做时创建一个 - 在对话的房间锁下自动决定，因此同时打开语音的两个成员会进入一个房间，而不是两个他们无法听到对方声音的房间。 <code>maxParticipants</code>/<code>codec</code> 仅在创建时应用。你还是打电话 <code>/rooms/{roomId}/join</code> 在打开 WebSocket 之前返回的房间。</p>
 <h3 id="room-shape">房间形状</h3>
 <p><code>GET /rooms?conversationId=&lt;guid&gt;</code> → <code>VoiceRoomDto[]</code>; <code>GET /rooms/{roomId}</code> → <code>VoiceRoomDto</code>:</p>
 <pre><code class="language-json">{
@@ -87,7 +95,7 @@ permalink: "/zh-CN/docs/api/voice.html"
   "creatorUserId": "&lt;guid&gt;",
   "codec": "opus",
   "status": "Active",
-  "maxParticipants": 10,
+  "maxParticipants": 8,
   "createdAt": "2026-07-22T07:00:00Z",
   "participants": [
     {
@@ -175,7 +183,7 @@ permalink: "/zh-CN/docs/api/voice.html"
 <h2 id="example-integration-pattern-from-the-chess-reference-implementation">集成模式示例（来自国际象棋参考实现）</h2>
 <p>每个游戏会话都可以选择加入语音。典型客户 <code>enable()</code> 流动：</p>
 <ol>
-<li><code>GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;</code> 找到一个现有的房间，否则 <code>POST /api/v1/voice/rooms</code> 创建一个。</li>
+<li><code>POST /api/v1/voice/rooms/join-or-create</code> 和 <code>{ "conversationId": "&lt;chatConversationId&gt;" }</code> — 一个呼叫返回其他所有人都打开语音的房间。 （你仍然可以 <code>GET /rooms?conversationId=</code> 然后 <code>POST /rooms</code> 手工，但两个客户同时这样做会产生两个房间。）</li>
 <li><code>POST /api/v1/voice/rooms/{roomId}/join</code>.</li>
 <li>打开 <code>ws/v1/voice?roomId=&lt;guid&gt;</code>.</li>
 </ol>

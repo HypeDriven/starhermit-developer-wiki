@@ -26,7 +26,7 @@ test('REST contract is valid OpenAPI with complete path parameters and unique op
       assert.ok(Object.keys(operation.responses).some(key => key !== 'default'));
     }
   }
-  assert.equal(ids.size, 276);
+  assert.equal(ids.size, 285);
   assert.ok(!api.paths['/api/v1/game-host/{id}/cache-policy']);
   assert.ok(!api.paths['/api/v1/webhooks/email/resend']);
 });

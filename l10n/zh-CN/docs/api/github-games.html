@@ -4,7 +4,7 @@ lang: "zh-CN"
 title: "GitHub 游戏"
 source_url: "/docs/api/github-games.html"
 source_path: "docs/api/github-games.md"
-source_hash: "3ac05be03d6f084237353cccfe3c7a2c060046dd000d68711193907a1b4c6263"
+source_hash: "18874cfc930238321fcafd0740bf7c9cb0e342371b34c7914a4370b28218c7fb"
 translation: "machine"
 permalink: "/zh-CN/docs/api/github-games.html"
 ---
@@ -150,8 +150,38 @@ control.shoot=Space | Shoot
 <tr>
 <td>邮政</td>
 <td><code>/api/v1/me/github-games/{id}/transfer</code></td>
+<td>智威汤逊（所有者）</td>
+<td>向其他用户提供游戏 → <code>GameTransferOfferDto</code> （游戏确实 <strong>不是</strong> 还没动）</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/github-games/transfers/incoming</code></td>
 <td>智威汤逊</td>
-<td>将游戏转移给另一个用户 → <code>GitHubGameDto</code></td>
+<td>优惠等待您的决定 → <code>GameTransferOfferDto[]</code></td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/me/github-games/transfers/outgoing</code></td>
+<td>智威汤逊</td>
+<td>您已发出但仍可能取消的优惠 → <code>GameTransferOfferDto[]</code></td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/accept</code></td>
+<td>智威汤逊（收件人）</td>
+<td>接受报价；游戏现在就属于你了 → <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/decline</code></td>
+<td>智威汤逊（收件人）</td>
+<td>拒绝报价 → <code>204</code></td>
+</tr>
+<tr>
+<td>邮政</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/cancel</code></td>
+<td>智威汤逊（报价者）</td>
+<td>撤回您提出的报价 → <code>204</code></td>
 </tr>
 <tr>
 <td>删除</td>
@@ -452,9 +482,35 @@ Windows 客户端无法解码 SVG，因此该图块显示的是网站图标。�
 <a href="/zh-CN/docs/tutorials/claim-existing-game.html">分步索赔教程</a> 为了发现，两个证明
 方法、验证、接管和故障排除。</p>
 <h3 id="transfer-ownership">转让所有权</h3>
-<p><code>POST /api/v1/me/github-games/{id}/transfer</code></p>
+<p>转账是一个 <strong>接收者接受的待定报价</strong>，不是立即行动——一场游戏（及其
+托管字节（对接收者不利）无法在没有其的情况下推送到另一个帐户
+这么说。</p>
+<p><code>POST /api/v1/me/github-games/{id}/transfer</code> （所有者）记录报价并返回
+<code>GameTransferOfferDto</code>;游戏在被接受之前一直属于您。</p>
 <pre><code class="language-json">{ "toUserId": "&lt;user id&gt;" }
 </code></pre>
+<pre><code class="language-jsonc">// GameTransferOfferDto
+{
+  "id": "&lt;offer id&gt;",
+  "gameId": "&lt;game id&gt;",
+  "gameTitle": "StarHermit Chess",
+  "fromUserId": "&lt;guid&gt;", "fromUsername": "alice",
+  "toUserId": "&lt;guid&gt;",   "toUsername": "bob",
+  "status": "pending",
+  "createdAt": "2026-10-17T16:00:00Z"
+}
+</code></pre>
+<ul>
+<li>收件人在下面看到它 <code>GET /transfers/incoming</code> 并接受
+<code>POST /transfers/{offerId}/accept</code>。接受改变游戏 <strong>现在</strong>，当时检查
+根据接收者自己的游戏次数和托管津贴 - 因此可以提出报价并且仍然
+如果接收者达到极限，则无法着陆。他们可能会改为 <code>POST /transfers/{offerId}/decline</code>.</li>
+<li>报价人在下面看到他们的待定报价 <code>GET /transfers/outgoing</code> 并可撤回其中一项
+<code>POST /transfers/{offerId}/cancel</code>.</li>
+<li>一切都在接受时重新检查：自报价答复以来游戏已移动、删除或重新指向
+<code>GameUnavailable</code>，并且再次提供相同的游戏会取代仍在等待的报价，因此两个直播
+不能同时接受一款游戏的报价。</li>
+</ul>
 <h3 id="push-a-game-bundle">推送游戏捆绑包</h3>
 <p><code>POST /api/v1/me/github-games/{id}/bundle</code> 无需询问 StarHermit 即可发布构建的输出
 再次克隆它。调用者必须拥有已注册的游戏。发送 <code>.tar.gz</code> 直接字节——不是
@@ -479,6 +535,9 @@ remove.txt         merge only: client-relative paths to delete, one per line
 <code>container.memory_mb</code> 或者 <code>container.cpu</code> 并且部署会在重新启动时拾取它；留下一个旋钮并
 它会保留您上次设置的内容。完全省略清单，不涉及部署
 除了图像之外的变化。</p>
+<p>一个捆绑包，其 <code>starhermit.txt</code> 携带一个可用的 <code>name=</code> 还 <strong>重命名游戏列表</strong> 对它——
+显示名称更新与推送一起进行。离开 <code>name=</code> 出（或省略清单）以保留
+当前名称。</p>
 <p>StarHermit 客户端从文件夹中为您构建此捆绑包 <strong>或单个 <code>.tar</code></strong>:</p>
 <ul>
 <li><strong>客户文件</strong> — 游戏的分发文件夹，或 <code>.tar</code> 它的。下有一个文件夹打包

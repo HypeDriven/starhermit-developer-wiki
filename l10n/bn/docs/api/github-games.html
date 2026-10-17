@@ -4,7 +4,7 @@ lang: "bn"
 title: "গিটহাব গেমস"
 source_url: "/docs/api/github-games.html"
 source_path: "docs/api/github-games.md"
-source_hash: "3ac05be03d6f084237353cccfe3c7a2c060046dd000d68711193907a1b4c6263"
+source_hash: "18874cfc930238321fcafd0740bf7c9cb0e342371b34c7914a4370b28218c7fb"
 translation: "machine"
 permalink: "/bn/docs/api/github-games.html"
 ---
@@ -150,8 +150,38 @@ control.shoot=Space | Shoot
 <tr>
 <td>পোস্ট</td>
 <td><code>/api/v1/me/github-games/{id}/transfer</code></td>
+<td>JWT (মালিক)</td>
+<td>অন্য ব্যবহারকারীকে একটি গেম অফার করুন → <code>GameTransferOfferDto</code> (গেমটি করে <strong>না</strong> এখনও সরান)</td>
+</tr>
+<tr>
+<td>পান</td>
+<td><code>/api/v1/me/github-games/transfers/incoming</code></td>
 <td>জেডব্লিউটি</td>
-<td>অন্য ব্যবহারকারীর কাছে একটি গেম স্থানান্তর করুন → <code>GitHubGameDto</code></td>
+<td>অফারগুলি আপনার সিদ্ধান্তের জন্য অপেক্ষা করছে → <code>GameTransferOfferDto[]</code></td>
+</tr>
+<tr>
+<td>পান</td>
+<td><code>/api/v1/me/github-games/transfers/outgoing</code></td>
+<td>জেডব্লিউটি</td>
+<td>আপনি যে অফার করেছেন এবং এখনও বাতিল হতে পারে → <code>GameTransferOfferDto[]</code></td>
+</tr>
+<tr>
+<td>পোস্ট</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/accept</code></td>
+<td>JWT (প্রাপক)</td>
+<td>একটি প্রস্তাব গ্রহণ করুন; গেমটি এখন আপনার হয়ে গেছে → <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>পোস্ট</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/decline</code></td>
+<td>JWT (প্রাপক)</td>
+<td>একটি অফার প্রত্যাখ্যান করুন → <code>204</code></td>
+</tr>
+<tr>
+<td>পোস্ট</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/cancel</code></td>
+<td>JWT (অফারকারী)</td>
+<td>আপনার করা একটি অফার প্রত্যাহার করুন → <code>204</code></td>
 </tr>
 <tr>
 <td>মুছুন</td>
@@ -452,9 +482,35 @@ Content-Type: application/json
 <a href="/bn/docs/tutorials/claim-existing-game.html">ধাপে ধাপে দাবি করার টিউটোরিয়াল</a> আবিষ্কারের জন্য, উভয় প্রমাণ
 পদ্ধতি, বৈধতা, টেকওভার, এবং সমস্যা সমাধান।</p>
 <h3 id="transfer-ownership">মালিকানা হস্তান্তর</h3>
-<p><code>POST /api/v1/me/github-games/{id}/transfer</code></p>
+<p>একটি স্থানান্তর একটি <strong>মুলতুবি অফার প্রাপক গ্রহণ করে</strong>, একটি তাৎক্ষণিক পদক্ষেপ নয় - একটি খেলা (এবং এর
+হোস্ট করা বাইট, যা প্রাপকের বিরুদ্ধে গণনা করা হয়) তাদের ছাড়া অন্য অ্যাকাউন্টে পুশ করা যাবে না
+say- so.</p>
+<p><code>POST /api/v1/me/github-games/{id}/transfer</code> (মালিক) অফারটি রেকর্ড করে এবং ফেরত দেয় ক
+<code>GameTransferOfferDto</code>; খেলাটি গৃহীত না হওয়া পর্যন্ত আপনারই থাকবে।</p>
 <pre><code class="language-json">{ "toUserId": "&lt;user id&gt;" }
 </code></pre>
+<pre><code class="language-jsonc">// GameTransferOfferDto
+{
+  "id": "&lt;offer id&gt;",
+  "gameId": "&lt;game id&gt;",
+  "gameTitle": "StarHermit Chess",
+  "fromUserId": "&lt;guid&gt;", "fromUsername": "alice",
+  "toUserId": "&lt;guid&gt;",   "toUsername": "bob",
+  "status": "pending",
+  "createdAt": "2026-10-17T16:00:00Z"
+}
+</code></pre>
+<ul>
+<li>প্রাপক এটি নীচে দেখেন <code>GET /transfers/incoming</code> এবং সঙ্গে গ্রহণ করে
+<code>POST /transfers/{offerId}/accept</code>. গ্রহণযোগ্যতা খেলাকে চালিত করে <strong>এখন</strong>, যে মুহূর্তে চেক
+প্রাপকের নিজস্ব গেম-গণনা এবং হোস্টিং ভাতার বিপরীতে — তাই একটি অফার করা যেতে পারে এবং এখনও
+যদি প্রাপক তাদের সীমাতে থাকে তবে অবতরণ করতে ব্যর্থ হয়। তারা পরিবর্তে হতে পারে <code>POST /transfers/{offerId}/decline</code>.</li>
+<li>অফারকারী তাদের মুলতুবি অফারগুলি দেখেন <code>GET /transfers/outgoing</code> এবং এর সাথে একটি প্রত্যাহার করতে পারে
+<code>POST /transfers/{offerId}/cancel</code>.</li>
+<li>স্বীকার করার সময় সবকিছু পুনরায় পরীক্ষা করা হয়: অফার উত্তর দেওয়ার পর থেকে একটি গেম সরানো, সরানো বা পুনরায় নির্দেশ করা হয়েছে
+<code>GameUnavailable</code>, এবং একই গেম আবার অফার করা একটি এখনও মুলতুবি থাকা অফারকে ছাড়িয়ে যায়, তাই দুটি লাইভ
+একটি খেলার প্রস্তাব উভয় গ্রহণ করা যাবে না.</li>
+</ul>
 <h3 id="push-a-game-bundle">একটি খেলা বান্ডিল ধাক্কা</h3>
 <p><code>POST /api/v1/me/github-games/{id}/bundle</code> StarHermit কে জিজ্ঞাসা না করেই বিল্ট আউটপুট প্রকাশ করে
 আবার ক্লোন করুন। কলারের অবশ্যই নিবন্ধিত গেমের মালিক হতে হবে। পাঠান <code>.tar.gz</code> বাইট সরাসরি-না
@@ -479,6 +535,9 @@ remove.txt         merge only: client-relative paths to delete, one per line
 <code>container.memory_mb</code> বা <code>container.cpu</code> এবং স্থাপনা পুনরায় চালু হলে তা তুলে নেয়; একটি গাঁট আউট ছেড়ে এবং
 আপনি গতবার সেট করা যাই হোক না কেন এটি রাখে। সম্পূর্ণরূপে ম্যানিফেস্ট বাদ দিন এবং স্থাপনার বিষয়ে কিছুই করবেন না
 ছবি ছাড়া পরিবর্তন.</p>
+<p>একটি বান্ডিল যার <code>starhermit.txt</code> একটি ব্যবহারযোগ্য বহন করে <code>name=</code> এছাড়াও <strong>গেমের তালিকার নাম পরিবর্তন করে</strong> এর প্রতি -
+ডিসপ্লে-নেম আপডেট পুশের সাথে রাইড করে। ছেড়ে দিন <code>name=</code> আউট (বা ম্যানিফেস্ট বাদ দিন) রাখার জন্য
+বর্তমান নাম।</p>
 <p>StarHermit ক্লায়েন্টরা একটি ফোল্ডার থেকে আপনার জন্য এই বান্ডিলটি তৈরি করে <strong>বা একক <code>.tar</code></strong>:</p>
 <ul>
 <li><strong>ক্লায়েন্ট ফাইল</strong> — গেমের ডিস্ট্রিবিউশন ফোল্ডার, অথবা a <code>.tar</code> এর একটি ফোল্ডার অধীনে প্যাক করা হয়

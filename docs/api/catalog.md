@@ -121,6 +121,11 @@ these for one account.
 | GET | `/api/v1/me/cloud-saves/{gameKey}/info` | JWT | Save metadata: `{ exists, sizeBytes, updatedAt? }` |
 | GET | `/api/v1/me/cloud-saves/{gameKey}` | JWT | `application/zip` bytes, 404 if none |
 | PUT | `/api/v1/me/cloud-saves/{gameKey}` | JWT | Upload a save (decoded save ≤ 10 MB, `gameKey` ≤ 300 chars) |
+| DELETE | `/api/v1/me/cloud-saves/{gameKey}` | JWT (full user token) | Delete the slot, `204` (idempotent) |
+
+The `DELETE` is the account owner's — a full user token only. A game's launch token can read and
+write its own slot but **cannot** delete it (`403`), so a game can never erase a save the player
+expects to keep.
 
 PUT body:
 

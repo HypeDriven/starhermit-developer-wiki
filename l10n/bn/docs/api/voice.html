@@ -4,14 +4,14 @@ lang: "bn"
 title: "ভয়েস"
 source_url: "/docs/api/voice.html"
 source_path: "docs/api/voice.md"
-source_hash: "b854ce844a33279125a6c44c43b800b3efef80cbcf31d1f74a9f17192fab0aef"
+source_hash: "2e62c810e7e3001d5fd08d03857a71dd55467740b6f524dbfa9ececa37f472a9"
 translation: "machine"
 permalink: "/bn/docs/api/voice.html"
 ---
 {% raw %}
 <h1 id="voice">ভয়েস</h1>
 <p>StarHermit ভয়েস একটি REST API এর মাধ্যমে প্রতি-কথোপকথনের ভয়েস রুম সরবরাহ করে (<code>api/v1/voice</code>) প্লাস একটি মিশ্র বাইনারি/টেক্সট ওয়েবসকেট (<code>ws/v1/voice</code>) অডিও এবং WebRTC সিগন্যালিংয়ের জন্য। সমস্ত REST এন্ডপয়েন্টের প্রমাণীকরণ প্রয়োজন। ভয়েস প্রাপ্যতা পরিবর্তিত হতে পারে. ত্রুটি সংস্থাগুলি পরিবর্তিত হয়; দেখুন <a href="/bn/docs/api/conventions.html#requests-and-responses">এপিআই কনভেনশন</a>.</p>
-<p>কক্ষ নোঙ্গর <a href="/bn/docs/api/chat.html">চ্যাট কথোপকথন</a>; কথোপকথনের সদস্যতা সবকিছুকে গেট করে, তাই চ্যাট বন্ধুত্বের নিয়মগুলি ভয়েসকেও নিয়ন্ত্রণ করে (গেম-সেশন কথোপকথন বন্ধুত্বকে বাইপাস করে)। সীমা: প্রতি কথোপকথনে 3টি সক্রিয় রুম, প্রতি রুমে সর্বাধিক 10 জন অংশগ্রহণকারী, কোডেক <code>"opus"</code>.</p>
+<p>কক্ষ নোঙ্গর <a href="/bn/docs/api/chat.html">চ্যাট কথোপকথন</a>; কথোপকথনের সদস্যতা সবকিছুকে গেট করে, তাই চ্যাট বন্ধুত্বের নিয়মগুলি ভয়েসকেও নিয়ন্ত্রণ করে (গেম-সেশন কথোপকথন বন্ধুত্বকে বাইপাস করে)। সীমা: প্রতি কথোপকথনে 3টি সক্রিয় কক্ষ, প্রতি রুম প্রতি 32 জন অংশগ্রহণকারী পর্যন্ত (আপনি বাদ দিলে ডিফল্ট <code>maxParticipants</code>; আপনার মান 2-32 এ আটকানো হয়েছে)। প্রতিটি কক্ষ ঘোষণা করে ক <code>codec</code> নির্মাতা সেট এবং ক্লায়েন্টরা নির্ভর করতে পারে: <code>pcm</code> ডিফল্টরূপে — 20 ms/16 kHz/mono/s16 কনভেনশন রিলে অস্বচ্ছভাবে এগিয়ে যায় — অথবা <code>opus</code> একটি কক্ষের জন্য যার অংশগ্রহণকারীরা সবাই একটি Opus-সক্ষম ক্লায়েন্ট চালায়। লেবেল ফরোয়ার্ড করা হয়, সার্ভার প্রযোজ্য একটি রূপান্তর না.</p>
 <h2 id="rest-endpoints">REST শেষ পয়েন্ট</h2>
 <p>ভিত্তি: <code>https://api.starhermit.com/api/v1/voice</code>.</p>
 <table>
@@ -29,6 +29,12 @@ permalink: "/bn/docs/api/voice.html"
 <td><code>/rooms</code></td>
 <td>জেডব্লিউটি</td>
 <td>কথোপকথনের জন্য একটি ভয়েস রুম তৈরি করুন</td>
+</tr>
+<tr>
+<td>পোস্ট</td>
+<td><code>/rooms/join-or-create</code></td>
+<td>জেডব্লিউটি</td>
+<td>একটি বিনামূল্যে আসন সহ কথোপকথনের প্রাচীনতম সক্রিয় রুম ফিরিয়ে দিন, অথবা একটি তৈরি করুন — পারমাণবিকভাবে নির্বাচিত৷</td>
 </tr>
 <tr>
 <td>পান</td>
@@ -76,9 +82,11 @@ permalink: "/bn/docs/api/voice.html"
 </table>
 <h3 id="create-a-room">একটি রুম তৈরি করুন</h3>
 <p><code>POST /rooms</code></p>
-<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 10 }
+<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 8, "codec": "opus" }
 </code></pre>
-<p>ফেরত a <code>VoiceRoomDto</code>.</p>
+<p><code>maxParticipants</code> (ঐচ্ছিক, 2-32 তে আটকানো; ডিফল্ট 32) এবং <code>codec</code> (ঐচ্ছিক, <code>pcm</code> বা <code>opus</code>; অন্য কিছু হিসাবে পড়া হয় <code>pcm</code>) উভয়ই সৃষ্টির সময় একবার সেট করা হয়। ফেরত a <code>VoiceRoomDto</code>.</p>
+<h3 id="join-or-create-a-room">যোগ দিন বা একটি রুম তৈরি করুন</h3>
+<p><code>POST /rooms/join-or-create</code> একই শরীরের সাথে ফেরত a <code>VoiceRoomDto</code> কথোপকথনের জন্য <strong>প্রাচীনতম সক্রিয় রুম যেখানে এখনও একটি বিনামূল্যে আসন আছে</strong>, অথবা একটি তৈরি করে যখন কেউ না করে — কথোপকথনের রুম লকের নীচে পারমাণবিকভাবে সিদ্ধান্ত নিয়েছে, তাই দুই সদস্য যারা একই তাত্ক্ষণিক জমিতে একটি ঘরে দুটির পরিবর্তে ভয়েস চালু করে তারা একে অপরকে শুনতে পায় না। <code>maxParticipants</code>/<code>codec</code> এটি তৈরি হলেই প্রয়োগ করুন। আপনি এখনও কল <code>/rooms/{roomId}/join</code> ওয়েবসকেট খোলার আগে ফিরে আসা ঘরে।</p>
 <h3 id="room-shape">রুমের আকৃতি</h3>
 <p><code>GET /rooms?conversationId=&lt;guid&gt;</code> → <code>VoiceRoomDto[]</code>; <code>GET /rooms/{roomId}</code> → <code>VoiceRoomDto</code>:</p>
 <pre><code class="language-json">{
@@ -87,7 +95,7 @@ permalink: "/bn/docs/api/voice.html"
   "creatorUserId": "&lt;guid&gt;",
   "codec": "opus",
   "status": "Active",
-  "maxParticipants": 10,
+  "maxParticipants": 8,
   "createdAt": "2026-07-22T07:00:00Z",
   "participants": [
     {
@@ -175,7 +183,7 @@ permalink: "/bn/docs/api/voice.html"
 <h2 id="example-integration-pattern-from-the-chess-reference-implementation">উদাহরণ ইন্টিগ্রেশন প্যাটার্ন (দাবা রেফারেন্স বাস্তবায়ন থেকে)</h2>
 <p>ভয়েস গেম সেশন প্রতি অপ্ট-ইন করা হয়. একজন সাধারণ ক্লায়েন্ট <code>enable()</code> প্রবাহ:</p>
 <ol>
-<li><code>GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;</code> একটি বিদ্যমান রুম খুঁজে পেতে, অন্যথায় <code>POST /api/v1/voice/rooms</code> একটি তৈরি করতে</li>
+<li><code>POST /api/v1/voice/rooms/join-or-create</code> সঙ্গে <code>{ "conversationId": "&lt;chatConversationId&gt;" }</code> — একটি কল যা ঘরে ফিরে আসে অন্য সবাই ভয়েস চালু করে কনভার্জে। (আপনি এখনও পারেন <code>GET /rooms?conversationId=</code> তারপর <code>POST /rooms</code> হাত দ্বারা, কিন্তু দুই ক্লায়েন্ট এটি একবারে দুটি ঘর তৈরি করে।)</li>
 <li><code>POST /api/v1/voice/rooms/{roomId}/join</code>.</li>
 <li>খোলা <code>ws/v1/voice?roomId=&lt;guid&gt;</code>.</li>
 </ol>

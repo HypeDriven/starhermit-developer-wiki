@@ -76,7 +76,12 @@ Players can override these defaults per game through the
 | GET/POST | `/api/v1/me/github-games/{id}/leaderboards` | JWT (owner) | [Your game's leaderboards](leaderboards.md#your-games-own-leaderboards): list all, create one |
 | PUT/DELETE | `/api/v1/me/github-games/{id}/leaderboards/{leaderboardId}` | JWT (owner) | Update / delete one |
 | DELETE | `/api/v1/me/github-games/{id}/players/{userId}/elo` | JWT (owner) | [Reset one player's rating](leaderboards.md#resetting-a-players-rating) to 1200 |
-| POST | `/api/v1/me/github-games/{id}/transfer` | JWT | Transfer a game to another user → `GitHubGameDto` |
+| POST | `/api/v1/me/github-games/{id}/transfer` | JWT (owner) | Offer a game to another user → `GameTransferOfferDto` (the game does **not** move yet) |
+| GET | `/api/v1/me/github-games/transfers/incoming` | JWT | Offers awaiting your decision → `GameTransferOfferDto[]` |
+| GET | `/api/v1/me/github-games/transfers/outgoing` | JWT | Offers you have made and may still cancel → `GameTransferOfferDto[]` |
+| POST | `/api/v1/me/github-games/transfers/{offerId}/accept` | JWT (recipient) | Accept an offer; the game becomes yours now → `GitHubGameDto` |
+| POST | `/api/v1/me/github-games/transfers/{offerId}/decline` | JWT (recipient) | Decline an offer → `204` |
+| POST | `/api/v1/me/github-games/transfers/{offerId}/cancel` | JWT (offerer) | Withdraw an offer you made → `204` |
 | DELETE | `/api/v1/me/github-games/{id}` | JWT | Remove a registered game → `204` |
 | GET | `/api/v1/me/github-games/removed` | JWT | Your removed games: `restorable` (uploaded games), `filesKept` |
 | POST | `/api/v1/me/github-games/{id}/restore` | JWT | Restore a removed uploaded game: same id and history, its files if not yet reclaimed (30 days); `409` for a game with a source — add its URL again |
@@ -311,11 +316,39 @@ methods, validation, takeover, and troubleshooting.
 
 ### Transfer ownership
 
-`POST /api/v1/me/github-games/{id}/transfer`
+A transfer is a **pending offer the recipient accepts**, not an immediate move — a game (and its
+hosted bytes, which count against the recipient) can't be pushed onto another account without their
+say-so.
+
+`POST /api/v1/me/github-games/{id}/transfer` (owner) records the offer and returns a
+`GameTransferOfferDto`; the game stays yours until it is accepted.
 
 ```json
 { "toUserId": "<user id>" }
 ```
+
+```jsonc
+// GameTransferOfferDto
+{
+  "id": "<offer id>",
+  "gameId": "<game id>",
+  "gameTitle": "StarHermit Chess",
+  "fromUserId": "<guid>", "fromUsername": "alice",
+  "toUserId": "<guid>",   "toUsername": "bob",
+  "status": "pending",
+  "createdAt": "2026-10-17T16:00:00Z"
+}
+```
+
+- The recipient sees it under `GET /transfers/incoming` and accepts with
+  `POST /transfers/{offerId}/accept`. Acceptance moves the game **now**, checked at that moment
+  against the recipient's own game-count and hosting allowance — so an offer can be made and still
+  fail to land if the recipient is at their limit. They may instead `POST /transfers/{offerId}/decline`.
+- The offerer sees their pending offers under `GET /transfers/outgoing` and may withdraw one with
+  `POST /transfers/{offerId}/cancel`.
+- Everything is re-checked at accept: a game moved, removed or re-pointed since the offer answers
+  `GameUnavailable`, and offering the same game again supersedes a still-pending offer, so two live
+  offers of one game can't both be accepted.
 
 ### Push a game bundle
 
@@ -347,6 +380,10 @@ and the image was the only thing that could describe it.
 `container.memory_mb` or `container.cpu` and the deployment picks it up on restart; leave a knob out and
 it keeps whatever you set last time. Omit the manifest entirely and nothing about the deployment
 changes except the image.
+
+A bundle whose `starhermit.txt` carries a usable `name=` also **renames the game's listing** to it —
+the display-name update rides along with the push. Leave `name=` out (or omit the manifest) to keep
+the current name.
 
 The StarHermit clients build this bundle for you, from a folder **or a single `.tar`**:
 

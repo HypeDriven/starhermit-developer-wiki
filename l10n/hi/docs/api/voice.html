@@ -4,14 +4,14 @@ lang: "hi"
 title: "आवाज़"
 source_url: "/docs/api/voice.html"
 source_path: "docs/api/voice.md"
-source_hash: "b854ce844a33279125a6c44c43b800b3efef80cbcf31d1f74a9f17192fab0aef"
+source_hash: "2e62c810e7e3001d5fd08d03857a71dd55467740b6f524dbfa9ececa37f472a9"
 translation: "machine"
 permalink: "/hi/docs/api/voice.html"
 ---
 {% raw %}
 <h1 id="voice">आवाज़</h1>
 <p>StarHermit वॉयस REST API पर प्रति-बातचीत वॉयस रूम प्रदान करता है (<code>api/v1/voice</code>) प्लस एक मिश्रित बाइनरी/टेक्स्ट वेबसॉकेट (<code>ws/v1/voice</code>) ऑडियो और वेबआरटीसी सिग्नलिंग के लिए। सभी REST समापन बिंदुओं को प्रमाणीकरण की आवश्यकता होती है। आवाज की उपलब्धता भिन्न हो सकती है। त्रुटि निकाय अलग-अलग होते हैं; देखना <a href="/hi/docs/api/conventions.html#requests-and-responses">एपीआई कन्वेंशन</a>.</p>
-<p>कमरे एक से लंगर डालते हैं <a href="/hi/docs/api/chat.html">चैट वार्तालाप</a>; बातचीत में सदस्यता हर चीज़ को प्रवेश देती है, इसलिए चैट मैत्री नियम आवाज को भी नियंत्रित करते हैं (गेम-सत्र वार्तालाप मित्रता को दरकिनार कर देते हैं)। सीमाएँ: प्रति वार्तालाप 3 सक्रिय कमरे, प्रति कमरा अधिकतम 10 प्रतिभागी, कोडेक <code>"opus"</code>.</p>
+<p>कमरे एक से लंगर डालते हैं <a href="/hi/docs/api/chat.html">चैट वार्तालाप</a>; बातचीत में सदस्यता हर चीज़ को प्रवेश देती है, इसलिए चैट मैत्री नियम आवाज को भी नियंत्रित करते हैं (गेम-सत्र वार्तालाप मित्रता को दरकिनार कर देते हैं)। सीमाएँ: प्रति वार्तालाप 3 सक्रिय कमरे, प्रति कमरा 32 प्रतिभागियों तक (जब आप छोड़ते हैं तो डिफ़ॉल्ट <code>maxParticipants</code>; आपका मान 2-32 तक सीमित है)। प्रत्येक कमरा एक घोषणा करता है <code>codec</code> निर्माता सेट और ग्राहक इस पर भरोसा कर सकते हैं: <code>pcm</code> डिफ़ॉल्ट रूप से - 20 एमएस/16 किलोहर्ट्ज़/मोनो/एस16 कन्वेंशन रिले अपारदर्शी रूप से आगे बढ़ता है - या <code>opus</code> एक ऐसे कमरे के लिए जिसके सभी प्रतिभागी एक ओपस-सक्षम क्लाइंट चलाते हैं। लेबल अग्रेषित किया जाता है, सर्वर कभी भी कोई परिवर्तन लागू नहीं करता है।</p>
 <h2 id="rest-endpoints">बाकी समापनबिंदु</h2>
 <p>आधार: <code>https://api.starhermit.com/api/v1/voice</code>.</p>
 <table>
@@ -29,6 +29,12 @@ permalink: "/hi/docs/api/voice.html"
 <td><code>/rooms</code></td>
 <td>जेडब्ल्यूटी</td>
 <td>बातचीत के लिए एक ध्वनि कक्ष बनाएं</td>
+</tr>
+<tr>
+<td>डाक</td>
+<td><code>/rooms/join-or-create</code></td>
+<td>जेडब्ल्यूटी</td>
+<td>बातचीत के सबसे पुराने सक्रिय कमरे को एक मुफ़्त सीट के साथ लौटाएँ, या एक बनाएँ - परमाणु रूप से चुना गया</td>
 </tr>
 <tr>
 <td>पाना</td>
@@ -76,9 +82,11 @@ permalink: "/hi/docs/api/voice.html"
 </table>
 <h3 id="create-a-room">एक कमरा बनाएं</h3>
 <p><code>POST /rooms</code></p>
-<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 10 }
+<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 8, "codec": "opus" }
 </code></pre>
-<p>रिटर्न ए <code>VoiceRoomDto</code>.</p>
+<p><code>maxParticipants</code> (वैकल्पिक, 2-32 पर क्लैंप किया गया; डिफ़ॉल्ट 32 पर) और <code>codec</code> (वैकल्पिक, <code>pcm</code> या <code>opus</code>; किसी भी अन्य चीज़ को इस प्रकार पढ़ा जाता है <code>pcm</code>) दोनों निर्माण के समय एक बार सेट किए गए हैं। रिटर्न ए <code>VoiceRoomDto</code>.</p>
+<h3 id="join-or-create-a-room">शामिल हों या एक कमरा बनाएं</h3>
+<p><code>POST /rooms/join-or-create</code> एक ही शरीर के साथ एक रिटर्न <code>VoiceRoomDto</code> बातचीत के लिए <strong>सबसे पुराना सक्रिय कमरा जिसमें अभी भी मुफ़्त सीट है</strong>, या जब कोई ऐसा नहीं करता है तो एक बनाता है - बातचीत के कमरे के ताले के तहत परमाणु रूप से निर्णय लिया जाता है, इसलिए दो सदस्य जो एक ही पल में आवाज चालू करते हैं, दो के बजाय एक कमरे में रहते हैं, वे एक-दूसरे को नहीं सुन सकते हैं। <code>maxParticipants</code>/<code>codec</code> इसे तभी लागू करें जब यह बन जाए। आप अब भी कॉल करते हैं <code>/rooms/{roomId}/join</code> WebSocket खोलने से पहले लौटे कमरे पर।</p>
 <h3 id="room-shape">कमरे का आकार</h3>
 <p><code>GET /rooms?conversationId=&lt;guid&gt;</code> → <code>VoiceRoomDto[]</code>; <code>GET /rooms/{roomId}</code> → <code>VoiceRoomDto</code>:</p>
 <pre><code class="language-json">{
@@ -87,7 +95,7 @@ permalink: "/hi/docs/api/voice.html"
   "creatorUserId": "&lt;guid&gt;",
   "codec": "opus",
   "status": "Active",
-  "maxParticipants": 10,
+  "maxParticipants": 8,
   "createdAt": "2026-07-22T07:00:00Z",
   "participants": [
     {
@@ -175,7 +183,7 @@ permalink: "/hi/docs/api/voice.html"
 <h2 id="example-integration-pattern-from-the-chess-reference-implementation">उदाहरण एकीकरण पैटर्न (शतरंज संदर्भ कार्यान्वयन से)</h2>
 <p>वॉयस प्रति गेम सत्र में ऑप्ट-इन है। एक विशिष्ट ग्राहक <code>enable()</code> प्रवाह:</p>
 <ol>
-<li><code>GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;</code> एक मौजूदा कमरा ढूंढने के लिए, अन्यथा <code>POST /api/v1/voice/rooms</code> एक बनाने के लिए.</li>
+<li><code>POST /api/v1/voice/rooms/join-or-create</code> साथ <code>{ "conversationId": "&lt;chatConversationId&gt;" }</code> - एक कॉल जो कमरे में वापस आती है और आवाज चालू करने वाला बाकी सभी लोग वहां जुट जाते हैं। (तुम अभी भी <code>GET /rooms?conversationId=</code> तब <code>POST /rooms</code> हाथ से, लेकिन ऐसा करने वाले दो ग्राहक एक साथ दो कमरे बनाते हैं।)</li>
 <li><code>POST /api/v1/voice/rooms/{roomId}/join</code>.</li>
 <li>खुला <code>ws/v1/voice?roomId=&lt;guid&gt;</code>.</li>
 </ol>

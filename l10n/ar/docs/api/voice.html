@@ -4,14 +4,14 @@ lang: "ar"
 title: "صوت"
 source_url: "/docs/api/voice.html"
 source_path: "docs/api/voice.md"
-source_hash: "b854ce844a33279125a6c44c43b800b3efef80cbcf31d1f74a9f17192fab0aef"
+source_hash: "2e62c810e7e3001d5fd08d03857a71dd55467740b6f524dbfa9ececa37f472a9"
 translation: "machine"
 permalink: "/ar/docs/api/voice.html"
 ---
 {% raw %}
 <h1 id="voice">صوت</h1>
 <p>يوفر صوت StarHermit غرفًا صوتية لكل محادثة عبر REST API (<code>api/v1/voice</code>) بالإضافة إلى WebSocket الثنائي/النص المختلط (<code>ws/v1/voice</code>) لإشارات الصوت وWebRTC. تتطلب جميع نقاط نهاية REST المصادقة. قد يختلف توفر الصوت. تختلف أجسام الخطأ؛ يرى <a href="/ar/docs/api/conventions.html#requests-and-responses">اتفاقيات API</a>.</p>
-<p>ترتكز الغرف على أ <a href="/ar/docs/api/chat.html">محادثة الدردشة</a>; العضوية في المحادثة بوابة لكل شيء، لذا فإن قواعد الصداقة في الدردشة تحكم الصوت أيضًا (محادثات جلسة اللعبة تتجاوز الصداقة). الحدود: 3 غرف نشطة لكل محادثة، بحد أقصى 10 مشاركين لكل غرفة، برنامج ترميز <code>"opus"</code>.</p>
+<p>ترتكز الغرف على أ <a href="/ar/docs/api/chat.html">محادثة الدردشة</a>; العضوية في المحادثة بوابة لكل شيء، لذا فإن قواعد الصداقة في الدردشة تحكم الصوت أيضًا (محادثات جلسة اللعبة تتجاوز الصداقة). الحدود: 3 غرف نشطة لكل محادثة، ما يصل إلى 32 مشاركًا لكل غرفة (الإعداد الافتراضي عند حذف <code>maxParticipants</code>; تم تثبيت القيمة الخاصة بك على 2–32). تعلن كل غرفة أ <code>codec</code> قد تعتمد مجموعات المنشئين والعملاء على: <code>pcm</code> افتراضيًا - اصطلاح 20 مللي ثانية/16 كيلو هرتز/أحادي/s16، حيث يتم إعادة توجيه التتابع بشكل غير شفاف - أو <code>opus</code> لغرفة يقوم جميع المشاركين فيها بتشغيل عميل قادر على استخدام Opus. تتم إعادة توجيه التسمية، ولا ينطبق أي تغيير على الخادم.</p>
 <h2 id="rest-endpoints">نقاط النهاية REST</h2>
 <p>قاعدة: <code>https://api.starhermit.com/api/v1/voice</code>.</p>
 <table>
@@ -29,6 +29,12 @@ permalink: "/ar/docs/api/voice.html"
 <td><code>/rooms</code></td>
 <td>JWT</td>
 <td>إنشاء غرفة صوتية للمحادثة</td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/rooms/join-or-create</code></td>
+<td>JWT</td>
+<td>قم بإرجاع أقدم غرفة نشطة للمحادثة بمقعد مجاني، أو قم بإنشاء واحدة - يتم اختيارها تلقائيًا</td>
 </tr>
 <tr>
 <td>يحصل</td>
@@ -76,9 +82,11 @@ permalink: "/ar/docs/api/voice.html"
 </table>
 <h3 id="create-a-room">قم بإنشاء غرفة</h3>
 <p><code>POST /rooms</code></p>
-<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 10 }
+<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 8, "codec": "opus" }
 </code></pre>
-<p>يعود أ <code>VoiceRoomDto</code>.</p>
+<p><code>maxParticipants</code> (اختياري، مثبت على 2–32؛ الإعدادات الافتراضية على 32) و <code>codec</code> (خياري، <code>pcm</code> أو <code>opus</code>; تتم قراءة أي شيء آخر كما <code>pcm</code>) يتم تعيينهما مرة واحدة عند الإنشاء. يعود أ <code>VoiceRoomDto</code>.</p>
+<h3 id="join-or-create-a-room">الانضمام أو إنشاء غرفة</h3>
+<p><code>POST /rooms/join-or-create</code> بنفس الجسم يعود أ <code>VoiceRoomDto</code> للمحادثة <strong>أقدم غرفة نشطة لا يزال بها مقعد مجاني</strong>، أو ينشئ واحدًا عندما لا يفعل أي منهم ذلك - يتم تحديده تلقائيًا تحت قفل غرفة المحادثة، لذلك فإن العضوين اللذين يقومان بتشغيل الصوت في نفس اللحظة يستقران في غرفة واحدة بدلاً من اثنتين، ولا يستطيعان سماع بعضهما البعض. <code>maxParticipants</code>/<code>codec</code> تنطبق فقط عندما يتم إنشاؤه. مازلت تتصل <code>/rooms/{roomId}/join</code> في الغرفة التي تم إرجاعها قبل فتح WebSocket.</p>
 <h3 id="room-shape">شكل الغرفة</h3>
 <p><code>GET /rooms?conversationId=&lt;guid&gt;</code> → <code>VoiceRoomDto[]</code>; <code>GET /rooms/{roomId}</code> → <code>VoiceRoomDto</code>:</p>
 <pre><code class="language-json">{
@@ -87,7 +95,7 @@ permalink: "/ar/docs/api/voice.html"
   "creatorUserId": "&lt;guid&gt;",
   "codec": "opus",
   "status": "Active",
-  "maxParticipants": 10,
+  "maxParticipants": 8,
   "createdAt": "2026-07-22T07:00:00Z",
   "participants": [
     {
@@ -175,7 +183,7 @@ permalink: "/ar/docs/api/voice.html"
 <h2 id="example-integration-pattern-from-the-chess-reference-implementation">نموذج لنمط التكامل (من التنفيذ المرجعي للشطرنج)</h2>
 <p>يتم الاشتراك في الصوت لكل جلسة لعبة. عميل نموذجي <code>enable()</code> تدفق:</p>
 <ol>
-<li><code>GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;</code> للعثور على غرفة موجودة، وإلا <code>POST /api/v1/voice/rooms</code> لإنشاء واحدة.</li>
+<li><code>POST /api/v1/voice/rooms/join-or-create</code> مع <code>{ "conversationId": "&lt;chatConversationId&gt;" }</code> - مكالمة واحدة تعيد الغرفة التي يتقارب فيها أي شخص آخر يقوم بتشغيل الصوت. (لا يزال بإمكانك <code>GET /rooms?conversationId=</code> ثم <code>POST /rooms</code> يدويًا، لكن عميلين يفعلان ذلك في الوقت نفسه يصنعان غرفتين.)</li>
 <li><code>POST /api/v1/voice/rooms/{roomId}/join</code>.</li>
 <li>يفتح <code>ws/v1/voice?roomId=&lt;guid&gt;</code>.</li>
 </ol>

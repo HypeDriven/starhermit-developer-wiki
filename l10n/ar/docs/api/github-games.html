@@ -4,7 +4,7 @@ lang: "ar"
 title: "ألعاب جيثب"
 source_url: "/docs/api/github-games.html"
 source_path: "docs/api/github-games.md"
-source_hash: "3ac05be03d6f084237353cccfe3c7a2c060046dd000d68711193907a1b4c6263"
+source_hash: "18874cfc930238321fcafd0740bf7c9cb0e342371b34c7914a4370b28218c7fb"
 translation: "machine"
 permalink: "/ar/docs/api/github-games.html"
 ---
@@ -150,8 +150,38 @@ control.shoot=Space | Shoot
 <tr>
 <td>بريد</td>
 <td><code>/api/v1/me/github-games/{id}/transfer</code></td>
+<td>جي دبليو تي (مالك)</td>
+<td>عرض لعبة على مستخدم آخر → <code>GameTransferOfferDto</code> (اللعبة تفعل <strong>لا</strong> تحرك بعد)</td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/github-games/transfers/incoming</code></td>
 <td>JWT</td>
-<td>نقل لعبة إلى مستخدم آخر → <code>GitHubGameDto</code></td>
+<td>العروض في انتظار قرارك → <code>GameTransferOfferDto[]</code></td>
+</tr>
+<tr>
+<td>يحصل</td>
+<td><code>/api/v1/me/github-games/transfers/outgoing</code></td>
+<td>JWT</td>
+<td>العروض التي قدمتها والتي لا يزال بإمكانك إلغاؤها → <code>GameTransferOfferDto[]</code></td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/accept</code></td>
+<td>JWT (المستلم)</td>
+<td>قبول العرض؛ تصبح اللعبة ملكك الآن → <code>GitHubGameDto</code></td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/decline</code></td>
+<td>JWT (المستلم)</td>
+<td>رفض العرض → <code>204</code></td>
+</tr>
+<tr>
+<td>بريد</td>
+<td><code>/api/v1/me/github-games/transfers/{offerId}/cancel</code></td>
+<td>JWT (المقدم)</td>
+<td>سحب العرض الذي قدمته → <code>204</code></td>
 </tr>
 <tr>
 <td>يمسح</td>
@@ -452,9 +482,35 @@ Content-Type: application/json
 <a href="/ar/docs/tutorials/claim-existing-game.html">برنامج تعليمي للمطالبة خطوة بخطوة</a> للاكتشاف، وكلاهما دليل
 الأساليب والتحقق والاستيلاء واستكشاف الأخطاء وإصلاحها.</p>
 <h3 id="transfer-ownership">نقل الملكية</h3>
-<p><code>POST /api/v1/me/github-games/{id}/transfer</code></p>
+<p>النقل هو أ <strong>العرض المعلق الذي يقبله المستلم</strong>، ليست خطوة فورية - لعبة (وخاصة
+البايتات المستضافة، والتي يتم احتسابها ضد المستلم) لا يمكن دفعها إلى حساب آخر بدونها
+قل ذلك.</p>
+<p><code>POST /api/v1/me/github-games/{id}/transfer</code> (المالك) يسجل العرض ويعيد أ
+<code>GameTransferOfferDto</code>; تبقى اللعبة ملكك حتى يتم قبولها.</p>
 <pre><code class="language-json">{ "toUserId": "&lt;user id&gt;" }
 </code></pre>
+<pre><code class="language-jsonc">// GameTransferOfferDto
+{
+  "id": "&lt;offer id&gt;",
+  "gameId": "&lt;game id&gt;",
+  "gameTitle": "StarHermit Chess",
+  "fromUserId": "&lt;guid&gt;", "fromUsername": "alice",
+  "toUserId": "&lt;guid&gt;",   "toUsername": "bob",
+  "status": "pending",
+  "createdAt": "2026-10-17T16:00:00Z"
+}
+</code></pre>
+<ul>
+<li>يراها المتلقي تحت <code>GET /transfers/incoming</code> ويقبل مع
+<code>POST /transfers/{offerId}/accept</code>. القبول يحرك اللعبة <strong>الآن</strong>، تم التحقق منه في تلك اللحظة
+مقابل عدد الألعاب وبدل الاستضافة الخاص بالمستلم - لذلك يمكن تقديم عرض وما زال
+تفشل في الهبوط إذا كان المستلم في حدوده. يمكنهم بدلا من ذلك <code>POST /transfers/{offerId}/decline</code>.</li>
+<li>يرى مقدم العرض عروضه المعلقة أدناه <code>GET /transfers/outgoing</code> ويجوز سحب واحد مع
+<code>POST /transfers/{offerId}/cancel</code>.</li>
+<li>يتم إعادة فحص كل شيء عند القبول: تم نقل اللعبة أو إزالتها أو إعادة الإشارة إليها منذ إجابات العرض
+<code>GameUnavailable</code>، وتقديم نفس اللعبة مرة أخرى يحل محل العرض الذي لا يزال معلقًا، لذلك يتوفر اثنان
+لا يمكن قبول عروض لعبة واحدة.</li>
+</ul>
 <h3 id="push-a-game-bundle">ادفع حزمة اللعبة</h3>
 <p><code>POST /api/v1/me/github-games/{id}/bundle</code> ينشر مخرجات مبنية دون أن يطلب من StarHermit ذلك
 استنساخه مرة أخرى. يجب أن يمتلك المتصل اللعبة المسجلة. أرسل <code>.tar.gz</code> بايت مباشرة - لا
@@ -479,6 +535,9 @@ remove.txt         merge only: client-relative paths to delete, one per line
 <code>container.memory_mb</code> أو <code>container.cpu</code> ويلتقطه النشر عند إعادة التشغيل؛ اترك المقبض و
 فهو يحتفظ بكل ما قمت بتعيينه في المرة الأخيرة. احذف البيان بالكامل ولا شيء يتعلق بالنشر
 التغييرات باستثناء الصورة.</p>
+<p>حزمة الذين <code>starhermit.txt</code> يحمل صالحة للاستعمال <code>name=</code> أيضًا <strong>يعيد تسمية قائمة اللعبة</strong> إليه —
+يتم تحديث اسم العرض جنبًا إلى جنب مع الدفع. يترك <code>name=</code> خارج (أو حذف البيان) للاحتفاظ به
+الاسم الحالي.</p>
 <p>يقوم عملاء StarHermit ببناء هذه الحزمة لك، من مجلد <strong>أو واحدة <code>.tar</code></strong>:</p>
 <ul>
 <li><strong>ملفات العميل</strong> - مجلد توزيع اللعبة، أو <code>.tar</code> منه. مجلد معبأة تحت

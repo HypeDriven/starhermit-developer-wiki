@@ -4,14 +4,14 @@ lang: "fr"
 title: "Voix"
 source_url: "/docs/api/voice.html"
 source_path: "docs/api/voice.md"
-source_hash: "b854ce844a33279125a6c44c43b800b3efef80cbcf31d1f74a9f17192fab0aef"
+source_hash: "2e62c810e7e3001d5fd08d03857a71dd55467740b6f524dbfa9ececa37f472a9"
 translation: "machine"
 permalink: "/fr/docs/api/voice.html"
 ---
 {% raw %}
 <h1 id="voice">Voix</h1>
 <p>StarHermit Voice fournit des salles vocales par conversation via une API REST (<code>api/v1/voice</code>) plus un WebSocket mixte binaire/texte (<code>ws/v1/voice</code>) pour la signalisation audio et WebRTC. Tous les points de terminaison REST nécessitent une authentification. La disponibilité vocale peut varier. Les corps d’erreur varient&#160;; voir <a href="/fr/docs/api/conventions.html#requests-and-responses">Conventions API</a>.</p>
-<p>Les chambres sont ancrées à un <a href="/fr/docs/api/chat.html">conversation en ligne</a>; l'adhésion à la conversation contrôle tout, donc les règles d'amitié dans le chat régissent également la voix (les conversations de session de jeu contournent l'amitié). Limites : 3 salles actives par conversation, max 10 participants par salle, codec <code>"opus"</code>.</p>
+<p>Les chambres sont ancrées à un <a href="/fr/docs/api/chat.html">conversation en ligne</a>; l'adhésion à la conversation contrôle tout, donc les règles d'amitié dans le chat régissent également la voix (les conversations de session de jeu contournent l'amitié). Limites&#160;: 3&#160;salles actives par conversation, jusqu'à 32&#160;participants par salle (valeur par défaut lorsque vous omettez <code>maxParticipants</code>; votre valeur est limitée à 2–32). Chaque pièce déclare un <code>codec</code> les ensembles de créateurs et les clients peuvent s'appuyer sur&#160;: <code>pcm</code> par défaut — la convention 20 ms/16 kHz/mono/s16 le relais transmet de manière opaque — ou <code>opus</code> pour une salle dont les participants gèrent tous un client compatible Opus. L'étiquette est transmise, jamais de transformation appliquée par le serveur.</p>
 <h2 id="rest-endpoints">Points de terminaison REST</h2>
 <p>Base: <code>https://api.starhermit.com/api/v1/voice</code>.</p>
 <table>
@@ -29,6 +29,12 @@ permalink: "/fr/docs/api/voice.html"
 <td><code>/rooms</code></td>
 <td>JWT</td>
 <td>Créer une salle vocale pour une conversation</td>
+</tr>
+<tr>
+<td>POSTE</td>
+<td><code>/rooms/join-or-create</code></td>
+<td>JWT</td>
+<td>Renvoyez la salle active la plus ancienne de la conversation avec un siège libre, ou créez-en un – choisi de manière atomique</td>
 </tr>
 <tr>
 <td>OBTENIR</td>
@@ -76,9 +82,11 @@ permalink: "/fr/docs/api/voice.html"
 </table>
 <h3 id="create-a-room">Créer une pièce</h3>
 <p><code>POST /rooms</code></p>
-<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 10 }
+<pre><code class="language-json">{ "conversationId": "&lt;guid&gt;", "maxParticipants": 8, "codec": "opus" }
 </code></pre>
-<p>Renvoie un <code>VoiceRoomDto</code>.</p>
+<p><code>maxParticipants</code> (facultatif, limité à 2–32&#160;; par défaut à 32) et <code>codec</code> (facultatif, <code>pcm</code> ou <code>opus</code>; tout le reste est lu comme <code>pcm</code>) sont tous deux définis une fois lors de la création. Renvoie un <code>VoiceRoomDto</code>.</p>
+<h3 id="join-or-create-a-room">Rejoindre ou créer une salle</h3>
+<p><code>POST /rooms/join-or-create</code> avec le même corps renvoie un <code>VoiceRoomDto</code> pour la conversation <strong>la salle active la plus ancienne qui dispose encore d'une place libre</strong>, ou en crée un alors qu'aucun ne le fait - décidé de manière atomique sous le verrou de la salle de conversation, de sorte que deux membres qui allument la voix au même instant atterrissent dans une pièce plutôt que dans deux dans lesquels ils ne peuvent pas s'entendre. <code>maxParticipants</code>/<code>codec</code> s'applique uniquement lors de sa création. Tu appelles toujours <code>/rooms/{roomId}/join</code> sur la salle retournée avant d'ouvrir le WebSocket.</p>
 <h3 id="room-shape">Forme de la pièce</h3>
 <p><code>GET /rooms?conversationId=&lt;guid&gt;</code> → <code>VoiceRoomDto[]</code>; <code>GET /rooms/{roomId}</code> → <code>VoiceRoomDto</code>:</p>
 <pre><code class="language-json">{
@@ -87,7 +95,7 @@ permalink: "/fr/docs/api/voice.html"
   "creatorUserId": "&lt;guid&gt;",
   "codec": "opus",
   "status": "Active",
-  "maxParticipants": 10,
+  "maxParticipants": 8,
   "createdAt": "2026-07-22T07:00:00Z",
   "participants": [
     {
@@ -175,7 +183,7 @@ reconnectez-vous et restaurez la sourdine prévue avant d'envoyer l'audio.</p>
 <h2 id="example-integration-pattern-from-the-chess-reference-implementation">Exemple de modèle d'intégration (issu de l'implémentation de référence des échecs)</h2>
 <p>La voix est facultative par session de jeu. Un client type <code>enable()</code> couler:</p>
 <ol>
-<li><code>GET /api/v1/voice/rooms?conversationId=&lt;chatConversationId&gt;</code> pour trouver une chambre existante, sinon <code>POST /api/v1/voice/rooms</code> pour en créer un.</li>
+<li><code>POST /api/v1/voice/rooms/join-or-create</code> avec <code>{ "conversationId": "&lt;chatConversationId&gt;" }</code> - un appel qui renvoie la pièce vers laquelle convergent tous les autres activant la voix. (Vous pouvez toujours <code>GET /rooms?conversationId=</code> alors <code>POST /rooms</code> à la main, mais deux clients faisant cela en même temps créent deux chambres.)</li>
 <li><code>POST /api/v1/voice/rooms/{roomId}/join</code>.</li>
 <li>Ouvrir <code>ws/v1/voice?roomId=&lt;guid&gt;</code>.</li>
 </ol>

@@ -154,7 +154,7 @@ The request is the same context shape a JavaScript game receives:
   "random": 0.418,
   "sessionId": "0f8fad5b-d9cb-469f-a165-70867728950e",
   "players": [
-    { "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "name": "alice" }
+    { "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7", "name": "alice", "elo": 1312 }
   ],
   "sessionState": null,
   "playerStates": {
@@ -165,8 +165,10 @@ The request is the same context shape a JavaScript game receives:
 
 Field semantics match the [script context](game-scripts.md#context-object), including
 [matchmaking seats, AI flags and empty seats](game-scripts.md#matchmaking-seat-layout) for games
-that configure a start deadline in `starhermit.txt`. Respond with the
-standard result envelope, for example:
+that configure a start deadline in `starhermit.txt`, and each player's current `elo` (1200 until
+rated). Because a container game cannot read the script-only `playerStates`, that roster `elo` is how
+it carries ratings forward between matches instead of starting every match from 1200; change a rating
+only by sending `eloUpdates`. Respond with the standard result envelope, for example:
 
 ```json
 { "ok": true, "sessionState": { "round": 1 } }
@@ -342,6 +344,11 @@ report the game id and sanitized startup logs; do not loosen the check.
 
 Use this after restoration when the container needs to confirm whether the platform still considers
 a session active. A token for another game, or a player launch token, is forbidden.
+
+`chatConversationId` can be `null` on a finished session even though it had one while live: when a
+match ends and nobody sent a chat message, the platform drops the empty game conversation rather
+than keep it for the session row's life, and the field reads `null` afterwards. Treat it as present
+only while the session is `active`.
 
 ## Isolation
 
