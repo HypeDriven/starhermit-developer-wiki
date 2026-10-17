@@ -99,17 +99,35 @@ const GPU_MATCHERS = Object.entries(GPU_LEVELS)
   .sort((a, b) => b[0].length - a[0].length)
   .map(([name, level]) => [new RegExp(`(^|[^a-z0-9])${name}(?![a-z0-9])`), level]);
 
+// Safari, and every browser on iPhone and iPad, names any Apple GPU only "Apple GPU". iPhones and iPads
+// are told apart by screen size (CSS pixels, short side first): the level of the weakest chip sold
+// with that screen. Other sizes — older models, Display Zoom — are level 0.
+const APPLE_SCREENS = {
+  '390x844': 1, '428x926': 1, // iPhone 12, 13, 14, 16e and the larger sizes (A14 and later)
+  '393x852': 4, '430x932': 4, // iPhone 14 Pro, 15, 16 and the larger sizes (A16 and later)
+  '402x874': 6, '420x912': 6, '440x956': 6, // iPhone 16 Pro, 17, Air and Pro Max (A18 Pro and later)
+  '820x1180': 1, // iPad 10th generation and later, iPad Air 11-inch (A14 and later)
+  '834x1194': 2, // iPad Pro 11-inch 2018–2022 (A12X and later)
+  '744x1133': 3, // iPad mini 6th generation and later (A15 and later)
+  '834x1210': 8, '1032x1376': 8, // iPad Pro M4 and later
+};
+
 /** What the browser reports about this machine. `env` defaults to the page (pass a fake in tests). */
 export function detectSystem(env = globalThis) {
   const nav = env.navigator || {};
   const mq = (q) => { try { return !!env.matchMedia?.(q).matches; } catch { return false; } };
+  const sw = Math.round(Number(env.screen?.width) || 0);
+  const sh = Math.round(Number(env.screen?.height) || 0);
   const out = {
     gpu: '',
     webgl: false,
     webgl2: false,
     mobile: !!nav.userAgentData?.mobile || mq('(pointer: coarse)'),
-    cores: Number(nav.hardwareConcurrency) || 0,
+    touch: Number(nav.maxTouchPoints) > 1, // also true for an iPad whose primary pointer is a trackpad
+    screen: [Math.min(sw, sh), Math.max(sw, sh)],
+    cores: Number(nav.hardwareConcurrency) || 0, // WebKit caps it
     memoryGb: Number(nav.deviceMemory) || 0, // Chromium only, and never above 8
+    astc: false, // ASTC textures: on a Mac, only Apple silicon
   };
   try {
     const canvas = env.document.createElement('canvas');
@@ -126,6 +144,7 @@ export function detectSystem(env = globalThis) {
       if (ext) name = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || name);
     }
     out.gpu = name;
+    out.astc = !!gl.getSupportedExtensions?.()?.includes('WEBGL_compressed_texture_astc');
     gl.getExtension('WEBGL_lose_context')?.loseContext(); // free the probe context
   } catch { /* no DOM or no WebGL: keep the defaults */ }
   return out;
@@ -136,13 +155,23 @@ export function detectLevel(system) {
   const s = system || {};
   const g = String(s.gpu || '').toLowerCase().replace(/\((tm|r)\)/g, ' ').replace(/\s+/g, ' ');
   if (s.webgl === false || SOFTWARE.test(g)) return 0;
-  if (s.webgl2 === false || (s.cores && s.cores <= 2) || (s.memoryGb && s.memoryGb <= 2)) return 0;
+  const apple = g.trim() === 'apple gpu';
+  // WebKit caps the reported core count, so it says nothing about an Apple device.
+  if (s.webgl2 === false || (!apple && s.cores && s.cores <= 2) || (s.memoryGb && s.memoryGb <= 2)) return 0;
   // Firefox names only a GPU family ("…, or similar"), so rate it by class like an unlisted GPU.
-  const known = !/or similar/.test(g) && GPU_MATCHERS.find(([re]) => re.test(g));
-  let level = known ? known[1] - (/laptop|max-q/.test(g) ? 2 : 0) : s.mobile ? 0 : DISCRETE.test(g) ? 10 : 4;
+  const known = !apple && !/or similar/.test(g) && GPU_MATCHERS.find(([re]) => re.test(g));
+  let level = apple ? appleLevel(s)
+    : known ? known[1] - (/laptop|max-q/.test(g) ? 2 : 0) : s.mobile ? 0 : DISCRETE.test(g) ? 10 : 4;
   // Phones, tablets and low-memory machines: Auto never goes above Balanced (heat and battery).
   if (s.mobile || (s.memoryGb && s.memoryGb <= 4)) level = Math.min(level, PRESET_LEVELS.high - 1);
   return clamp(level, 0, 20);
+}
+
+// A best guess for Safari's "Apple GPU": the weakest chip that fits the device, so never too high.
+function appleLevel(s) {
+  if (!s.mobile && !s.touch) return s.astc ? 6 : 2; // a Mac: Apple silicon (M1 and later) or Intel
+  const [w, h] = s.screen || [];
+  return APPLE_SCREENS[`${w}x${h}`] || 0;
 }
 
 /** The preset for a hardware level: the one with the highest starting level at or below it. */

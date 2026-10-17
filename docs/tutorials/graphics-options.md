@@ -93,7 +93,7 @@ The levels are approximate, relative to each other; the table in the module list
 | Signal | Level |
 |---|---|
 | No WebGL, or a software renderer (SwiftShader, llvmpipe, Microsoft Basic Render) | 0 |
-| No WebGL2, 2 or fewer CPU cores, or 2 GB of memory or less | 0 |
+| No WebGL2, 2 or fewer CPU cores (except Safari's "Apple GPU"), or 2 GB of memory or less | 0 |
 | A laptop part ("Laptop GPU", "Max-Q") | two below the desktop part |
 | A GPU not in the table: on a phone or tablet | 0 |
 | A GPU not in the table: discrete (NVIDIA, AMD Radeon RX/Pro, Apple M-series) | 10 |
@@ -103,8 +103,27 @@ The levels are approximate, relative to each other; the table in the module list
 The GPU name comes from `RENDERER`, and the `WEBGL_debug_renderer_info` extension is requested only
 when Chromium masks the name. Firefox logs a console warning when that extension is requested, and it
 already reports a name, but only a GPU family ending in "or similar", so Firefox is rated as a GPU not
-in the table. Safari, and every browser on iPhone and iPad, reports any Apple GPU as "Apple GPU": iPhones
-and iPads therefore start at level 0 and Macs in Safari at level 4. Players can always pick a higher preset.
+in the table.
+
+Safari, and every browser on iPhone and iPad, names any Apple GPU only "Apple GPU" and caps the reported
+CPU core count, so for that name the store ignores cores and rates the weakest chip that fits the device:
+
+| Device (screen size in CSS pixels) | Weakest chip | Level |
+|---|---|---|
+| iPhone 16 Pro, 17, Air, 16 Pro Max / 17 Pro Max (402×874, 420×912, 440×956) | A18 Pro | 6 |
+| iPhone 14 Pro, 15, 16 and their larger sizes (393×852, 430×932) | A16 | 4 |
+| iPhone 12, 13, 14, 16e and their larger sizes (390×844, 428×926) | A14 | 1 |
+| iPad Pro with M4 or later (834×1210, 1032×1376) | M4 | 8 |
+| iPad mini 6th generation or later (744×1133) | A15 | 3 |
+| iPad Pro 11-inch, 2018–2022 (834×1194) | A12X | 2 |
+| iPad 10th generation or later, iPad Air 11-inch (820×1180) | A14 | 1 |
+| Any other iPhone or iPad, including Display Zoom | — | 0 |
+| Mac with ASTC texture support (Apple silicon) | M1 | 6 |
+| Mac without ASTC texture support (Intel) | — | 2 |
+
+A touch screen (`navigator.maxTouchPoints` above 1) marks an iPad even when its desktop-class Safari
+reports a Mac and a trackpad is the primary pointer. These are floors: a faster model sharing a screen size,
+or an M-series Pro or Max chip, starts lower than it could, never higher. Players can always pick a higher preset.
 
 While the game runs, Auto also watches frame times. If adaptive resolution has already dropped to its
 floor and frames still average over 26 ms for three more 90-frame windows, Auto steps down one preset

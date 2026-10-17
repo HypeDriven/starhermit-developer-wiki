@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createGraphics, detectLevel, detectPreset, presetForLevel, resolve, withPreset } from '../docs/sdk/graphics-options.js';
+import { createGraphics, detectLevel, detectPreset, detectSystem, presetForLevel, resolve, withPreset } from '../docs/sdk/graphics-options.js';
 
 const system = { gpu: 'NVIDIA RTX', webgl: true, webgl2: true, cores: 8, memoryGb: 8 };
 const create = (opts = {}) => createGraphics({ sdk: null, storage: null, system, ...opts });
@@ -35,7 +35,6 @@ test('hardware levels run from a Galaxy S20 or weaker (0) to an RTX 5090 (20)', 
     [desktop, 'ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)', 2, 'low'],
     [desktop, 'ANGLE (Intel, Intel(R) UHD Graphics 620 (0x00005917) Direct3D11 vs_5_0 ps_5_0, D3D11)', 0, 'low'],
     [desktop, 'ANGLE (NVIDIA, NVIDIA GeForce GTX 980 Direct3D11 vs_5_0 ps_5_0), or similar', 10, 'high'],
-    [desktop, 'Apple GPU', 4, 'balanced'],
     [desktop, 'Some Future GPU', 4, 'balanced'],
     [{ ...desktop, memoryGb: 4 }, 'NVIDIA GeForce RTX 5090', 9, 'balanced'],
     [{ ...desktop, cores: 2 }, 'NVIDIA GeForce RTX 5090', 0, 'low'],
@@ -60,6 +59,46 @@ test('hardware levels run from a Galaxy S20 or weaker (0) to an RTX 5090 (20)', 
     levels: { fast: 0, pretty: 12 } });
   assert.equal(gfx.level, 12);
   assert.equal(gfx.settings.preset, 'pretty');
+});
+
+test("Safari's masked Apple GPU is rated by the weakest chip that fits the device", () => {
+  const apple = { gpu: 'Apple GPU', webgl: true, webgl2: true, cores: 2, memoryGb: 0 }; // WebKit caps cores
+  const iphone = { ...apple, mobile: true, touch: true };
+  for (const [s, level, preset] of [
+    [{ ...iphone, screen: [414, 896] }, 0, 'low'], // iPhone 11 (A13)
+    [{ ...iphone, screen: [375, 812] }, 0, 'low'], // iPhone X–13 mini, or Display Zoom
+    [{ ...iphone, screen: [390, 844] }, 1, 'low'], // iPhone 12–14 (A14+)
+    [{ ...iphone, screen: [393, 852] }, 4, 'balanced'], // iPhone 15 (A16+)
+    [{ ...iphone, screen: [440, 956] }, 6, 'balanced'], // iPhone 16 Pro Max (A18 Pro+)
+    [{ ...iphone, screen: [834, 1210] }, 8, 'balanced'], // iPad Pro M4
+    [{ ...apple, touch: true, screen: [820, 1180] }, 1, 'low'], // iPad Air with a trackpad as primary pointer
+    [{ ...iphone }, 0, 'low'], // no screen size
+    [{ ...apple, astc: true, screen: [900, 1440] }, 6, 'balanced'], // Mac with Apple silicon
+    [{ ...apple, astc: false, screen: [900, 1440] }, 2, 'low'], // Intel Mac
+  ]) {
+    assert.equal(detectLevel(s), level, JSON.stringify(s));
+    assert.equal(detectPreset(s), preset);
+  }
+  assert.equal(detectLevel({ ...apple, gpu: 'Intel Iris' }), 0); // the core cap still applies elsewhere
+});
+
+test('detectSystem reads Safari through the WebGL debug extension and probes screen and ASTC', () => {
+  const gl = {
+    RENDERER: 1,
+    getParameter: p => (p === 1 ? 'WebKit WebGL' : p === 2 ? 'Apple GPU' : null),
+    getExtension: name => (name === 'WEBGL_debug_renderer_info' ? { UNMASKED_RENDERER_WEBGL: 2 } : null),
+    getSupportedExtensions: () => ['WEBGL_compressed_texture_astc'],
+  };
+  const system = detectSystem({
+    navigator: { maxTouchPoints: 5, hardwareConcurrency: 4 },
+    screen: { width: 852, height: 393 },
+    matchMedia: q => ({ matches: q === '(pointer: coarse)' }),
+    document: { createElement: () => ({ getContext: type => (type === 'webgl2' ? gl : null) }) },
+  });
+  assert.deepEqual(system, { gpu: 'Apple GPU', webgl: true, webgl2: true, mobile: true, touch: true,
+    screen: [393, 852], cores: 4, memoryGb: 0, astc: true });
+  assert.equal(detectLevel(system), 4);
+  assert.deepEqual(detectSystem({}).screen, [0, 0]);
 });
 
 test('phones and tablets render at half the refresh rate unless the player sets a limit', () => {

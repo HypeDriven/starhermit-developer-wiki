@@ -129,7 +129,8 @@ patterns, not the subject of the docs.
   `control.*` actions, publishing them on each publish path, verifying, a client input map and
   rebinding screen, and a troubleshooting table for the controls API's 404/400s), `graphics-options` (the shipped
   `docs/sdk/graphics-options.js` module: a 0–20 hardware level from the reported GPU — a Galaxy S20 or
-  weaker at 0, an RTX 5090 at 20, about 23% per level — that picks the Auto preset, a runtime step-down, per-effect
+  weaker at 0, an RTX 5090 at 20, about 23% per level; Safari's masked "Apple GPU" is estimated from
+  screen size or ASTC support — that picks the Auto preset, a runtime step-down, per-effect
   overrides, adaptive resolution, automatic display-refresh rendering (half the refresh rate on phones
   and tablets) or a persistent manual maximum FPS
   with a render-loop pacing hook, a ready-made panel, `localStorage` plus per-player-settings persistence keyed
