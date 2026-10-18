@@ -193,7 +193,8 @@ Notes specific to this route:
   another one. Push a new build with
   [the bundle endpoint](#push-a-game-bundle) or upload the folder again.
 - **No repository means no claiming.** `ownerLogin` is empty, so no GitHub login can ever match it;
-  `repoUrl` carries a synthetic `upload:<id>` value rather than a URL.
+  `repoUrl` carries a synthetic `upload:<random>` value rather than a URL — a fresh opaque token,
+  **not** the game's id, so don't parse a game id out of it.
 - **A `server/image.tar` is refused here** (`422`). A server image needs a provisioned game to
   attach to, which does not exist until the game does — create the game first, then push the image
   to `/{id}/bundle`.
@@ -643,7 +644,7 @@ backend — a browser-only game gets `409`. See [Leaderboards](leaderboards.md#y
 - `serverScriptPath` is present only for a JavaScript backend. The current DTO does not expose a container image reference.
 - `gameSlug` is present for every game added from a local folder and every game a verified owner added, **with or without a server backend** — it addresses the game's controls, settings, cloud-save slot, rooms and launch tokens. It is `null` only for a repository submission whose owner is not proven. It does not tell you whether the game has a backend; `serverRuntime` does.
 - `serverRuntime` says whether the game has a server backend: `"script"`, `"container"`, or `null` for a browser-only game. It agrees with `GET /api/v1/games/{gameSlug}`, which answers `404` exactly when it is `null`.
-- For a game added from a local folder, `repoUrl` is a synthetic `upload:<id>` marker and `ownerLogin`/`repoName` are empty — there is no repository to name, and an empty owner is what makes the listing unclaimable.
+- For a game added from a local folder, `repoUrl` is a synthetic `upload:<random>` marker (an opaque token, not the game's id) and `ownerLogin`/`repoName` are empty — there is no repository to name, and an empty owner is what makes the listing unclaimable.
 - `coverArtSource` is `"upload"`, `"manifest"` or `null`, and `coverArtUpdatedAt` is when that cover last changed — use it to cache-bust the `/cover` URL. Anything non-null means the game has cover art to fetch; `null` means fall back to `/icon`. The two sources are not equal: an upload always wins, and it is the only one `DELETE /cover` can remove.
 - `description` is the manifest's description, or `null`. `releaseNotesUpdatedAt` is when the release notes last *changed text* (`null` when the game has none). Redeploying identical notes does not move it, so it is safe to drive a "What's new" badge: remember the value a player last saw and compare. The notes themselves are not in the listing; see [Description and release notes](#description-and-release-notes).
 - `SharedGitHubGameDto` extends `GitHubGameDto` with `submittedByUserId` and `submittedByUsername`.
