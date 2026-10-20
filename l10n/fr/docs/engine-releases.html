@@ -1,0 +1,144 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "Sorties du moteur StarHermit"
+source_url: "/docs/engine-releases.html"
+source_path: "docs/engine-releases.md"
+source_hash: "d866f3bf6d9ef5218af4e0260a104d3f77515a84c4d622bfaf19604b11c9183d"
+translation: "machine"
+permalink: "/fr/docs/engine-releases.html"
+---
+{% raw %}
+<h1 id="starhermit-engine-releases">Sorties du moteur StarHermit</h1>
+<p>Le moteur StarHermit - le moteur d'exécution qui joue <a href="/fr/docs/tutorials/starhermit-engine.html">jeux de scénario</a> - est
+publié sur ce wiki sous forme de versions versionnées et immuables sous
+<a href="/engine/">wiki.starhermit.com/engine/</a>. Les jeux épinglent une version exactement avec <code>engine.version</code> dans
+leur <a href="/fr/docs/starhermit-txt.html"><code>starhermit.txt</code></a>; le client StarHermit Windows installe la version a
+le jeu épingle et joue au jeu dessus, et les développeurs téléchargent le runtime d'une version à partir d'ici pour construire
+avec.</p>
+<h2 id="versions">Versions</h2>
+<p>Une libération est <code>X.Y.Z</code>. <code>X</code> est le <strong>version majeure de l'API hôte</strong>, le <code>engine.api</code> un jeu déclare, donc
+chaque version 1.x.x est exécutée <code>engine.api=1</code> jeux; la version enregistre également la version mineure de l'API hôte,
+qui grandit à mesure que des membres sont ajoutés (un jeu peut en nécessiter un avec <code>engine.minor</code>). Une version publiée
+ne change jamais&#160;: un correctif est la prochaine version.</p>
+<table>
+<thead>
+<tr>
+<th>Libérer</th>
+<th>API hôte</th>
+<th>Durées d'exécution</th>
+<th>Téléchargement pour les développeurs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.0.0</td>
+<td>1.4</td>
+<td>Windows (x86-64)&#160;; pas d'exécution Web</td>
+<td><a href="/engine/1.0.0/native/windows-x86_64/starhermit-1.0.0-windows-x86_64.zip">starhermit-1.0.0-windows-x86_64.zip</a></td>
+</tr>
+</tbody>
+</table>
+<p><a href="/engine/versions.json">versions.json</a> est la liste faisant autorité, la plus récente en premier, et le moteur
+la propre page de la zone répertorie la même chose.</p>
+<h2 id="the-engine-area">La zone moteur</h2>
+<pre><code class="language-text">engine/
+  versions.json            every release: host API, date, runtimes, revocation
+  X.Y.Z/
+    native/windows-x86_64/
+      native.json          the Windows runtime's files, each with its size, SHA-256 and chunks
+      starhermit-X.Y.Z-windows-x86_64.zip
+                           the developer download: the same files as one archive
+    manifest.json, starhermit.js, starhermit.wasm, ...
+                           the web runtime, in a release that has one
+  chunks/ab/&lt;sha256&gt;.z     pieces of the native files, shared by every release
+  patches/ab/&lt;sha256&gt;.p    binary patches from earlier releases' files
+</code></pre>
+<p>Chaque fichier est publié tel quel (aucun nom de fichier ne commence par <code>_</code> ou <code>.</code>), et GitHub Pages le sert
+avec <code>Access-Control-Allow-Origin: *</code>.</p>
+<h3 id="versionsjson">versions.json</h3>
+<pre><code class="language-json">{
+  "format": 2,
+  "versions": [
+    {
+      "api": {"major": 1, "minor": 4},
+      "date": "2026-10-20T12:49:23Z",
+      "native": {
+        "windows-x86_64": {"manifest": "1.0.0/native/windows-x86_64/native.json", "sha256": "&lt;SHA-256 of native.json&gt;"}
+      },
+      "revoked": false,
+      "version": "1.0.0",
+      "web": null
+    }
+  ]
+}
+</code></pre>
+<p><code>web</code> est <code>{"manifest": "sha384-…"}</code>, le hachage SRI du site Web de la version <code>manifest.json</code>, ou <code>null</code> pour
+une version sans runtime Web. <code>native</code> épingle chaque plate-forme <code>native.json</code> par son SHA-256. Un
+la version a été retirée parce qu'elle n'est pas sûre, dit <code>"revoked": true</code> avec un <code>"revokedReason"</code>; c'est le
+seul le changement qu'une entrée publiée prend jamais.</p>
+<h3 id="nativejson">native.json</h3>
+<p><code>native.json</code> répertorie les fichiers du dossier du moteur qu'un client installe - <code>starhermit.exe</code>,
+<code>release.json</code> (la version de la release, l'API hôte et le <code>launcher</code> protocole dont son runtime parle),
+<code>LICENSE-engine</code> et les avis des tiers - chacun avec son <code>size</code>, <code>sha256</code> et <code>chunks</code>. Un morceau
+est une partie d'un fichier, stocké sous forme compressée avec zlib <code>chunks/&lt;first two hex digits&gt;/&lt;sha256&gt;.z</code> et nommé
+par le SHA-256 de ses octets non compressés&#160;; les limites des morceaux suivent le contenu, donc un
+stretch conserve son morceau d'une version à l'autre. Là où il est plus petit, un fichier répertorie également
+<code>patches</code> à partir du même fichier des versions antérieures (<code>"from"</code>: le SHA-256 du fichier précédent).
+<code>downloads</code> répertorie le téléchargement du développeur avec son <code>size</code> et <code>sha256</code>; les clients ne l'installent jamais.</p>
+<h2 id="integrity">Intégrité</h2>
+<p>Une chaîne de hachage couvre chaque octet exécuté par un client&#160;:</p>
+<ol>
+<li><code>versions.json</code> (ou l'API de la plateforme ci-dessous) donne le SHA-256 d'une version <code>native.json</code>.</li>
+<li><code>native.json</code> donne le SHA-256 de chaque fichier et celui de chaque morceau.</li>
+<li>Le client récupère uniquement les morceaux qu'il ne détient pas déjà, vérifie la taille stockée de chacun,
+taille gonflée et SHA-256, rassemble chaque fichier, vérifie le SHA-256 du fichier et se déplace ensuite seulement
+la libération en place. Un correctif est vérifié par rapport à son propre SHA-256 et le fichier corrigé par rapport à
+celui du fichier&#160;; tout échec retombe sur les morceaux.</li>
+</ol>
+<p>Le téléchargement développeur est couvert par la même chaîne jusqu'à son entrée dans <code>downloads</code>. Un navigateur
+la page de chargement du jeu épingle le moteur d'exécution Web <code>starhermit.js</code> et <code>manifest.json</code> avec des hachages SRI, et
+le moteur d'exécution vérifie tous les autres fichiers qu'il charge par rapport au manifeste.</p>
+<h2 id="the-engine-releases-api">Le moteur publie l'API</h2>
+<p>La plateforme sert la même liste, avec chaque URL sur ce wiki, donc les clients demandent à l'API quel moteur
+pour récupérer :</p>
+<p><code>GET /api/v1/engine/releases</code> → chaque version, la plus récente en premier&#160;:</p>
+<pre><code class="language-json">{"releases": [{
+  "version": "1.0.0", "api": {"major": 1, "minor": 4}, "revoked": false, "date": "2026-10-20T12:49:23Z",
+  "web": null,
+  "native": {"windows-x86_64": {
+    "manifestUrl": "https://wiki.starhermit.com/engine/1.0.0/native/windows-x86_64/native.json",
+    "manifestSha256": "&lt;SHA-256 of native.json&gt;"}}
+}]}
+</code></pre>
+<p><code>GET /api/v1/engine/releases/{version}</code> → une version, ou <code>404</code> quand il n'est pas répertorié. Les deux sont
+anonyme et pouvant être mis en cache (<code>Cache-Control: public, max-age=60</code> avec un <code>ETag</code>). Une version révoquée
+porte <code>revokedReason</code>; <code>web</code> est <code>{"base", "manifestIntegrity"}</code> pour une version avec un runtime Web.
+Alors que la plateforme n'a jamais lu la liste (le wiki inaccessible depuis son lancement) ils répondent
+<code>503</code> avec <code>Retry-After</code>.</p>
+<h2 id="script-games-on-the-platform">Jeux de script sur la plateforme</h2>
+<p>Quand la racine d'un jeu <code>starhermit.txt</code> déclare <code>engine.version</code>, la plateforme le traite comme un script
+jeu :</p>
+<ul>
+<li>chaque publication enregistre la publication du code PIN des fichiers, comme <code>hosting.engineVersion</code>, et définit
+<code>hosting.deployWarning</code> (également dans la réponse d'un bundle push) lorsque cette version n'est pas répertoriée ou est
+révoqué. Un avertissement n'arrête jamais une publication.</li>
+<li>chaque page du jeu hébergé est accompagnée d'une politique de sécurité du contenu qui n'admet que les scripts
+de ce wiki (et du propre moteur <code>blob:</code> travailleurs), donc le seul code qu'une page de jeu de script peut
+run est le moteur officiel :</li>
+</ul>
+<pre><code class="language-text">default-src 'self'; script-src https://wiki.starhermit.com 'wasm-unsafe-eval' blob:; worker-src blob:;
+connect-src 'self' https://wiki.starhermit.com; img-src 'self' blob: data:; media-src 'self' blob:;
+style-src 'self' 'unsafe-inline'; font-src 'self' https://wiki.starhermit.com;
+frame-ancestors https://dashboard.starhermit.com; base-uri 'self'; form-action 'none'
+</code></pre>
+<p>Une page d'un jeu de script sans version de navigateur (comme la page simple téléchargée par un jeu Windows uniquement)
+pour les navigateurs) ne nécessite aucun script et n'est pas affecté.</p>
+<h2 id="revocations">Révocations</h2>
+<p>Une version révoquée reste répertoriée afin que les clients puissent expliquer pourquoi ils la refusent&#160;: le client StarHermit le fait.
+ne pas l'installer ou le démarrer et indique au joueur que les commandes d'empaquetage refusent d'empaqueter un jeu pour celui-ci
+quand ils lisent <code>versions.json</code>, et la plateforme prévient les propriétaires de jeux qui l'épinglent lorsqu'ils
+publier. Réépinglez la version qui la remplace et publiez à nouveau
+(voir <a href="/fr/docs/tutorials/starhermit-engine.html#9-move-to-a-newer-engine">Passer à un moteur plus récent</a>).</p>
+
+{% endraw %}

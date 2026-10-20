@@ -1,0 +1,565 @@
+# Tutorial: build a game with the StarHermit engine
+
+The StarHermit engine runs **script games**: a whole game written in TypeScript (or JavaScript) and
+played by one prebuilt engine executable, the StarHermit runtime, without compiling any native code.
+You write the game's logic against the engine's built-in modules — a 3D scene, input, a HUD, audio,
+storage and the StarHermit platform — and the runtime does the rest: windowing, rendering on the
+GPU, sound, the options menu, sign-in and online play. Players get the game through the
+[StarHermit Windows client](https://starhermit.com), which installs the engine your game asks for
+and plays it natively.
+
+This tutorial builds **Star Catcher**, a small game in which you steer a basket to catch falling
+stars, and takes it from an empty folder to a published game:
+
+1. [What a script game is](#1-what-a-script-game-is)
+2. [Get the engine](#2-get-the-engine)
+3. [Create the game](#3-create-the-game)
+4. [Write the first version](#4-write-the-first-version)
+5. [Run it natively](#5-run-it-natively)
+6. [Many things at once: `starhermit:world`](#6-many-things-at-once-starhermitworld)
+7. [Players, saves and online play](#7-players-saves-and-online-play)
+8. [Publish it](#8-publish-it)
+9. [Move to a newer engine](#9-move-to-a-newer-engine)
+10. [Limits and the licence](#10-limits-and-the-licence)
+
+## 1. What a script game is
+
+A script game is a folder (a **package**) with a [`starhermit.txt`](../starhermit-txt.md) at its
+root, your TypeScript modules and your assets. Three `engine.*` lines in the manifest make it one:
+
+```ini
+engine.api=1
+engine.entry=src/main.ts
+engine.version=1.0.0
+```
+
+`engine.api` is the major version of the host API your code is written against, `engine.entry` the
+module the runtime starts, and `engine.version` the exact engine release the game is built and
+tested for. Releases are published on this wiki under [Engine releases](../engine-releases.md); the
+game never contains the engine itself, so an upload holds only your own files.
+
+The runtime treats every game as untrusted: your code reaches the machine only through the host API
+(its own package files, its own storage, the platform for its own game id), never files, processes,
+arbitrary network connections or the player's credentials. In return a game cannot crash the runtime
+or hang the window: a call that runs for three seconds brings up the runtime's own "not responding"
+screen, and an uncaught error ends the game on an error screen the player can restart from.
+
+The same package runs everywhere the engine runs. Release 1.0.0 has a Windows runtime only; a
+browser build of the engine comes with a later release (see [Publish it](#8-publish-it)).
+
+## 2. Get the engine
+
+**Players** do nothing: when they press Play on a script game, the StarHermit Windows client
+downloads the release the game pins (once, shared by every game that pins it), checks every file
+against the release's published hashes and starts it.
+
+**Developers** download the runtime of a release from the engine area:
+
+- [starhermit-1.0.0-windows-x86_64.zip](../../engine/1.0.0/native/windows-x86_64/starhermit-1.0.0-windows-x86_64.zip)
+  (Windows 10 or 11, 64-bit), 6.7 MB.
+
+The archive holds one folder, `starhermit-1.0.0-windows-x86_64`, with `starhermit.exe`, the
+`release.json` that tells the runtime which release it is, `LICENSE-engine` and the third-party
+notices. It is the same engine the client installs. Its size and SHA-256 are listed under
+`downloads` in the release's [native.json](../../engine/1.0.0/native/windows-x86_64/native.json); to
+check your copy in PowerShell, compare that `sha256` with:
+
+```powershell
+Get-FileHash .\starhermit-1.0.0-windows-x86_64.zip -Algorithm SHA256
+```
+
+Unpack the archive and open a terminal in the unpacked folder:
+
+```powershell
+.\starhermit.exe --version
+```
+
+```text
+starhermit 0.1.0 (host API 1.4, launcher 1; engine release 1.0.0)
+```
+
+The commands below are written as `starhermit`; run them as `.\starhermit.exe` from that folder, or
+add the folder to your `PATH`.
+
+## 3. Create the game
+
+```powershell
+starhermit new star-catcher --title "Star Catcher"
+```
+
+```text
+Created Star Catcher in star-catcher: a script game pinned to engine 1.0.0
+Play it: starhermit star-catcher
+Check it: starhermit check star-catcher
+For a native upload (the StarHermit client plays it): starhermit package --native star-catcher
+```
+
+The new folder holds a playable starting point — a cube that hops when you press Space:
+
+```text
+star-catcher/
+  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.0.0)
+  tsconfig.json              TypeScript settings for checking the game
+  src/main.ts                the entry module
+  .starhermit/starhermit.d.ts  the host API's declarations, for your editor and the type checker
+```
+
+`.starhermit/` starts with a dot, so it is never part of the package.
+`starhermit types star-catcher` writes the declarations again, for example after you move to a newer
+runtime. Every module, member, unit, limit and error of the host API is documented in that file.
+
+The runtime does not type-check: it removes TypeScript's types as it loads each module. Check them
+yourself with TypeScript 5 or newer; with Node.js installed, `npx` runs it without installing
+anything in the game folder:
+
+```powershell
+cd star-catcher
+npx --package typescript tsc -p .
+```
+
+Keep `node_modules` and other tooling **out of the game folder**: everything in the folder except
+dot-names is part of the package and of every upload.
+
+## 4. Write the first version
+
+Replace the generated `starhermit.txt` with the game's manifest:
+
+```ini
+name=Star Catcher
+description=Catch the falling stars before the time runs out.
+launch=play.html
+engine.api=1
+engine.entry=src/main.ts
+engine.version=1.0.0
+engine.capabilities=platform,storage
+control.left=KeyA+ArrowLeft | Move left
+control.right=KeyD+ArrowRight | Move right
+control.start=Space+Enter | Start a round
+engine.gamepad.left=LeftStickLeft+DpadLeft
+engine.gamepad.right=LeftStickRight+DpadRight
+engine.gamepad.start=South
+cache..=0
+```
+
+The `control.*` lines declare the game's actions with their default keys (the platform's
+[controls](game-controls.md) format) and `engine.gamepad.*` their gamepad defaults. Players rebind
+them in the runtime's Options menu, so the game reads **actions**, never keys. `engine.capabilities`
+asks for what the game uses beyond drawing and input: `platform` for the signed-in player and online
+features, `storage` for data kept on the player's device and account. `launch=play.html` and the page
+it names come into play when you [publish](#8-publish-it).
+
+Then replace `src/main.ts`:
+
+```ts
+// Star Catcher: catch the falling stars in the basket before the time runs out.
+import { frame, onFixedUpdate, onRender, onStart, setFixedRate } from "starhermit:engine";
+import {
+  AmbientLight,
+  BoxGeometry,
+  Color,
+  DirectionalLight,
+  Mesh,
+  MeshStandardMaterial,
+  PerspectiveCamera,
+  SphereGeometry,
+  renderer,
+  scene,
+} from "starhermit:scene";
+import { onAction, value } from "starhermit:input";
+import { storage } from "starhermit:storage";
+import { player } from "starhermit:platform";
+import * as draw from "starhermit:draw";
+
+// -- The scene ----------------------------------------------------------------
+const camera = new PerspectiveCamera(50, 16 / 9, 0.1, 100);
+camera.position.set(0, 4, 12);
+camera.lookAt(0, 3, 0);
+renderer.camera = camera;
+scene.background = new Color(0x0b1020);
+
+const sun = new DirectionalLight(0xfff4e0, 1.2);
+sun.position.set(3, 8, 5);
+scene.add(sun, sun.target, new AmbientLight(0x6070a0, 0.5));
+
+const basket = new Mesh(new BoxGeometry(2, 0.4, 1), new MeshStandardMaterial({ color: 0x4fa3ff, roughness: 0.4 }));
+scene.add(basket);
+
+const starGeometry = new SphereGeometry(0.3, 16, 12);
+const starMaterial = new MeshStandardMaterial({ color: 0xffd34d, emissive: 0xffb000, emissiveIntensity: 0.6 });
+const stars = Array.from({ length: 3 }, () => {
+  const mesh = new Mesh(starGeometry, starMaterial);
+  scene.add(mesh);
+  return { mesh, x: 0, y: 0, previousY: 0, speed: 0 };
+});
+type Star = (typeof stars)[number];
+
+// -- The rules ----------------------------------------------------------------
+const WIDTH = 6; // the basket moves between -WIDTH and WIDTH
+const ROUND = 60; // seconds a round lasts
+let basketX = 0;
+let previousX = 0;
+let score = 0;
+let timeLeft = 0; // 0 between rounds
+const saved = storage.getJson("best");
+let best = typeof saved === "number" ? saved : 0;
+
+function drop(star: Star): void {
+  star.x = (Math.random() * 2 - 1) * WIDTH;
+  star.y = star.previousY = 8 + Math.random() * 4;
+  star.speed = 2 + Math.random() * 2 + score * 0.05;
+}
+
+onStart(() => {
+  setFixedRate(60);
+  for (const star of stars) drop(star);
+});
+
+onAction((event) => {
+  if (event.action === "start" && event.pressed && timeLeft === 0) {
+    score = 0;
+    timeLeft = ROUND;
+    for (const star of stars) drop(star);
+  }
+});
+
+onFixedUpdate((step) => {
+  previousX = basketX;
+  for (const star of stars) star.previousY = star.y;
+  if (timeLeft === 0) return;
+  // An action's value is 0 to 1, so a stick steers gently and a key fully.
+  const steer = value("right") - value("left");
+  basketX = Math.max(-WIDTH, Math.min(WIDTH, basketX + steer * 9 * step));
+  for (const star of stars) {
+    star.y -= star.speed * step;
+    if (star.y < 0.6 && star.y > 0 && Math.abs(star.x - basketX) < 1.2) {
+      score += 1;
+      drop(star);
+    } else if (star.y < -1) {
+      drop(star);
+    }
+  }
+  timeLeft = Math.max(0, timeLeft - step);
+  if (timeLeft === 0 && score > best) {
+    best = score;
+    storage.setJson("best", best);
+  }
+});
+
+// -- Drawing ------------------------------------------------------------------
+onRender((alpha) => {
+  // Between two fixed steps: draw where things are at this moment.
+  basket.position.set(previousX + (basketX - previousX) * alpha, 0.2, 0);
+  for (const star of stars) {
+    star.mesh.position.set(star.x, star.previousY + (star.y - star.previousY) * alpha, 0);
+  }
+  hud();
+});
+
+function hud(): void {
+  const { width, height, scale } = frame();
+  const size = 22 * scale;
+  const name = player()?.displayName ?? "Guest";
+  draw.text(`${name}   score ${score}   best ${best}`, 16 * scale, 16 * scale, { size, color: "#e8ecf4" });
+  if (timeLeft > 0) {
+    draw.text(`${Math.ceil(timeLeft)} s`, width - 16 * scale, 16 * scale, { size, color: "#ffd34d", align: "end" });
+  } else {
+    draw.rect(0, height / 2 - 40 * scale, width, 80 * scale, [0, 0, 0, 0.5]);
+    draw.text("Press Space to play", width / 2, height / 2 - 12 * scale, { size, color: "#ffffff", align: "center" });
+  }
+}
+```
+
+What each part does:
+
+- **The scene.** `starhermit:scene` follows three.js: a camera, lights, meshes made of a geometry
+  and a material, `scene.add`. Distances are meters, angles radians, and colors sRGB.
+- **The rules.** `onFixedUpdate` runs at the fixed rate `setFixedRate(60)` asks for, 60 times a
+  second whatever the frame rate, so the game plays the same on every machine. `value("right")` is
+  the action's value from 0 to 1, so a gamepad stick steers gently and a key steers fully, and
+  `onAction` hears each press, here to start a round.
+- **Drawing.** `onRender` runs once per frame with `alpha`, how far the frame is between the last two
+  fixed steps; positions drawn between `previous` and current values move smoothly at any refresh
+  rate. `starhermit:draw` draws the HUD over the scene in window pixels; `frame().scale` converts
+  logical pixels for high-DPI displays.
+- **The best score** stays on the player's device through `starhermit:storage`, kept apart for
+  each player.
+
+## 5. Run it natively
+
+```powershell
+starhermit check star-catcher
+```
+
+```text
+package=Directory files=3 bytes=4800 name="Star Catcher" api=1 entry=src/main.ts capabilities=platform,storage actions=left,right,start
+runnable=true engine="TypeScript" frames=120 probes=0
+PASS package src/main.ts: valid; 120 frames headless
+```
+
+`check` validates the package (manifest, paths, sizes) and plays 120 frames without a window, so a
+syntax error, an unknown import or an exception at start-up shows here with its file, line and column.
+Then play it:
+
+```powershell
+starhermit star-catcher
+```
+
+Press Space to start a round and the arrow keys (or A and D, or a gamepad) to steer. **F1** always
+opens the runtime's own menu: graphics, audio, controls (rebinding), the account and quitting. Your
+game cannot draw over that menu or read it, and no game can bind F1.
+
+While developing, add `--dev` (`starhermit star-catcher --dev`): the runtime then prints the game's
+`console.log` output and points errors at your TypeScript lines.
+
+## 6. Many things at once: `starhermit:world`
+
+Your game's TypeScript runs in the engine's own script interpreter, which keeps every game inside
+its time and memory budgets. Decisions and a few dozen objects cost little there, but per-entity
+work — moving thousands of particles, a crowd, a flock — would mean thousands of interpreted steps
+every frame. For that the engine has `starhermit:world`:
+
+- **tables** keep entity data in typed columns (numbers and vectors) in the game's memory;
+- **kernels** are ordinary functions of one row that the runtime compiles and runs natively over
+  every row of a table, without entering script;
+- the **schedule** runs kernels every frame, and **bindings** draw a table as one `InstancedMesh`
+  (or drive scene nodes), composing every instance natively.
+
+Your script makes the decisions; the runtime does the per-row arithmetic. Add a night sky of 4,000
+twinkling sparkles behind the game as `src/sky.ts`:
+
+```ts
+// The night sky behind the game: 4,000 twinkling sparkles. Their data lives
+// in a starhermit:world table, a kernel moves every one of them natively each
+// frame, and an instance binding draws the table as one InstancedMesh, so the
+// game's script runs no per-sparkle code at all.
+import { InstancedMesh, MeshBasicMaterial, SphereGeometry, scene } from "starhermit:scene";
+import { bind, kernel, schedule, table } from "starhermit:world";
+
+const COUNT = 4_000;
+
+// One row per sparkle: where it hangs, how it twinkles, and what the kernel
+// writes each frame (its height and size).
+const sky = table("sky", COUNT, {
+  base: "vec3",
+  phase: "f32",
+  rate: "f32",
+  y: "f32",
+  size: "f32",
+});
+sky.spawn(COUNT);
+
+// Filled once from script, through typed arrays over the table's memory.
+const base = sky.column("base");
+const phase = sky.column("phase");
+const rate = sky.column("rate");
+for (let i = 0; i < COUNT; i++) {
+  base[i * 3] = (Math.random() * 2 - 1) * 40;
+  base[i * 3 + 1] = Math.random() * 24 - 2;
+  base[i * 3 + 2] = -10 - Math.random() * 30;
+  phase[i] = Math.random() * Math.PI * 2;
+  rate[i] = 0.5 + Math.random() * 2;
+}
+
+// An ordinary function of one row. The runtime compiles it and runs it over
+// every live row without entering script.
+const twinkle = kernel(sky, (r, u: { drift: number }, f) => {
+  r.y = r.base.y + Math.sin(f.time * u.drift + r.phase) * 0.3;
+  r.size = 0.04 + 0.04 * Math.abs(Math.sin(f.time * r.rate + r.phase));
+});
+
+const mesh = new InstancedMesh(new SphereGeometry(1, 6, 4), new MeshBasicMaterial({ color: 0xcfd8ff }), COUNT);
+scene.add(mesh);
+
+/** Starts the sky: the kernel runs after every onUpdate, and the binding
+ * composes the mesh's instances from the columns after every onRender. */
+export function startSky(): void {
+  schedule.update(twinkle, { drift: 0.4 });
+  bind.instances(mesh, sky, { position: ["base.x", "y", "base.z"], scale: "size" });
+}
+```
+
+and start it from `src/main.ts`: import it with the other imports, and call it in `onStart`:
+
+```ts
+import { startSky } from "./sky.js";
+```
+
+```ts
+onStart(() => {
+  setFixedRate(60);
+  startSky();
+  for (const star of stars) drop(star);
+});
+```
+
+The import names `./sky.js`, TypeScript's convention for a module written as `sky.ts`; the runtime
+resolves it the same way. Kernels accept a subset of the language — numbers and booleans, arithmetic,
+`Math`, `if`, bounded `for` loops, the row's columns and the uniforms you pass — and the runtime
+rejects anything else with a `SyntaxError` at the kernel's line when it compiles it, rather than
+running it slowly. The declarations of `starhermit:world` describe the subset, event queues that
+kernels emit to, tables with history for smooth fixed-step motion, and node bindings.
+
+## 7. Players, saves and online play
+
+**The player.** `player()` from `starhermit:platform` is the signed-in player, or `null` for a
+guest; Star Catcher shows their name in its HUD. When the StarHermit Windows client starts your game,
+the player is signed in from the first frame, with the client's account: the client hands the
+runtime a launch token for your game over a private channel, renews it while the game runs, and the
+game never sees it (no host call returns a token, key or cookie). Players never sign in inside a
+game; signing in and out happens in the client.
+
+**Development runs.** Started from a terminal, a package cannot claim a platform identity by itself,
+so `starhermit star-catcher` plays as a guest. Once your game is published, a development launch
+names it:
+
+```powershell
+starhermit star-catcher --game <your game's id>
+```
+
+and you sign in through **F1 → Account…**, the runtime's own dialog (a key on this computer and one
+emailed confirmation, as in [public-key onboarding](public-key-onboarding.md)). Storage, settings,
+saves and online play then follow that game and account.
+
+**Saves and settings.** `starhermit:storage` has three stores, all private to your game: `storage`
+(key/value data on the device, as Star Catcher uses), `settings` (the game's options, kept with the
+player's account under the platform's [per-player settings](../api/games.md#per-player-game-settings)), and `saves` (the
+game's save, on the device and in the player's [cloud save slot](cloud-save-sync.md) with conflict
+handling).
+
+**Online play.** Everything the platform offers a game is in `starhermit:platform` for your game's
+own id: friends and presence, invites, [realtime rooms](../api/realtime.md), matchmaking, the
+[game socket](../api/games.md) (`connectGame`), leaderboards, achievements, replays, chat and voice.
+For server-authoritative multiplayer, declare a [game script](../api/game-scripts.md):
+
+```ini
+server=server.js
+```
+
+The platform runs it as the authority for your game's sessions; `starhermit:script`'s
+`authority("server.js", …)` runs the same file on a local worker for offline practice, exactly as
+the platform does, so offline and online play share one code path. Leaderboard scores, achievements
+and match results are written only by the server script, never by the game itself; create the boards
+as described in [leaderboards and achievements](game-leaderboards-achievements.md).
+
+## 8. Publish it
+
+A published script game is an ordinary StarHermit game whose files are your package. Players find
+it in their library; the StarHermit Windows client installs it with the engine it pins and plays it
+natively.
+
+**A page for browsers.** The platform hosts every uploaded game at its own address and needs a page
+there to open. Until your game has a browser build, a plain page saying where to play it will do;
+Star Catcher's manifest names `play.html`:
+
+```html
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Star Catcher</title>
+<p>Star Catcher runs in the StarHermit Windows client: find it in your library and press Play.</p>
+</html>
+```
+
+Use a name other than `index.html`: a later browser build writes its own `index.html`.
+
+**The file index.** The client installs and updates an uploaded game by its file index,
+`starhermit-files.json`: every file with its size and SHA-256. Write it after every change to the
+game, as the last step before uploading:
+
+```powershell
+starhermit package --native star-catcher
+```
+
+```text
+Native upload: star-catcher (6 files, 7553 bytes to upload; the platform takes at most 50 MiB)
+Wrote star-catcher\starhermit-files.json for engine 1.0.0: the StarHermit client installs the game by it
+Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.0.0 is still current
+```
+
+It checks the package against the platform's upload rules (no `api/` or `ws/` folders, at most
+9,998 paths and 50 MiB) and the release your game pins, which must be published with a Windows
+runtime and not revoked. The runtime checks its own release offline; `--versions` names a copy of
+[versions.json](../../engine/versions.json) to check against another one.
+
+**Upload it.** The folder is the upload, exactly as it is: the client checks every file against the
+index, so upload the folder's files unchanged, with the same `starhermit.txt` both inside the folder
+and at the bundle's root (the platform publishes the root copy in the folder's place). As in
+[Add a game from a local folder](../api/github-games.md#add-a-game-from-a-local-folder):
+
+```bash
+mkdir -p bundle/client
+cp -R star-catcher/. bundle/client/
+rm -rf bundle/client/.starhermit
+cp star-catcher/starhermit.txt bundle/starhermit.txt
+tar -C bundle -czf star-catcher.tar.gz .
+
+curl --fail-with-body -X POST https://api.starhermit.com/api/v1/me/github-games/upload \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H 'Content-Type: application/gzip' \
+  --data-binary @star-catcher.tar.gz
+```
+
+`ACCESS_TOKEN` is your account's access token (see [upload builds from CI/CD](ci-cd-build-upload.md)
+for signing in without a browser). The answer's `game.id` is your game's id, and the game is live at once at
+`https://<id>.starhermit.com/`. For every later version, write the index again and push the same kind
+of bundle to the game with [`POST /api/v1/me/github-games/{id}/bundle`](../api/github-games.md#push-a-game-bundle);
+players' clients then download only the files whose hashes changed. A `server=` script in the
+folder gets the game its backend as the upload is published.
+
+**From a repository.** A game [published from GitHub](../api/github-games.md) works the same way:
+commit `starhermit.txt` with its `engine.*` lines at the repository root. The client installs and
+updates a repository game with git, fetching only what each commit adds, so it needs no file index.
+
+**In browsers.** `starhermit package --web` writes a game's browser upload: its files, a loader page
+that loads the pinned engine release from this wiki by hash, and its file index. It needs a release
+with a web runtime; 1.0.0 is Windows-only, so browser builds start with a later release, and
+`package --web` says so until then. On the platform, a script game's pages may run only the official
+engine from this wiki (see [Engine releases](../engine-releases.md#script-games-on-the-platform)).
+
+## 9. Move to a newer engine
+
+A game runs on exactly the release it pins: nothing upgrades it behind your back, and a published
+release never changes. To move to a newer one, download its runtime, run your game and its checks
+on it, then re-pin by changing `engine.version` in `starhermit.txt`, write the file index again and
+publish. Players' clients download the new engine once (only what changed from releases they already
+hold) and your game's changed files.
+
+The release's major version is the host API's: `engine.api=1` games move freely within 1.x.x. A game
+that needs host API members added in a minor version can say so with `engine.minor=N`; an older
+runtime then refuses it with a message instead of failing later.
+
+A release found unsafe is **revoked**: [versions.json](../../engine/versions.json) marks it with the
+reason, the client refuses to install or start it (and tells the player why), and the packaging
+commands refuse it whenever they read versions.json. A revoked release is always followed by a fixed one; re-pin to it and publish.
+
+## 10. Limits and the licence
+
+The runtime keeps every game within budgets, which a package may lower with `engine.limits.*` but
+never raise: 32 ms of script time for each callback (a callback that uses it up is paused and
+continues on the next frames; after three seconds the runtime's "not responding" screen lets the
+player wait or stop the game), a 256 MiB script heap, 64 MiB of storage, at most 512 MiB and 65,536
+files in a package and, for uploads, the platform's 50 MiB and 9,998 paths. Going past a limit where
+an operation can fail (an allocation, a host call) throws a `RangeError`; running out of heap or call
+depth ends the game on the error screen. The host API's declarations list every limit.
+
+The engine is licensed under the [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)
+with this additional permission, quoted from its `LICENSE-engine`:
+
+> Additional permission: Hype Driven Development Inc. also permits use of this software for any
+> purpose, including commercial purposes, to make, distribute and run a game built with it, for as
+> long as that game is published on StarHermit.com, publicly available to play there, and kept in
+> running order there. For any other use that the license below does not permit, contact
+> info@hypedriven.com.
+
+The full text is the `LICENSE-engine` file in the download and beside every installed engine; the
+third-party components keep their own licences, in its `notices` folder. Your game's own code and
+assets are yours.
+
+## Checklist
+
+- [ ] `starhermit.txt` has `engine.api`, `engine.entry` and `engine.version`, and the capabilities
+      the game uses.
+- [ ] `starhermit check` passes, and `npx --package typescript tsc -p .` reports no errors.
+- [ ] The folder holds only the game: no `node_modules`, no build tools.
+- [ ] A page for browsers is named by `launch=`.
+- [ ] `starhermit package --native` ran after the last change, and the folder was uploaded unchanged.

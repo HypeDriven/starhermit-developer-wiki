@@ -1,0 +1,482 @@
+---
+layout: "wiki"
+lang: "ur"
+title: "ٹیوٹوریل: StarHermit انجن کے ساتھ ایک گیم بنائیں"
+source_url: "/docs/tutorials/starhermit-engine.html"
+source_path: "docs/tutorials/starhermit-engine.md"
+source_hash: "4c2d0cc374adb8270ed1094215281efce6a3dc2f2cf235876f02011df5fb054d"
+translation: "machine"
+permalink: "/ur/docs/tutorials/starhermit-engine.html"
+---
+{% raw %}
+<h1 id="tutorial-build-a-game-with-the-starhermit-engine">ٹیوٹوریل: StarHermit انجن کے ساتھ ایک گیم بنائیں</h1>
+<p>StarHermit انجن چلتا ہے۔ <strong>سکرپٹ کھیل</strong>: TypeScript (یا JavaScript) میں لکھا ہوا ایک پورا گیم اور
+کسی بھی مقامی کوڈ کو مرتب کیے بغیر، ایک پری بلٹ انجن ایگزیکیوٹیبل، StarHermit رن ٹائم کے ذریعے چلایا جاتا ہے۔
+آپ گیم کی منطق انجن کے بلٹ ان ماڈیولز کے خلاف لکھتے ہیں — ایک 3D سین، ان پٹ، ایک HUD، آڈیو،
+اسٹوریج اور StarHermit پلیٹ فارم - اور رن ٹائم باقی کام کرتا ہے: ونڈونگ، پر رینڈرنگ
+GPU، آواز، اختیارات کا مینو، سائن ان اور آن لائن کھیل۔ کھلاڑی کھیل کے ذریعے حاصل کرتے ہیں۔
+<a href="https://starhermit.com">StarHermit ونڈوز کلائنٹ</a>، جو آپ کے گیم کے طلب کردہ انجن کو انسٹال کرتا ہے۔
+اور اسے مقامی طور پر کھیلتا ہے۔</p>
+<p>یہ ٹیوٹوریل بناتا ہے۔ <strong>سٹار پکڑنے والا</strong>، ایک چھوٹا سا کھیل جس میں آپ گرتے ہوئے پکڑنے کے لیے ٹوکری چلاتے ہیں۔
+ستارے، اور اسے خالی فولڈر سے شائع شدہ گیم میں لے جاتا ہے:</p>
+<ol>
+<li><a href="#1-what-a-script-game-is">کیا اسکرپٹ گیم ہے۔</a></li>
+<li><a href="#2-get-the-engine">انجن حاصل کریں۔</a></li>
+<li><a href="#3-create-the-game">گیم بنائیں</a></li>
+<li><a href="#4-write-the-first-version">پہلا ورژن لکھیں۔</a></li>
+<li><a href="#5-run-it-natively">اسے مقامی طور پر چلائیں۔</a></li>
+<li><a href="#6-many-things-at-once-starhermitworld">ایک ساتھ بہت سی چیزیں: <code>starhermit:world</code></a></li>
+<li><a href="#7-players-saves-and-online-play">کھلاڑی، بچت اور آن لائن کھیل</a></li>
+<li><a href="#8-publish-it">اسے شائع کریں۔</a></li>
+<li><a href="#9-move-to-a-newer-engine">ایک نئے انجن پر جائیں۔</a></li>
+<li><a href="#10-limits-and-the-licence">حدود اور لائسنس</a></li>
+</ol>
+<h2 id="1-what-a-script-game-is">1. اسکرپٹ گیم کیا ہے۔</h2>
+<p>اسکرپٹ گیم ایک فولڈر ہے (a <strong>پیکج</strong>) کے ساتھ a <a href="/ur/docs/starhermit-txt.html"><code>starhermit.txt</code></a> اس پر
+روٹ، آپ کے ٹائپ اسکرپٹ ماڈیولز اور آپ کے اثاثے۔ تین <code>engine.*</code> مینی فیسٹ میں لائنیں اسے ایک بناتی ہیں:</p>
+<pre><code class="language-ini">engine.api=1
+engine.entry=src/main.ts
+engine.version=1.0.0
+</code></pre>
+<p><code>engine.api</code> میزبان API کا بڑا ورژن ہے جس کے خلاف آپ کا کوڈ لکھا جاتا ہے، <code>engine.entry</code> دی
+ماڈیول رن ٹائم شروع ہوتا ہے، اور <code>engine.version</code> عین مطابق انجن ریلیز گیم بنایا گیا ہے اور
+کے لئے تجربہ کیا. ریلیز اس ویکی پر اس کے تحت شائع کی جاتی ہیں۔ <a href="/ur/docs/engine-releases.html">انجن کی ریلیز</a>; دی
+گیم میں کبھی بھی انجن شامل نہیں ہوتا ہے، لہذا اپ لوڈ میں صرف آپ کی اپنی فائلیں ہوتی ہیں۔</p>
+<p>رن ٹائم ہر گیم کو ناقابل اعتماد سمجھتا ہے: آپ کا کوڈ صرف میزبان API کے ذریعے مشین تک پہنچتا ہے۔
+(اس کی اپنی پیکیج فائلیں، اس کا اپنا اسٹوریج، اس کی اپنی گیم آئی ڈی کا پلیٹ فارم)، کبھی بھی فائلیں، عمل،
+صوابدیدی نیٹ ورک کنکشن یا کھلاڑی کی اسناد۔ بدلے میں ایک گیم رن ٹائم کریش نہیں کر سکتا
+یا ونڈو کو ہینگ کریں: ایک کال جو تین سیکنڈ تک چلتی ہے رن ٹائم کا اپنا لے آتی ہے۔ "جواب نہیں دے رہا"
+اسکرین، اور ایک نہ پکڑی گئی غلطی ایک ایرر اسکرین پر گیم کو ختم کر دیتی ہے جس سے کھلاڑی دوبارہ شروع کر سکتا ہے۔</p>
+<p>جہاں بھی انجن چلتا ہے ایک ہی پیکج چلتا ہے۔ ریلیز 1.0.0 کا صرف ونڈوز رن ٹائم ہے۔ a
+انجن کی براؤزر کی تعمیر بعد میں ریلیز کے ساتھ آتی ہے (دیکھیں۔ <a href="#8-publish-it">اسے شائع کریں۔</a>).</p>
+<h2 id="2-get-the-engine">2. انجن حاصل کریں۔</h2>
+<p><strong>کھلاڑی</strong> کچھ نہ کریں: جب وہ اسکرپٹ گیم پر پلے دبائیں تو StarHermit ونڈوز کلائنٹ
+ریلیز گیم پن کو ڈاؤن لوڈ کرتا ہے (ایک بار، ہر اس گیم کے ذریعے شیئر کیا جاتا ہے جو اسے پن کرتا ہے)، ہر فائل کو چیک کرتا ہے۔
+ریلیز کی شائع شدہ ہیش کے خلاف اور اسے شروع کرتا ہے۔</p>
+<p><strong>ڈویلپرز</strong> انجن کے علاقے سے ریلیز کا رن ٹائم ڈاؤن لوڈ کریں:</p>
+<ul>
+<li><a href="/engine/1.0.0/native/windows-x86_64/starhermit-1.0.0-windows-x86_64.zip">starhermit-1.0.0-windows-x86_64.zip</a>
+(ونڈوز 10 یا 11، 64 بٹ)، 6.7 ایم بی۔</li>
+</ul>
+<p>آرکائیو ایک فولڈر رکھتا ہے، <code>starhermit-1.0.0-windows-x86_64</code>کے ساتھ <code>starhermit.exe</code>, the
+<code>release.json</code> جو رن ٹائم بتاتا ہے کہ یہ کون سا ریلیز ہے، <code>LICENSE-engine</code> اور تیسری پارٹی
+نوٹس یہ وہی انجن ہے جو کلائنٹ انسٹال کرتا ہے۔ اس کا سائز اور SHA-256 ذیل میں درج ہیں۔
+<code>downloads</code> ریلیز میں <a href="/engine/1.0.0/native/windows-x86_64/native.json">native.json</a>; کو
+PowerShell میں اپنی کاپی چیک کریں، اس کا موازنہ کریں۔ <code>sha256</code> کے ساتھ:</p>
+<pre><code class="language-powershell">Get-FileHash .\starhermit-1.0.0-windows-x86_64.zip -Algorithm SHA256
+</code></pre>
+<p>آرکائیو کو کھولیں اور پیک کیے ہوئے فولڈر میں ٹرمینل کھولیں:</p>
+<pre><code class="language-powershell">.\starhermit.exe --version
+</code></pre>
+<pre><code class="language-text">starhermit 0.1.0 (host API 1.4, launcher 1; engine release 1.0.0)
+</code></pre>
+<p>نیچے دیے گئے احکامات اس طرح لکھے گئے ہیں۔ <code>starhermit</code>; ان کے طور پر چلائیں <code>.\starhermit.exe</code> اس فولڈر سے، یا
+فولڈر کو اپنے میں شامل کریں۔ <code>PATH</code>.</p>
+<h2 id="3-create-the-game">3. گیم بنائیں</h2>
+<pre><code class="language-powershell">starhermit new star-catcher --title "Star Catcher"
+</code></pre>
+<pre><code class="language-text">Created Star Catcher in star-catcher: a script game pinned to engine 1.0.0
+Play it: starhermit star-catcher
+Check it: starhermit check star-catcher
+For a native upload (the StarHermit client plays it): starhermit package --native star-catcher
+</code></pre>
+<p>نئے فولڈر میں چلنے کے قابل نقطہ آغاز ہے - ایک مکعب جو اسپیس دبانے پر ہاپ کرتا ہے:</p>
+<pre><code class="language-text">star-catcher/
+  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.0.0)
+  tsconfig.json              TypeScript settings for checking the game
+  src/main.ts                the entry module
+  .starhermit/starhermit.d.ts  the host API's declarations, for your editor and the type checker
+</code></pre>
+<p><code>.starhermit/</code> ڈاٹ کے ساتھ شروع ہوتا ہے، لہذا یہ کبھی بھی پیکیج کا حصہ نہیں ہوتا ہے۔
+<code>starhermit types star-catcher</code> دوبارہ اعلانات لکھتا ہے، مثال کے طور پر جب آپ نئے پر منتقل ہوتے ہیں۔
+رن ٹائم میزبان API کا ہر ماڈیول، ممبر، یونٹ، حد اور غلطی اس فائل میں درج ہے۔</p>
+<p>رن ٹائم ٹائپ چیک نہیں کرتا ہے: یہ TypeScript کی اقسام کو ہٹاتا ہے کیونکہ یہ ہر ماڈیول کو لوڈ کرتا ہے۔ انہیں چیک کریں۔
+خود کو TypeScript 5 یا جدید تر کے ساتھ؛ Node.js انسٹال کے ساتھ، <code>npx</code> اسے انسٹال کیے بغیر چلاتا ہے۔
+گیم فولڈر میں کچھ بھی:</p>
+<pre><code class="language-powershell">cd star-catcher
+npx --package typescript tsc -p .
+</code></pre>
+<p>رکھو <code>node_modules</code> اور دیگر ٹولنگ <strong>گیم فولڈر سے باہر</strong>: فولڈر میں سب کچھ سوائے
+dot-names پیکیج اور ہر اپ لوڈ کا حصہ ہے۔</p>
+<h2 id="4-write-the-first-version">4. پہلا ورژن لکھیں۔</h2>
+<p>پیدا کردہ کو تبدیل کریں۔ <code>starhermit.txt</code> گیم کے مینی فیسٹ کے ساتھ:</p>
+<pre><code class="language-ini">name=Star Catcher
+description=Catch the falling stars before the time runs out.
+launch=play.html
+engine.api=1
+engine.entry=src/main.ts
+engine.version=1.0.0
+engine.capabilities=platform,storage
+control.left=KeyA+ArrowLeft | Move left
+control.right=KeyD+ArrowRight | Move right
+control.start=Space+Enter | Start a round
+engine.gamepad.left=LeftStickLeft+DpadLeft
+engine.gamepad.right=LeftStickRight+DpadRight
+engine.gamepad.start=South
+cache..=0
+</code></pre>
+<p>دی <code>control.*</code> لائنیں گیم کی کارروائیوں کا اعلان اپنی ڈیفالٹ کیز (پلیٹ فارم کی
+<a href="/ur/docs/tutorials/game-controls.html">کنٹرول کرتا ہے</a> فارمیٹ) اور <code>engine.gamepad.*</code> ان کے گیم پیڈ ڈیفالٹس۔ کھلاڑی دوبارہ باندھتے ہیں۔
+انہیں رن ٹائم کے اختیارات کے مینو میں، تاکہ گیم پڑھے۔ <strong>اعمال</strong>, چابیاں کبھی نہیں. <code>engine.capabilities</code>
+کھیل ڈرائنگ اور ان پٹ سے آگے کیا استعمال کرتا ہے کے بارے میں پوچھتا ہے: <code>platform</code> سائن ان کردہ کھلاڑی اور آن لائن کے لیے
+خصوصیات، <code>storage</code> پلیئر کے ڈیوائس اور اکاؤنٹ پر رکھے گئے ڈیٹا کے لیے۔ <code>launch=play.html</code> اور صفحہ
+یہ نام کھیل میں آتے ہیں جب آپ <a href="#8-publish-it">شائع کریں</a>.</p>
+<p>پھر بدل دیں۔ <code>src/main.ts</code>:</p>
+<pre><code class="language-ts">// Star Catcher: catch the falling stars in the basket before the time runs out.
+import { frame, onFixedUpdate, onRender, onStart, setFixedRate } from "starhermit:engine";
+import {
+  AmbientLight,
+  BoxGeometry,
+  Color,
+  DirectionalLight,
+  Mesh,
+  MeshStandardMaterial,
+  PerspectiveCamera,
+  SphereGeometry,
+  renderer,
+  scene,
+} from "starhermit:scene";
+import { onAction, value } from "starhermit:input";
+import { storage } from "starhermit:storage";
+import { player } from "starhermit:platform";
+import * as draw from "starhermit:draw";
+
+// -- The scene ----------------------------------------------------------------
+const camera = new PerspectiveCamera(50, 16 / 9, 0.1, 100);
+camera.position.set(0, 4, 12);
+camera.lookAt(0, 3, 0);
+renderer.camera = camera;
+scene.background = new Color(0x0b1020);
+
+const sun = new DirectionalLight(0xfff4e0, 1.2);
+sun.position.set(3, 8, 5);
+scene.add(sun, sun.target, new AmbientLight(0x6070a0, 0.5));
+
+const basket = new Mesh(new BoxGeometry(2, 0.4, 1), new MeshStandardMaterial({ color: 0x4fa3ff, roughness: 0.4 }));
+scene.add(basket);
+
+const starGeometry = new SphereGeometry(0.3, 16, 12);
+const starMaterial = new MeshStandardMaterial({ color: 0xffd34d, emissive: 0xffb000, emissiveIntensity: 0.6 });
+const stars = Array.from({ length: 3 }, () =&gt; {
+  const mesh = new Mesh(starGeometry, starMaterial);
+  scene.add(mesh);
+  return { mesh, x: 0, y: 0, previousY: 0, speed: 0 };
+});
+type Star = (typeof stars)[number];
+
+// -- The rules ----------------------------------------------------------------
+const WIDTH = 6; // the basket moves between -WIDTH and WIDTH
+const ROUND = 60; // seconds a round lasts
+let basketX = 0;
+let previousX = 0;
+let score = 0;
+let timeLeft = 0; // 0 between rounds
+const saved = storage.getJson("best");
+let best = typeof saved === "number" ? saved : 0;
+
+function drop(star: Star): void {
+  star.x = (Math.random() * 2 - 1) * WIDTH;
+  star.y = star.previousY = 8 + Math.random() * 4;
+  star.speed = 2 + Math.random() * 2 + score * 0.05;
+}
+
+onStart(() =&gt; {
+  setFixedRate(60);
+  for (const star of stars) drop(star);
+});
+
+onAction((event) =&gt; {
+  if (event.action === "start" &amp;&amp; event.pressed &amp;&amp; timeLeft === 0) {
+    score = 0;
+    timeLeft = ROUND;
+    for (const star of stars) drop(star);
+  }
+});
+
+onFixedUpdate((step) =&gt; {
+  previousX = basketX;
+  for (const star of stars) star.previousY = star.y;
+  if (timeLeft === 0) return;
+  // An action's value is 0 to 1, so a stick steers gently and a key fully.
+  const steer = value("right") - value("left");
+  basketX = Math.max(-WIDTH, Math.min(WIDTH, basketX + steer * 9 * step));
+  for (const star of stars) {
+    star.y -= star.speed * step;
+    if (star.y &lt; 0.6 &amp;&amp; star.y &gt; 0 &amp;&amp; Math.abs(star.x - basketX) &lt; 1.2) {
+      score += 1;
+      drop(star);
+    } else if (star.y &lt; -1) {
+      drop(star);
+    }
+  }
+  timeLeft = Math.max(0, timeLeft - step);
+  if (timeLeft === 0 &amp;&amp; score &gt; best) {
+    best = score;
+    storage.setJson("best", best);
+  }
+});
+
+// -- Drawing ------------------------------------------------------------------
+onRender((alpha) =&gt; {
+  // Between two fixed steps: draw where things are at this moment.
+  basket.position.set(previousX + (basketX - previousX) * alpha, 0.2, 0);
+  for (const star of stars) {
+    star.mesh.position.set(star.x, star.previousY + (star.y - star.previousY) * alpha, 0);
+  }
+  hud();
+});
+
+function hud(): void {
+  const { width, height, scale } = frame();
+  const size = 22 * scale;
+  const name = player()?.displayName ?? "Guest";
+  draw.text(`${name}   score ${score}   best ${best}`, 16 * scale, 16 * scale, { size, color: "#e8ecf4" });
+  if (timeLeft &gt; 0) {
+    draw.text(`${Math.ceil(timeLeft)} s`, width - 16 * scale, 16 * scale, { size, color: "#ffd34d", align: "end" });
+  } else {
+    draw.rect(0, height / 2 - 40 * scale, width, 80 * scale, [0, 0, 0, 0.5]);
+    draw.text("Press Space to play", width / 2, height / 2 - 12 * scale, { size, color: "#ffffff", align: "center" });
+  }
+}
+</code></pre>
+<p>ہر حصہ کیا کرتا ہے:</p>
+<ul>
+<li><strong>منظر۔</strong> <code>starhermit:scene</code> 3.js کی پیروی کرتا ہے: جیومیٹری سے بنا کیمرہ، لائٹس، میش
+اور ایک مواد، <code>scene.add</code>. فاصلے میٹر، زاویہ ریڈین، اور رنگ sRGB ہیں۔</li>
+<li><strong>قواعد۔</strong> <code>onFixedUpdate</code> مقررہ شرح پر چلتا ہے۔ <code>setFixedRate(60)</code> مانگتا ہے، 60 بار ایک
+دوسرا جو بھی فریم ریٹ ہو، لہذا گیم ہر مشین پر ایک جیسا کھیلتا ہے۔ <code>value("right")</code> ہے
+ایکشن کی قدر 0 سے 1 تک ہوتی ہے، اس لیے ایک گیم پیڈ اسٹک آہستہ سے چلتا ہے اور کلیدی مکمل طور پر چلتا ہے، اور
+<code>onAction</code> ہر پریس کو سنتا ہے، یہاں ایک راؤنڈ شروع کرنے کے لیے۔</li>
+<li><strong>ڈرائنگ۔</strong> <code>onRender</code> کے ساتھ فی فریم ایک بار چلتا ہے۔ <code>alpha</code>، آخری دو کے درمیان فریم کتنی دور ہے۔
+مقررہ اقدامات؛ کے درمیان تیار کردہ پوزیشنیں <code>previous</code> اور موجودہ قدریں کسی بھی ریفریش پر آسانی سے حرکت کرتی ہیں۔
+شرح <code>starhermit:draw</code> ونڈو پکسلز میں HUD کو منظر پر کھینچتا ہے۔ <code>frame().scale</code> تبدیل کرتا ہے
+ہائی DPI ڈسپلے کے لیے منطقی پکسلز۔</li>
+<li><strong>بہترین سکور</strong> کے ذریعے کھلاڑی کے آلے پر رہتا ہے۔ <code>starhermit:storage</code>کے لیے الگ رکھا
+ہر کھلاڑی.</li>
+</ul>
+<h2 id="5-run-it-natively">5. اسے مقامی طور پر چلائیں۔</h2>
+<pre><code class="language-powershell">starhermit check star-catcher
+</code></pre>
+<pre><code class="language-text">package=Directory files=3 bytes=4800 name="Star Catcher" api=1 entry=src/main.ts capabilities=platform,storage actions=left,right,start
+runnable=true engine="TypeScript" frames=120 probes=0
+PASS package src/main.ts: valid; 120 frames headless
+</code></pre>
+<p><code>check</code> پیکج (منشور، راستے، سائز) کی توثیق کرتا ہے اور ونڈو کے بغیر 120 فریم چلاتا ہے، لہذا ایک
+نحو کی خرابی، ایک نامعلوم درآمد یا اسٹارٹ اپ میں ایک استثناء اس کی فائل، لائن اور کالم کے ساتھ یہاں ظاہر ہوتا ہے۔
+پھر اسے چلائیں:</p>
+<pre><code class="language-powershell">starhermit star-catcher
+</code></pre>
+<p>راؤنڈ شروع کرنے کے لیے اسپیس دبائیں اور اسٹیئر کرنے کے لیے تیر والے بٹن (یا A اور D، یا گیم پیڈ) دبائیں۔ <strong>F1</strong> ہمیشہ
+رن ٹائم کا اپنا مینو کھولتا ہے: گرافکس، آڈیو، کنٹرولز (ری بائنڈنگ)، اکاؤنٹ اور چھوڑنا۔ آپ کا
+گیم اس مینو کو نہیں کھینچ سکتی اور نہ ہی اسے پڑھ سکتی ہے، اور کوئی گیم F1 کو پابند نہیں کر سکتی۔</p>
+<p>ترقی کرتے وقت، شامل کریں <code>--dev</code> (<code>starhermit star-catcher --dev</code>): رن ٹائم پھر گیم کو پرنٹ کرتا ہے۔
+<code>console.log</code> آپ کی TypeScript لائنوں پر آؤٹ پٹ اور پوائنٹس کی خرابیاں۔</p>
+<h2 id="6-many-things-at-once-starhermitworld">6. ایک ساتھ بہت سی چیزیں: <code>starhermit:world</code></h2>
+<p>آپ کے گیم کا ٹائپ اسکرپٹ انجن کے اپنے اسکرپٹ انٹرپریٹر میں چلتا ہے، جو ہر گیم کو اندر رکھتا ہے۔
+اس کا وقت اور میموری بجٹ۔ فیصلوں اور چند درجن اشیاء کی قیمت وہاں بہت کم ہے، لیکن فی ہستی
+کام - ہزاروں ذرات، ایک ہجوم، ایک ریوڑ کو حرکت دینا - کا مطلب ہوگا ہزاروں تشریح شدہ اقدامات
+ہر فریم. اس کے لیے انجن ہے۔ <code>starhermit:world</code>:</p>
+<ul>
+<li><strong>میزیں</strong> گیم کی میموری میں ہستی کے ڈیٹا کو ٹائپ شدہ کالم (نمبر اور ویکٹر) میں رکھیں۔</li>
+<li><strong>دانا</strong> ایک قطار کے عام افعال ہیں جو رن ٹائم مرتب کرتا ہے اور مقامی طور پر چلتا ہے۔
+اسکرپٹ میں داخل کیے بغیر ٹیبل کی ہر قطار؛</li>
+<li>دی <strong>شیڈول</strong> دانا ہر فریم چلاتا ہے، اور <strong>پابندیاں</strong> ایک کے طور پر ایک میز کھینچیں <code>InstancedMesh</code>
+(یا ڈرائیو سین نوڈس)، ہر مثال کو مقامی طور پر کمپوز کرنا۔</li>
+</ul>
+<p>آپ کی اسکرپٹ فیصلے کرتی ہے۔ رن ٹائم فی قطار ریاضی کرتا ہے۔ 4,000 کا ایک رات کا آسمان شامل کریں۔
+کے طور پر کھیل کے پیچھے چمک چمک <code>src/sky.ts</code>:</p>
+<pre><code class="language-ts">// The night sky behind the game: 4,000 twinkling sparkles. Their data lives
+// in a starhermit:world table, a kernel moves every one of them natively each
+// frame, and an instance binding draws the table as one InstancedMesh, so the
+// game's script runs no per-sparkle code at all.
+import { InstancedMesh, MeshBasicMaterial, SphereGeometry, scene } from "starhermit:scene";
+import { bind, kernel, schedule, table } from "starhermit:world";
+
+const COUNT = 4_000;
+
+// One row per sparkle: where it hangs, how it twinkles, and what the kernel
+// writes each frame (its height and size).
+const sky = table("sky", COUNT, {
+  base: "vec3",
+  phase: "f32",
+  rate: "f32",
+  y: "f32",
+  size: "f32",
+});
+sky.spawn(COUNT);
+
+// Filled once from script, through typed arrays over the table's memory.
+const base = sky.column("base");
+const phase = sky.column("phase");
+const rate = sky.column("rate");
+for (let i = 0; i &lt; COUNT; i++) {
+  base[i * 3] = (Math.random() * 2 - 1) * 40;
+  base[i * 3 + 1] = Math.random() * 24 - 2;
+  base[i * 3 + 2] = -10 - Math.random() * 30;
+  phase[i] = Math.random() * Math.PI * 2;
+  rate[i] = 0.5 + Math.random() * 2;
+}
+
+// An ordinary function of one row. The runtime compiles it and runs it over
+// every live row without entering script.
+const twinkle = kernel(sky, (r, u: { drift: number }, f) =&gt; {
+  r.y = r.base.y + Math.sin(f.time * u.drift + r.phase) * 0.3;
+  r.size = 0.04 + 0.04 * Math.abs(Math.sin(f.time * r.rate + r.phase));
+});
+
+const mesh = new InstancedMesh(new SphereGeometry(1, 6, 4), new MeshBasicMaterial({ color: 0xcfd8ff }), COUNT);
+scene.add(mesh);
+
+/** Starts the sky: the kernel runs after every onUpdate, and the binding
+ * composes the mesh's instances from the columns after every onRender. */
+export function startSky(): void {
+  schedule.update(twinkle, { drift: 0.4 });
+  bind.instances(mesh, sky, { position: ["base.x", "y", "base.z"], scale: "size" });
+}
+</code></pre>
+<p>اور اس سے شروع کریں <code>src/main.ts</code>: اسے دوسری درآمدات کے ساتھ درآمد کریں، اور اسے کال کریں۔ <code>onStart</code>:</p>
+<pre><code class="language-ts">import { startSky } from "./sky.js";
+</code></pre>
+<pre><code class="language-ts">onStart(() =&gt; {
+  setFixedRate(60);
+  startSky();
+  for (const star of stars) drop(star);
+});
+</code></pre>
+<p>درآمد کے نام <code>./sky.js</code>, ایک ماڈیول کے لیے TypeScript کا کنونشن بطور لکھا گیا ہے۔ <code>sky.ts</code>; رن ٹائم
+اسے اسی طرح حل کرتا ہے۔ دانا زبان کے ایک ذیلی سیٹ کو قبول کرتے ہیں — اعداد اور بولین، ریاضی،
+<code>Math</code>, <code>if</code>، پابند <code>for</code> لوپس، قطار کے کالم اور یونیفارم جو آپ پاس کرتے ہیں — اور رن ٹائم
+a کے ساتھ کسی اور چیز کو مسترد کرتا ہے۔ <code>SyntaxError</code> دانا کی لائن پر جب وہ اسے مرتب کرتا ہے، بجائے
+اسے آہستہ سے چلائیں. کے اعلانات <code>starhermit:world</code> سب سیٹ کی وضاحت کریں، ایونٹ کی قطاریں
+دانا خارج ہوتا ہے، ہموار فکسڈ اسٹیپ موشن کے لیے ہسٹری کے ساتھ میزیں، اور نوڈ بائنڈنگز۔</p>
+<h2 id="7-players-saves-and-online-play">7. کھلاڑی، بچت اور آن لائن کھیل</h2>
+<p><strong>کھلاڑی۔</strong> <code>player()</code> سے <code>starhermit:platform</code> سائن ان کردہ کھلاڑی ہے، یا <code>null</code> a کے لیے
+مہمان اسٹار کیچر اپنے HUD میں ان کا نام دکھاتا ہے۔ جب StarHermit Windows کلائنٹ آپ کا گیم شروع کرتا ہے،
+پلیئر پہلے فریم سے سائن ان ہوتا ہے، کلائنٹ کے اکاؤنٹ کے ساتھ: کلائنٹ ہینڈ کرتا ہے۔
+ایک نجی چینل پر آپ کے گیم کے لیے لانچ ٹوکن کا رن ٹائم، گیم کے چلنے کے دوران اس کی تجدید، اور
+گیم اسے کبھی نہیں دیکھتا ہے (کوئی میزبان کال ٹوکن، کلید یا کوکی واپس نہیں کرتا)۔ کھلاڑی کبھی بھی a کے اندر سائن ان نہیں ہوتے ہیں۔
+کھیل سائن ان اور آؤٹ کلائنٹ میں ہوتا ہے۔</p>
+<p><strong>ترقی چلتی ہے۔</strong> ٹرمینل سے شروع ہوا، ایک پیکج خود سے پلیٹ فارم کی شناخت کا دعوی نہیں کر سکتا،
+تو <code>starhermit star-catcher</code> مہمان کے طور پر کھیلتا ہے۔ ایک بار جب آپ کا گیم شائع ہوتا ہے، ایک ترقی کا آغاز
+اس کے نام:</p>
+<pre><code class="language-powershell">starhermit star-catcher --game &lt;your game's id&gt;
+</code></pre>
+<p>اور آپ اس کے ذریعے سائن ان کریں۔ <strong>F1 → اکاؤنٹ…</strong>، رن ٹائم کا اپنا ڈائیلاگ (اس کمپیوٹر پر ایک کلید اور ایک
+ای میل کی توثیق، جیسا کہ میں <a href="/ur/docs/tutorials/public-key-onboarding.html">عوامی کلید آن بورڈنگ</a>)۔ اسٹوریج، ترتیبات،
+محفوظ کرتا ہے اور آن لائن کھیل پھر اس گیم اور اکاؤنٹ کو فالو کریں۔</p>
+<p><strong>محفوظ کرتا ہے اور ترتیبات۔</strong> <code>starhermit:storage</code> تین اسٹورز ہیں، سبھی آپ کے گیم کے لیے نجی ہیں: <code>storage</code>
+(آلہ پر کلیدی/قدر کا ڈیٹا، جیسا کہ اسٹار کیچر استعمال کرتا ہے) <code>settings</code> (کھیل کے اختیارات، کے ساتھ رکھے گئے ہیں۔
+پلیٹ فارم کے تحت کھلاڑی کا اکاؤنٹ <a href="/ur/docs/api/games.html#per-player-game-settings">فی کھلاڑی کی ترتیبات</a>)، اور <code>saves</code> (د
+گیم کی بچت، ڈیوائس پر اور پلیئرز میں <a href="/ur/docs/tutorials/cloud-save-sync.html">بادل بچانے کی سلاٹ</a> تنازعہ کے ساتھ
+ہینڈلنگ)۔</p>
+<p><strong>آن لائن کھیل.</strong> ہر وہ چیز جو پلیٹ فارم گیم پیش کرتا ہے۔ <code>starhermit:platform</code> آپ کے کھیل کے لیے
+اپنی شناخت: دوست اور موجودگی، دعوتیں، <a href="/ur/docs/api/realtime.html">حقیقی وقت کے کمرے</a>, matchmaking, the
+<a href="/ur/docs/api/games.html">کھیل ساکٹ</a> (<code>connectGame</code>)، لیڈر بورڈز، کامیابیاں، ری پلے، چیٹ اور آواز۔
+سرور سے مستند ملٹی پلیئر کے لیے، اعلان کریں a <a href="/ur/docs/api/game-scripts.html">کھیل سکرپٹ</a>:</p>
+<pre><code class="language-ini">server=server.js
+</code></pre>
+<p>پلیٹ فارم اسے آپ کے گیم کے سیشنز کی اتھارٹی کے طور پر چلاتا ہے۔ <code>starhermit:script</code>'s
+<code>authority("server.js", …)</code> ایک ہی فائل کو مقامی کارکن پر آف لائن پریکٹس کے لیے چلاتا ہے، بالکل اسی طرح
+پلیٹ فارم کرتا ہے، لہذا آف لائن اور آن لائن پلے ایک کوڈ پاتھ کا اشتراک کرتے ہیں۔ لیڈر بورڈ کے اسکور، کامیابیاں
+اور میچ کے نتائج صرف سرور اسکرپٹ کے ذریعہ لکھے جاتے ہیں، کبھی بھی خود گیم کے ذریعہ نہیں؛ بورڈز بنائیں
+جیسا کہ میں بیان کیا گیا ہے۔ <a href="/ur/docs/tutorials/game-leaderboards-achievements.html">لیڈر بورڈ اور کامیابیاں</a>.</p>
+<h2 id="8-publish-it">8. اسے شائع کریں۔</h2>
+<p>ایک شائع شدہ اسکرپٹ گیم ایک عام StarHermit گیم ہے جس کی فائلیں آپ کا پیکج ہیں۔ کھلاڑی ڈھونڈتے ہیں۔
+یہ ان کی لائبریری میں ہے؛ StarHermit Windows کلائنٹ اسے اس انجن کے ساتھ انسٹال کرتا ہے جسے وہ پن کرتا ہے اور چلاتا ہے۔
+مقامی طور پر</p>
+<p><strong>براؤزرز کے لیے ایک صفحہ۔</strong> پلیٹ فارم ہر اپ لوڈ کردہ گیم کو اپنے پتے پر میزبانی کرتا ہے اور اسے ایک صفحہ کی ضرورت ہوتی ہے۔
+وہاں کھولنے کے لئے. جب تک کہ آپ کے گیم میں براؤزر کی تعمیر نہ ہو، ایک سادہ صفحہ کہے گا کہ اسے کہاں کھیلنا ہے۔
+اسٹار کیچر کے واضح نام <code>play.html</code>:</p>
+<pre><code class="language-html">&lt;!doctype html&gt;
+&lt;html lang="en"&gt;
+&lt;meta charset="utf-8"&gt;
+&lt;title&gt;Star Catcher&lt;/title&gt;
+&lt;p&gt;Star Catcher runs in the StarHermit Windows client: find it in your library and press Play.&lt;/p&gt;
+&lt;/html&gt;
+</code></pre>
+<p>کے علاوہ کوئی اور نام استعمال کریں۔ <code>index.html</code>: بعد میں براؤزر کی تعمیر خود لکھتی ہے۔ <code>index.html</code>.</p>
+<p><strong>فائل انڈیکس۔</strong> کلائنٹ اپنے فائل انڈیکس کے ذریعہ اپ لوڈ کردہ گیم کو انسٹال اور اپ ڈیٹ کرتا ہے،
+<code>starhermit-files.json</code>: ہر فائل اس کے سائز اور SHA-256 کے ساتھ۔ میں ہر تبدیلی کے بعد اسے لکھیں۔
+گیم، اپ لوڈ کرنے سے پہلے آخری قدم کے طور پر:</p>
+<pre><code class="language-powershell">starhermit package --native star-catcher
+</code></pre>
+<pre><code class="language-text">Native upload: star-catcher (6 files, 7553 bytes to upload; the platform takes at most 50 MiB)
+Wrote star-catcher\starhermit-files.json for engine 1.0.0: the StarHermit client installs the game by it
+Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.0.0 is still current
+</code></pre>
+<p>یہ پلیٹ فارم کے اپ لوڈ قوانین کے خلاف پیکج کو چیک کرتا ہے (نمبر <code>api/</code> یا <code>ws/</code> فولڈرز، زیادہ سے زیادہ
+9,998 راستے اور 50 MiB) اور ریلیز آپ کے گیم پن، جو ونڈوز کے ساتھ شائع ہونا ضروری ہے
+رن ٹائم اور منسوخ نہیں کیا گیا۔ رن ٹائم اپنی ریلیز آف لائن چیک کرتا ہے۔ <code>--versions</code> کی ایک کاپی کے نام
+<a href="/engine/versions.json">versions.json</a> کسی دوسرے کے خلاف چیک کرنے کے لیے۔</p>
+<p><strong>اسے اپ لوڈ کریں۔</strong> فولڈر اپ لوڈ ہے، بالکل جیسا کہ یہ ہے: کلائنٹ ہر فائل کے خلاف چیک کرتا ہے۔
+index، تو فولڈر کی فائلوں کو بغیر تبدیلی کے اسی کے ساتھ اپ لوڈ کریں۔ <code>starhermit.txt</code> دونوں فولڈر کے اندر
+اور بنڈل کی جڑ پر (پلیٹ فارم فولڈر کی جگہ پر روٹ کاپی شائع کرتا ہے)۔ جیسا کہ میں
+<a href="/ur/docs/api/github-games.html#add-a-game-from-a-local-folder">مقامی فولڈر سے ایک گیم شامل کریں۔</a>:</p>
+<pre><code class="language-bash">mkdir -p bundle/client
+cp -R star-catcher/. bundle/client/
+rm -rf bundle/client/.starhermit
+cp star-catcher/starhermit.txt bundle/starhermit.txt
+tar -C bundle -czf star-catcher.tar.gz .
+
+curl --fail-with-body -X POST https://api.starhermit.com/api/v1/me/github-games/upload \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H 'Content-Type: application/gzip' \
+  --data-binary @star-catcher.tar.gz
+</code></pre>
+<p><code>ACCESS_TOKEN</code> آپ کے اکاؤنٹ تک رسائی کا ٹوکن ہے (دیکھیں۔ <a href="/ur/docs/tutorials/ci-cd-build-upload.html">CI/CD سے تعمیرات اپ لوڈ کریں۔</a>
+براؤزر کے بغیر سائن ان کرنے کے لیے)۔ جواب ہے <code>game.id</code> آپ کے گیم کی آئی ڈی ہے، اور گیم ایک ساتھ لائیو ہے۔
+<code>https://&lt;id&gt;.starhermit.com/</code>. ہر بعد کے ورژن کے لیے، دوبارہ انڈیکس لکھیں اور اسی قسم کو دھکیلیں۔
+کے ساتھ کھیل کے بنڈل کے <a href="/ur/docs/api/github-games.html#push-a-game-bundle"><code>POST /api/v1/me/github-games/{id}/bundle</code></a>;
+پلیئرز کے کلائنٹ پھر صرف ان فائلوں کو ڈاؤن لوڈ کرتے ہیں جن کی ہیشز تبدیل ہوتی ہیں۔ اے <code>server=</code> اسکرپٹ میں
+اپ لوڈ شائع ہوتے ہی فولڈر کو گیم کا بیک اینڈ مل جاتا ہے۔</p>
+<p><strong>ایک مخزن سے۔</strong> ایک کھیل <a href="/ur/docs/api/github-games.html">GitHub سے شائع ہوا۔</a> اسی طرح کام کرتا ہے:
+عزم <code>starhermit.txt</code> اس کے ساتھ <code>engine.*</code> ذخیرہ کی جڑ پر لائنیں. کلائنٹ انسٹال کرتا ہے اور
+گٹ کے ساتھ ریپوزٹری گیم کو اپ ڈیٹ کرتا ہے، صرف وہی لاتا ہے جو ہر کمٹ میں شامل کرتا ہے، لہذا اسے فائل انڈیکس کی ضرورت نہیں ہے۔</p>
+<p><strong>براؤزرز میں۔</strong> <code>starhermit package --web</code> گیم کا براؤزر اپ لوڈ لکھتا ہے: اس کی فائلیں، ایک لوڈر صفحہ
+جو اس ویکی سے پن کیے ہوئے انجن کی ریلیز کو ہیش کے ذریعے لوڈ کرتا ہے، اور اس کی فائل انڈیکس۔ اسے رہائی کی ضرورت ہے۔
+ویب رن ٹائم کے ساتھ؛ 1.0.0 صرف ونڈوز ہے، لہذا براؤزر کی تعمیر بعد میں ریلیز کے ساتھ شروع ہوتی ہے، اور
+<code>package --web</code> تب تک کہتا ہے۔ پلیٹ فارم پر، اسکرپٹ گیم کے صفحات صرف آفیشل چلا سکتے ہیں۔
+اس ویکی سے انجن (دیکھیں۔ <a href="/ur/docs/engine-releases.html#script-games-on-the-platform">انجن کی ریلیز</a>).</p>
+<h2 id="9-move-to-a-newer-engine">9. ایک نئے انجن میں منتقل کریں۔</h2>
+<p>ایک گیم بالکل اسی ریلیز پر چلتی ہے جس پر یہ پن کرتا ہے: کچھ بھی اسے آپ کی پیٹھ کے پیچھے اپ گریڈ نہیں کرتا ہے، اور ایک شائع ہوتا ہے۔
+رہائی کبھی نہیں بدلتی۔ کسی نئے پر جانے کے لیے، اس کا رن ٹائم ڈاؤن لوڈ کریں، اپنا گیم چلائیں اور اس کی جانچ کریں۔
+اس پر، پھر تبدیل کرکے دوبارہ پن کریں۔ <code>engine.version</code> میں <code>starhermit.txt</code>، فائل انڈیکس کو دوبارہ لکھیں اور
+شائع کریں پلیئرز کے کلائنٹ نئے انجن کو ایک بار ڈاؤن لوڈ کرتے ہیں (صرف وہی جو ان کی ریلیز سے تبدیل ہوا ہے۔
+ہولڈ) اور آپ کے گیم کی فائلوں کو تبدیل کریں۔</p>
+<p>ریلیز کا بڑا ورژن میزبان API کا ہے: <code>engine.api=1</code> گیمز 1.x.x کے اندر آزادانہ طور پر حرکت کرتے ہیں۔ ایک کھیل
+جس کے لیے ایک معمولی ورژن میں شامل ہوسٹ API ممبران کی ضرورت ہے اس کے ساتھ ایسا کہہ سکتے ہیں۔ <code>engine.minor=N</code>; ایک پرانا
+رن ٹائم پھر اسے بعد میں ناکام ہونے کے بجائے ایک پیغام کے ساتھ انکار کرتا ہے۔</p>
+<p>غیر محفوظ پائی جانے والی ریلیز ہے۔ <strong>منسوخ کر دیا</strong>: <a href="/engine/versions.json">versions.json</a> کے ساتھ نشان زد کرتا ہے۔
+وجہ، کلائنٹ اسے انسٹال کرنے یا شروع کرنے سے انکار کرتا ہے (اور کھلاڑی کو بتاتا ہے کہ کیوں)، اور پیکیجنگ
+جب بھی وہ versions.json پڑھتے ہیں تو کمانڈز اس سے انکار کرتے ہیں۔ منسوخ شدہ ریلیز کے بعد ہمیشہ ایک مقررہ ہوتا ہے۔ اسے دوبارہ پن کریں اور شائع کریں۔</p>
+<h2 id="10-limits-and-the-licence">10. حدود اور لائسنس</h2>
+<p>رن ٹائم ہر گیم کو بجٹ کے اندر رکھتا ہے، جس کے ساتھ پیکج کم ہو سکتا ہے۔ <code>engine.limits.*</code> لیکن
+کبھی نہ بڑھائیں: ہر کال بیک کے لیے 32 ایم ایس اسکرپٹ ٹائم (ایک کال بیک جو اسے استعمال کرتا ہے اسے روک دیا جاتا ہے اور
+اگلے فریموں پر جاری ہے؛ تین سیکنڈ کے بعد رن ٹائم "جواب نہیں دے رہا" سکرین کی اجازت دیتا ہے
+کھلاڑی انتظار کریں یا کھیل کو روکیں)، ایک 256 MiB اسکرپٹ ہیپ، 64 MiB اسٹوریج، زیادہ سے زیادہ 512 MiB اور 65,536
+ایک پیکیج میں فائلیں اور، اپ لوڈز کے لیے، پلیٹ فارم کے 50 MiB اور 9,998 راستے۔ جہاں ایک حد سے گزر رہے ہیں۔
+ایک آپریشن ناکام ہو سکتا ہے (ایک مختص، ایک میزبان کال) پھینک دیتا ہے a <code>RangeError</code>; ڈھیر یا کال ختم ہو رہی ہے۔
+گہرائی غلطی کی سکرین پر کھیل کو ختم کرتی ہے۔ میزبان API کے اعلانات ہر حد کو درج کرتے ہیں۔</p>
+<p>انجن کے تحت لائسنس یافتہ ہے۔ <a href="https://polyformproject.org/licenses/noncommercial/1.0.0">پولی فارم غیر تجارتی لائسنس 1.0.0</a>
+اس اضافی اجازت کے ساتھ، اس سے نقل کیا گیا ہے۔ <code>LICENSE-engine</code>:</p>
+<blockquote>
+<p>اضافی اجازت: Hype Driven Development Inc. کسی کے لیے بھی اس سافٹ ویئر کے استعمال کی اجازت دیتا ہے۔
+مقصد، بشمول تجارتی مقاصد، اس کے ساتھ بنایا گیا گیم بنانا، تقسیم کرنا اور چلانا، جیسا کہ
+جب تک وہ گیم StarHermit.com پر شائع ہوتی ہے، عوامی طور پر وہاں کھیلنے کے لیے دستیاب ہوتی ہے، اور اسے اندر رکھا جاتا ہے۔
+وہاں آرڈر چل رہا ہے. کسی دوسرے استعمال کے لیے جس کی نیچے لائسنس اجازت نہیں دیتا، رابطہ کریں۔
+info@hypedriven.com۔</p>
+</blockquote>
+<p>مکمل متن یہ ہے۔ <code>LICENSE-engine</code> ڈاؤن لوڈ میں اور ہر نصب انجن کے ساتھ فائل؛ دی
+فریق ثالث کے اجزاء اپنے اپنے لائسنس رکھتے ہیں۔ <code>notices</code> فولڈر آپ کے گیم کا اپنا کوڈ اور
+اثاثے آپ کے ہیں.</p>
+<h2 id="checklist">چیک لسٹ</h2>
+<ul>
+<li>[ ] <code>starhermit.txt</code> ہے <code>engine.api</code>, <code>engine.entry</code> اور <code>engine.version</code>، اور صلاحیتیں
+کھیل استعمال کرتا ہے.</li>
+<li>[ ] <code>starhermit check</code> گزرتا ہے، اور <code>npx --package typescript tsc -p .</code> کوئی غلطی کی اطلاع نہیں ہے.</li>
+<li>[ ] فولڈر میں صرف گیم ہے: نہیں۔ <code>node_modules</code>، کوئی تعمیراتی اوزار نہیں۔</li>
+<li>براؤزرز کے لیے ایک صفحہ کا نام ہے۔ <code>launch=</code>.</li>
+<li>[ ] <code>starhermit package --native</code> آخری تبدیلی کے بعد بھاگ گیا، اور فولڈر کو بغیر تبدیلی کے اپ لوڈ کیا گیا۔</li>
+</ul>
+
+{% endraw %}

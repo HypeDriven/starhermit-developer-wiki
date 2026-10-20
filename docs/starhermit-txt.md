@@ -251,6 +251,23 @@ game with no valid line has no controls — its controls API answers
 `404 "This game declares no controls."`. They take effect when you publish a build containing them.
 See [Tutorial: add controls to your game](tutorials/game-controls.md).
 
+### Keys for a StarHermit engine game
+
+A game played by the [StarHermit engine](tutorials/starhermit-engine.md) (a script game) declares the
+engine it runs on with `engine.*` keys. The engine reads them together with `name=`, `server=` and the
+`control.*` lines; the StarHermit Windows client plays a game natively when it finds `engine.version`
+and `engine.entry`.
+
+| Key | Meaning |
+|---|---|
+| `engine.api` | The host API's major version the game is written for (`1`). |
+| `engine.entry` | The module the engine starts, such as `src/main.ts`. |
+| `engine.version` | The exact [engine release](engine-releases.md) the game runs on, `X.Y.Z`; its major is `engine.api`. The platform records it at every publish and serves a script game's pages under the engine's [Content-Security-Policy](engine-releases.md#script-games-on-the-platform). |
+| `engine.minor` | Optional: the host API minor version the game needs; an engine that offers less refuses it. |
+| `engine.capabilities` | Optional, comma-separated: `platform`, `voice`, `clipboard`, `storage`. |
+| `engine.gamepad.<action>` | Default gamepad controls for an action the `control.*` lines declare. |
+| `engine.limits.<name>` | Optional: lowers one of the engine's limits for the game. |
+
 ### Keys for a game with server logic
 
 Pick **one** server style. Declaring both `server=` and `container.image=` is refused.

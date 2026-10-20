@@ -1,0 +1,482 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Tutorial: membuat game dengan mesin StarHermit"
+source_url: "/docs/tutorials/starhermit-engine.html"
+source_path: "docs/tutorials/starhermit-engine.md"
+source_hash: "4c2d0cc374adb8270ed1094215281efce6a3dc2f2cf235876f02011df5fb054d"
+translation: "machine"
+permalink: "/id/docs/tutorials/starhermit-engine.html"
+---
+{% raw %}
+<h1 id="tutorial-build-a-game-with-the-starhermit-engine">Tutorial: membuat game dengan mesin StarHermit</h1>
+<p>Mesin StarHermit bekerja <strong>permainan skrip</strong>: keseluruhan permainan yang ditulis dalam TypeScript (atau JavaScript) dan
+dimainkan oleh satu mesin bawaan yang dapat dieksekusi, runtime StarHermit, tanpa mengkompilasi kode asli apa pun.
+Anda menulis logika permainan berdasarkan modul bawaan mesin — adegan 3D, masukan, HUD, audio,
+penyimpanan dan platform StarHermit — dan runtime melakukan sisanya: windowing, rendering pada
+GPU, suara, menu opsi, masuk dan bermain online. Pemain mendapatkan permainan melalui
+<a href="https://starhermit.com">Klien Windows StarHermit</a>, yang memasang mesin yang diminta oleh game Anda
+dan memainkannya secara asli.</p>
+<p>Tutorial ini dibuat <strong>Penangkap Bintang</strong>, permainan kecil di mana Anda mengarahkan keranjang untuk menangkap jatuh
+bintang, dan membawanya dari folder kosong ke game yang diterbitkan:</p>
+<ol>
+<li><a href="#1-what-a-script-game-is">Apa itu permainan skrip</a></li>
+<li><a href="#2-get-the-engine">Dapatkan mesinnya</a></li>
+<li><a href="#3-create-the-game">Buat permainannya</a></li>
+<li><a href="#4-write-the-first-version">Tulis versi pertama</a></li>
+<li><a href="#5-run-it-natively">Jalankan secara asli</a></li>
+<li><a href="#6-many-things-at-once-starhermitworld">Banyak hal sekaligus: <code>starhermit:world</code></a></li>
+<li><a href="#7-players-saves-and-online-play">Pemain, penyimpanan, dan permainan online</a></li>
+<li><a href="#8-publish-it">Publikasikan itu</a></li>
+<li><a href="#9-move-to-a-newer-engine">Pindah ke mesin yang lebih baru</a></li>
+<li><a href="#10-limits-and-the-licence">Batasan dan lisensi</a></li>
+</ol>
+<h2 id="1-what-a-script-game-is">1. Apa itu permainan skrip</h2>
+<p>Permainan skrip adalah folder (a <strong>kemasan</strong>) dengan a <a href="/id/docs/starhermit-txt.html"><code>starhermit.txt</code></a> di itu
+root, modul TypeScript Anda, dan aset Anda. Tiga <code>engine.*</code> baris dalam manifes menjadikannya satu:</p>
+<pre><code class="language-ini">engine.api=1
+engine.entry=src/main.ts
+engine.version=1.0.0
+</code></pre>
+<p><code>engine.api</code> adalah versi utama dari API host yang digunakan untuk menulis kode Anda, <code>engine.entry</code> itu
+modul runtime dimulai, dan <code>engine.version</code> rilis mesin yang tepat untuk game tersebut dan
+diuji untuk. Rilis dipublikasikan di wiki ini di bawah <a href="/id/docs/engine-releases.html">Rilis engine</a>; itu
+game tidak pernah berisi mesin itu sendiri, jadi unggahan hanya menampung file Anda sendiri.</p>
+<p>Runtime memperlakukan setiap game sebagai tidak tepercaya: kode Anda hanya mencapai mesin melalui API host
+(file paketnya sendiri, penyimpanannya sendiri, platform untuk id gamenya sendiri), tidak pernah file, proses,
+koneksi jaringan sewenang-wenang atau kredensial pemain. Sebagai imbalannya, game tidak dapat menghentikan runtime
+atau gantung jendela: panggilan yang berjalan selama tiga detik menampilkan runtime-nya sendiri "tidak merespons"
+layar, dan kesalahan yang tidak tertangkap mengakhiri permainan pada layar kesalahan tempat pemain dapat memulai ulang.</p>
+<p>Paket yang sama berjalan di mana pun mesin dijalankan. Rilis 1.0.0 hanya memiliki runtime Windows; sebuah
+versi browser dari mesin ini hadir dengan rilis yang lebih baru (lihat <a href="#8-publish-it">Publikasikan itu</a>).</p>
+<h2 id="2-get-the-engine">2. Dapatkan mesinnya</h2>
+<p><strong>Pemain</strong> tidak melakukan apa pun: ketika mereka menekan Mainkan pada permainan skrip, klien Windows StarHermit
+mengunduh rilis pin game (sekali, dibagikan oleh setiap game yang menyematkannya), memeriksa setiap file
+terhadap hash rilis yang dipublikasikan dan memulainya.</p>
+<p><strong>Pengembang</strong> unduh runtime rilis dari area mesin:</p>
+<ul>
+<li><a href="/engine/1.0.0/native/windows-x86_64/starhermit-1.0.0-windows-x86_64.zip">starhermit-1.0.0-windows-x86_64.zip</a>
+(Windows 10 atau 11, 64-bit), 6,7 MB.</li>
+</ul>
+<p>Arsip menampung satu folder, <code>starhermit-1.0.0-windows-x86_64</code>, dengan <code>starhermit.exe</code>, itu
+<code>release.json</code> yang memberi tahu runtime rilis mana itu, <code>LICENSE-engine</code> dan pihak ketiga
+pemberitahuan. Ini adalah mesin yang sama yang dipasang klien. Ukurannya dan SHA-256 tercantum di bawah
+<code>downloads</code> dalam rilis <a href="/engine/1.0.0/native/windows-x86_64/native.json">native.json</a>; untuk
+periksa salinan Anda di PowerShell, bandingkan itu <code>sha256</code> dengan:</p>
+<pre><code class="language-powershell">Get-FileHash .\starhermit-1.0.0-windows-x86_64.zip -Algorithm SHA256
+</code></pre>
+<p>Buka paket arsip dan buka terminal di folder yang belum dibongkar:</p>
+<pre><code class="language-powershell">.\starhermit.exe --version
+</code></pre>
+<pre><code class="language-text">starhermit 0.1.0 (host API 1.4, launcher 1; engine release 1.0.0)
+</code></pre>
+<p>Perintah di bawah ini ditulis sebagai <code>starhermit</code>; jalankan sebagai <code>.\starhermit.exe</code> dari folder itu, atau
+tambahkan folder ke Anda <code>PATH</code>.</p>
+<h2 id="3-create-the-game">3. Buat permainannya</h2>
+<pre><code class="language-powershell">starhermit new star-catcher --title "Star Catcher"
+</code></pre>
+<pre><code class="language-text">Created Star Catcher in star-catcher: a script game pinned to engine 1.0.0
+Play it: starhermit star-catcher
+Check it: starhermit check star-catcher
+For a native upload (the StarHermit client plays it): starhermit package --native star-catcher
+</code></pre>
+<p>Folder baru ini berisi titik awal yang dapat dimainkan — sebuah kubus yang melompat ketika Anda menekan Spasi:</p>
+<pre><code class="language-text">star-catcher/
+  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.0.0)
+  tsconfig.json              TypeScript settings for checking the game
+  src/main.ts                the entry module
+  .starhermit/starhermit.d.ts  the host API's declarations, for your editor and the type checker
+</code></pre>
+<p><code>.starhermit/</code> dimulai dengan sebuah titik, jadi itu tidak pernah menjadi bagian dari paket.
+<code>starhermit types star-catcher</code> tulis deklarasinya lagi, misalnya setelah Anda pindah ke yang lebih baru
+waktu proses. Setiap modul, anggota, unit, batasan, dan kesalahan API host didokumentasikan dalam file itu.</p>
+<p>Runtime tidak memeriksa tipe: ia menghapus tipe TypeScript saat memuat setiap modul. Periksa mereka
+diri Anda sendiri dengan TypeScript 5 atau lebih baru; dengan Node.js terinstal, <code>npx</code> menjalankannya tanpa menginstal
+apa pun di folder game:</p>
+<pre><code class="language-powershell">cd star-catcher
+npx --package typescript tsc -p .
+</code></pre>
+<p>Menyimpan <code>node_modules</code> dan perkakas lainnya <strong>keluar dari folder permainan</strong>: semua yang ada di folder kecuali
+nama titik adalah bagian dari paket dan setiap unggahan.</p>
+<h2 id="4-write-the-first-version">4. Tulis versi pertama</h2>
+<p>Ganti yang dihasilkan <code>starhermit.txt</code> dengan manifes permainan:</p>
+<pre><code class="language-ini">name=Star Catcher
+description=Catch the falling stars before the time runs out.
+launch=play.html
+engine.api=1
+engine.entry=src/main.ts
+engine.version=1.0.0
+engine.capabilities=platform,storage
+control.left=KeyA+ArrowLeft | Move left
+control.right=KeyD+ArrowRight | Move right
+control.start=Space+Enter | Start a round
+engine.gamepad.left=LeftStickLeft+DpadLeft
+engine.gamepad.right=LeftStickRight+DpadRight
+engine.gamepad.start=South
+cache..=0
+</code></pre>
+<p>Itu <code>control.*</code> baris mendeklarasikan tindakan game dengan kunci defaultnya (kunci platform
+<a href="/id/docs/tutorials/game-controls.html">kontrol</a> format) dan <code>engine.gamepad.*</code> default gamepad mereka. Pemain melakukan rebind
+mereka di menu Opsi runtime, sehingga permainan terbaca <strong>tindakan</strong>, tidak pernah kunci. <code>engine.capabilities</code>
+menanyakan apa yang digunakan game selain menggambar dan memasukkan: <code>platform</code> untuk pemain yang masuk dan online
+fitur, <code>storage</code> untuk data yang disimpan di perangkat dan akun pemain. <code>launch=play.html</code> dan halaman
+itu nama ikut berperan ketika Anda <a href="#8-publish-it">menerbitkan</a>.</p>
+<p>Lalu ganti <code>src/main.ts</code>:</p>
+<pre><code class="language-ts">// Star Catcher: catch the falling stars in the basket before the time runs out.
+import { frame, onFixedUpdate, onRender, onStart, setFixedRate } from "starhermit:engine";
+import {
+  AmbientLight,
+  BoxGeometry,
+  Color,
+  DirectionalLight,
+  Mesh,
+  MeshStandardMaterial,
+  PerspectiveCamera,
+  SphereGeometry,
+  renderer,
+  scene,
+} from "starhermit:scene";
+import { onAction, value } from "starhermit:input";
+import { storage } from "starhermit:storage";
+import { player } from "starhermit:platform";
+import * as draw from "starhermit:draw";
+
+// -- The scene ----------------------------------------------------------------
+const camera = new PerspectiveCamera(50, 16 / 9, 0.1, 100);
+camera.position.set(0, 4, 12);
+camera.lookAt(0, 3, 0);
+renderer.camera = camera;
+scene.background = new Color(0x0b1020);
+
+const sun = new DirectionalLight(0xfff4e0, 1.2);
+sun.position.set(3, 8, 5);
+scene.add(sun, sun.target, new AmbientLight(0x6070a0, 0.5));
+
+const basket = new Mesh(new BoxGeometry(2, 0.4, 1), new MeshStandardMaterial({ color: 0x4fa3ff, roughness: 0.4 }));
+scene.add(basket);
+
+const starGeometry = new SphereGeometry(0.3, 16, 12);
+const starMaterial = new MeshStandardMaterial({ color: 0xffd34d, emissive: 0xffb000, emissiveIntensity: 0.6 });
+const stars = Array.from({ length: 3 }, () =&gt; {
+  const mesh = new Mesh(starGeometry, starMaterial);
+  scene.add(mesh);
+  return { mesh, x: 0, y: 0, previousY: 0, speed: 0 };
+});
+type Star = (typeof stars)[number];
+
+// -- The rules ----------------------------------------------------------------
+const WIDTH = 6; // the basket moves between -WIDTH and WIDTH
+const ROUND = 60; // seconds a round lasts
+let basketX = 0;
+let previousX = 0;
+let score = 0;
+let timeLeft = 0; // 0 between rounds
+const saved = storage.getJson("best");
+let best = typeof saved === "number" ? saved : 0;
+
+function drop(star: Star): void {
+  star.x = (Math.random() * 2 - 1) * WIDTH;
+  star.y = star.previousY = 8 + Math.random() * 4;
+  star.speed = 2 + Math.random() * 2 + score * 0.05;
+}
+
+onStart(() =&gt; {
+  setFixedRate(60);
+  for (const star of stars) drop(star);
+});
+
+onAction((event) =&gt; {
+  if (event.action === "start" &amp;&amp; event.pressed &amp;&amp; timeLeft === 0) {
+    score = 0;
+    timeLeft = ROUND;
+    for (const star of stars) drop(star);
+  }
+});
+
+onFixedUpdate((step) =&gt; {
+  previousX = basketX;
+  for (const star of stars) star.previousY = star.y;
+  if (timeLeft === 0) return;
+  // An action's value is 0 to 1, so a stick steers gently and a key fully.
+  const steer = value("right") - value("left");
+  basketX = Math.max(-WIDTH, Math.min(WIDTH, basketX + steer * 9 * step));
+  for (const star of stars) {
+    star.y -= star.speed * step;
+    if (star.y &lt; 0.6 &amp;&amp; star.y &gt; 0 &amp;&amp; Math.abs(star.x - basketX) &lt; 1.2) {
+      score += 1;
+      drop(star);
+    } else if (star.y &lt; -1) {
+      drop(star);
+    }
+  }
+  timeLeft = Math.max(0, timeLeft - step);
+  if (timeLeft === 0 &amp;&amp; score &gt; best) {
+    best = score;
+    storage.setJson("best", best);
+  }
+});
+
+// -- Drawing ------------------------------------------------------------------
+onRender((alpha) =&gt; {
+  // Between two fixed steps: draw where things are at this moment.
+  basket.position.set(previousX + (basketX - previousX) * alpha, 0.2, 0);
+  for (const star of stars) {
+    star.mesh.position.set(star.x, star.previousY + (star.y - star.previousY) * alpha, 0);
+  }
+  hud();
+});
+
+function hud(): void {
+  const { width, height, scale } = frame();
+  const size = 22 * scale;
+  const name = player()?.displayName ?? "Guest";
+  draw.text(`${name}   score ${score}   best ${best}`, 16 * scale, 16 * scale, { size, color: "#e8ecf4" });
+  if (timeLeft &gt; 0) {
+    draw.text(`${Math.ceil(timeLeft)} s`, width - 16 * scale, 16 * scale, { size, color: "#ffd34d", align: "end" });
+  } else {
+    draw.rect(0, height / 2 - 40 * scale, width, 80 * scale, [0, 0, 0, 0.5]);
+    draw.text("Press Space to play", width / 2, height / 2 - 12 * scale, { size, color: "#ffffff", align: "center" });
+  }
+}
+</code></pre>
+<p>Apa yang dilakukan setiap bagian:</p>
+<ul>
+<li><strong>Adegan itu.</strong> <code>starhermit:scene</code> mengikuti three.js: kamera, lampu, jerat yang terbuat dari geometri
+dan sebuah bahan, <code>scene.add</code>. Jarak adalah meter, sudut radian, dan warna sRGB.</li>
+<li><strong>Aturannya.</strong> <code>onFixedUpdate</code> berjalan pada tingkat bunga tetap <code>setFixedRate(60)</code> meminta, 60 kali a
+kedua, berapa pun kecepatan bingkainya, sehingga permainan dimainkan sama di setiap mesin. <code>value("right")</code> adalah
+nilai aksinya dari 0 hingga 1, jadi stik gamepad akan bergerak dengan lembut dan kunci akan bergerak sepenuhnya, dan
+<code>onAction</code> mendengar setiap tekanan, di sini untuk memulai putaran.</li>
+<li><strong>Menggambar.</strong> <code>onRender</code> berjalan sekali per frame dengan <code>alpha</code>, seberapa jauh jarak frame antara dua frame terakhir
+langkah-langkah tetap; posisi yang ditarik di antaranya <code>previous</code> dan nilai saat ini bergerak dengan lancar pada penyegaran apa pun
+menilai. <code>starhermit:draw</code> menggambar HUD di atas pemandangan dalam piksel jendela; <code>frame().scale</code> mengkonversi
+piksel logis untuk tampilan DPI tinggi.</li>
+<li><strong>Skor terbaik</strong> tetap berada di perangkat pemain <code>starhermit:storage</code>, dipisah untuk
+setiap pemain.</li>
+</ul>
+<h2 id="5-run-it-natively">5. Jalankan secara asli</h2>
+<pre><code class="language-powershell">starhermit check star-catcher
+</code></pre>
+<pre><code class="language-text">package=Directory files=3 bytes=4800 name="Star Catcher" api=1 entry=src/main.ts capabilities=platform,storage actions=left,right,start
+runnable=true engine="TypeScript" frames=120 probes=0
+PASS package src/main.ts: valid; 120 frames headless
+</code></pre>
+<p><code>check</code> memvalidasi paket (manifest, jalur, ukuran) dan memutar 120 frame tanpa jendela, jadi a
+kesalahan sintaksis, impor yang tidak diketahui atau pengecualian saat start-up ditampilkan di sini dengan file, baris, dan kolomnya.
+Kemudian mainkan:</p>
+<pre><code class="language-powershell">starhermit star-catcher
+</code></pre>
+<p>Tekan Spasi untuk memulai putaran dan tombol panah (atau A dan D, atau gamepad) untuk mengarahkan. <strong>F1</strong> selalu
+membuka menu runtime sendiri: grafik, audio, kontrol (rebinding), akun, dan keluar. Anda
+game tidak dapat menggambar atau membacanya, dan tidak ada game yang dapat mengikat F1.</p>
+<p>Sambil berkembang, tambahkan <code>--dev</code> (<code>starhermit star-catcher --dev</code>): runtime kemudian mencetak game tersebut
+<code>console.log</code> keluaran dan titik kesalahan pada baris TypeScript Anda.</p>
+<h2 id="6-many-things-at-once-starhermitworld">6. Banyak hal sekaligus: <code>starhermit:world</code></h2>
+<p>TypeScript game Anda berjalan di penerjemah skrip mesin itu sendiri, yang menyimpan setiap game di dalamnya
+anggaran waktu dan memorinya. Keputusan dan beberapa lusin objek memerlukan biaya yang kecil, namun per-entitas
+pekerjaan - memindahkan ribuan partikel, kerumunan, kawanan - berarti ribuan langkah yang ditafsirkan
+setiap bingkai. Untuk itu mesinnya punya <code>starhermit:world</code>:</p>
+<ul>
+<li><strong>tabel</strong> menyimpan data entitas dalam kolom yang diketik (angka dan vektor) di memori permainan;</li>
+<li><strong>kernel</strong> adalah fungsi biasa dari satu baris yang dikompilasi dan dijalankan secara asli oleh runtime
+setiap baris tabel, tanpa memasukkan skrip;</li>
+<li>itu <strong>jadwal</strong> menjalankan kernel setiap frame, dan <strong>ikatan</strong> menggambar meja menjadi satu <code>InstancedMesh</code>
+(atau menggerakkan node adegan), menyusun setiap instance secara asli.</li>
+</ul>
+<p>Skrip Anda membuat keputusan; runtime melakukan aritmatika per baris. Tambahkan langit malam 4.000
+berkilauan berkilau di belakang permainan sebagai <code>src/sky.ts</code>:</p>
+<pre><code class="language-ts">// The night sky behind the game: 4,000 twinkling sparkles. Their data lives
+// in a starhermit:world table, a kernel moves every one of them natively each
+// frame, and an instance binding draws the table as one InstancedMesh, so the
+// game's script runs no per-sparkle code at all.
+import { InstancedMesh, MeshBasicMaterial, SphereGeometry, scene } from "starhermit:scene";
+import { bind, kernel, schedule, table } from "starhermit:world";
+
+const COUNT = 4_000;
+
+// One row per sparkle: where it hangs, how it twinkles, and what the kernel
+// writes each frame (its height and size).
+const sky = table("sky", COUNT, {
+  base: "vec3",
+  phase: "f32",
+  rate: "f32",
+  y: "f32",
+  size: "f32",
+});
+sky.spawn(COUNT);
+
+// Filled once from script, through typed arrays over the table's memory.
+const base = sky.column("base");
+const phase = sky.column("phase");
+const rate = sky.column("rate");
+for (let i = 0; i &lt; COUNT; i++) {
+  base[i * 3] = (Math.random() * 2 - 1) * 40;
+  base[i * 3 + 1] = Math.random() * 24 - 2;
+  base[i * 3 + 2] = -10 - Math.random() * 30;
+  phase[i] = Math.random() * Math.PI * 2;
+  rate[i] = 0.5 + Math.random() * 2;
+}
+
+// An ordinary function of one row. The runtime compiles it and runs it over
+// every live row without entering script.
+const twinkle = kernel(sky, (r, u: { drift: number }, f) =&gt; {
+  r.y = r.base.y + Math.sin(f.time * u.drift + r.phase) * 0.3;
+  r.size = 0.04 + 0.04 * Math.abs(Math.sin(f.time * r.rate + r.phase));
+});
+
+const mesh = new InstancedMesh(new SphereGeometry(1, 6, 4), new MeshBasicMaterial({ color: 0xcfd8ff }), COUNT);
+scene.add(mesh);
+
+/** Starts the sky: the kernel runs after every onUpdate, and the binding
+ * composes the mesh's instances from the columns after every onRender. */
+export function startSky(): void {
+  schedule.update(twinkle, { drift: 0.4 });
+  bind.instances(mesh, sky, { position: ["base.x", "y", "base.z"], scale: "size" });
+}
+</code></pre>
+<p>dan memulainya dari <code>src/main.ts</code>: mengimpornya dengan impor lainnya, dan memanggilnya <code>onStart</code>:</p>
+<pre><code class="language-ts">import { startSky } from "./sky.js";
+</code></pre>
+<pre><code class="language-ts">onStart(() =&gt; {
+  setFixedRate(60);
+  startSky();
+  for (const star of stars) drop(star);
+});
+</code></pre>
+<p>Nama-nama impor <code>./sky.js</code>, konvensi TypeScript untuk modul yang ditulis sebagai <code>sky.ts</code>; waktu proses
+menyelesaikannya dengan cara yang sama. Kernel menerima subset dari bahasa — angka dan boolean, aritmatika,
+<code>Math</code>, <code>if</code>, dibatasi <code>for</code> loop, kolom baris dan seragam yang Anda lewati — dan runtime
+menolak apa pun dengan a <code>SyntaxError</code> di baris kernel saat mengkompilasinya, bukan
+menjalankannya perlahan. Deklarasi dari <code>starhermit:world</code> jelaskan subset, antrian acara itu
+kernel memancarkan, tabel dengan riwayat untuk gerakan langkah tetap yang mulus, dan pengikatan simpul.</p>
+<h2 id="7-players-saves-and-online-play">7. Pemain, simpanan dan permainan online</h2>
+<p><strong>Pemain.</strong> <code>player()</code> dari <code>starhermit:platform</code> adalah pemain yang masuk, atau <code>null</code> untuk a
+tamu; Star Catcher menunjukkan nama mereka di HUD-nya. Saat klien Windows StarHermit memulai permainan Anda,
+pemain masuk dari frame pertama, dengan akun klien: klien menyerahkan
+runtime token peluncuran untuk game Anda melalui saluran pribadi, memperbaruinya saat game berjalan, dan
+game tidak pernah melihatnya (tidak ada panggilan host yang mengembalikan token, kunci, atau cookie). Pemain tidak pernah masuk ke dalam a
+permainan; masuk dan keluar terjadi di klien.</p>
+<p><strong>Pembangunan berjalan.</strong> Dimulai dari terminal, sebuah paket tidak dapat mengklaim identitas platform dengan sendirinya,
+jadi <code>starhermit star-catcher</code> bermain sebagai tamu. Setelah game Anda diterbitkan, pengembangan diluncurkan
+beri nama:</p>
+<pre><code class="language-powershell">starhermit star-catcher --game &lt;your game's id&gt;
+</code></pre>
+<p>dan Anda masuk melalui <strong>F1 → Akun…</strong>, dialog runtime itu sendiri (kunci di komputer ini dan satu
+konfirmasi melalui email, seperti pada <a href="/id/docs/tutorials/public-key-onboarding.html">orientasi kunci publik</a>). Penyimpanan, pengaturan,
+simpan dan mainkan online lalu ikuti game dan akun itu.</p>
+<p><strong>Simpan dan pengaturan.</strong> <code>starhermit:storage</code> memiliki tiga toko, semuanya bersifat pribadi untuk game Anda: <code>storage</code>
+(data kunci/nilai pada perangkat, seperti yang digunakan Star Catcher), <code>settings</code> (opsi permainan, disimpan di
+akun pemain di bawah platform <a href="/id/docs/api/games.html#per-player-game-settings">pengaturan per pemain</a>), Dan <code>saves</code> (yang
+penyimpanan game, di perangkat, dan di pemain <a href="/id/docs/tutorials/cloud-save-sync.html">slot penyimpanan awan</a> dengan konflik
+penanganan).</p>
+<p><strong>Bermain daring.</strong> Semua yang ditawarkan platform game ada di dalamnya <code>starhermit:platform</code> untuk permainanmu
+id sendiri: teman dan kehadiran, undangan, <a href="/id/docs/api/realtime.html">ruangan waktu nyata</a>, perjodohan, itu
+<a href="/id/docs/api/games.html">soket permainan</a> (<code>connectGame</code>), papan peringkat, pencapaian, tayangan ulang, obrolan, dan suara.
+Untuk multipemain otoritatif server, deklarasikan a <a href="/id/docs/api/game-scripts.html">naskah permainan</a>:</p>
+<pre><code class="language-ini">server=server.js
+</code></pre>
+<p>Platform menjalankannya sebagai otoritas untuk sesi game Anda; <code>starhermit:script</code>'s
+<code>authority("server.js", …)</code> menjalankan file yang sama pada pekerja lokal untuk latihan offline, persis seperti itu
+platform melakukannya, jadi permainan offline dan online berbagi satu jalur kode. Skor papan peringkat, prestasi
+dan hasil pertandingan hanya ditulis oleh skrip server, tidak pernah ditulis oleh game itu sendiri; membuat papan
+seperti yang dijelaskan dalam <a href="/id/docs/tutorials/game-leaderboards-achievements.html">papan peringkat dan prestasi</a>.</p>
+<h2 id="8-publish-it">8. Publikasikan</h2>
+<p>Game skrip yang diterbitkan adalah game StarHermit biasa yang filenya adalah paket Anda. Pemain menemukan
+itu di perpustakaan mereka; klien Windows StarHermit menginstalnya dengan mesin yang disematkannya dan memutarnya
+secara asli.</p>
+<p><strong>Halaman untuk browser.</strong> Platform ini menghosting setiap game yang diunggah di alamatnya sendiri dan memerlukan sebuah halaman
+di sana untuk membuka. Sampai game Anda memiliki versi browser, halaman biasa yang menyatakan tempat memainkannya sudah cukup;
+Nama manifes Star Catcher <code>play.html</code>:</p>
+<pre><code class="language-html">&lt;!doctype html&gt;
+&lt;html lang="en"&gt;
+&lt;meta charset="utf-8"&gt;
+&lt;title&gt;Star Catcher&lt;/title&gt;
+&lt;p&gt;Star Catcher runs in the StarHermit Windows client: find it in your library and press Play.&lt;/p&gt;
+&lt;/html&gt;
+</code></pre>
+<p>Gunakan nama selain <code>index.html</code>: versi browser yang lebih baru akan menulis sendiri <code>index.html</code>.</p>
+<p><strong>Indeks berkas.</strong> Klien menginstal dan memperbarui game yang diunggah berdasarkan indeks filenya,
+<code>starhermit-files.json</code>: setiap file dengan ukurannya dan SHA-256. Tuliskan setelah setiap perubahan pada
+game, sebagai langkah terakhir sebelum mengupload:</p>
+<pre><code class="language-powershell">starhermit package --native star-catcher
+</code></pre>
+<pre><code class="language-text">Native upload: star-catcher (6 files, 7553 bytes to upload; the platform takes at most 50 MiB)
+Wrote star-catcher\starhermit-files.json for engine 1.0.0: the StarHermit client installs the game by it
+Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.0.0 is still current
+</code></pre>
+<p>Ia memeriksa paket terhadap aturan pengunggahan platform (no <code>api/</code> atau <code>ws/</code> folder, paling banyak
+9.998 jalur dan 50 MiB) dan lepaskan pin game Anda, yang harus dipublikasikan dengan Windows
+runtime dan tidak dicabut. Runtime memeriksa rilisnya sendiri secara offline; <code>--versions</code> menyebutkan salinannya
+<a href="/engine/versions.json">versions.json</a> untuk memeriksa terhadap yang lain.</p>
+<p><strong>Unggah itu.</strong> Folder tersebut adalah unggahannya, persis seperti apa adanya: klien memeriksa setiap file terhadap
+indeks, jadi unggah file folder tanpa perubahan, dengan jumlah yang sama <code>starhermit.txt</code> keduanya di dalam folder
+dan di akar bundel (platform menerbitkan salinan akar di tempat folder). Seperti di
+<a href="/id/docs/api/github-games.html#add-a-game-from-a-local-folder">Tambahkan game dari folder lokal</a>:</p>
+<pre><code class="language-bash">mkdir -p bundle/client
+cp -R star-catcher/. bundle/client/
+rm -rf bundle/client/.starhermit
+cp star-catcher/starhermit.txt bundle/starhermit.txt
+tar -C bundle -czf star-catcher.tar.gz .
+
+curl --fail-with-body -X POST https://api.starhermit.com/api/v1/me/github-games/upload \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H 'Content-Type: application/gzip' \
+  --data-binary @star-catcher.tar.gz
+</code></pre>
+<p><code>ACCESS_TOKEN</code> adalah token akses akun Anda (lihat <a href="/id/docs/tutorials/ci-cd-build-upload.html">unggahan yang dibuat dari CI/CD</a>
+untuk masuk tanpa browser). Jawabannya adalah <code>game.id</code> adalah id game Anda, dan game tersebut langsung ditayangkan
+<code>https://&lt;id&gt;.starhermit.com/</code>. Untuk setiap versi selanjutnya, tulis kembali indeksnya dan dorong jenis yang sama
+dari bundel ke permainan dengan <a href="/id/docs/api/github-games.html#push-a-game-bundle"><code>POST /api/v1/me/github-games/{id}/bundle</code></a>;
+klien pemain kemudian hanya mengunduh file yang hashnya diubah. A <code>server=</code> naskah di
+folder tersebut mendapatkan backend game tersebut saat unggahan dipublikasikan.</p>
+<p><strong>Dari repositori.</strong> Sebuah permainan <a href="/id/docs/api/github-games.html">diterbitkan dari GitHub</a> bekerja dengan cara yang sama:
+melakukan <code>starhermit.txt</code> dengan itu <code>engine.*</code> baris di root repositori. Klien menginstal dan
+memperbarui permainan repositori dengan git, hanya mengambil apa yang ditambahkan setiap komit, sehingga tidak memerlukan indeks file.</p>
+<p><strong>Di browser.</strong> <code>starhermit package --web</code> menulis unggahan browser game: filenya, halaman pemuat
+yang memuat rilis mesin yang disematkan dari wiki ini dengan hash, dan indeks filenya. Ini perlu pelepasan
+dengan waktu proses web; 1.0.0 hanya untuk Windows, jadi pembuatan browser dimulai dengan rilis yang lebih baru, dan
+<code>package --web</code> mengatakan demikian sampai saat itu. Di platform, halaman permainan skrip hanya dapat menjalankan halaman resmi
+mesin dari wiki ini (lihat <a href="/id/docs/engine-releases.html#script-games-on-the-platform">Rilis engine</a>).</p>
+<h2 id="9-move-to-a-newer-engine">9. Pindah ke mesin yang lebih baru</h2>
+<p>Sebuah game berjalan persis pada rilis yang disematkannya: tidak ada yang mengupgradenya di belakang Anda, dan diterbitkan
+rilis tidak pernah berubah. Untuk pindah ke yang lebih baru, unduh runtime-nya, jalankan game Anda dan periksa
+di atasnya, lalu sematkan ulang dengan cara menggantinya <code>engine.version</code> di dalam <code>starhermit.txt</code>, tulis lagi indeks file dan
+mempublikasikan. Klien pemain mengunduh mesin baru satu kali (hanya yang berubah dari rilis yang sudah mereka rilis
+tahan) dan file game Anda diubah.</p>
+<p>Versi utama rilis ini adalah API host: <code>engine.api=1</code> game bergerak bebas dalam 1.x.x. Sebuah permainan
+yang memerlukan anggota API host yang ditambahkan dalam versi minor dapat mengatakannya <code>engine.minor=N</code>; seorang yang lebih tua
+runtime kemudian menolaknya dengan pesan alih-alih gagal nanti.</p>
+<p>Rilisan yang ditemukan tidak aman adalah <strong>dicabut</strong>: <a href="/engine/versions.json">versions.json</a> menandainya dengan
+alasannya, klien menolak untuk menginstal atau memulainya (dan memberi tahu pemain alasannya), dan kemasannya
+perintah menolaknya setiap kali mereka membaca version.json. Pelepasan yang dicabut selalu diikuti dengan pelepasan yang tetap; sematkan ulang ke sana dan publikasikan.</p>
+<h2 id="10-limits-and-the-licence">10. Batasan dan izin</h2>
+<p>Runtime menjaga setiap game sesuai anggaran, yang mungkin akan menurunkan anggaran paket <code>engine.limits.*</code> tapi
+never raise: waktu skrip 32 ms untuk setiap panggilan balik (panggilan balik yang menggunakannya akan dijeda dan
+berlanjut pada frame berikutnya; setelah tiga detik runtime-nya "tidak merespons" layar memungkinkan
+pemain menunggu atau menghentikan permainan), tumpukan skrip 256 MiB, penyimpanan 64 MiB, paling banyak 512 MiB dan 65.536
+file dalam satu paket dan, untuk unggahan, jalur platform 50 MiB dan 9.998. Melewati batas dimana
+suatu operasi bisa gagal (alokasi, panggilan host) melempar a <code>RangeError</code>; kehabisan tumpukan atau panggilan
+kedalaman mengakhiri permainan di layar kesalahan. Deklarasi API host mencantumkan setiap batasan.</p>
+<p>Mesin ini dilisensikan di bawah <a href="https://polyformproject.org/licenses/noncommercial/1.0.0">Lisensi Nonkomersial PolyForm 1.0.0</a>
+dengan izin tambahan ini, dikutip dari nya <code>LICENSE-engine</code>:</p>
+<blockquote>
+<p>Izin tambahan: Hype Driven Development Inc. juga mengizinkan penggunaan perangkat lunak ini untuk siapa pun
+tujuan, termasuk tujuan komersial, untuk membuat, mendistribusikan, dan menjalankan game yang dibuat dengannya, sebagai
+selama game tersebut dipublikasikan di StarHermit.com, tersedia untuk umum untuk dimainkan di sana, dan disimpan
+ketertiban berjalan di sana. Untuk penggunaan lain yang tidak diizinkan oleh lisensi di bawah ini, hubungi
+info@hypedriven.com.</p>
+</blockquote>
+<p>Teks lengkapnya adalah <code>LICENSE-engine</code> file yang diunduh dan di samping setiap mesin yang diinstal; itu
+komponen pihak ketiga mempunyai lisensinya sendiri <code>notices</code> map. Kode permainan Anda sendiri dan
+aset adalah milikmu.</p>
+<h2 id="checklist">Daftar periksa</h2>
+<ul>
+<li>[ ] <code>starhermit.txt</code> memiliki <code>engine.api</code>, <code>engine.entry</code> Dan <code>engine.version</code>, dan kemampuannya
+permainan itu menggunakan.</li>
+<li>[ ] <code>starhermit check</code> melewati, dan <code>npx --package typescript tsc -p .</code> melaporkan tidak ada kesalahan.</li>
+<li>[ ] Folder tersebut hanya menampung permainan: tidak <code>node_modules</code>, tidak ada alat pembuatan.</li>
+<li>[ ] Halaman untuk browser diberi nama oleh <code>launch=</code>.</li>
+<li>[ ] <code>starhermit package --native</code> dijalankan setelah perubahan terakhir, dan folder diunggah tanpa perubahan.</li>
+</ul>
+
+{% endraw %}

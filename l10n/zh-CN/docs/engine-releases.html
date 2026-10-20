@@ -1,0 +1,144 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "StarHermit 引擎发布"
+source_url: "/docs/engine-releases.html"
+source_path: "docs/engine-releases.md"
+source_hash: "d866f3bf6d9ef5218af4e0260a104d3f77515a84c4d622bfaf19604b11c9183d"
+translation: "machine"
+permalink: "/zh-CN/docs/engine-releases.html"
+---
+{% raw %}
+<h1 id="starhermit-engine-releases">StarHermit 引擎发布</h1>
+<p>StarHermit 引擎——运行的运行时 <a href="/zh-CN/docs/tutorials/starhermit-engine.html">脚本游戏</a> — 是
+在此 wiki 上发布为版本控制的、不可变的版本
+<a href="/engine/">wiki.starhermit.com/engine/</a>。游戏固定一个版本与 <code>engine.version</code> 在
+他们的 <a href="/zh-CN/docs/starhermit-txt.html"><code>starhermit.txt</code></a>; StarHermit Windows 客户端安装版本 a
+游戏固定并在上面玩游戏，开发人员从这里下载版本的运行时来构建
+与.</p>
+<h2 id="versions">版本</h2>
+<p>一个版本是 <code>X.Y.Z</code>. <code>X</code> 是 <strong>主机API的主要版本</strong>， 这 <code>engine.api</code> 游戏宣告，所以
+每个 1.x.x 版本都会运行 <code>engine.api=1</code> 游戏；该版本还记录了主机 API 的次要版本，
+随着成员的增加而增长（游戏可能需要一个 <code>engine.minor</code>）。已发布的版本
+永远不会改变：修复是下一个版本。</p>
+<table>
+<thead>
+<tr>
+<th>发布</th>
+<th>主机API</th>
+<th>运行时</th>
+<th>开发者下载</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.0.0</td>
+<td>1.4</td>
+<td>Windows (x86-64)；没有网络运行时</td>
+<td><a href="/engine/1.0.0/native/windows-x86_64/starhermit-1.0.0-windows-x86_64.zip">starhermit-1.0.0-windows-x86_64.zip</a></td>
+</tr>
+</tbody>
+</table>
+<p><a href="/engine/versions.json">versions.json</a> 是权威列表，最新优先，引擎
+区域自己的页面列出了相同的内容。</p>
+<h2 id="the-engine-area">发动机区</h2>
+<pre><code class="language-text">engine/
+  versions.json            every release: host API, date, runtimes, revocation
+  X.Y.Z/
+    native/windows-x86_64/
+      native.json          the Windows runtime's files, each with its size, SHA-256 and chunks
+      starhermit-X.Y.Z-windows-x86_64.zip
+                           the developer download: the same files as one archive
+    manifest.json, starhermit.js, starhermit.wasm, ...
+                           the web runtime, in a release that has one
+  chunks/ab/&lt;sha256&gt;.z     pieces of the native files, shared by every release
+  patches/ab/&lt;sha256&gt;.p    binary patches from earlier releases' files
+</code></pre>
+<p>每个文件均按原样发布（没有文件名以 <code>_</code> 或者 <code>.</code>），GitHub Pages 为其提供服务
+与 <code>Access-Control-Allow-Origin: *</code>.</p>
+<h3 id="versionsjson">versions.json</h3>
+<pre><code class="language-json">{
+  "format": 2,
+  "versions": [
+    {
+      "api": {"major": 1, "minor": 4},
+      "date": "2026-10-20T12:49:23Z",
+      "native": {
+        "windows-x86_64": {"manifest": "1.0.0/native/windows-x86_64/native.json", "sha256": "&lt;SHA-256 of native.json&gt;"}
+      },
+      "revoked": false,
+      "version": "1.0.0",
+      "web": null
+    }
+  ]
+}
+</code></pre>
+<p><code>web</code> 是 <code>{"manifest": "sha384-…"}</code>, 发布网站的 SRI 哈希值 <code>manifest.json</code>， 或者 <code>null</code> 为了
+没有 Web 运行时的版本。 <code>native</code> 固定每个平台的 <code>native.json</code> 通过其 SHA-256。一个
+释放已撤回，因为不安全说 <code>"revoked": true</code> 与一个 <code>"revokedReason"</code>;那就是
+仅更改已发布的条目。</p>
+<h3 id="nativejson">native.json</h3>
+<p><code>native.json</code> 列出客户端安装的引擎文件夹的文件 - <code>starhermit.exe</code>,
+<code>release.json</code> （发布版本、主机 API 和 <code>launcher</code> 其运行时所讲的协议），
+<code>LICENSE-engine</code> 和第三方通知——每一个都有其 <code>size</code>, <code>sha256</code> 和 <code>chunks</code>。一大块
+是文件的一部分，zlib 压缩存储为 <code>chunks/&lt;first two hex digits&gt;/&lt;sha256&gt;.z</code> 并命名为
+通过其未压缩字节的 SHA-256；块边界遵循内容，因此不变
+拉伸将其块从一个版本保留到下一个版本。在较小的地方，文件还列出了
+<code>patches</code> 来自早期版本的同一文件（<code>"from"</code>：早期文件的 SHA-256）。
+<code>downloads</code> 列出了开发人员下载及其 <code>size</code> 和 <code>sha256</code>;客户从不安装它。</p>
+<h2 id="integrity">正直</h2>
+<p>一个哈希链涵盖了客户端运行的每个字节：</p>
+<ol>
+<li><code>versions.json</code> （或下面的平台 API）给出版本的 SHA-256 <code>native.json</code>.</li>
+<li><code>native.json</code> 给出每个文件和每个块的 SHA-256。</li>
+<li>客户端仅获取尚未保存的块，检查每个块的存储大小，
+膨胀的大小和 SHA-256，将每个文件放在一起，检查文件的 SHA-256，然后才移动
+释放到位。补丁会根据其自己的 SHA-256 进行检查，并且修补后的文件会根据
+文件的；任何失败都会归咎于块。</li>
+</ol>
+<p>开发者下载通过其入口被同一条链覆盖 <code>downloads</code>。一个浏览器
+游戏的加载器页面固定网络运行时的 <code>starhermit.js</code> 和 <code>manifest.json</code> 使用 SRI 哈希值，以及
+运行时会根据清单检查它加载的所有其他文件。</p>
+<h2 id="the-engine-releases-api">引擎发布API</h2>
+<p>该平台提供相同的列表，包含此 wiki 上的每个 URL，因此客户询问 API 是哪个引擎
+获取：</p>
+<p><code>GET /api/v1/engine/releases</code> → 每个版本，最新的在前：</p>
+<pre><code class="language-json">{"releases": [{
+  "version": "1.0.0", "api": {"major": 1, "minor": 4}, "revoked": false, "date": "2026-10-20T12:49:23Z",
+  "web": null,
+  "native": {"windows-x86_64": {
+    "manifestUrl": "https://wiki.starhermit.com/engine/1.0.0/native/windows-x86_64/native.json",
+    "manifestSha256": "&lt;SHA-256 of native.json&gt;"}}
+}]}
+</code></pre>
+<p><code>GET /api/v1/engine/releases/{version}</code> → 一次发布，或 <code>404</code> 当它没有列出时。两者都是
+匿名且可缓存（<code>Cache-Control: public, max-age=60</code> 与一个 <code>ETag</code>）。已撤销的发布
+携带 <code>revokedReason</code>; <code>web</code> 是 <code>{"base", "manifestIntegrity"}</code> 具有 Web 运行时的版本。
+虽然平台从未阅读过该列表（维基百科自启动以来就无法访问），但他们回答
+<code>503</code> 和 <code>Retry-After</code>.</p>
+<h2 id="script-games-on-the-platform">平台上的脚本游戏</h2>
+<p>当游戏的根 <code>starhermit.txt</code> 宣称 <code>engine.version</code>，平台将其视为脚本
+游戏：</p>
+<ul>
+<li>每次发布都会记录文件 pin 的发布，如 <code>hosting.engineVersion</code>，并设置
+<code>hosting.deployWarning</code> （也在捆绑推送的答案中）当该版本未列出或已列出时
+撤销。警告永远不会停止发布。</li>
+<li>托管游戏的每个页面都提供仅允许脚本的内容安全策略
+来自这个维基（以及引擎自己的 <code>blob:</code> 工人），所以脚本游戏页面的唯一代码可以
+run 是官方引擎：</li>
+</ul>
+<pre><code class="language-text">default-src 'self'; script-src https://wiki.starhermit.com 'wasm-unsafe-eval' blob:; worker-src blob:;
+connect-src 'self' https://wiki.starhermit.com; img-src 'self' blob: data:; media-src 'self' blob:;
+style-src 'self' 'unsafe-inline'; font-src 'self' https://wiki.starhermit.com;
+frame-ancestors https://dashboard.starhermit.com; base-uri 'self'; form-action 'none'
+</code></pre>
+<p>没有浏览器构建的脚本游戏页面（例如仅限 Windows 的游戏上传的纯页面
+对于浏览器）不需要脚本并且不受影响。</p>
+<h2 id="revocations">撤销</h2>
+<p>已撤销的版本会保留在列表中，以便客户可以说出拒绝的原因：StarHermit 客户会这样做
+不安装或启动它并告诉玩家，打包命令拒绝为其打包游戏
+当他们阅读时 <code>versions.json</code>，并且该平台会警告那些将其固定的游戏的所有者
+发布。重新固定到替换它的版本并再次发布
+（见 <a href="/zh-CN/docs/tutorials/starhermit-engine.html#9-move-to-a-newer-engine">转向更新的引擎</a>).</p>
+
+{% endraw %}

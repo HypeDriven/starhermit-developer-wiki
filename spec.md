@@ -22,7 +22,7 @@ and second-language speakers in the Ethnologue 2026 ranking. Local SVG country f
 which also works without JavaScript. Flags render as images rather than relying on emoji fonts.
 English remains at its existing URLs;
 the nine other locales have static pages at `/<language>/` and `/<language>/docs/...html`, generated
-under `l10n/`. All 46 public documents, navigation labels, accessibility labels, and seven SVG diagrams
+under `l10n/`. All 48 public documents, navigation labels, accessibility labels, and seven SVG diagrams
 are translated. Arabic and Urdu use right-to-left layouts; code remains left-to-right. Heading IDs,
 code examples, API identifiers, downloadable examples, and contracts retain their original values.
 Links and the language selector keep readers on the corresponding page and preserve section anchors.
@@ -57,10 +57,28 @@ patterns, not the subject of the docs.
 - `docs/examples/browser-quickstart/` and its ZIP — complete no-build game with account sign-in,
   explicit terms consent, validated conditional cloud saves and untracked in-memory single-player play.
   `scripts/build-quickstart.py` refreshes its vendored helpers and deterministic archive.
+- `docs/tutorials/starhermit-engine.md` and `docs/engine-releases.md` — the StarHermit engine for script
+  games. The tutorial builds a small TypeScript game (scene, input, HUD, storage) step by step: what a
+  script game is, getting the engine (the client installs releases; developers download a release's
+  Windows runtime from `engine/`), `starhermit new`/`types`/`check` and TypeScript checking, running
+  natively, per-entity work with `starhermit:world` tables, kernels and bindings, the platform (sign-in
+  from the client, `--game <id>` development launches, saves, online play with `server=`), publishing
+  (a plain page for browsers, `starhermit package --native` for the file index, folder upload or
+  repository; the web build with a later release), re-pinning and revocations, limits and the licence.
+  The reference page covers `engine/` (versions.json format 2, native.json, chunks and patches, the
+  developer download), the integrity chain, `GET /api/v1/engine/releases`, and what the platform does
+  for a game that declares `engine.version` (deploy record and warning, Content-Security-Policy).
+- `engine/` — the engine area, written only by the engine's `cargo starhermit release` (never by hand):
+  `versions.json`, one immutable directory per release (`<version>/native/windows-x86_64/native.json`
+  and the developer download `starhermit-<version>-windows-x86_64.zip`; a web runtime's files in a
+  release that has one), the shared content-addressed `chunks/` (and `patches/`), and a README that
+  renders as `/engine/`. Its files are published verbatim (no `_`/`.` names, no front matter but the
+  README's) and it is not translated; release 1.0.0 is Windows-only.
 - `docs/starhermit-txt.md` — the manifest every published game needs (including `control.*` declarations), where it must sit in the uploaded
   folder, and why that folder should be the distributable build (everything beside the manifest is
   uploaded and served). It also documents matchmaking start deadlines, AI-seat limits and empty-seat behavior,
-  folder cache lifetimes, exact additional CORS origins, and how upload modes replace or preserve hosting policies.
+  folder cache lifetimes, exact additional CORS origins, how upload modes replace or preserve hosting policies, and the
+  `engine.*` keys of a StarHermit engine game.
 - `docs/getting-started.md` — base URLs, versioning, the auth model (including WebSocket connection
   tickets), recommended account/untracked entry options, and the ways to integrate: a platform game published from GitHub or uploaded as a folder,
   with an optional script or container server, or an external client calling the REST/WS API directly.

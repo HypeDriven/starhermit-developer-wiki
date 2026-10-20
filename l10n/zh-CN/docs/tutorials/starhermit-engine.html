@@ -1,0 +1,482 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "教程：使用 StarHermit 引擎构建游戏"
+source_url: "/docs/tutorials/starhermit-engine.html"
+source_path: "docs/tutorials/starhermit-engine.md"
+source_hash: "4c2d0cc374adb8270ed1094215281efce6a3dc2f2cf235876f02011df5fb054d"
+translation: "machine"
+permalink: "/zh-CN/docs/tutorials/starhermit-engine.html"
+---
+{% raw %}
+<h1 id="tutorial-build-a-game-with-the-starhermit-engine">教程：使用 StarHermit 引擎构建游戏</h1>
+<p>StarHermit 引擎运行 <strong>脚本游戏</strong>：用 TypeScript（或 JavaScript）编写的整个游戏以及
+由一个预构建引擎可执行文件（StarHermit 运行时）播放，无需编译任何本机代码。
+您根据引擎的内置模块编写游戏逻辑 - 3D 场景、输入、HUD、音频、
+存储和 StarHermit 平台 — 剩下的由运行时完成：窗口化、渲染
+GPU、声音、选项菜单、登录和在线游戏。玩家通过以下方式获得游戏
+<a href="https://starhermit.com">星隐者 Windows 客户端</a>，它会安装您的游戏所需的引擎
+并以本地方式播放。</p>
+<p>本教程构建 <strong>明星捕手</strong>，一个小游戏，你需要驾驶一个篮子来接住掉落的东西
+星星，并将其从空文件夹中取出到已发布的游戏中：</p>
+<ol>
+<li><a href="#1-what-a-script-game-is">什么是脚本游戏</a></li>
+<li><a href="#2-get-the-engine">获取引擎</a></li>
+<li><a href="#3-create-the-game">创建游戏</a></li>
+<li><a href="#4-write-the-first-version">编写第一个版本</a></li>
+<li><a href="#5-run-it-natively">本地运行</a></li>
+<li><a href="#6-many-things-at-once-starhermitworld">一次做很多事情： <code>starhermit:world</code></a></li>
+<li><a href="#7-players-saves-and-online-play">玩家、保存和在线游戏</a></li>
+<li><a href="#8-publish-it">发布它</a></li>
+<li><a href="#9-move-to-a-newer-engine">转向更新的引擎</a></li>
+<li><a href="#10-limits-and-the-licence">限制和许可</a></li>
+</ol>
+<h2 id="1-what-a-script-game-is">1.什么是脚本游戏</h2>
+<p>脚本游戏是一个文件夹（ <strong>包裹</strong>）与一个 <a href="/zh-CN/docs/starhermit-txt.html"><code>starhermit.txt</code></a> 在其
+root、您的 TypeScript 模块和您的资产。三 <code>engine.*</code> 清单中的行使其成为一：</p>
+<pre><code class="language-ini">engine.api=1
+engine.entry=src/main.ts
+engine.version=1.0.0
+</code></pre>
+<p><code>engine.api</code> 是您的代码所针对的主机 API 的主要版本， <code>engine.entry</code> 的
+模块运行时启动，并且 <code>engine.version</code> 游戏构建的确切引擎版本以及
+测试过。版本发布在此 wiki 下 <a href="/zh-CN/docs/engine-releases.html">引擎发布</a>;的
+游戏从不包含引擎本身，因此上传仅包含您自己的文件。</p>
+<p>运行时将每个游戏视为不受信任：您的代码仅通过主机 API 到达机器
+（它自己的包文件，它自己的存储，它自己的游戏id的平台），从来没有文件，进程，
+任意网络连接或玩家的凭据。作为回报，游戏不能使运行时崩溃
+或挂起窗口：运行三秒钟的调用会调出运行时自己的窗口 "没有回应"
+屏幕上，未捕获的错误会在错误屏幕上结束游戏，玩家可以从中重新启动。</p>
+<p>引擎运行的任何地方都运行相同的包。版本 1.0.0 仅具有 Windows 运行时；一个
+引擎的浏览器版本随更高版本一起提供（请参阅 <a href="#8-publish-it">发布它</a>).</p>
+<h2 id="2-get-the-engine">2.获取引擎</h2>
+<p><strong>玩家</strong> 什么都不做：当他们在脚本游戏上按下“开始”时，StarHermit Windows 客户端
+下载游戏 pin 的版本（一次，由每个 pin 的游戏共享），检查每个文件
+针对该版本已发布的哈希值并启动它。</p>
+<p><strong>开发商</strong> 从引擎区域下载版本的运行时：</p>
+<ul>
+<li><a href="/engine/1.0.0/native/windows-x86_64/starhermit-1.0.0-windows-x86_64.zip">starhermit-1.0.0-windows-x86_64.zip</a>
+（Windows 10 或 11，64 位），6.7 MB。</li>
+</ul>
+<p>存档包含一个文件夹， <code>starhermit-1.0.0-windows-x86_64</code>， 和 <code>starhermit.exe</code>， 这
+<code>release.json</code> 告诉运行时它是哪个版本， <code>LICENSE-engine</code> 和第三方
+通知。它与客户端安装的引擎相同。它的大小和 SHA-256 列在下面
+<code>downloads</code> 在发布的 <a href="/engine/1.0.0/native/windows-x86_64/native.json">native.json</a>;到
+检查 PowerShell 中的副本，进行比较 <code>sha256</code> 和：</p>
+<pre><code class="language-powershell">Get-FileHash .\starhermit-1.0.0-windows-x86_64.zip -Algorithm SHA256
+</code></pre>
+<p>解压存档并在解压的文件夹中打开终端：</p>
+<pre><code class="language-powershell">.\starhermit.exe --version
+</code></pre>
+<pre><code class="language-text">starhermit 0.1.0 (host API 1.4, launcher 1; engine release 1.0.0)
+</code></pre>
+<p>下面的命令写为 <code>starhermit</code>;将它们运行为 <code>.\starhermit.exe</code> 从该文件夹中，或者
+将文件夹添加到您的 <code>PATH</code>.</p>
+<h2 id="3-create-the-game">3. 创建游戏</h2>
+<pre><code class="language-powershell">starhermit new star-catcher --title "Star Catcher"
+</code></pre>
+<pre><code class="language-text">Created Star Catcher in star-catcher: a script game pinned to engine 1.0.0
+Play it: starhermit star-catcher
+Check it: starhermit check star-catcher
+For a native upload (the StarHermit client plays it): starhermit package --native star-catcher
+</code></pre>
+<p>新文件夹包含一个可播放的起点 - 当您按空格键时会跳跃的立方体：</p>
+<pre><code class="language-text">star-catcher/
+  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.0.0)
+  tsconfig.json              TypeScript settings for checking the game
+  src/main.ts                the entry module
+  .starhermit/starhermit.d.ts  the host API's declarations, for your editor and the type checker
+</code></pre>
+<p><code>.starhermit/</code> 以点开头，因此它永远不是包的一部分。
+<code>starhermit types star-catcher</code> 再次写入声明，例如在您移动到较新的版本后
+运行时。主机 API 的每个模块、成员、单位、限制和错误都记录在该文件中。</p>
+<p>运行时不会进行类型检查：它会在加载每个模块时删除 TypeScript 的类型。检查它们
+自己使用 TypeScript 5 或更高版本；安装了 Node.js， <code>npx</code> 无需安装即可运行
+游戏文件夹中的任何内容：</p>
+<pre><code class="language-powershell">cd star-catcher
+npx --package typescript tsc -p .
+</code></pre>
+<p>保持 <code>node_modules</code> 和其他工具 <strong>游戏文件夹外</strong>：文件夹中的所有内容，除了
+点名称是包和每次上传的一部分。</p>
+<h2 id="4-write-the-first-version">4. 编写第一个版本</h2>
+<p>替换生成的 <code>starhermit.txt</code> 与游戏的清单：</p>
+<pre><code class="language-ini">name=Star Catcher
+description=Catch the falling stars before the time runs out.
+launch=play.html
+engine.api=1
+engine.entry=src/main.ts
+engine.version=1.0.0
+engine.capabilities=platform,storage
+control.left=KeyA+ArrowLeft | Move left
+control.right=KeyD+ArrowRight | Move right
+control.start=Space+Enter | Start a round
+engine.gamepad.left=LeftStickLeft+DpadLeft
+engine.gamepad.right=LeftStickRight+DpadRight
+engine.gamepad.start=South
+cache..=0
+</code></pre>
+<p>这 <code>control.*</code> 行使用默认键（平台的
+<a href="/zh-CN/docs/tutorials/game-controls.html">控制</a> 格式）和 <code>engine.gamepad.*</code> 他们的游戏手柄默认值。玩家重新绑定
+它们位于运行时的“选项”菜单中，因此游戏会读取 <strong>行动</strong>，从不钥匙。 <code>engine.capabilities</code>
+询问游戏除了绘图和输入之外还使用什么： <code>platform</code> 对于已登录玩家和在线玩家
+特点， <code>storage</code> 用于保存在玩家设备和帐户上的数据。 <code>launch=play.html</code> 和页面
+当你 <a href="#8-publish-it">发布</a>.</p>
+<p>然后更换 <code>src/main.ts</code>:</p>
+<pre><code class="language-ts">// Star Catcher: catch the falling stars in the basket before the time runs out.
+import { frame, onFixedUpdate, onRender, onStart, setFixedRate } from "starhermit:engine";
+import {
+  AmbientLight,
+  BoxGeometry,
+  Color,
+  DirectionalLight,
+  Mesh,
+  MeshStandardMaterial,
+  PerspectiveCamera,
+  SphereGeometry,
+  renderer,
+  scene,
+} from "starhermit:scene";
+import { onAction, value } from "starhermit:input";
+import { storage } from "starhermit:storage";
+import { player } from "starhermit:platform";
+import * as draw from "starhermit:draw";
+
+// -- The scene ----------------------------------------------------------------
+const camera = new PerspectiveCamera(50, 16 / 9, 0.1, 100);
+camera.position.set(0, 4, 12);
+camera.lookAt(0, 3, 0);
+renderer.camera = camera;
+scene.background = new Color(0x0b1020);
+
+const sun = new DirectionalLight(0xfff4e0, 1.2);
+sun.position.set(3, 8, 5);
+scene.add(sun, sun.target, new AmbientLight(0x6070a0, 0.5));
+
+const basket = new Mesh(new BoxGeometry(2, 0.4, 1), new MeshStandardMaterial({ color: 0x4fa3ff, roughness: 0.4 }));
+scene.add(basket);
+
+const starGeometry = new SphereGeometry(0.3, 16, 12);
+const starMaterial = new MeshStandardMaterial({ color: 0xffd34d, emissive: 0xffb000, emissiveIntensity: 0.6 });
+const stars = Array.from({ length: 3 }, () =&gt; {
+  const mesh = new Mesh(starGeometry, starMaterial);
+  scene.add(mesh);
+  return { mesh, x: 0, y: 0, previousY: 0, speed: 0 };
+});
+type Star = (typeof stars)[number];
+
+// -- The rules ----------------------------------------------------------------
+const WIDTH = 6; // the basket moves between -WIDTH and WIDTH
+const ROUND = 60; // seconds a round lasts
+let basketX = 0;
+let previousX = 0;
+let score = 0;
+let timeLeft = 0; // 0 between rounds
+const saved = storage.getJson("best");
+let best = typeof saved === "number" ? saved : 0;
+
+function drop(star: Star): void {
+  star.x = (Math.random() * 2 - 1) * WIDTH;
+  star.y = star.previousY = 8 + Math.random() * 4;
+  star.speed = 2 + Math.random() * 2 + score * 0.05;
+}
+
+onStart(() =&gt; {
+  setFixedRate(60);
+  for (const star of stars) drop(star);
+});
+
+onAction((event) =&gt; {
+  if (event.action === "start" &amp;&amp; event.pressed &amp;&amp; timeLeft === 0) {
+    score = 0;
+    timeLeft = ROUND;
+    for (const star of stars) drop(star);
+  }
+});
+
+onFixedUpdate((step) =&gt; {
+  previousX = basketX;
+  for (const star of stars) star.previousY = star.y;
+  if (timeLeft === 0) return;
+  // An action's value is 0 to 1, so a stick steers gently and a key fully.
+  const steer = value("right") - value("left");
+  basketX = Math.max(-WIDTH, Math.min(WIDTH, basketX + steer * 9 * step));
+  for (const star of stars) {
+    star.y -= star.speed * step;
+    if (star.y &lt; 0.6 &amp;&amp; star.y &gt; 0 &amp;&amp; Math.abs(star.x - basketX) &lt; 1.2) {
+      score += 1;
+      drop(star);
+    } else if (star.y &lt; -1) {
+      drop(star);
+    }
+  }
+  timeLeft = Math.max(0, timeLeft - step);
+  if (timeLeft === 0 &amp;&amp; score &gt; best) {
+    best = score;
+    storage.setJson("best", best);
+  }
+});
+
+// -- Drawing ------------------------------------------------------------------
+onRender((alpha) =&gt; {
+  // Between two fixed steps: draw where things are at this moment.
+  basket.position.set(previousX + (basketX - previousX) * alpha, 0.2, 0);
+  for (const star of stars) {
+    star.mesh.position.set(star.x, star.previousY + (star.y - star.previousY) * alpha, 0);
+  }
+  hud();
+});
+
+function hud(): void {
+  const { width, height, scale } = frame();
+  const size = 22 * scale;
+  const name = player()?.displayName ?? "Guest";
+  draw.text(`${name}   score ${score}   best ${best}`, 16 * scale, 16 * scale, { size, color: "#e8ecf4" });
+  if (timeLeft &gt; 0) {
+    draw.text(`${Math.ceil(timeLeft)} s`, width - 16 * scale, 16 * scale, { size, color: "#ffd34d", align: "end" });
+  } else {
+    draw.rect(0, height / 2 - 40 * scale, width, 80 * scale, [0, 0, 0, 0.5]);
+    draw.text("Press Space to play", width / 2, height / 2 - 12 * scale, { size, color: "#ffffff", align: "center" });
+  }
+}
+</code></pre>
+<p>每个部分的作用：</p>
+<ul>
+<li><strong>现场。</strong> <code>starhermit:scene</code> 下面是三个.js：相机、灯光、由几何体组成的网格
+和一种材料， <code>scene.add</code>。距离为米，角度为弧度，颜色为 sRGB。</li>
+<li><strong>规则。</strong> <code>onFixedUpdate</code> 以固定速率运行 <code>setFixedRate(60)</code> 要求，一次 60 次
+其次，无论帧速率如何，因此游戏在每台机器上的播放效果都是相同的。 <code>value("right")</code> 是
+动作的值从 0 到 1，因此游戏手柄摇杆会轻轻转向，按键会完全转向，并且
+<code>onAction</code> 听到每一次按下，这里开始一轮。</li>
+<li><strong>绘画。</strong> <code>onRender</code> 每帧运行一次 <code>alpha</code>，最后两个帧之间的距离是多少
+固定步骤；之间绘制的位置 <code>previous</code> 并且当前值在任何刷新时都会平滑移动
+率。 <code>starhermit:draw</code> 在场景上以窗口像素绘制 HUD； <code>frame().scale</code> 皈依者
+高 DPI 显示器的逻辑像素。</li>
+<li><strong>最好成绩</strong> 保留在玩家的设备上 <code>starhermit:storage</code>，保持分开
+每个玩家。</li>
+</ul>
+<h2 id="5-run-it-natively">5.本地运行</h2>
+<pre><code class="language-powershell">starhermit check star-catcher
+</code></pre>
+<pre><code class="language-text">package=Directory files=3 bytes=4800 name="Star Catcher" api=1 entry=src/main.ts capabilities=platform,storage actions=left,right,start
+runnable=true engine="TypeScript" frames=120 probes=0
+PASS package src/main.ts: valid; 120 frames headless
+</code></pre>
+<p><code>check</code> 验证包（清单、路径、大小）并在没有窗口的情况下播放 120 帧，因此
+此处显示语法错误、未知导入或启动时的异常及其文件、行和列。
+然后播放：</p>
+<pre><code class="language-powershell">starhermit star-catcher
+</code></pre>
+<p>按空格键开始一轮，然后按箭头键（或 A 和 D，或游戏手柄）进行转向。 <strong>F1</strong> 总是
+打开运行时自己的菜单：图形、音频、控件（重新绑定）、帐户和退出。你的
+游戏无法绘制或读取该菜单，并且没有游戏可以绑定 F1。</p>
+<p>开发时添加 <code>--dev</code> (<code>starhermit star-catcher --dev</code>): 然后运行时打印游戏的
+<code>console.log</code> 输出并指出 TypeScript 行中的错误。</p>
+<h2 id="6-many-things-at-once-starhermitworld">6.同时做很多事情： <code>starhermit:world</code></h2>
+<p>您的游戏的 TypeScript 在引擎自己的脚本解释器中运行，这将每个游戏都保留在内部
+它的时间和内存预算。决策和几十个对象的成本很低，但每个实体的成本却很低
+工作——移动数千个粒子、一群人、一群——意味着数千个被解释的步骤
+每一帧。为此，发动机具有 <code>starhermit:world</code>:</p>
+<ul>
+<li><strong>桌子</strong> 将实体数据保存在游戏内存中的类型列（数字和向量）中；</li>
+<li><strong>内核</strong> 是运行时编译并本机运行的一行的普通函数
+表格的每一行，无需输入脚本；</li>
+<li>这 <strong>日程</strong> 每帧运行内核，并且 <strong>绑定</strong> 将表格绘制为一个整体 <code>InstancedMesh</code>
+（或驱动场景节点），本地组合每个实例。</li>
+</ul>
+<p>你的脚本做出决定；运行时执行每行算术。添加 4,000 的夜空
+游戏背后闪烁着光芒 <code>src/sky.ts</code>:</p>
+<pre><code class="language-ts">// The night sky behind the game: 4,000 twinkling sparkles. Their data lives
+// in a starhermit:world table, a kernel moves every one of them natively each
+// frame, and an instance binding draws the table as one InstancedMesh, so the
+// game's script runs no per-sparkle code at all.
+import { InstancedMesh, MeshBasicMaterial, SphereGeometry, scene } from "starhermit:scene";
+import { bind, kernel, schedule, table } from "starhermit:world";
+
+const COUNT = 4_000;
+
+// One row per sparkle: where it hangs, how it twinkles, and what the kernel
+// writes each frame (its height and size).
+const sky = table("sky", COUNT, {
+  base: "vec3",
+  phase: "f32",
+  rate: "f32",
+  y: "f32",
+  size: "f32",
+});
+sky.spawn(COUNT);
+
+// Filled once from script, through typed arrays over the table's memory.
+const base = sky.column("base");
+const phase = sky.column("phase");
+const rate = sky.column("rate");
+for (let i = 0; i &lt; COUNT; i++) {
+  base[i * 3] = (Math.random() * 2 - 1) * 40;
+  base[i * 3 + 1] = Math.random() * 24 - 2;
+  base[i * 3 + 2] = -10 - Math.random() * 30;
+  phase[i] = Math.random() * Math.PI * 2;
+  rate[i] = 0.5 + Math.random() * 2;
+}
+
+// An ordinary function of one row. The runtime compiles it and runs it over
+// every live row without entering script.
+const twinkle = kernel(sky, (r, u: { drift: number }, f) =&gt; {
+  r.y = r.base.y + Math.sin(f.time * u.drift + r.phase) * 0.3;
+  r.size = 0.04 + 0.04 * Math.abs(Math.sin(f.time * r.rate + r.phase));
+});
+
+const mesh = new InstancedMesh(new SphereGeometry(1, 6, 4), new MeshBasicMaterial({ color: 0xcfd8ff }), COUNT);
+scene.add(mesh);
+
+/** Starts the sky: the kernel runs after every onUpdate, and the binding
+ * composes the mesh's instances from the columns after every onRender. */
+export function startSky(): void {
+  schedule.update(twinkle, { drift: 0.4 });
+  bind.instances(mesh, sky, { position: ["base.x", "y", "base.z"], scale: "size" });
+}
+</code></pre>
+<p>并从开始 <code>src/main.ts</code>：将其与其他导入一起导入，然后调用它 <code>onStart</code>:</p>
+<pre><code class="language-ts">import { startSky } from "./sky.js";
+</code></pre>
+<pre><code class="language-ts">onStart(() =&gt; {
+  setFixedRate(60);
+  startSky();
+  for (const star of stars) drop(star);
+});
+</code></pre>
+<p>导入名称 <code>./sky.js</code>，TypeScript 的模块约定写为 <code>sky.ts</code>;运行时
+以同样的方式解决它。内核接受语言的子集——数字和布尔值、算术、
+<code>Math</code>, <code>if</code>, 有界 <code>for</code> 循环、行的列和您传递的制服 - 以及运行时
+拒绝任何其他带有 <code>SyntaxError</code> 在编译内核时，而不是
+慢慢地运行它。的声明 <code>starhermit:world</code> 描述事件队列的子集
+内核发送到具有平滑固定步运动历史记录的表和节点绑定。</p>
+<h2 id="7-players-saves-and-online-play">7. 玩家、保存和在线游戏</h2>
+<p><strong>玩家。</strong> <code>player()</code> 从 <code>starhermit:platform</code> 是已登录的玩家，或者 <code>null</code> 对于一个
+客人； Star Catcher 在其 HUD 中显示了他们的名字。当 StarHermit Windows 客户端启动您的游戏时，
+玩家从第一帧开始使用客户的帐户登录：客户将
+通过私人渠道为您的游戏运行启动令牌，在游戏运行时更新它，然后
+游戏永远不会看到它（没有主机调用返回令牌、密钥或 cookie）。玩家从不登录
+游戏；登录和注销发生在客户端。</p>
+<p><strong>开发运行。</strong> 从终端开始，程序包无法自行声明平台身份，
+所以 <code>starhermit star-catcher</code> 以嘉宾身份演奏。游戏发布后，开发启动
+将其命名为：</p>
+<pre><code class="language-powershell">starhermit star-catcher --game &lt;your game's id&gt;
+</code></pre>
+<p>并且您通过以下方式登录 <strong>F1 → 帐户...</strong>，运行时自己的对话框（这台计算机上的一个键和一个
+通过电子邮件发送确认，如 <a href="/zh-CN/docs/tutorials/public-key-onboarding.html">公钥入职</a>）。存储、设置、
+保存并在线玩，然后关注该游戏和帐户。</p>
+<p><strong>保存并设置。</strong> <code>starhermit:storage</code> 拥有三个商店，全部为您的游戏私有： <code>storage</code>
+（设备上的键/值数据，如 Star Catcher 使用）， <code>settings</code> （游戏的选项，与
+平台下的玩家账号 <a href="/zh-CN/docs/api/games.html#per-player-game-settings">每个玩家的设置</a>）， 和 <code>saves</code> （该
+游戏的保存，在设备上和玩家的 <a href="/zh-CN/docs/tutorials/cloud-save-sync.html">云存储槽</a> 有冲突
+处理）。</p>
+<p><strong>在线玩。</strong> 平台提供游戏的所有内容都在 <code>starhermit:platform</code> 为您的游戏
+自己的 ID：朋友和状态、邀请、 <a href="/zh-CN/docs/api/realtime.html">实时房间</a>、 对接会 、
+<a href="/zh-CN/docs/api/games.html">游戏插座</a> (<code>connectGame</code>）、排行榜、成就、重播、聊天和语音。
+对于服务器权威多人游戏，声明一个 <a href="/zh-CN/docs/api/game-scripts.html">游戏脚本</a>:</p>
+<pre><code class="language-ini">server=server.js
+</code></pre>
+<p>该平台将其作为游戏会话的权威运行； <code>starhermit:script</code>'s
+<code>authority("server.js", …)</code> 在本地工作人员上运行相同的文件进行离线练习，完全相同
+平台支持，因此离线和在线游戏共享一个代码路径。排行榜分数、成就
+并且比赛结果仅由服务器脚本写入，而不是由游戏本身写入；创建板
+如中所述 <a href="/zh-CN/docs/tutorials/game-leaderboards-achievements.html">排行榜和成就</a>.</p>
+<h2 id="8-publish-it">8. 发布</h2>
+<p>发布的脚本游戏是一个普通的 StarHermit 游戏，其文件就是您的包。玩家发现
+在他们的图书馆里； StarHermit Windows 客户端使用其固定的引擎安装它并播放它
+原生地。</p>
+<p><strong>浏览器页面。</strong> 该平台将每个上传的游戏托管在自己的地址上，并且需要一个页面
+那里可以打开。在你的游戏有浏览器版本之前，一个简单的页面说明在哪里玩就可以了；
+捕星者的清单名称 <code>play.html</code>:</p>
+<pre><code class="language-html">&lt;!doctype html&gt;
+&lt;html lang="en"&gt;
+&lt;meta charset="utf-8"&gt;
+&lt;title&gt;Star Catcher&lt;/title&gt;
+&lt;p&gt;Star Catcher runs in the StarHermit Windows client: find it in your library and press Play.&lt;/p&gt;
+&lt;/html&gt;
+</code></pre>
+<p>使用除 <code>index.html</code>：更高版本的浏览器版本会编写自己的 <code>index.html</code>.</p>
+<p><strong>文件索引。</strong> 客户端通过文件索引安装和更新上传的游戏，
+<code>starhermit-files.json</code>：每个文件及其大小和 SHA-256。每次更改后写入
+游戏，作为上传前的最后一步：</p>
+<pre><code class="language-powershell">starhermit package --native star-catcher
+</code></pre>
+<pre><code class="language-text">Native upload: star-catcher (6 files, 7553 bytes to upload; the platform takes at most 50 MiB)
+Wrote star-catcher\starhermit-files.json for engine 1.0.0: the StarHermit client installs the game by it
+Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.0.0 is still current
+</code></pre>
+<p>它根据平台的上传规则检查包（不 <code>api/</code> 或者 <code>ws/</code> 最多文件夹
+9,998 条路径和 50 MiB）并释放您的游戏 pin，该 pin 必须使用 Windows 发布
+运行时且未撤销。运行时离线检查自己的版本； <code>--versions</code> 命名一个副本
+<a href="/engine/versions.json">versions.json</a> 来检查另一个。</p>
+<p><strong>上传吧。</strong> 该文件夹是上传的，正如它的样子：客户端根据文件夹检查每个文件
+索引，因此上传文件夹的文件不变，具有相同的 <code>starhermit.txt</code> 都在文件夹内
+以及捆绑包的根目录（平台在文件夹的位置发布根副本）。如在
+<a href="/zh-CN/docs/api/github-games.html#add-a-game-from-a-local-folder">从本地文件夹添加游戏</a>:</p>
+<pre><code class="language-bash">mkdir -p bundle/client
+cp -R star-catcher/. bundle/client/
+rm -rf bundle/client/.starhermit
+cp star-catcher/starhermit.txt bundle/starhermit.txt
+tar -C bundle -czf star-catcher.tar.gz .
+
+curl --fail-with-body -X POST https://api.starhermit.com/api/v1/me/github-games/upload \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H 'Content-Type: application/gzip' \
+  --data-binary @star-catcher.tar.gz
+</code></pre>
+<p><code>ACCESS_TOKEN</code> 是您帐户的访问令牌（请参阅 <a href="/zh-CN/docs/tutorials/ci-cd-build-upload.html">从 CI/CD 上传构建</a>
+用于无需浏览器登录）。答案是 <code>game.id</code> 是你游戏的id，游戏立即上线
+<code>https://&lt;id&gt;.starhermit.com/</code>。对于每个更高的版本，重新编写索引并推送相同的类型
+捆绑到游戏中的 <a href="/zh-CN/docs/api/github-games.html#push-a-game-bundle"><code>POST /api/v1/me/github-games/{id}/bundle</code></a>;
+然后，玩家的客户端仅下载哈希值发生更改的文件。一个 <code>server=</code> 脚本中的
+上传发布后，文件夹会获取游戏的后端。</p>
+<p><strong>来自存储库。</strong> 一场游戏 <a href="/zh-CN/docs/api/github-games.html">从 GitHub 发布</a> 工作方式相同：
+提交 <code>starhermit.txt</code> 以其 <code>engine.*</code> 存储库根目录下的行。客户端安装并
+使用 git 更新存储库游戏，仅获取每次提交添加的内容，因此不需要文件索引。</p>
+<p><strong>在浏览器中。</strong> <code>starhermit package --web</code> 编写游戏的浏览器上传：其文件、加载器页面
+通过哈希值及其文件索引从该 wiki 加载固定的引擎版本。它需要一个版本
+具有网络运行时； 1.0.0 仅适用于 Windows，因此浏览器版本从更高版本开始，并且
+<code>package --web</code> 直到那时为止。在该平台上，脚本游戏的页面只能运行官方的
+来自此 wiki 的引擎（参见 <a href="/zh-CN/docs/engine-releases.html#script-games-on-the-platform">引擎发布</a>).</p>
+<h2 id="9-move-to-a-newer-engine">9. 转向更新的引擎</h2>
+<p>游戏完全按照它所固定的版本运行：没有任何东西会在你背后升级它，并且已发布的版本
+发布永远不会改变。要迁移到较新的版本，请下载其运行时，运行您的游戏及其检查
+上，然后通过更改重新固定 <code>engine.version</code> 在 <code>starhermit.txt</code>，再次写入文件索引并
+发布。玩家的客户端下载新引擎一次（仅与他们已经发布的版本相比发生了变化）
+按住）和您的游戏已更改的文件。</p>
+<p>该版本的主要版本是主机 API 的： <code>engine.api=1</code> 游戏在 1.x.x 范围内自由移动。一场游戏
+需要在次要版本中添加主机 API 成员的可以这样说 <code>engine.minor=N</code>;一个年长的
+然后运行时会通过一条消息拒绝它，而不是稍后失败。</p>
+<p>发现不安全的版本是 <strong>撤销</strong>: <a href="/engine/versions.json">versions.json</a> 将其标记为
+原因，客户端拒绝安装或启动它（并告诉玩家原因），以及包装
+命令在读取 versions.json 时会拒绝它。撤销的版本总是紧随其后的是固定的版本；重新固定并发布。</p>
+<h2 id="10-limits-and-the-licence">10. 限制和许可</h2>
+<p>运行时使每个游戏都在预算之内，而包可能会降低预算 <code>engine.limits.*</code> 但是
+从不引发：每个回调需要 32 毫秒的脚本时间（使用它的回调将暂停并
+继续下一帧；三秒后运行时间 "没有回应" 屏幕让
+玩家等待或停止游戏），256 MiB 脚本堆，64 MiB 存储，最多 512 MiB 和 65,536
+包中的文件，以及用于上传的平台的 50 MiB 和 9,998 个路径。超越极限
+操作可能会失败（分配、主机调用） <code>RangeError</code>;堆或调用耗尽
+深度在错误屏幕上结束游戏。主机 API 的声明列出了每个限制。</p>
+<p>该发动机已获得许可 <a href="https://polyformproject.org/licenses/noncommercial/1.0.0">PolyForm 非商业许可证 1.0.0</a>
+有了这个额外的许可，引用自其 <code>LICENSE-engine</code>:</p>
+<blockquote>
+<p>附加许可：Hype Driven Development Inc. 还允许将此软件用于任何目的
+目的，包括商业目的，制作、分发和运行用它构建的游戏，例如
+只要该游戏发布在 StarHermit.com 上，可以在那里公开玩，并保存在
+那里运行命令。对于以下许可证不允许的任何其他用途，请联系
+info@hypedriven.com。</p>
+</blockquote>
+<p>全文是 <code>LICENSE-engine</code> 下载中的文件以及每个已安装的引擎旁边的文件；的
+第三方组件保留自己的许可证，在其 <code>notices</code> 文件夹。您的游戏自己的代码和
+资产是你的。</p>
+<h2 id="checklist">清单</h2>
+<ul>
+<li>[ ] <code>starhermit.txt</code> 有 <code>engine.api</code>, <code>engine.entry</code> 和 <code>engine.version</code>，以及能力
+游戏使用。</li>
+<li>[ ] <code>starhermit check</code> 通过，并且 <code>npx --package typescript tsc -p .</code> 报告没有错误。</li>
+<li>[ ] 该文件夹仅包含游戏：无 <code>node_modules</code>，没有构建工具。</li>
+<li>[ ] 浏览器页面的命名方式为 <code>launch=</code>.</li>
+<li>[ ] <code>starhermit package --native</code> 最后一次更改后运行，并且文件夹未更改地上传。</li>
+</ul>
+
+{% endraw %}

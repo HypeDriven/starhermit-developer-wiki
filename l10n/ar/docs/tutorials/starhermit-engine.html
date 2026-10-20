@@ -1,0 +1,482 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "البرنامج التعليمي: قم ببناء لعبة باستخدام محرك StarHermit"
+source_url: "/docs/tutorials/starhermit-engine.html"
+source_path: "docs/tutorials/starhermit-engine.md"
+source_hash: "4c2d0cc374adb8270ed1094215281efce6a3dc2f2cf235876f02011df5fb054d"
+translation: "machine"
+permalink: "/ar/docs/tutorials/starhermit-engine.html"
+---
+{% raw %}
+<h1 id="tutorial-build-a-game-with-the-starhermit-engine">البرنامج التعليمي: قم ببناء لعبة باستخدام محرك StarHermit</h1>
+<p>يعمل محرك StarHermit <strong>العاب السيناريو</strong>: لعبة كاملة مكتوبة بلغة TypeScript (أو JavaScript) و
+يتم تشغيله بواسطة محرك واحد قابل للتنفيذ تم إنشاؤه مسبقًا، وهو StarHermit runtime، دون تجميع أي تعليمات برمجية أصلية.
+تقوم بكتابة منطق اللعبة مقابل الوحدات المدمجة في المحرك — مشهد ثلاثي الأبعاد، وإدخال، وشاشة HUD، وصوت،
+التخزين ومنصة StarHermit - ويقوم وقت التشغيل بالباقي: النوافذ، والعرض على
+GPU والصوت وقائمة الخيارات وتسجيل الدخول واللعب عبر الإنترنت. يحصل اللاعبون على اللعبة من خلال
+<a href="https://starhermit.com">عميل ستارهيرميت ويندوز</a>، الذي يقوم بتثبيت المحرك الذي تطلبه لعبتك
+ويلعبها محليا.</p>
+<p>يبني هذا البرنامج التعليمي <strong>صائد النجوم</strong>، لعبة صغيرة تقوم فيها بتوجيه سلة لتتجنب السقوط
+النجوم، وينقلها من مجلد فارغ إلى لعبة منشورة:</p>
+<ol>
+<li><a href="#1-what-a-script-game-is">ما هي لعبة السيناريو</a></li>
+<li><a href="#2-get-the-engine">احصل على المحرك</a></li>
+<li><a href="#3-create-the-game">قم بإنشاء اللعبة</a></li>
+<li><a href="#4-write-the-first-version">اكتب النسخة الأولى</a></li>
+<li><a href="#5-run-it-natively">تشغيله محليا</a></li>
+<li><a href="#6-many-things-at-once-starhermitworld">أشياء كثيرة في وقت واحد: <code>starhermit:world</code></a></li>
+<li><a href="#7-players-saves-and-online-play">اللاعبون والحفظ واللعب عبر الإنترنت</a></li>
+<li><a href="#8-publish-it">انشرها</a></li>
+<li><a href="#9-move-to-a-newer-engine">الانتقال إلى محرك أحدث</a></li>
+<li><a href="#10-limits-and-the-licence">الحدود والترخيص</a></li>
+</ol>
+<h2 id="1-what-a-script-game-is">1. ما هي لعبة السيناريو</h2>
+<p>لعبة البرنامج النصي عبارة عن مجلد (a <strong>طَرد</strong>) مع أ <a href="/ar/docs/starhermit-txt.html"><code>starhermit.txt</code></a> فيه
+الجذر ووحدات TypeScript والأصول الخاصة بك. ثلاثة <code>engine.*</code> الأسطر الموجودة في البيان تجعله واحدًا:</p>
+<pre><code class="language-ini">engine.api=1
+engine.entry=src/main.ts
+engine.version=1.0.0
+</code></pre>
+<p><code>engine.api</code> هو الإصدار الرئيسي من واجهة برمجة تطبيقات المضيف التي تم كتابة الكود الخاص بك عليها، <code>engine.entry</code> ال
+وحدة يبدأ وقت التشغيل، و <code>engine.version</code> إصدار المحرك الدقيق الذي تم تصميم اللعبة و
+تم اختباره ل. يتم نشر الإصدارات على هذا الويكي تحت <a href="/ar/docs/engine-releases.html">إصدارات المحرك</a>; ال
+لا تحتوي اللعبة مطلقًا على المحرك نفسه، لذا فإن التحميل يحمل ملفاتك الخاصة فقط.</p>
+<p>يتعامل وقت التشغيل مع كل لعبة على أنها غير موثوقة: يصل الكود الخاص بك إلى الجهاز فقط من خلال واجهة برمجة تطبيقات المضيف
+(ملفات الحزمة الخاصة بها، والتخزين الخاص بها، والنظام الأساسي لمعرف اللعبة الخاص بها)، وليس الملفات أو العمليات،
+اتصالات الشبكة التعسفية أو بيانات اعتماد اللاعب. في المقابل، لا يمكن للعبة أن تتعطل وقت التشغيل
+أو قم بتعليق النافذة: المكالمة التي يتم تشغيلها لمدة ثلاث ثوانٍ تظهر وقت التشغيل الخاص بها "لا يستجيب"
+الشاشة، ويؤدي خطأ لم يتم اكتشافه إلى إنهاء اللعبة على شاشة خطأ يمكن للاعب إعادة التشغيل منها.</p>
+<p>تعمل نفس الحزمة في كل مكان يعمل فيه المحرك. الإصدار 1.0.0 يعمل بنظام التشغيل Windows فقط؛ أ
+يأتي بناء المتصفح للمحرك مع إصدار لاحق (انظر <a href="#8-publish-it">انشرها</a>).</p>
+<h2 id="2-get-the-engine">2. احصل على المحرك</h2>
+<p><strong>اللاعبين</strong> لا تفعل شيئًا: عندما يضغطون على تشغيل لعبة نصية، فإن عميل StarHermit Windows
+يقوم بتنزيل إصدار دبابيس اللعبة (مرة واحدة، وتتم مشاركتها بواسطة كل لعبة تقوم بتثبيتها)، ويتحقق من كل ملف
+ضد التجزئات المنشورة للإصدار ويبدأ تشغيله.</p>
+<p><strong>المطورين</strong> قم بتنزيل وقت تشغيل الإصدار من منطقة المحرك:</p>
+<ul>
+<li><a href="/engine/1.0.0/native/windows-x86_64/starhermit-1.0.0-windows-x86_64.zip">ستارهيرميت-1.0.0-windows-x86_64.zip</a>
+(ويندوز 10 أو 11، 64 بت)، 6.7 ميجابايت.</li>
+</ul>
+<p>يحتوي الأرشيف على مجلد واحد، <code>starhermit-1.0.0-windows-x86_64</code>، مع <code>starhermit.exe</code>، ال
+<code>release.json</code> الذي يخبر وقت التشغيل بإصداره، <code>LICENSE-engine</code> والطرف الثالث
+إشعارات. وهو نفس المحرك الذي يقوم العميل بتثبيته. حجمه وSHA-256 مدرجان أدناه
+<code>downloads</code> في الإصدار <a href="/engine/1.0.0/native/windows-x86_64/native.json">native.json</a>; ل
+تحقق من نسختك في PowerShell، وقارن ذلك <code>sha256</code> مع:</p>
+<pre><code class="language-powershell">Get-FileHash .\starhermit-1.0.0-windows-x86_64.zip -Algorithm SHA256
+</code></pre>
+<p>قم بفك ضغط الأرشيف وافتح الوحدة الطرفية في المجلد الذي تم فك حزمه:</p>
+<pre><code class="language-powershell">.\starhermit.exe --version
+</code></pre>
+<pre><code class="language-text">starhermit 0.1.0 (host API 1.4, launcher 1; engine release 1.0.0)
+</code></pre>
+<p>الأوامر أدناه مكتوبة باسم <code>starhermit</code>; تشغيلها كما <code>.\starhermit.exe</code> من هذا المجلد، أو
+إضافة المجلد إلى الخاص بك <code>PATH</code>.</p>
+<h2 id="3-create-the-game">3. قم بإنشاء اللعبة</h2>
+<pre><code class="language-powershell">starhermit new star-catcher --title "Star Catcher"
+</code></pre>
+<pre><code class="language-text">Created Star Catcher in star-catcher: a script game pinned to engine 1.0.0
+Play it: starhermit star-catcher
+Check it: starhermit check star-catcher
+For a native upload (the StarHermit client plays it): starhermit package --native star-catcher
+</code></pre>
+<p>يحتوي المجلد الجديد على نقطة بداية قابلة للتشغيل - مكعب يقفز عند الضغط على مفتاح المسافة:</p>
+<pre><code class="language-text">star-catcher/
+  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.0.0)
+  tsconfig.json              TypeScript settings for checking the game
+  src/main.ts                the entry module
+  .starhermit/starhermit.d.ts  the host API's declarations, for your editor and the type checker
+</code></pre>
+<p><code>.starhermit/</code> يبدأ بنقطة، لذا فهو ليس جزءًا من الحزمة أبدًا.
+<code>starhermit types star-catcher</code> يكتب الإقرارات مرة أخرى، على سبيل المثال بعد الانتقال إلى أحدث
+وقت التشغيل. يتم توثيق كل وحدة وعضو ووحدة وحدود وخطأ لواجهة برمجة تطبيقات المضيف في هذا الملف.</p>
+<p>لا يقوم وقت التشغيل بفحص النوع: فهو يزيل أنواع TypeScript أثناء تحميل كل وحدة. التحقق منها
+نفسك باستخدام TypeScript 5 أو الأحدث؛ مع تثبيت Node.js، <code>npx</code> يعمل عليه دون تثبيت
+أي شيء في مجلد اللعبة:</p>
+<pre><code class="language-powershell">cd star-catcher
+npx --package typescript tsc -p .
+</code></pre>
+<p>يحفظ <code>node_modules</code> وأدوات أخرى <strong>من مجلد اللعبة</strong>: كل شيء في المجلد باستثناء
+تعد أسماء النقاط جزءًا من الحزمة ومن كل عملية تحميل.</p>
+<h2 id="4-write-the-first-version">4. اكتب النسخة الأولى</h2>
+<p>استبدل الذي تم إنشاؤه <code>starhermit.txt</code> مع بيان اللعبة:</p>
+<pre><code class="language-ini">name=Star Catcher
+description=Catch the falling stars before the time runs out.
+launch=play.html
+engine.api=1
+engine.entry=src/main.ts
+engine.version=1.0.0
+engine.capabilities=platform,storage
+control.left=KeyA+ArrowLeft | Move left
+control.right=KeyD+ArrowRight | Move right
+control.start=Space+Enter | Start a round
+engine.gamepad.left=LeftStickLeft+DpadLeft
+engine.gamepad.right=LeftStickRight+DpadRight
+engine.gamepad.start=South
+cache..=0
+</code></pre>
+<p>ال <code>control.*</code> تعلن الخطوط عن إجراءات اللعبة باستخدام مفاتيحها الافتراضية (ملفات النظام الأساسي
+<a href="/ar/docs/tutorials/game-controls.html">الضوابط</a> الشكل) و <code>engine.gamepad.*</code> إعدادات لوحة الألعاب الخاصة بهم. يعود اللاعبون
+لهم في قائمة خيارات وقت التشغيل، بحيث تقرأ اللعبة <strong>الإجراءات</strong>، أبدا المفاتيح. <code>engine.capabilities</code>
+يسأل عما تستخدمه اللعبة بخلاف الرسم والإدخال: <code>platform</code> للاعب الذي قام بتسجيل الدخول وعلى الإنترنت
+الميزات, <code>storage</code> للبيانات المحفوظة على جهاز اللاعب وحسابه. <code>launch=play.html</code> والصفحة
+يتم تشغيل الأسماء عندما تقوم بذلك <a href="#8-publish-it">نشر</a>.</p>
+<p>ثم استبدل <code>src/main.ts</code>:</p>
+<pre><code class="language-ts">// Star Catcher: catch the falling stars in the basket before the time runs out.
+import { frame, onFixedUpdate, onRender, onStart, setFixedRate } from "starhermit:engine";
+import {
+  AmbientLight,
+  BoxGeometry,
+  Color,
+  DirectionalLight,
+  Mesh,
+  MeshStandardMaterial,
+  PerspectiveCamera,
+  SphereGeometry,
+  renderer,
+  scene,
+} from "starhermit:scene";
+import { onAction, value } from "starhermit:input";
+import { storage } from "starhermit:storage";
+import { player } from "starhermit:platform";
+import * as draw from "starhermit:draw";
+
+// -- The scene ----------------------------------------------------------------
+const camera = new PerspectiveCamera(50, 16 / 9, 0.1, 100);
+camera.position.set(0, 4, 12);
+camera.lookAt(0, 3, 0);
+renderer.camera = camera;
+scene.background = new Color(0x0b1020);
+
+const sun = new DirectionalLight(0xfff4e0, 1.2);
+sun.position.set(3, 8, 5);
+scene.add(sun, sun.target, new AmbientLight(0x6070a0, 0.5));
+
+const basket = new Mesh(new BoxGeometry(2, 0.4, 1), new MeshStandardMaterial({ color: 0x4fa3ff, roughness: 0.4 }));
+scene.add(basket);
+
+const starGeometry = new SphereGeometry(0.3, 16, 12);
+const starMaterial = new MeshStandardMaterial({ color: 0xffd34d, emissive: 0xffb000, emissiveIntensity: 0.6 });
+const stars = Array.from({ length: 3 }, () =&gt; {
+  const mesh = new Mesh(starGeometry, starMaterial);
+  scene.add(mesh);
+  return { mesh, x: 0, y: 0, previousY: 0, speed: 0 };
+});
+type Star = (typeof stars)[number];
+
+// -- The rules ----------------------------------------------------------------
+const WIDTH = 6; // the basket moves between -WIDTH and WIDTH
+const ROUND = 60; // seconds a round lasts
+let basketX = 0;
+let previousX = 0;
+let score = 0;
+let timeLeft = 0; // 0 between rounds
+const saved = storage.getJson("best");
+let best = typeof saved === "number" ? saved : 0;
+
+function drop(star: Star): void {
+  star.x = (Math.random() * 2 - 1) * WIDTH;
+  star.y = star.previousY = 8 + Math.random() * 4;
+  star.speed = 2 + Math.random() * 2 + score * 0.05;
+}
+
+onStart(() =&gt; {
+  setFixedRate(60);
+  for (const star of stars) drop(star);
+});
+
+onAction((event) =&gt; {
+  if (event.action === "start" &amp;&amp; event.pressed &amp;&amp; timeLeft === 0) {
+    score = 0;
+    timeLeft = ROUND;
+    for (const star of stars) drop(star);
+  }
+});
+
+onFixedUpdate((step) =&gt; {
+  previousX = basketX;
+  for (const star of stars) star.previousY = star.y;
+  if (timeLeft === 0) return;
+  // An action's value is 0 to 1, so a stick steers gently and a key fully.
+  const steer = value("right") - value("left");
+  basketX = Math.max(-WIDTH, Math.min(WIDTH, basketX + steer * 9 * step));
+  for (const star of stars) {
+    star.y -= star.speed * step;
+    if (star.y &lt; 0.6 &amp;&amp; star.y &gt; 0 &amp;&amp; Math.abs(star.x - basketX) &lt; 1.2) {
+      score += 1;
+      drop(star);
+    } else if (star.y &lt; -1) {
+      drop(star);
+    }
+  }
+  timeLeft = Math.max(0, timeLeft - step);
+  if (timeLeft === 0 &amp;&amp; score &gt; best) {
+    best = score;
+    storage.setJson("best", best);
+  }
+});
+
+// -- Drawing ------------------------------------------------------------------
+onRender((alpha) =&gt; {
+  // Between two fixed steps: draw where things are at this moment.
+  basket.position.set(previousX + (basketX - previousX) * alpha, 0.2, 0);
+  for (const star of stars) {
+    star.mesh.position.set(star.x, star.previousY + (star.y - star.previousY) * alpha, 0);
+  }
+  hud();
+});
+
+function hud(): void {
+  const { width, height, scale } = frame();
+  const size = 22 * scale;
+  const name = player()?.displayName ?? "Guest";
+  draw.text(`${name}   score ${score}   best ${best}`, 16 * scale, 16 * scale, { size, color: "#e8ecf4" });
+  if (timeLeft &gt; 0) {
+    draw.text(`${Math.ceil(timeLeft)} s`, width - 16 * scale, 16 * scale, { size, color: "#ffd34d", align: "end" });
+  } else {
+    draw.rect(0, height / 2 - 40 * scale, width, 80 * scale, [0, 0, 0, 0.5]);
+    draw.text("Press Space to play", width / 2, height / 2 - 12 * scale, { size, color: "#ffffff", align: "center" });
+  }
+}
+</code></pre>
+<p>ماذا يفعل كل جزء:</p>
+<ul>
+<li><strong>المشهد.</strong> <code>starhermit:scene</code> يتبع three.js: كاميرا، أضواء، شبكات مصنوعة من الهندسة
+و مادة، <code>scene.add</code>. المسافات هي أمتار، وزوايا راديان، والألوان إس آر جي بي.</li>
+<li><strong>القواعد.</strong> <code>onFixedUpdate</code> يعمل بمعدل ثابت <code>setFixedRate(60)</code> يسأل عن 60 مرة أ
+ثانيًا، بغض النظر عن معدل الإطارات، بحيث يتم تشغيل اللعبة بنفس الطريقة على كل جهاز. <code>value("right")</code> هو
+قيمة الإجراء من 0 إلى 1، لذلك يتم توجيه عصا لوحة الألعاب بلطف ويتم توجيه المفتاح بالكامل، و
+<code>onAction</code> يسمع كل ضغطة، هنا لبدء الجولة.</li>
+<li><strong>رسم.</strong> <code>onRender</code> يعمل مرة واحدة لكل إطار مع <code>alpha</code>، إلى أي مدى يقع الإطار بين الأخيرين
+خطوات ثابتة المواقف المرسومة بين <code>previous</code> وتتحرك القيم الحالية بسلاسة عند أي تحديث
+معدل. <code>starhermit:draw</code> رسم شاشة HUD فوق المشهد بوحدات بكسل النافذة؛ <code>frame().scale</code> المتحولين
+وحدات البكسل المنطقية لشاشات العرض ذات DPI العالية.</li>
+<li><strong>أفضل نتيجة</strong> يبقى على جهاز اللاعب من خلال <code>starhermit:storage</code>، متباعدة ل
+كل لاعب.</li>
+</ul>
+<h2 id="5-run-it-natively">5. قم بتشغيله محليًا</h2>
+<pre><code class="language-powershell">starhermit check star-catcher
+</code></pre>
+<pre><code class="language-text">package=Directory files=3 bytes=4800 name="Star Catcher" api=1 entry=src/main.ts capabilities=platform,storage actions=left,right,start
+runnable=true engine="TypeScript" frames=120 probes=0
+PASS package src/main.ts: valid; 120 frames headless
+</code></pre>
+<p><code>check</code> التحقق من صحة الحزمة (البيان والمسارات والأحجام) وتشغيل 120 إطارًا بدون نافذة، لذلك أ
+يظهر هنا خطأ في بناء الجملة أو استيراد غير معروف أو استثناء عند بدء التشغيل مع الملف والسطر والعمود الخاص به.
+ثم العبها:</p>
+<pre><code class="language-powershell">starhermit star-catcher
+</code></pre>
+<p>اضغط على Space لبدء جولة ومفاتيح الأسهم (أو A وD، أو لوحة الألعاب) للتوجيه. <strong>F1</strong> دائما
+يفتح قائمة وقت التشغيل الخاصة: الرسومات والصوت وعناصر التحكم (إعادة الربط) والحساب والخروج. الخاص بك
+لا يمكن للعبة الرسم فوق تلك القائمة أو قراءتها، ولا يمكن لأي لعبة ربط F1.</p>
+<p>أثناء التطوير، أضف <code>--dev</code> (<code>starhermit star-catcher --dev</code>): وقت التشغيل ثم يطبع ملف اللعبة
+<code>console.log</code> أخطاء الإخراج والنقاط في خطوط TypeScript الخاصة بك.</p>
+<h2 id="6-many-things-at-once-starhermitworld">6. أشياء كثيرة في وقت واحد: <code>starhermit:world</code></h2>
+<p>يتم تشغيل TypeScript الخاص بلعبتك في مترجم البرنامج النصي الخاص بالمحرك، والذي يحافظ على كل لعبة بداخلها
+ميزانيات الوقت والذاكرة. القرارات وبضع عشرات من الأشياء تكلف القليل هناك، ولكن لكل كيان
+إن العمل - تحريك آلاف الجسيمات، أو حشد من الناس، أو قطيع - يعني آلاف الخطوات المفسرة
+كل إطار. لهذا المحرك لديه <code>starhermit:world</code>:</p>
+<ul>
+<li><strong>الجداول</strong> الاحتفاظ ببيانات الكيان في أعمدة مكتوبة (أرقام ومتجهات) في ذاكرة اللعبة؛</li>
+<li><strong>حبات</strong> هي وظائف عادية لصف واحد يجمعها وقت التشغيل ويعمل عليها أصلاً
+كل صف من الجدول، دون إدخال البرنامج النصي؛</li>
+<li>ال <strong>جدول</strong> يدير حبات كل إطار، و <strong>الارتباطات</strong> رسم جدول واحد <code>InstancedMesh</code>
+(أو عقد مشهد القيادة)، وتأليف كل مثيل محليًا.</li>
+</ul>
+<p>النص الخاص بك هو الذي يتخذ القرارات؛ يقوم وقت التشغيل بإجراء العمليات الحسابية لكل صف. أضف سماء الليل بـ 4000
+وميض البريق وراء اللعبة كما <code>src/sky.ts</code>:</p>
+<pre><code class="language-ts">// The night sky behind the game: 4,000 twinkling sparkles. Their data lives
+// in a starhermit:world table, a kernel moves every one of them natively each
+// frame, and an instance binding draws the table as one InstancedMesh, so the
+// game's script runs no per-sparkle code at all.
+import { InstancedMesh, MeshBasicMaterial, SphereGeometry, scene } from "starhermit:scene";
+import { bind, kernel, schedule, table } from "starhermit:world";
+
+const COUNT = 4_000;
+
+// One row per sparkle: where it hangs, how it twinkles, and what the kernel
+// writes each frame (its height and size).
+const sky = table("sky", COUNT, {
+  base: "vec3",
+  phase: "f32",
+  rate: "f32",
+  y: "f32",
+  size: "f32",
+});
+sky.spawn(COUNT);
+
+// Filled once from script, through typed arrays over the table's memory.
+const base = sky.column("base");
+const phase = sky.column("phase");
+const rate = sky.column("rate");
+for (let i = 0; i &lt; COUNT; i++) {
+  base[i * 3] = (Math.random() * 2 - 1) * 40;
+  base[i * 3 + 1] = Math.random() * 24 - 2;
+  base[i * 3 + 2] = -10 - Math.random() * 30;
+  phase[i] = Math.random() * Math.PI * 2;
+  rate[i] = 0.5 + Math.random() * 2;
+}
+
+// An ordinary function of one row. The runtime compiles it and runs it over
+// every live row without entering script.
+const twinkle = kernel(sky, (r, u: { drift: number }, f) =&gt; {
+  r.y = r.base.y + Math.sin(f.time * u.drift + r.phase) * 0.3;
+  r.size = 0.04 + 0.04 * Math.abs(Math.sin(f.time * r.rate + r.phase));
+});
+
+const mesh = new InstancedMesh(new SphereGeometry(1, 6, 4), new MeshBasicMaterial({ color: 0xcfd8ff }), COUNT);
+scene.add(mesh);
+
+/** Starts the sky: the kernel runs after every onUpdate, and the binding
+ * composes the mesh's instances from the columns after every onRender. */
+export function startSky(): void {
+  schedule.update(twinkle, { drift: 0.4 });
+  bind.instances(mesh, sky, { position: ["base.x", "y", "base.z"], scale: "size" });
+}
+</code></pre>
+<p>والبدء منه <code>src/main.ts</code>: قم باستيراده مع الواردات الأخرى، واستدعائه <code>onStart</code>:</p>
+<pre><code class="language-ts">import { startSky } from "./sky.js";
+</code></pre>
+<pre><code class="language-ts">onStart(() =&gt; {
+  setFixedRate(60);
+  startSky();
+  for (const star of stars) drop(star);
+});
+</code></pre>
+<p>أسماء الاستيراد <code>./sky.js</code>، اتفاقية TypeScript لوحدة مكتوبة باسم <code>sky.ts</code>; وقت التشغيل
+يحلها بنفس الطريقة. تقبل النواة مجموعة فرعية من اللغة - الأرقام والمنطقيات والحساب
+<code>Math</code>, <code>if</code>، يحدها <code>for</code> الحلقات وأعمدة الصف والزي الرسمي الذي تمر به - ووقت التشغيل
+يرفض أي شيء آخر مع <code>SyntaxError</code> على خط النواة عندما تقوم بتجميعها، بدلاً من
+تشغيله ببطء. تصريحات <code>starhermit:world</code> وصف المجموعة الفرعية، وقوائم الانتظار الحدث ذلك
+تنبعث النواة إلى جداول ذات محفوظات لحركة سلسة ذات خطوات ثابتة وارتباطات العقدة.</p>
+<h2 id="7-players-saves-and-online-play">7. اللاعبون والحفظ واللعب عبر الإنترنت</h2>
+<p><strong>اللاعب.</strong> <code>player()</code> من <code>starhermit:platform</code> هو اللاعب الذي قام بتسجيل الدخول، أو <code>null</code> ل
+ضيف؛ يعرض Star Catcher اسمه في شاشة HUD الخاصة به. عندما يبدأ عميل StarHermit Windows لعبتك،
+يتم تسجيل دخول اللاعب من الإطار الأول باستخدام حساب العميل: يقوم العميل بتسليم الملف
+وقت التشغيل: رمز إطلاق لعبتك عبر قناة خاصة، ويتم تجديده أثناء تشغيل اللعبة، و
+اللعبة لا تراها أبدًا (لا توجد مكالمة مضيفة تُرجع رمزًا مميزًا أو مفتاحًا أو ملف تعريف ارتباط). لا يقوم اللاعبون أبدًا بتسجيل الدخول داخل ملف
+لعبة؛ يحدث تسجيل الدخول والخروج في العميل.</p>
+<p><strong>يجري التطوير.</strong> تبدأ الحزمة من محطة طرفية، ولا يمكنها المطالبة بهوية النظام الأساسي بنفسها،
+هكذا <code>starhermit star-catcher</code> يلعب كضيف. بمجرد نشر لعبتك، سيتم إطلاق التطوير
+يسميها:</p>
+<pre><code class="language-powershell">starhermit star-catcher --game &lt;your game's id&gt;
+</code></pre>
+<p>وقمت بتسجيل الدخول من خلال <strong>F1 → الحساب…</strong>، مربع الحوار الخاص بوقت التشغيل (مفتاح على هذا الكمبيوتر وواحد
+التأكيد عبر البريد الإلكتروني، كما في <a href="/ar/docs/tutorials/public-key-onboarding.html">تأهيل المفتاح العام</a>). التخزين، الإعدادات،
+الحفظ واللعب عبر الإنترنت ثم اتبع تلك اللعبة والحساب.</p>
+<p><strong>يحفظ والإعدادات.</strong> <code>starhermit:storage</code> لديها ثلاثة متاجر، كلها خاصة بلعبتك: <code>storage</code>
+(بيانات المفتاح/القيمة الموجودة على الجهاز، كما يستخدم Star Catcher)، <code>settings</code> (خيارات اللعبة، محفوظة مع
+حساب اللاعب ضمن المنصة <a href="/ar/docs/api/games.html#per-player-game-settings">إعدادات لكل لاعب</a>)، و <code>saves</code> (ال
+حفظ اللعبة، على الجهاز وفي اللاعب <a href="/ar/docs/tutorials/cloud-save-sync.html">فتحة الحفظ السحابي</a> مع الصراع
+التعامل).</p>
+<p><strong>اللعب على الانترنت.</strong> كل ما تقدمه المنصة للعبة موجود <code>starhermit:platform</code> للعبتك
+الهوية الخاصة: الأصدقاء والحضور، الدعوات، <a href="/ar/docs/api/realtime.html">غرف الوقت الحقيقي</a>, التوفيق, ال
+<a href="/ar/docs/api/games.html">مقبس اللعبة</a> (<code>connectGame</code>)، المتصدرين، والإنجازات، والاعادة، والدردشة والصوت.
+بالنسبة للاعبين المتعددين المخولين بالخادم، قم بتعريف أ <a href="/ar/docs/api/game-scripts.html">سيناريو اللعبة</a>:</p>
+<pre><code class="language-ini">server=server.js
+</code></pre>
+<p>تقوم المنصة بتشغيله كمرجع لجلسات لعبتك؛ <code>starhermit:script</code>'s
+<code>authority("server.js", …)</code> يقوم بتشغيل نفس الملف على عامل محلي للممارسة دون اتصال بالإنترنت، تمامًا كما هو الحال
+النظام الأساسي يفعل ذلك، لذلك يتشارك اللعب دون الاتصال بالإنترنت أو عبر الإنترنت في مسار رمز واحد. عشرات المتصدرين والإنجازات
+ويتم كتابة نتائج المطابقة فقط من خلال البرنامج النصي للخادم، وليس من خلال اللعبة نفسها أبدًا؛ إنشاء المجالس
+كما هو موضح في <a href="/ar/docs/tutorials/game-leaderboards-achievements.html">المتصدرين والإنجازات</a>.</p>
+<h2 id="8-publish-it">8. قم بنشره</h2>
+<p>لعبة السيناريو المنشورة هي لعبة StarHermit عادية تكون ملفاتها هي الحزمة الخاصة بك. يجد اللاعبون
+في مكتبتهم؛ يقوم عميل StarHermit Windows بتثبيته بالمحرك الذي يقوم بتثبيته وتشغيله
+محليا.</p>
+<p><strong>صفحة للمتصفحات.</strong> تستضيف المنصة كل لعبة تم تحميلها على عنوانها الخاص وتحتاج إلى صفحة
+هناك لفتح. إلى أن يتم إنشاء متصفح للعبتك، ستفي صفحة عادية توضح مكان اللعب بها؛
+الأسماء الواضحة لـ Star Catcher <code>play.html</code>:</p>
+<pre><code class="language-html">&lt;!doctype html&gt;
+&lt;html lang="en"&gt;
+&lt;meta charset="utf-8"&gt;
+&lt;title&gt;Star Catcher&lt;/title&gt;
+&lt;p&gt;Star Catcher runs in the StarHermit Windows client: find it in your library and press Play.&lt;/p&gt;
+&lt;/html&gt;
+</code></pre>
+<p>استخدم اسمًا آخر غير <code>index.html</code>: إصدار متصفح لاحق يكتب نسخته الخاصة <code>index.html</code>.</p>
+<p><strong>فهرس الملف.</strong> يقوم العميل بتثبيت وتحديث اللعبة التي تم تحميلها من خلال فهرس الملفات الخاص بها،
+<code>starhermit-files.json</code>: كل ​​ملف بحجمه وSHA-256. اكتبه بعد كل تغيير في
+اللعبة، كخطوة أخيرة قبل التحميل:</p>
+<pre><code class="language-powershell">starhermit package --native star-catcher
+</code></pre>
+<pre><code class="language-text">Native upload: star-catcher (6 files, 7553 bytes to upload; the platform takes at most 50 MiB)
+Wrote star-catcher\starhermit-files.json for engine 1.0.0: the StarHermit client installs the game by it
+Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.0.0 is still current
+</code></pre>
+<p>يقوم بفحص الحزمة وفقًا لقواعد تحميل النظام الأساسي (رقم <code>api/</code> أو <code>ws/</code> المجلدات على الأكثر
+9,998 مسارًا و50 ميجابايت) وإصدار دبابيس اللعبة الخاصة بك، والتي يجب نشرها باستخدام Windows
+وقت التشغيل ولم يتم إبطاله. يتحقق وقت التشغيل من الإصدار الخاص به في وضع عدم الاتصال؛ <code>--versions</code> أسماء نسخة من
+<a href="/engine/versions.json">versions.json</a> للتحقق ضد واحد آخر.</p>
+<p><strong>قم بتحميله.</strong> المجلد هو التحميل، تمامًا كما هو: يقوم العميل بفحص كل ملف مقابل ملف
+الفهرس، لذا قم بتحميل ملفات المجلد دون تغيير، بنفس الطريقة <code>starhermit.txt</code> سواء داخل المجلد
+وفي جذر الحزمة (ينشر النظام الأساسي النسخة الجذرية في مكان المجلد). كما في
+<a href="/ar/docs/api/github-games.html#add-a-game-from-a-local-folder">أضف لعبة من مجلد محلي</a>:</p>
+<pre><code class="language-bash">mkdir -p bundle/client
+cp -R star-catcher/. bundle/client/
+rm -rf bundle/client/.starhermit
+cp star-catcher/starhermit.txt bundle/starhermit.txt
+tar -C bundle -czf star-catcher.tar.gz .
+
+curl --fail-with-body -X POST https://api.starhermit.com/api/v1/me/github-games/upload \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H 'Content-Type: application/gzip' \
+  --data-binary @star-catcher.tar.gz
+</code></pre>
+<p><code>ACCESS_TOKEN</code> هو رمز الوصول لحسابك (انظر <a href="/ar/docs/tutorials/ci-cd-build-upload.html">تحميل بنيات من CI/CD</a>
+لتسجيل الدخول بدون متصفح). الجواب <code>game.id</code> هو معرف لعبتك، ويتم بث اللعبة مباشرة مرة واحدة
+<code>https://&lt;id&gt;.starhermit.com/</code>. لكل إصدار لاحق، اكتب الفهرس مرة أخرى وادفع نفس النوع
+من حزمة للعبة مع <a href="/ar/docs/api/github-games.html#push-a-game-bundle"><code>POST /api/v1/me/github-games/{id}/bundle</code></a>;
+يقوم عملاء اللاعبين بعد ذلك بتنزيل الملفات التي تغيرت تجزئاتها فقط. أ <code>server=</code> البرنامج النصي في
+يحصل المجلد على الواجهة الخلفية للعبة عند نشر التحميل.</p>
+<p><strong>من مستودع.</strong> لعبة <a href="/ar/docs/api/github-games.html">تم نشره من جيثب</a> يعمل بنفس الطريقة:
+ارتكاب <code>starhermit.txt</code> معها <code>engine.*</code> الخطوط في جذر المستودع. يقوم العميل بتثبيت و
+يقوم بتحديث لعبة المستودع باستخدام git، ويجلب فقط ما يضيفه كل التزام، لذلك لا يحتاج إلى فهرس ملف.</p>
+<p><strong>في المتصفحات.</strong> <code>starhermit package --web</code> يكتب تحميل متصفح اللعبة: ملفاتها، وصفحة التحميل
+الذي يقوم بتحميل إصدار المحرك المثبت من هذا الويكي عن طريق التجزئة، وفهرس الملف الخاص به. انها تحتاج الى الافراج
+مع وقت تشغيل الويب؛ 1.0.0 هو نظام التشغيل Windows فقط، لذا فإن إنشاءات المتصفح تبدأ بإصدار لاحق، و
+<code>package --web</code> يقول ذلك حتى ذلك الحين. على المنصة، يجوز تشغيل صفحات اللعبة النصية الرسمية فقط
+المحرك من هذا الويكي (انظر <a href="/ar/docs/engine-releases.html#script-games-on-the-platform">إصدارات المحرك</a>).</p>
+<h2 id="9-move-to-a-newer-engine">9. انتقل إلى محرك أحدث</h2>
+<p>تعمل اللعبة وفقًا للإصدار الذي تثبته تمامًا: لا شيء يرقيها خلف ظهرك، ويتم نشرها
+الافراج لا يتغير أبدا. للانتقال إلى إصدار أحدث، قم بتنزيل وقت التشغيل الخاص به، وقم بتشغيل لعبتك وفحوصاتها
+عليه، ثم أعد تثبيته عن طريق التغيير <code>engine.version</code> في <code>starhermit.txt</code>، اكتب فهرس الملف مرة أخرى و
+نشر. يقوم عملاء اللاعبين بتنزيل المحرك الجديد مرة واحدة (فقط ما تغير من الإصدارات التي قاموا بها بالفعل
+عقد) والملفات التي تم تغييرها في لعبتك.</p>
+<p>الإصدار الرئيسي للإصدار هو واجهة برمجة تطبيقات المضيف: <code>engine.api=1</code> تتحرك الألعاب بحرية داخل 1.x.x. لعبة
+الذي يحتاج إلى إضافة أعضاء واجهة برمجة التطبيقات المضيفة في إصدار ثانوي يمكنه قول ذلك باستخدام <code>engine.minor=N</code>; أقدم
+ثم يرفضه وقت التشغيل برسالة بدلاً من الفشل لاحقًا.</p>
+<p>الإصدار الذي تم العثور عليه غير آمن هو <strong>تم إبطاله</strong>: <a href="/engine/versions.json">versions.json</a> يضع علامة عليه
+السبب، يرفض العميل تثبيته أو تشغيله (ويخبر اللاعب بالسبب)، والتعبئة والتغليف
+الأوامر ترفض ذلك عندما يقرأون versions.json. دائمًا ما يتبع الإصدار المُلغى إصدار ثابت؛ إعادة تثبيت عليه ونشر.</p>
+<h2 id="10-limits-and-the-licence">10. الحدود والترخيص</h2>
+<p>يبقي وقت التشغيل كل لعبة ضمن الميزانيات، والتي قد تنخفض بها الحزمة <code>engine.limits.*</code> لكن
+لا ترفع أبدًا: 32 مللي ثانية من وقت البرنامج النصي لكل رد اتصال (يتم إيقاف رد الاتصال الذي يستخدمه مؤقتًا و
+ويستمر في الإطارات التالية؛ بعد ثلاث ثوان من وقت التشغيل "لا يستجيب" تتيح لك الشاشة
+لاعب ينتظر أو يوقف اللعبة)، كومة نصية تبلغ 256 ميجابايت، ومساحة تخزين 64 ميجابايت، و512 ميجابايت على الأكثر و65,536 ميجابايت
+الملفات في حزمة، وللتحميل، 50 ميجابايت للمنصة و9998 مسارًا. تجاوز الحد حيث
+يمكن أن تفشل العملية (التخصيص، استدعاء المضيف) يلقي أ <code>RangeError</code>; نفاد الكومة أو الاتصال
+العمق ينهي اللعبة على شاشة الخطأ. تسرد إعلانات واجهة برمجة التطبيقات المضيفة كل الحدود.</p>
+<p>المحرك مرخص بموجب <a href="https://polyformproject.org/licenses/noncommercial/1.0.0">ترخيص PolyForm غير التجاري 1.0.0</a>
+مع هذا الإذن الإضافي، نقلا عن <code>LICENSE-engine</code>:</p>
+<blockquote>
+<p>إذن إضافي: تسمح شركة Hype Driven Development Inc. أيضًا باستخدام هذا البرنامج لأي غرض
+الغرض، بما في ذلك الأغراض التجارية، إنشاء وتوزيع وتشغيل لعبة مبنية عليها
+طالما أن هذه اللعبة منشورة على موقع StarHermit.com، ومتاحة للعامة للعب هناك، ويتم الاحتفاظ بها
+تشغيل النظام هناك. لأي استخدام آخر لا يسمح به الترخيص أدناه، اتصل بـ
+info@hypediven.com.</p>
+</blockquote>
+<p>النص الكامل هو <code>LICENSE-engine</code> الملف الموجود في التنزيل وبجانب كل محرك مثبت؛ ال
+تحتفظ مكونات الطرف الثالث بتراخيصها الخاصة <code>notices</code> المجلد. رمز لعبتك الخاصة و
+الأصول لك.</p>
+<h2 id="checklist">قائمة التحقق</h2>
+<ul>
+<li>[ ] <code>starhermit.txt</code> لديه <code>engine.api</code>, <code>engine.entry</code> و <code>engine.version</code>، والإمكانيات
+تستخدم اللعبة.</li>
+<li>[ ] <code>starhermit check</code> يمر، و <code>npx --package typescript tsc -p .</code> تقارير أية أخطاء.</li>
+<li>[ ] المجلد يحمل اللعبة فقط: لا <code>node_modules</code>، لا توجد أدوات البناء.</li>
+<li>[ ] يتم تسمية صفحة للمتصفحات بواسطة <code>launch=</code>.</li>
+<li>[ ] <code>starhermit package --native</code> تم تشغيله بعد التغيير الأخير، وتم تحميل المجلد دون تغيير.</li>
+</ul>
+
+{% endraw %}
