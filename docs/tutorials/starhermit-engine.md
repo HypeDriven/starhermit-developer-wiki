@@ -1,5 +1,11 @@
 # Tutorial: build a game with the StarHermit engine
 
+The **StarHermit engine is the recommended way to create games for publishing on StarHermit**.
+You build the game once, and the same package is automatically playable in a browser and natively
+across all platforms supported by the engine. Native play offers additional performance and features.
+Availability depends on the engine release: 1.0.0 currently has a Windows runtime only; browser
+support comes in a later release (see [Publish it](#8-publish-it)).
+
 The StarHermit engine runs **script games**: a whole game written in TypeScript (or JavaScript) and
 played by one prebuilt engine executable, the StarHermit runtime, without compiling any native code.
 You write the game's logic against the engine's built-in modules — a 3D scene, input, a HUD, audio,
@@ -43,9 +49,6 @@ The runtime treats every game as untrusted: your code reaches the machine only t
 arbitrary network connections or the player's credentials. In return a game cannot crash the runtime
 or hang the window: a call that runs for three seconds brings up the runtime's own "not responding"
 screen, and an uncaught error ends the game on an error screen the player can restart from.
-
-The same package runs everywhere the engine runs. Release 1.0.0 has a Windows runtime only; a
-browser build of the engine comes with a later release (see [Publish it](#8-publish-it)).
 
 ## 2. Get the engine
 

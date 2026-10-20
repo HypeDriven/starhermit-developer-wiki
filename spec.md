@@ -58,7 +58,9 @@ patterns, not the subject of the docs.
   explicit terms consent, validated conditional cloud saves and untracked in-memory single-player play.
   `scripts/build-quickstart.py` refreshes its vendored helpers and deterministic archive.
 - `docs/tutorials/starhermit-engine.md` and `docs/engine-releases.md` — the StarHermit engine for script
-  games. The tutorial builds a small TypeScript game (scene, input, HUD, storage) step by step: what a
+  games, recommended for publishing on StarHermit: one package for browser and native play across
+  supported platforms, with additional native performance and features and release-specific runtime
+  availability. The tutorial builds a small TypeScript game (scene, input, HUD, storage) step by step: what a
   script game is, getting the engine (the client installs releases; developers download a release's
   Windows runtime from `engine/`), `starhermit new`/`types`/`check` and TypeScript checking, running
   natively, per-entity work with `starhermit:world` tables, kernels and bindings, the platform (sign-in
