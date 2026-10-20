@@ -3,16 +3,16 @@
 The **StarHermit engine is the recommended way to create games for publishing on StarHermit**.
 You build the game once, and the same package is automatically playable in a browser and natively
 across all platforms supported by the engine. Native play offers additional performance and features.
-Availability depends on the engine release: 1.0.0 currently has a Windows runtime only; browser
-support comes in a later release (see [Publish it](#8-publish-it)).
+Availability depends on the engine release: 1.1.0 has a Windows runtime and a web runtime (1.0.0 was
+Windows-only).
 
 The StarHermit engine runs **script games**: a whole game written in TypeScript (or JavaScript) and
 played by one prebuilt engine executable, the StarHermit runtime, without compiling any native code.
 You write the game's logic against the engine's built-in modules — a 3D scene, input, a HUD, audio,
 storage and the StarHermit platform — and the runtime does the rest: windowing, rendering on the
-GPU, sound, the options menu, sign-in and online play. Players get the game through the
-[StarHermit Windows client](https://starhermit.com), which installs the engine your game asks for
-and plays it natively.
+GPU, sound, the options menu, sign-in and online play. Players open the game on starhermit.com in
+their browser, where its page loads the engine your game asks for from this wiki, or play it natively
+in the [StarHermit Windows client](https://starhermit.com), which installs that engine.
 
 This tutorial builds **Star Catcher**, a small game in which you steer a basket to catch falling
 stars, and takes it from an empty folder to a published game:
@@ -36,7 +36,7 @@ root, your TypeScript modules and your assets. Three `engine.*` lines in the man
 ```ini
 engine.api=1
 engine.entry=src/main.ts
-engine.version=1.0.0
+engine.version=1.1.0
 ```
 
 `engine.api` is the major version of the host API your code is written against, `engine.entry` the
@@ -52,23 +52,25 @@ screen, and an uncaught error ends the game on an error screen the player can re
 
 ## 2. Get the engine
 
-**Players** do nothing: when they press Play on a script game, the StarHermit Windows client
-downloads the release the game pins (once, shared by every game that pins it), checks every file
-against the release's published hashes and starts it.
+**Players** do nothing: in a browser, the game's page loads the release the game pins from this wiki
+and checks it against the hashes the page carries; in the StarHermit Windows client, Play downloads
+the release (once, shared by every game that pins it), checks every file against the release's
+published hashes and starts it.
 
 **Developers** download the runtime of a release from the engine area:
 
-- [starhermit-1.0.0-windows-x86_64.zip](../../engine/1.0.0/native/windows-x86_64/starhermit-1.0.0-windows-x86_64.zip)
+- [starhermit-1.1.0-windows-x86_64.zip](../../engine/1.1.0/native/windows-x86_64/starhermit-1.1.0-windows-x86_64.zip)
   (Windows 10 or 11, 64-bit), 6.7 MB.
 
-The archive holds one folder, `starhermit-1.0.0-windows-x86_64`, with `starhermit.exe`, the
-`release.json` that tells the runtime which release it is, `LICENSE-engine` and the third-party
-notices. It is the same engine the client installs. Its size and SHA-256 are listed under
-`downloads` in the release's [native.json](../../engine/1.0.0/native/windows-x86_64/native.json); to
+The archive holds one folder, `starhermit-1.1.0-windows-x86_64`, with `starhermit.exe`, the
+`release.json` that tells the runtime which release it is, the release's `web-manifest.json`,
+`LICENSE-engine` and the third-party notices. It is the same engine the client installs, and it
+packages games for the release's web runtime without a network. Its size and SHA-256 are listed under
+`downloads` in the release's [native.json](../../engine/1.1.0/native/windows-x86_64/native.json); to
 check your copy in PowerShell, compare that `sha256` with:
 
 ```powershell
-Get-FileHash .\starhermit-1.0.0-windows-x86_64.zip -Algorithm SHA256
+Get-FileHash .\starhermit-1.1.0-windows-x86_64.zip -Algorithm SHA256
 ```
 
 Unpack the archive and open a terminal in the unpacked folder:
@@ -78,7 +80,7 @@ Unpack the archive and open a terminal in the unpacked folder:
 ```
 
 ```text
-starhermit 0.1.0 (host API 1.4, launcher 1; engine release 1.0.0)
+starhermit 0.1.0 (host API 1.4, launcher 1; engine release 1.1.0)
 ```
 
 The commands below are written as `starhermit`; run them as `.\starhermit.exe` from that folder, or
@@ -91,17 +93,18 @@ starhermit new star-catcher --title "Star Catcher"
 ```
 
 ```text
-Created Star Catcher in star-catcher: a script game pinned to engine 1.0.0
+Created Star Catcher in star-catcher: a script game pinned to engine 1.1.0
 Play it: starhermit star-catcher
 Check it: starhermit check star-catcher
 For a native upload (the StarHermit client plays it): starhermit package --native star-catcher
+For the web: starhermit package --web star-catcher --out <upload>
 ```
 
 The new folder holds a playable starting point — a cube that hops when you press Space:
 
 ```text
 star-catcher/
-  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.0.0)
+  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.1.0)
   tsconfig.json              TypeScript settings for checking the game
   src/main.ts                the entry module
   .starhermit/starhermit.d.ts  the host API's declarations, for your editor and the type checker
@@ -130,10 +133,10 @@ Replace the generated `starhermit.txt` with the game's manifest:
 ```ini
 name=Star Catcher
 description=Catch the falling stars before the time runs out.
-launch=play.html
+launch=index.html
 engine.api=1
 engine.entry=src/main.ts
-engine.version=1.0.0
+engine.version=1.1.0
 engine.capabilities=platform,storage
 control.left=KeyA+ArrowLeft | Move left
 control.right=KeyD+ArrowRight | Move right
@@ -148,8 +151,8 @@ The `control.*` lines declare the game's actions with their default keys (the pl
 [controls](game-controls.md) format) and `engine.gamepad.*` their gamepad defaults. Players rebind
 them in the runtime's Options menu, so the game reads **actions**, never keys. `engine.capabilities`
 asks for what the game uses beyond drawing and input: `platform` for the signed-in player and online
-features, `storage` for data kept on the player's device and account. `launch=play.html` and the page
-it names come into play when you [publish](#8-publish-it).
+features, `storage` for data kept on the player's device and account. `launch=index.html` names the
+page that plays the game in browsers, which the engine writes when you [publish](#8-publish-it).
 
 Then replace `src/main.ts`:
 
@@ -316,8 +319,9 @@ While developing, add `--dev` (`starhermit star-catcher --dev`): the runtime the
 
 ## 6. Many things at once: `starhermit:world`
 
-Your game's TypeScript runs in the engine's own script interpreter, which keeps every game inside
-its time and memory budgets. Decisions and a few dozen objects cost little there, but per-entity
+Natively, your game's TypeScript runs in the engine's own script interpreter, which keeps every game
+inside its time and memory budgets; in browsers it runs in the browser's JavaScript engine, in a
+worker the page can stop. Decisions and a few dozen objects cost little there, but per-entity
 work — moving thousands of particles, a crowd, a flock — would mean thousands of interpreted steps
 every frame. For that the engine has `starhermit:world`:
 
@@ -411,6 +415,12 @@ runtime a launch token for your game over a private channel, renews it while the
 game never sees it (no host call returns a token, key or cookie). Players never sign in inside a
 game; signing in and out happens in the client.
 
+**In browsers** the platform opens the game's page with a launch token for your game, which the
+engine takes out of the page's address before your code runs and renews within the platform's 12-hour
+limit; your game sees only `player()`, exactly as natively. A guest who chooses **Sign in** in the
+runtime's Account dialog goes to StarHermit's own sign-in page and comes back signed in. Voice uses the
+browser's microphone after the browser's own permission prompt.
+
 **Development runs.** Started from a terminal, a package cannot claim a platform identity by itself,
 so `starhermit star-catcher` plays as a guest. Once your game is published, a development launch
 names it:
@@ -447,47 +457,40 @@ as described in [leaderboards and achievements](game-leaderboards-achievements.m
 ## 8. Publish it
 
 A published script game is an ordinary StarHermit game whose files are your package. Players find
-it in their library; the StarHermit Windows client installs it with the engine it pins and plays it
-natively.
+it on starhermit.com and in their library: the page plays it in the browser, and the StarHermit
+Windows client installs it with the engine it pins and plays it natively.
 
-**A page for browsers.** The platform hosts every uploaded game at its own address and needs a page
-there to open. Until your game has a browser build, a plain page saying where to play it will do;
-Star Catcher's manifest names `play.html`:
-
-```html
-<!doctype html>
-<html lang="en">
-<meta charset="utf-8">
-<title>Star Catcher</title>
-<p>Star Catcher runs in the StarHermit Windows client: find it in your library and press Play.</p>
-</html>
-```
-
-Use a name other than `index.html`: a later browser build writes its own `index.html`.
-
-**The file index.** The client installs and updates an uploaded game by its file index,
-`starhermit-files.json`: every file with its size and SHA-256. Write it after every change to the
-game, as the last step before uploading:
+**Package it.** One command, run after every change as the last step before uploading, writes the
+two files the platform and the client need into the game's folder:
 
 ```powershell
-starhermit package --native star-catcher
+starhermit package --web star-catcher
 ```
 
 ```text
-Native upload: star-catcher (6 files, 7553 bytes to upload; the platform takes at most 50 MiB)
-Wrote star-catcher\starhermit-files.json for engine 1.0.0: the StarHermit client installs the game by it
-Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.0.0 is still current
+Web package: \\?\C:\games\star-catcher (6 files, 9088 bytes to upload; the platform takes at most 50 MiB)
+Engine 1.1.0 from https://wiki.starhermit.com/engine (manifest sha384-liw5ISwUXU5hWOBFSCLqjQNn31KEDCA9s7Oj/2eRMjh81Mcu08GK8W29UBKfbrna)
+Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.1.0 is still current
 ```
 
-It checks the package against the platform's upload rules (no `api/` or `ws/` folders, at most
-9,998 paths and 50 MiB) and the release your game pins, which must be published with a Windows
-runtime and not revoked. The runtime checks its own release offline; `--versions` names a copy of
-[versions.json](../../engine/versions.json) to check against another one.
+- `index.html`, the **loader page** `launch=index.html` names: markup only, no script of its own. It
+  loads the release's `starhermit.js` and `manifest.json` from this wiki pinned by their SRI hashes,
+  and the engine checks every other file it loads against that manifest, so the page can run only
+  that exact release. Package again rather than edit it.
+- `starhermit-files.json`, the **file index**: every file with its size and SHA-256. The browser
+  engine reads the package by it, and the client installs and updates the game by it.
 
-**Upload it.** The folder is the upload, exactly as it is: the client checks every file against the
-index, so upload the folder's files unchanged, with the same `starhermit.txt` both inside the folder
-and at the bundle's root (the platform publishes the root copy in the folder's place). As in
-[Add a game from a local folder](../api/github-games.md#add-a-game-from-a-local-folder):
+It checks the package against the platform's upload rules (no `api/` or `ws/` folders, at most
+9,998 paths and 50 MiB) and the release your game pins, which must be published with a web runtime
+and not revoked. The runtime checks its own release offline; `--engine-version X.Y.Z --manifest <a copy of that
+release>` packages for another one. A game must not have its own `index.html`; the command refuses to
+replace it. `starhermit package --native star-catcher` writes the same file index without the loader,
+for a game that is played only in the client (with any plain page named by `launch=`).
+
+**Upload it.** The folder is the upload, exactly as it is: the browser engine and the client check
+every file against the index, so upload the folder's files unchanged, with the same `starhermit.txt`
+both inside the folder and at the bundle's root (the platform publishes the root copy in the folder's
+place). As in [Add a game from a local folder](../api/github-games.md#add-a-game-from-a-local-folder):
 
 ```bash
 mkdir -p bundle/client
@@ -504,27 +507,28 @@ curl --fail-with-body -X POST https://api.starhermit.com/api/v1/me/github-games/
 
 `ACCESS_TOKEN` is your account's access token (see [upload builds from CI/CD](ci-cd-build-upload.md)
 for signing in without a browser). The answer's `game.id` is your game's id, and the game is live at once at
-`https://<id>.starhermit.com/`. For every later version, write the index again and push the same kind
+`https://<id>.starhermit.com/`. For every later version, package again and push the same kind
 of bundle to the game with [`POST /api/v1/me/github-games/{id}/bundle`](../api/github-games.md#push-a-game-bundle);
 players' clients then download only the files whose hashes changed. A `server=` script in the
 folder gets the game its backend as the upload is published.
 
 **From a repository.** A game [published from GitHub](../api/github-games.md) works the same way:
-commit `starhermit.txt` with its `engine.*` lines at the repository root. The client installs and
-updates a repository game with git, fetching only what each commit adds, so it needs no file index.
+commit the packaged folder (`starhermit.txt` with its `engine.*` lines, `index.html` and
+`starhermit-files.json`) at the repository root. The client installs and updates a repository game
+with git, fetching only what each commit adds.
 
-**In browsers.** `starhermit package --web` writes a game's browser upload: its files, a loader page
-that loads the pinned engine release from this wiki by hash, and its file index. It needs a release
-with a web runtime; 1.0.0 is Windows-only, so browser builds start with a later release, and
-`package --web` says so until then. On the platform, a script game's pages may run only the official
-engine from this wiki (see [Engine releases](../engine-releases.md#script-games-on-the-platform)).
+**The page's lock.** The platform serves every page of a game whose `starhermit.txt` declares
+`engine.version` with a Content-Security-Policy that admits scripts only from this wiki, so the only
+code a script game's page can run is the official engine (see
+[Engine releases](../engine-releases.md#script-games-on-the-platform)). Your TypeScript runs in a
+worker the engine starts; the page itself runs only the engine: input, the runtime's menus, audio,
+storage and the platform session.
 
 ## 9. Move to a newer engine
 
 A game runs on exactly the release it pins: nothing upgrades it behind your back, and a published
 release never changes. To move to a newer one, download its runtime, run your game and its checks
-on it, then re-pin by changing `engine.version` in `starhermit.txt`, write the file index again and
-publish. Players' clients download the new engine once (only what changed from releases they already
+on it, then re-pin by changing `engine.version` in `starhermit.txt`, package again and publish. Players' clients download the new engine once (only what changed from releases they already
 hold) and your game's changed files.
 
 The release's major version is the host API's: `engine.api=1` games move freely within 1.x.x. A game
@@ -564,5 +568,5 @@ assets are yours.
       the game uses.
 - [ ] `starhermit check` passes, and `npx --package typescript tsc -p .` reports no errors.
 - [ ] The folder holds only the game: no `node_modules`, no build tools.
-- [ ] A page for browsers is named by `launch=`.
-- [ ] `starhermit package --native` ran after the last change, and the folder was uploaded unchanged.
+- [ ] `launch=index.html` names the loader page.
+- [ ] `starhermit package --web` ran after the last change, and the folder was uploaded unchanged.

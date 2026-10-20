@@ -26,7 +26,7 @@ not the subject of the docs.
 
 - **[Browser quickstart](docs/tutorials/browser-quickstart.md)** — download a complete game with account sign-in, explicit terms acceptance, safe cloud saves, and untracked single-player play.
 - **[Choose an integration](docs/choosing-an-integration.md)** — compare browser-only games, host-routed rooms, scripts, containers, and catalog titles.
-- **[Tutorial: build a game with the StarHermit engine](docs/tutorials/starhermit-engine.md)** — write a TypeScript script game, run it natively on the engine's Windows runtime, move thousands of objects with native kernels, sign players in through the StarHermit client, and publish it for the client to install and play.
+- **[Tutorial: build a game with the StarHermit engine](docs/tutorials/starhermit-engine.md)** — write a TypeScript script game, run it natively on the engine's Windows runtime, move thousands of objects with native kernels, sign players in, and publish it to play in browsers on the engine's web runtime and natively in the StarHermit client.
 - **[Credentials and identifiers](docs/credentials.md)** — which tokens can call which APIs, and how game, user, session, room, and participant IDs differ.
 - **[API conventions](docs/api/conventions.md)** — response/error parsing, timestamp units, pagination, update semantics, and retries.
 - **[Troubleshooting](docs/troubleshooting.md)** — diagnose sign-in, scope, save conflicts, sockets, uploads, and container startup.
@@ -105,7 +105,7 @@ WebSockets under `ws/v1/...`, JWT bearer auth
 |---|---|---|
 | Shared conventions | [conventions.md](docs/api/conventions.md) | Base URLs, body/error parsing, timestamps, paging, updates, retries and concurrency |
 | Machine-readable contracts | [contracts.md](docs/api/contracts.md) | Public REST operations and models, WebSocket frame schemas, and binary layouts |
-| Engine releases | [engine-releases.md](docs/engine-releases.md) | StarHermit engine versions on this wiki: `versions.json`, native runtimes and their chunks, the developer download, integrity, `GET /api/v1/engine/releases`, and script games' Content-Security-Policy |
+| Engine releases | [engine-releases.md](docs/engine-releases.md) | StarHermit engine versions on this wiki: `versions.json`, the web runtime and its loader, native runtimes and their chunks, the developer download, integrity, `GET /api/v1/engine/releases`, and script games' Content-Security-Policy |
 | Content moderation | [moderation.md](docs/api/moderation.md) | Exact hashes, scoped checks/discovery, screened flags, owner review, approval validity and withdrawal recovery; current service availability |
 | Auth | [auth.md](docs/api/auth.md) | Public-key registration/login, live OAuth providers (`GET /auth/oauth/providers`), refresh rotation, launch tokens & game-scope fencing, WebSocket connection tickets |
 | Games | [games.md](docs/api/games.md) | Sessions, declared match queues, elo matchmaking, friend invites and share links (with pass-through query strings), per-player controls and settings, AI practice, opt-in replays, owner diagnostics/webhooks, `ws/v1/games` protocol, **limits: message rates and elo per match** |

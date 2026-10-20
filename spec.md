@@ -65,17 +65,18 @@ patterns, not the subject of the docs.
   Windows runtime from `engine/`), `starhermit new`/`types`/`check` and TypeScript checking, running
   natively, per-entity work with `starhermit:world` tables, kernels and bindings, the platform (sign-in
   from the client, `--game <id>` development launches, saves, online play with `server=`), publishing
-  (a plain page for browsers, `starhermit package --native` for the file index, folder upload or
-  repository; the web build with a later release), re-pinning and revocations, limits and the licence.
+  (`starhermit package --web` for the loader page and file index, `--native` for a client-only game,
+  folder upload or repository, the page's script lock), re-pinning and revocations, limits and the licence.
   The reference page covers `engine/` (versions.json format 2, native.json, chunks and patches, the
-  developer download), the integrity chain, `GET /api/v1/engine/releases`, and what the platform does
+  developer download, the web runtime with its loader and bundled fonts), the integrity chain, `GET /api/v1/engine/releases`, and what the platform does
   for a game that declares `engine.version` (deploy record and warning, Content-Security-Policy).
 - `engine/` — the engine area, written only by the engine's `cargo starhermit release` (never by hand):
   `versions.json`, one immutable directory per release (`<version>/native/windows-x86_64/native.json`
   and the developer download `starhermit-<version>-windows-x86_64.zip`; a web runtime's files in a
   release that has one), the shared content-addressed `chunks/` (and `patches/`), and a README that
   renders as `/engine/`. Its files are published verbatim (no `_`/`.` names, no front matter but the
-  README's) and it is not translated; release 1.0.0 is Windows-only.
+  README's) and it is not translated; release 1.0.0 is Windows-only, 1.1.0 has the web runtime and
+  Windows.
 - `docs/starhermit-txt.md` — the manifest every published game needs (including `control.*` declarations), where it must sit in the uploaded
   folder, and why that folder should be the distributable build (everything beside the manifest is
   uploaded and served). It also documents matchmaking start deadlines, AI-seat limits and empty-seat behavior,

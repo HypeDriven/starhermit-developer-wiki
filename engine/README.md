@@ -18,6 +18,7 @@ This area is written by `cargo starhermit release`; do not edit it by hand.
 
 | Version | Host API | Built | Manifest (SRI) | Native |
 |---|---|---|---|---|
+| 1.1.0 | 1.4 | 2026-10-20T13:55:50Z | `sha384-liw5ISwUXU5hWOBFSCLqjQNn31KEDCA9s7Oj/2eRMjh81Mcu08GK8W29UBKfbrna` | windows-x86_64 |
 | 1.0.0 | 1.4 | 2026-10-20T12:49:23Z | none (native only) | windows-x86_64 |
 
 [versions.json](versions.json) lists the same, newest first. Release `X.Y.Z`
@@ -65,7 +66,7 @@ SHA-256. A chunk or patch is never changed or removed while a release lists it.
 A release with a Windows runtime has a developer download beside its
 native.json: the runtime (`starhermit.exe`) with its `release.json` and
 license notices, the engine a game needs to be written, checked and packaged.
-The newest: [starhermit-1.0.0-windows-x86_64.zip](1.0.0/native/windows-x86_64/starhermit-1.0.0-windows-x86_64.zip).
+The newest: [starhermit-1.1.0-windows-x86_64.zip](1.1.0/native/windows-x86_64/starhermit-1.1.0-windows-x86_64.zip).
 
 Unpack it and run `starhermit new <game>` for a game pinned to the release,
 `starhermit types <game>` for the host API's declarations, `starhermit check
@@ -83,7 +84,7 @@ and checks that the release the game pins (`engine.version`) is published
 with a native runtime and not revoked.
 
 ```
-starhermit package --web <game> --engine-version 1.0.0 --out <upload>
+starhermit package --web <game> --engine-version 1.1.0 --out <upload>
 ```
 
 (the runtime of that release; `cargo starhermit package --web` is the same,

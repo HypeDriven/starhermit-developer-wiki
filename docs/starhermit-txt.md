@@ -256,7 +256,7 @@ See [Tutorial: add controls to your game](tutorials/game-controls.md).
 A game played by the [StarHermit engine](tutorials/starhermit-engine.md) (a script game) declares the
 engine it runs on with `engine.*` keys. The engine reads them together with `name=`, `server=` and the
 `control.*` lines; the StarHermit Windows client plays a game natively when it finds `engine.version`
-and `engine.entry`.
+and `engine.entry`, and browsers play it from the loader page `starhermit package --web` writes.
 
 | Key | Meaning |
 |---|---|
