@@ -4,7 +4,7 @@ The **StarHermit engine is the recommended way to create games for publishing on
 You build the game once, and the same package is automatically playable in a browser and natively
 across all platforms supported by the engine. Native play offers additional performance and features.
 Availability depends on the engine release: 1.1.0 and later have a Windows runtime and a web runtime
-(1.0.0 was Windows-only). This page describes engine **1.2.0**; what each release changed is listed
+(1.0.0 was Windows-only). This page describes engine **1.3.0**; what each release changed is listed
 under [Engine releases](../engine-releases.md#release-notes).
 
 The StarHermit engine runs **script games**: a whole game written in TypeScript (or JavaScript) and
@@ -37,7 +37,7 @@ root, your TypeScript modules and your assets. Three `engine.*` lines in the man
 ```ini
 engine.api=1
 engine.entry=src/main.ts
-engine.version=1.2.0
+engine.version=1.3.0
 ```
 
 `engine.api` is the major version of the host API your code is written against, `engine.entry` the
@@ -60,18 +60,18 @@ published hashes and starts it.
 
 **Developers** download the runtime of a release from the engine area:
 
-- [starhermit-1.2.0-windows-x86_64.zip](../../engine/1.2.0/native/windows-x86_64/starhermit-1.2.0-windows-x86_64.zip)
+- [starhermit-1.3.0-windows-x86_64.zip](../../engine/1.3.0/native/windows-x86_64/starhermit-1.3.0-windows-x86_64.zip)
   (Windows 10 or 11, 64-bit), 6.7 MB.
 
-The archive holds one folder, `starhermit-1.2.0-windows-x86_64`, with `starhermit.exe`, the
+The archive holds one folder, `starhermit-1.3.0-windows-x86_64`, with `starhermit.exe`, the
 `release.json` that tells the runtime which release it is, the release's `web-manifest.json`,
 `LICENSE-engine` and the third-party notices. It is the same engine the client installs, and it
 packages games for the release's web runtime without a network. Its size and SHA-256 are listed under
-`downloads` in the release's [native.json](../../engine/1.2.0/native/windows-x86_64/native.json); to
+`downloads` in the release's [native.json](../../engine/1.3.0/native/windows-x86_64/native.json); to
 check your copy in PowerShell, compare that `sha256` with:
 
 ```powershell
-Get-FileHash .\starhermit-1.2.0-windows-x86_64.zip -Algorithm SHA256
+Get-FileHash .\starhermit-1.3.0-windows-x86_64.zip -Algorithm SHA256
 ```
 
 Unpack the archive and open a terminal in the unpacked folder:
@@ -81,7 +81,7 @@ Unpack the archive and open a terminal in the unpacked folder:
 ```
 
 ```text
-starhermit 0.1.0 (host API 1.6, launcher 1; engine release 1.2.0)
+starhermit 0.1.0 (host API 1.7, launcher 1; engine release 1.3.0)
 ```
 
 The commands below are written as `starhermit`; run them as `.\starhermit.exe` from that folder, or
@@ -94,7 +94,7 @@ starhermit new star-catcher --title "Star Catcher"
 ```
 
 ```text
-Created Star Catcher in star-catcher: a script game pinned to engine 1.2.0
+Created Star Catcher in star-catcher: a script game pinned to engine 1.3.0
 Play it: starhermit star-catcher
 Check it: starhermit check star-catcher
 For a native upload (the StarHermit client plays it): starhermit package --native star-catcher
@@ -105,7 +105,7 @@ The new folder holds a playable starting point — a cube that hops when you pre
 
 ```text
 star-catcher/
-  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.2.0)
+  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.3.0)
   tsconfig.json              TypeScript settings for checking the game
   src/main.ts                the entry module
   .starhermit/starhermit.d.ts  the host API's declarations, for your editor and the type checker
@@ -150,7 +150,7 @@ description=Catch the falling stars before the time runs out.
 launch=index.html
 engine.api=1
 engine.entry=src/main.ts
-engine.version=1.2.0
+engine.version=1.3.0
 engine.capabilities=platform,storage
 control.left=KeyA+ArrowLeft | Move left
 control.right=KeyD+ArrowRight | Move right
@@ -495,8 +495,8 @@ starhermit package --web star-catcher --out upload
 ```text
 Web package: upload (5 files, 8620 bytes to upload; the platform takes at most 50 MiB)
 Left out (not part of the package): tsconfig.json (default rule tsconfig.json)
-Engine 1.2.0 from https://wiki.starhermit.com/engine (manifest sha384-ytl5Z3FrO2ap1Q0OnYyENS7PjjjRrtBYyxtRYQM0yGUa3ok4JCjEg7JYOD47CcNE)
-Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.2.0 is still current
+Engine 1.3.0 from https://wiki.starhermit.com/engine (manifest sha384-HcXR/Hw5WOTmr+uUEt6gGd3dH8DBcwsWQ1I/7O0GLvQ82Hzxz9SzgFFdDishwP8Z)
+Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.3.0 is still current
 ```
 
 - `index.html`, the **loader page** `launch=index.html` names: markup only, no script of its own. It
@@ -593,7 +593,12 @@ long work across frames (`fuelLeft()` says what is left of this call's fuel), or
 
 The other limits: a 256 MiB script heap and 1,024 call frames, 64 MiB of storage, canvases of at most
 4,096 pixels a side and 8,388,608 pixels (4096 × 2048), 128 actions, BigInts of at most 2<sup>20</sup> bits,
-at most 512 MiB and 65,536 files in a package and, for uploads, the platform's 50 MiB and 9,998 paths.
+at most 512 MiB and 65,536 files in a package and, for uploads, the platform's 50 MiB and 9,998 paths
+(a game the platform allows more passes `--max-upload-mib` and `--max-upload-paths` to the packaging
+commands, or `--game-id` to read its limits). Large assets can stay off the upload as **remote files**:
+`engine.remote.files=` and `engine.remote.urls=` in `starhermit.txt` name files your own HTTPS hosts serve,
+the packaging commands pin each by size and SHA-256, and the runtime fetches and checks them
+(`files.fetch` in `starhermit:engine`; see the host API's declarations).
 Going past a limit where an operation can fail (an allocation, a host call) throws a `RangeError`;
 running out of heap or call depth ends the game on the error screen. The host API's declarations
 list every limit.

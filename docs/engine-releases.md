@@ -16,6 +16,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.3.0 | 1.7 | Web; Windows (x86-64) | [starhermit-1.3.0-windows-x86_64.zip](../engine/1.3.0/native/windows-x86_64/starhermit-1.3.0-windows-x86_64.zip) |
 | 1.2.0 | 1.6 | Web; Windows (x86-64) | [starhermit-1.2.0-windows-x86_64.zip](../engine/1.2.0/native/windows-x86_64/starhermit-1.2.0-windows-x86_64.zip) |
 | 1.1.0 | 1.4 | Web; Windows (x86-64) | [starhermit-1.1.0-windows-x86_64.zip](../engine/1.1.0/native/windows-x86_64/starhermit-1.1.0-windows-x86_64.zip) |
 | 1.0.0 | 1.4 | Windows (x86-64); no web runtime | [starhermit-1.0.0-windows-x86_64.zip](../engine/1.0.0/native/windows-x86_64/starhermit-1.0.0-windows-x86_64.zip) |
@@ -28,6 +29,31 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.3.0
+
+Host API 1.7. Games pinned to an earlier release keep running on it; re-pin to use these.
+
+- **Faster, leaner scripts**: the native interpreter keeps values in one machine word and caches property
+  lookups, and `x | 0`, `x >>> 0` and shifts by constants run as single instructions. Object-heavy games use
+  about half the heap, and map generation runs about 1.2–1.3× faster. A game past its heap limit is collected
+  and its tables shrunk before it is ended; `STARHERMIT_HEAP_CENSUS=<seconds>` with `--dev` prints what the
+  heap holds.
+- **Remote files** (host API 1.7): `engine.remote.files=`, `engine.remote.urls=` and
+  `engine.remote.redirects=` mark files the game's own HTTPS hosts serve. The packaging commands leave them out
+  of the upload and pin each by size and SHA-256 in `starhermit-remote.json` (`--remote-out DIR` writes their
+  objects by hash). The runtime fetches, checks and caches them; `files.fetch(paths, onProgress)` makes them
+  ready, `files.status(path)` says where a file is, and loaders fetch what they load.
+- **Upload limits**: `--max-upload-mib` and `--max-upload-paths` (or `STARHERMIT_MAX_UPLOAD_MIB` / `_PATHS`)
+  pass a game's raised limits, and with `--game-id` the tools read the limits the platform reports.
+- **glTF**: Draco-compressed meshes (`KHR_draco_mesh_compression`) and `KHR_mesh_quantization` load through
+  `GLTFLoader`.
+- **Geometry and materials** (host API 1.7): `BufferAttribute.onUpload` drops a geometry's arrays from the
+  heap once they reach the GPU; compact `Int8`, `Uint8` and `Int16` attributes; four custom vec4s per instance
+  (`setCustomAt(i, v, slot)`); premultiplied and multiply blending; culling by `boundingSphere` and
+  `frustumCulled = false`. Vertex colours outside 0–1 no longer drop a mesh silently.
+- **Web**: the page's start-up clear no longer issues an empty draw, so WebGPU stops warning of a zero vertex
+  count.
 
 ### 1.2.0
 
