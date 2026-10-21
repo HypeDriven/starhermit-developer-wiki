@@ -514,7 +514,7 @@ replace it. Without `--out`, `package --web` writes the two files into the game'
 `starhermit package --native star-catcher` writes the same file index into the game's folder without
 the loader, for a game that is played only in the client (with any plain page named by `launch=`).
 An index written into the game's folder lists the development files the folder holds under
-`"excluded"`, and the StarHermit client leaves them out of the upload (client 0.2.6 or later).
+`"excluded"`, and the StarHermit client leaves them out of the upload (client 0.2.7 or later).
 
 **Upload it.** The `upload` folder is the upload, exactly as it is: the browser engine and the client
 check every file against the index, so upload its files unchanged, with the same `starhermit.txt`
