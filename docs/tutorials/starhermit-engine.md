@@ -3,8 +3,9 @@
 The **StarHermit engine is the recommended way to create games for publishing on StarHermit**.
 You build the game once, and the same package is automatically playable in a browser and natively
 across all platforms supported by the engine. Native play offers additional performance and features.
-Availability depends on the engine release: 1.1.0 has a Windows runtime and a web runtime (1.0.0 was
-Windows-only).
+Availability depends on the engine release: 1.1.0 and later have a Windows runtime and a web runtime
+(1.0.0 was Windows-only). This page describes engine **1.2.0**; what each release changed is listed
+under [Engine releases](../engine-releases.md#release-notes).
 
 The StarHermit engine runs **script games**: a whole game written in TypeScript (or JavaScript) and
 played by one prebuilt engine executable, the StarHermit runtime, without compiling any native code.
@@ -36,7 +37,7 @@ root, your TypeScript modules and your assets. Three `engine.*` lines in the man
 ```ini
 engine.api=1
 engine.entry=src/main.ts
-engine.version=1.1.0
+engine.version=1.2.0
 ```
 
 `engine.api` is the major version of the host API your code is written against, `engine.entry` the
@@ -59,18 +60,18 @@ published hashes and starts it.
 
 **Developers** download the runtime of a release from the engine area:
 
-- [starhermit-1.1.0-windows-x86_64.zip](../../engine/1.1.0/native/windows-x86_64/starhermit-1.1.0-windows-x86_64.zip)
+- [starhermit-1.2.0-windows-x86_64.zip](../../engine/1.2.0/native/windows-x86_64/starhermit-1.2.0-windows-x86_64.zip)
   (Windows 10 or 11, 64-bit), 6.7 MB.
 
-The archive holds one folder, `starhermit-1.1.0-windows-x86_64`, with `starhermit.exe`, the
+The archive holds one folder, `starhermit-1.2.0-windows-x86_64`, with `starhermit.exe`, the
 `release.json` that tells the runtime which release it is, the release's `web-manifest.json`,
 `LICENSE-engine` and the third-party notices. It is the same engine the client installs, and it
 packages games for the release's web runtime without a network. Its size and SHA-256 are listed under
-`downloads` in the release's [native.json](../../engine/1.1.0/native/windows-x86_64/native.json); to
+`downloads` in the release's [native.json](../../engine/1.2.0/native/windows-x86_64/native.json); to
 check your copy in PowerShell, compare that `sha256` with:
 
 ```powershell
-Get-FileHash .\starhermit-1.1.0-windows-x86_64.zip -Algorithm SHA256
+Get-FileHash .\starhermit-1.2.0-windows-x86_64.zip -Algorithm SHA256
 ```
 
 Unpack the archive and open a terminal in the unpacked folder:
@@ -80,7 +81,7 @@ Unpack the archive and open a terminal in the unpacked folder:
 ```
 
 ```text
-starhermit 0.1.0 (host API 1.4, launcher 1; engine release 1.1.0)
+starhermit 0.1.0 (host API 1.6, launcher 1; engine release 1.2.0)
 ```
 
 The commands below are written as `starhermit`; run them as `.\starhermit.exe` from that folder, or
@@ -93,7 +94,7 @@ starhermit new star-catcher --title "Star Catcher"
 ```
 
 ```text
-Created Star Catcher in star-catcher: a script game pinned to engine 1.1.0
+Created Star Catcher in star-catcher: a script game pinned to engine 1.2.0
 Play it: starhermit star-catcher
 Check it: starhermit check star-catcher
 For a native upload (the StarHermit client plays it): starhermit package --native star-catcher
@@ -104,7 +105,7 @@ The new folder holds a playable starting point — a cube that hops when you pre
 
 ```text
 star-catcher/
-  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.1.0)
+  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.2.0)
   tsconfig.json              TypeScript settings for checking the game
   src/main.ts                the entry module
   .starhermit/starhermit.d.ts  the host API's declarations, for your editor and the type checker
@@ -123,8 +124,21 @@ cd star-catcher
 npx --package typescript tsc -p .
 ```
 
-Keep `node_modules` and other tooling **out of the game folder**: everything in the folder except
-dot-names is part of the package and of every upload.
+Development files stay out of the package: dot-names (such as `.starhermit/` and `.git/`),
+`node_modules/`, `tsconfig.json`, `jsconfig.json`, `package.json`, npm, yarn and pnpm lock files,
+source maps (`*.js.map`, `*.ts.map` and the like) and `Thumbs.db`/`desktop.ini`. Everything else in
+the folder is part of the package. To leave out more, add a `.starhermitignore` at the game's root
+with gitignore-style rules (`*` and `?` within a name, `**` for any number of folders, a trailing `/`
+for a folder, `!` to keep a file a default rule leaves out; the last matching rule decides):
+
+```text
+notes/
+levels/**/draft-*.json
+!package.json
+```
+
+A game that reads or imports a left-out file fails with an error naming the rule, in development as
+well, so `starhermit check` catches it before you upload.
 
 ## 4. Write the first version
 
@@ -136,7 +150,7 @@ description=Catch the falling stars before the time runs out.
 launch=index.html
 engine.api=1
 engine.entry=src/main.ts
-engine.version=1.1.0
+engine.version=1.2.0
 engine.capabilities=platform,storage
 control.left=KeyA+ArrowLeft | Move left
 control.right=KeyD+ArrowRight | Move right
@@ -149,7 +163,11 @@ cache..=0
 
 The `control.*` lines declare the game's actions with their default keys (the platform's
 [controls](game-controls.md) format) and `engine.gamepad.*` their gamepad defaults. Players rebind
-them in the runtime's Options menu, so the game reads **actions**, never keys. `engine.capabilities`
+them in the runtime's Options menu, so the game reads **actions**, never keys. A game declares up to
+128 actions: the platform keeps the first 32 with the player's account, and the runtime keeps the
+bindings of the rest in the player's synced settings. `engine.group.<action>=Heading` starts a group
+at that action (up to the next group), which the controls screen shows under the heading, for example
+`engine.group.left=Movement` (host API 1.6). `engine.capabilities`
 asks for what the game uses beyond drawing and input: `platform` for the signed-in player and online
 features, `storage` for data kept on the player's device and account. `launch=index.html` names the
 page that plays the game in browsers, which the engine writes when you [publish](#8-publish-it).
@@ -297,13 +315,19 @@ starhermit check star-catcher
 ```
 
 ```text
-package=Directory files=3 bytes=4800 name="Star Catcher" api=1 entry=src/main.ts capabilities=platform,storage actions=left,right,start
+package=Directory files=3 bytes=6378 name="Star Catcher" api=1 entry=src/main.ts capabilities=platform,storage actions=left,right,start
+left out: tsconfig.json (default rule tsconfig.json)
+web=linked modules=2
 runnable=true engine="TypeScript" frames=120 probes=0
 PASS package src/main.ts: valid; 120 frames headless
 ```
 
 `check` validates the package (manifest, paths, sizes) and plays 120 frames without a window, so a
 syntax error, an unknown import or an exception at start-up shows here with its file, line and column.
+It prints the game's `console` output as it goes (`[game] log src/main.ts:12:5: text`, at most 1,000
+lines; `--quiet` hides it), fails a game that would bring up the "not responding" screen, and links
+your modules the way browsers load them, so a game that would not load in a browser fails here too
+(see [Native and browser differences](#native-and-browser-differences)).
 Then play it:
 
 ```powershell
@@ -315,7 +339,7 @@ opens the runtime's own menu: graphics, audio, controls (rebinding), the account
 game cannot draw over that menu or read it, and no game can bind F1.
 
 While developing, add `--dev` (`starhermit star-catcher --dev`): the runtime then prints the game's
-`console.log` output and points errors at your TypeScript lines.
+`console` output in the same form and points errors at your TypeScript lines.
 
 ## 6. Many things at once: `starhermit:world`
 
@@ -461,16 +485,18 @@ it on starhermit.com and in their library: the page plays it in the browser, and
 Windows client installs it with the engine it pins and plays it natively.
 
 **Package it.** One command, run after every change as the last step before uploading, writes the
-two files the platform and the client need into the game's folder:
+upload into a folder of its own: the package's files (without the development files left out above)
+plus the two files the platform and the client need:
 
 ```powershell
-starhermit package --web star-catcher
+starhermit package --web star-catcher --out upload
 ```
 
 ```text
-Web package: \\?\C:\games\star-catcher (6 files, 9088 bytes to upload; the platform takes at most 50 MiB)
-Engine 1.1.0 from https://wiki.starhermit.com/engine (manifest sha384-liw5ISwUXU5hWOBFSCLqjQNn31KEDCA9s7Oj/2eRMjh81Mcu08GK8W29UBKfbrna)
-Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.1.0 is still current
+Web package: upload (5 files, 8620 bytes to upload; the platform takes at most 50 MiB)
+Left out (not part of the package): tsconfig.json (default rule tsconfig.json)
+Engine 1.2.0 from https://wiki.starhermit.com/engine (manifest sha384-ytl5Z3FrO2ap1Q0OnYyENS7PjjjRrtBYyxtRYQM0yGUa3ok4JCjEg7JYOD47CcNE)
+Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.2.0 is still current
 ```
 
 - `index.html`, the **loader page** `launch=index.html` names: markup only, no script of its own. It
@@ -484,19 +510,21 @@ It checks the package against the platform's upload rules (no `api/` or `ws/` fo
 9,998 paths and 50 MiB) and the release your game pins, which must be published with a web runtime
 and not revoked. The runtime checks its own release offline; `--engine-version X.Y.Z --manifest <a copy of that
 release>` packages for another one. A game must not have its own `index.html`; the command refuses to
-replace it. `starhermit package --native star-catcher` writes the same file index without the loader,
-for a game that is played only in the client (with any plain page named by `launch=`).
+replace it. Without `--out`, `package --web` writes the two files into the game's own folder.
+`starhermit package --native star-catcher` writes the same file index into the game's folder without
+the loader, for a game that is played only in the client (with any plain page named by `launch=`).
+An index written into the game's folder lists the development files the folder holds under
+`"excluded"`, and the StarHermit client leaves them out of the upload (client 0.2.6 or later).
 
-**Upload it.** The folder is the upload, exactly as it is: the browser engine and the client check
-every file against the index, so upload the folder's files unchanged, with the same `starhermit.txt`
+**Upload it.** The `upload` folder is the upload, exactly as it is: the browser engine and the client
+check every file against the index, so upload its files unchanged, with the same `starhermit.txt`
 both inside the folder and at the bundle's root (the platform publishes the root copy in the folder's
 place). As in [Add a game from a local folder](../api/github-games.md#add-a-game-from-a-local-folder):
 
 ```bash
 mkdir -p bundle/client
-cp -R star-catcher/. bundle/client/
-rm -rf bundle/client/.starhermit
-cp star-catcher/starhermit.txt bundle/starhermit.txt
+cp -R upload/. bundle/client/
+cp upload/starhermit.txt bundle/starhermit.txt
 tar -C bundle -czf star-catcher.tar.gz .
 
 curl --fail-with-body -X POST https://api.starhermit.com/api/v1/me/github-games/upload \
@@ -509,7 +537,10 @@ curl --fail-with-body -X POST https://api.starhermit.com/api/v1/me/github-games/
 for signing in without a browser). The answer's `game.id` is your game's id, and the game is live at once at
 `https://<id>.starhermit.com/`. For every later version, package again and push the same kind
 of bundle to the game with [`POST /api/v1/me/github-games/{id}/bundle`](../api/github-games.md#push-a-game-bundle);
-players' clients then download only the files whose hashes changed. A `server=` script in the
+players' clients then download only the files whose hashes changed. If a file is changed after
+packaging, the browser engine refuses to start and its error screen names the file with the size
+and SHA-256 the index lists and the ones it found: package again and upload what the command wrote.
+`starhermit check` warns when a folder's index is out of date. A `server=` script in the
 folder gets the game its backend as the upload is published.
 
 **From a repository.** A game [published from GitHub](../api/github-games.md) works the same way:
@@ -542,12 +573,58 @@ commands refuse it whenever they read versions.json. A revoked release is always
 ## 10. Limits and the licence
 
 The runtime keeps every game within budgets, which a package may lower with `engine.limits.*` but
-never raise: 32 ms of script time for each callback (a callback that uses it up is paused and
-continues on the next frames; after three seconds the runtime's "not responding" screen lets the
-player wait or stop the game), a 256 MiB script heap, 64 MiB of storage, at most 512 MiB and 65,536
-files in a package and, for uploads, the platform's 50 MiB and 9,998 paths. Going past a limit where
-an operation can fail (an allocation, a host call) throws a `RangeError`; running out of heap or call
-depth ends the game on the error screen. The host API's declarations list every limit.
+never raise. Script time is measured natively in instructions of a reference machine (**fuel**);
+browsers have no fuel but the same "not responding" limits:
+
+| Phase | Fuel | "Not responding" after |
+|---|---|---|
+| Module evaluation (module-scope code of the entry and its imports) | 60 s in all; it cannot pause | 9 s, together with `onStart` |
+| `onStart` and its promise jobs | 256 ms a slice (8 × `fuel_ms`) | 9 s, together with module evaluation |
+| A frame: events, timers, `onFixedUpdate`, `onUpdate`, `onRender`, promise jobs | 32 ms per call (`fuel_ms`) | 3 s for the whole frame |
+| `onSuspend`, `onResume` | 32 ms | 3 s |
+
+A call that uses up its fuel is paused, not ended: it continues on the next frames while the game
+draws nothing new. Once a phase runs past its limit, the runtime's "not responding" screen lets the
+player wait or stop the game (60 s while the game has called `engine.setBusy`). An error for time names
+the phase, the time it ran and the limit, for example `module evaluation of src/main.ts ran past its
+time budget (it ran 61234 ms; the limit is 60000 ms of the reference machine's instructions)`. Slice
+long work across frames (`fuelLeft()` says what is left of this call's fuel), or announce it with
+`setBusy`.
+
+The other limits: a 256 MiB script heap and 1,024 call frames, 64 MiB of storage, canvases of at most
+4,096 pixels a side and 8,388,608 pixels (4096 × 2048), 128 actions, BigInts of at most 2<sup>20</sup> bits,
+at most 512 MiB and 65,536 files in a package and, for uploads, the platform's 50 MiB and 9,998 paths.
+Going past a limit where an operation can fail (an allocation, a host call) throws a `RangeError`;
+running out of heap or call depth ends the game on the error screen. The host API's declarations
+list every limit.
+
+### Native and browser differences
+
+Natively your code runs in the engine's interpreter, in browsers in the browser's JavaScript engine
+(V8 in Chrome and Edge). Both are strict ECMAScript 2022, BigInt included, and `starhermit check`
+runs the game natively *and* links its modules as browsers get them. What still differs:
+
+- **Modules that import each other.** In browsers, an import read before its module ran is
+  `undefined`; `check` fails on such a read in a module's top-level code (read it inside a function
+  instead). `export * from` a module of such a cycle fails `check`: name the exports. A `let`
+  exported again from a module of a cycle is a copy in browsers, so later assignments are not seen
+  through it: import it from its own module.
+- **Loading.** `import()` needs a string literal (`check` fails on a computed specifier).
+- **Code from strings.** `eval` fails the load natively; `new Function(...)` throws an `EvalError` on
+  both.
+- **Built-ins only browsers have**: `Proxy`, `WeakRef`, `FinalizationRegistry`, `Atomics`,
+  `structuredClone`, the iterator helpers, `Array.fromAsync`, the new `Set` methods, the worker's
+  globals (`self`, `crypto`, `atob`, `URL`, `WebAssembly`, …) and some of `Intl` (`ListFormat`,
+  `Segmenter`, `DisplayNames`, `Locale`). `check` warns of every use with its file and line;
+  `typeof` tests are fine.
+- **Regular expressions.** The `v` flag and the legacy `RegExp.$1` statics are browser-only.
+- **Dates.** Natively local time is UTC (`getTimezoneOffset()` is 0); browsers use the player's time
+  zone. Format wall-clock times with `timeZone: "UTC"` to show the same on both.
+- **Limits.** Natively a string holds at most 2<sup>28</sup> − 16 code units, an array 2<sup>26</sup>
+  elements and a BigInt 2<sup>20</sup> bits (more in browsers); a stack overflow natively ends the game rather
+  than throwing a catchable `RangeError`. `Math.random` sequences differ.
+- **Host API values.** No host API takes a BigInt, and `JSON.stringify` refuses one (`TypeError`):
+  convert with `Number(x)` or `String(x)` before saving or passing it.
 
 The engine is licensed under the [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)
 with this additional permission, quoted from its `LICENSE-engine`:
@@ -567,6 +644,8 @@ assets are yours.
 - [ ] `starhermit.txt` has `engine.api`, `engine.entry` and `engine.version`, and the capabilities
       the game uses.
 - [ ] `starhermit check` passes, and `npx --package typescript tsc -p .` reports no errors.
-- [ ] The folder holds only the game: no `node_modules`, no build tools.
+- [ ] `check` prints no `warning` about browser-only built-ins, and what else the game keeps out of the
+      package is listed in `.starhermitignore`.
 - [ ] `launch=index.html` names the loader page.
-- [ ] `starhermit package --web` ran after the last change, and the folder was uploaded unchanged.
+- [ ] `starhermit package --web --out upload` ran after the last change, and that folder was uploaded
+      unchanged.

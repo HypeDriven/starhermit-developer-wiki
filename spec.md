@@ -65,9 +65,10 @@ patterns, not the subject of the docs.
   Windows runtime from `engine/`), `starhermit new`/`types`/`check` and TypeScript checking, running
   natively, per-entity work with `starhermit:world` tables, kernels and bindings, the platform (sign-in
   from the client, `--game <id>` development launches, saves, online play with `server=`), publishing
-  (`starhermit package --web` for the loader page and file index, `--native` for a client-only game,
-  folder upload or repository, the page's script lock), re-pinning and revocations, limits and the licence.
-  The reference page covers `engine/` (versions.json format 2, native.json, chunks and patches, the
+  (`starhermit package --web --out` for the loader page and file index, `--native` for a client-only game,
+  development files left out and `.starhermitignore`, folder upload or repository, the page's script lock),
+  re-pinning and revocations, limits by phase, native and browser differences, and the licence.
+  The reference page has per-release notes and covers `engine/` (versions.json format 2, native.json, chunks and patches, the
   developer download, the web runtime with its loader and bundled fonts), the integrity chain, `GET /api/v1/engine/releases`, and what the platform does
   for a game that declares `engine.version` (deploy record and warning, Content-Security-Policy).
 - `engine/` — the engine area, written only by the engine's `cargo starhermit release` (never by hand):

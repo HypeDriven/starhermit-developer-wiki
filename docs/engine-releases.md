@@ -16,11 +16,61 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.2.0 | 1.6 | Web; Windows (x86-64) | [starhermit-1.2.0-windows-x86_64.zip](../engine/1.2.0/native/windows-x86_64/starhermit-1.2.0-windows-x86_64.zip) |
 | 1.1.0 | 1.4 | Web; Windows (x86-64) | [starhermit-1.1.0-windows-x86_64.zip](../engine/1.1.0/native/windows-x86_64/starhermit-1.1.0-windows-x86_64.zip) |
 | 1.0.0 | 1.4 | Windows (x86-64); no web runtime | [starhermit-1.0.0-windows-x86_64.zip](../engine/1.0.0/native/windows-x86_64/starhermit-1.0.0-windows-x86_64.zip) |
 
 [versions.json](../engine/versions.json) is the authoritative list, newest first, and the engine
 area's own page lists the same.
+
+The documentation always describes the newest release. Pages here may be cached for up to ten
+minutes after a release is published; [versions.json](../engine/versions.json) says which release is
+newest.
+
+## Release notes
+
+### 1.2.0
+
+Host API 1.6. Games pinned to 1.1.0 keep running on 1.1.0; re-pin to use these.
+
+- **BigInt** natively, as in browsers: `1n << 64n` and the rest of ES2022 BigInt (`BigInt.asIntN`,
+  `asUintN`, `BigInt64Array`, `BigUint64Array`, DataView's BigInt accessors). A BigInt holds at most
+  2<sup>20</sup> bits natively. Host APIs and `JSON.stringify` refuse BigInts (`TypeError`).
+- **Modules in browsers**: a module that imports a binding and exports it again now loads when the
+  two modules import each other (it failed with "Export '…' is not defined in module"), as do
+  `export { x } from` and `import()` in such a cycle.
+- **`starhermit check`** links the modules as browsers get them and fails, with file and line, where a
+  browser would not load the game; warns of built-ins only browsers have; prints the game's `console`
+  output (`--quiet` hides it); and fails a game that would bring up the "not responding" screen.
+- **Time budgets**: module evaluation has 60 s of fuel (it was 2 s), `TypedArray` `set` and `fill`
+  cost only what they write, and an error for time names the phase, the time it ran and the limit.
+  The budgets by phase are in the [tutorial](tutorials/starhermit-engine.md#10-limits-and-the-licence).
+- **Up to 128 rebindable actions** (the platform keeps the first 32 with the account, the runtime keeps
+  the rest in the player's synced settings), and `engine.group.<action>=Heading` groups them on the
+  controls screen.
+- **Packages leave out development files** (`node_modules/`, `tsconfig.json`, `package.json`, lock
+  files, source maps, …) and whatever a `.starhermitignore` lists. `package --web --out DIR` writes
+  an upload without them; an index written in place lists them under `"excluded"`.
+- **The page**: a file changed after packaging is named on the error screen with its listed and
+  actual size and SHA-256; the loader names the game's icon (no `/favicon.ico` request); a browser
+  without WebGPU or WebGL 2 gets a clear message.
+- **Custom materials** (host API 1.6): game WGSL vertex and surface hooks on the standard, physical,
+  Lambert and basic materials and a `ShaderMaterial`, checked and sandboxed by the engine; an
+  additive surface hook on `MeshBasicMaterial` gives glow.
+- **Scenes and tools** (host API 1.5): `GLTFLoader` in `starhermit:scene`, `engine.setBusy(label)`
+  for long work that cannot be sliced, the script heap in `engine.stats()`, and a sampling profiler
+  (`STARHERMIT_SAMPLE` with `--dev`).
+- **Faster scripts**: typed-array loops 25–30% faster and `Math` built-ins computed inline.
+
+### 1.1.0
+
+The web runtime: games play in browsers from this wiki's engine files, pinned by SRI, with online
+play, voice and bundled Liberation and DejaVu fonts; `starhermit package --web` writes one folder
+for browsers and the client.
+
+### 1.0.0
+
+The first release: the Windows (x86-64) runtime, without a web runtime.
 
 ## The engine area
 
