@@ -16,6 +16,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.4.1 | 1.8 | Web; Windows (x86-64) | [starhermit-1.4.1-windows-x86_64.zip](../engine/1.4.1/native/windows-x86_64/starhermit-1.4.1-windows-x86_64.zip) |
 | 1.4.0 | 1.8 | Web; Windows (x86-64) | [starhermit-1.4.0-windows-x86_64.zip](../engine/1.4.0/native/windows-x86_64/starhermit-1.4.0-windows-x86_64.zip) |
 | 1.3.0 | 1.7 | Web; Windows (x86-64) | [starhermit-1.3.0-windows-x86_64.zip](../engine/1.3.0/native/windows-x86_64/starhermit-1.3.0-windows-x86_64.zip) |
 | 1.2.0 | 1.6 | Web; Windows (x86-64) | [starhermit-1.2.0-windows-x86_64.zip](../engine/1.2.0/native/windows-x86_64/starhermit-1.2.0-windows-x86_64.zip) |
@@ -30,6 +31,21 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.4.1
+
+Host API 1.8, fixes only: re-pin from 1.4.0 with no other change.
+
+- **Text fields in browsers**: a focused `ui.textField` (and the runtime's own fields) takes typing, paste and
+  input method compositions in browsers, where no text reached it; natively the input method is on only while
+  a field has focus, with its candidates at the caret.
+- **Audio clips in browsers**: every clip a game loads reaches the mixer, however many it loads at the start
+  (they queue and upload a few at a time in order) instead of most being silently lost; a clip that could not
+  be made throws when played.
+- **No console error without a cloud save**: the runtime asks whether a save exists before downloading it, so
+  a player with no save yet no longer causes a 404 in the console.
+- **Local platform** (`--dev --local-platform`): a refused command answers its sender with the platform's error
+  frame, and server scripts get the live context (room, presence, ratings and teams, matchmaking).
 
 ### 1.4.0
 
