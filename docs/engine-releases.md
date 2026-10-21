@@ -16,6 +16,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.5.0 | 1.9 | Web; Windows (x86-64) | [starhermit-1.5.0-windows-x86_64.zip](../engine/1.5.0/native/windows-x86_64/starhermit-1.5.0-windows-x86_64.zip) |
 | 1.4.1 | 1.8 | Web; Windows (x86-64) | [starhermit-1.4.1-windows-x86_64.zip](../engine/1.4.1/native/windows-x86_64/starhermit-1.4.1-windows-x86_64.zip) |
 | 1.4.0 | 1.8 | Web; Windows (x86-64) | [starhermit-1.4.0-windows-x86_64.zip](../engine/1.4.0/native/windows-x86_64/starhermit-1.4.0-windows-x86_64.zip) |
 | 1.3.0 | 1.7 | Web; Windows (x86-64) | [starhermit-1.3.0-windows-x86_64.zip](../engine/1.3.0/native/windows-x86_64/starhermit-1.3.0-windows-x86_64.zip) |
@@ -31,6 +32,30 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.5.0
+
+Host API 1.9. Games pinned to an earlier release keep running on it; re-pin (with `engine.minor=9` for these)
+to use them.
+
+- **Files the player picks**: `files.saveAs(name, data, {type})` and `files.open({accept})` open a trusted
+  dialog only while handling the player's press (or within 5 seconds of it): the runtime's own file picker
+  natively, the browser's download and file chooser on the web. The game sees names and bytes, never paths;
+  at most 64 MiB, and program, script and page names are refused.
+- **Captures**: `renderer.capture({ui})` returns a PNG of the game's own frame (with its 2D overlay if asked),
+  never the runtime's menus; a photo mode is `files.saveAs("photo.png", await renderer.capture())`.
+- **Screen readers**: `ui.announce(text, { politeness })` speaks what a drawn board cannot (UI Automation,
+  AT-SPI, a live region in browsers), at most 500 characters and a few a second.
+- **Invite links**: `platform.launchContext()` gives the session a launch was for (an accepted invite, a
+  notification), so the game can open that table instead of its lobby.
+- **Image budget**: `engine.limits.image_mib` raises a game's image budget from 56 MiB up to 512 MiB, within
+  `gpu_mib`.
+- **Materials and lighting**: 5 textures per custom material, render targets without depth and with mipmaps,
+  instanced meshes on their own 262,144-instance budget, light and fog hooks, a full-screen post pass with the
+  scene's colour and depth, fog that starts behind the camera, shadow softness and a grade flash.
+- **Faster scripts**: interpreter allocation from reused pools, cheaper `for…of` and Map/Set; object-heavy
+  game code about 10–20% faster natively. In browsers, host calls with short strings are about 3× cheaper.
+- `engine.stats().heapBytes` and `heapLimitBytes` are absent in browsers rather than 0.
 
 ### 1.4.1
 
