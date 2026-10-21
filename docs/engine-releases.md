@@ -16,6 +16,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.4.0 | 1.8 | Web; Windows (x86-64) | [starhermit-1.4.0-windows-x86_64.zip](../engine/1.4.0/native/windows-x86_64/starhermit-1.4.0-windows-x86_64.zip) |
 | 1.3.0 | 1.7 | Web; Windows (x86-64) | [starhermit-1.3.0-windows-x86_64.zip](../engine/1.3.0/native/windows-x86_64/starhermit-1.3.0-windows-x86_64.zip) |
 | 1.2.0 | 1.6 | Web; Windows (x86-64) | [starhermit-1.2.0-windows-x86_64.zip](../engine/1.2.0/native/windows-x86_64/starhermit-1.2.0-windows-x86_64.zip) |
 | 1.1.0 | 1.4 | Web; Windows (x86-64) | [starhermit-1.1.0-windows-x86_64.zip](../engine/1.1.0/native/windows-x86_64/starhermit-1.1.0-windows-x86_64.zip) |
@@ -29,6 +30,34 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.4.0
+
+Host API 1.8. Games pinned to an earlier release keep running on it; re-pin to use these.
+
+- **Carry a JS SDK build's players over**: a cloud save the engine did not write (a JS SDK build's) is no
+  longer an error. `saves.foreign()` gives its `{ text, bytes }`, the save state is `"foreign"`, and nothing is
+  uploaded until the game migrates it and calls `saves.save(data, { replaceForeign: true })`, which replaces
+  only the version it was shown. `settings.legacyKeys()`, `legacy(key)`, `removeLegacy(key)` and `onLegacy`
+  read and remove the game's own older settings keys (outside `game.`).
+- **Compression**: `compress` and `decompress` (`"gzip"`, `"deflate"`, `"deflate-raw"`) in `starhermit:engine`,
+  bounded and with the same bytes natively and in browsers; `atob` and `btoa` natively too.
+- **Platform-hosted remote files**: `engine.remote.urls=platform` serves a game's remote files from StarHermit
+  under the game's own origin, and `cargo starhermit publish` uploads only the objects the game lacks.
+- **Render targets**: `WebGLRenderTarget` with `renderer.setRenderTarget` and `render` (icons, ground marks),
+  the scene's depth for custom materials (soft particles), and more texture sampling in material hooks.
+- **UI**: no lost clicks when a press and release fall between two frames (a quick tap on a slow frame);
+  `ui.scrollArea` can be scrolled and read by the script; per-widget text size, family and weight, and the
+  generic families `serif`, `monospace` and `cursive`.
+- **Browsers**: `loadClip`, `loadBuffer`, `createImageBitmap(path)` and `FontFace.load()` no longer make the
+  page wait for an unfetched file, `files.fetch` fetches package files and keeps them, and at most 16 fetches
+  run at once (the rest queue).
+- **Classic scripts in browsers**: games that load classic scripts (`loadClassic`) now start in browsers; the
+  page's globals such as `fetch`, `WebSocket` and `location` can be assigned by a game as natively.
+- **Ranged reads**: `files.readBytes(path, offset, length)` reads part of a package or remote file.
+- **Scripts**: `Intl.NumberFormat` with `style: "currency"` natively (symbols, accounting, CLDR 48), and
+  `formatToParts`. A server script declaring `tickRateHz: 0` needs no `onTick` in `authority()`, as on the
+  platform.
 
 ### 1.3.0
 
