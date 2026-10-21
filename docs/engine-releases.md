@@ -16,6 +16,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.5.1 | 1.9 | Web; Windows (x86-64) | [starhermit-1.5.1-windows-x86_64.zip](../engine/1.5.1/native/windows-x86_64/starhermit-1.5.1-windows-x86_64.zip) |
 | 1.5.0 | 1.9 | Web; Windows (x86-64) | [starhermit-1.5.0-windows-x86_64.zip](../engine/1.5.0/native/windows-x86_64/starhermit-1.5.0-windows-x86_64.zip) |
 | 1.4.1 | 1.8 | Web; Windows (x86-64) | [starhermit-1.4.1-windows-x86_64.zip](../engine/1.4.1/native/windows-x86_64/starhermit-1.4.1-windows-x86_64.zip) |
 | 1.4.0 | 1.8 | Web; Windows (x86-64) | [starhermit-1.4.0-windows-x86_64.zip](../engine/1.4.0/native/windows-x86_64/starhermit-1.4.0-windows-x86_64.zip) |
@@ -32,6 +33,18 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.5.1
+
+Host API 1.9, fixes only: re-pin from 1.5.0 with no other change.
+
+- **Copying works**: `clipboard.writeText` puts the text on the system clipboard natively (Windows, X11,
+  Wayland) and in browsers; it passed its checks before but the text never arrived.
+- **Pasting natively**: Ctrl+V, Shift+Insert or the Paste key paste into a focused text field. Only the runtime
+  reads the clipboard, on the player's gesture; the game sees the pasted text as typing.
+- **`frustumCulled = false` is never culled**: a mesh a vertex hook places keeps its shadow even when the hook
+  puts it nearer the light than its bounds say, and a NaN, infinite or empty bounding sphere culls nothing
+  instead of throwing.
 
 ### 1.5.0
 
