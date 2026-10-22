@@ -16,6 +16,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.6.0 | 1.10 | Web; Windows (x86-64) | [starhermit-1.6.0-windows-x86_64.zip](../engine/1.6.0/native/windows-x86_64/starhermit-1.6.0-windows-x86_64.zip) |
 | 1.5.1 | 1.9 | Web; Windows (x86-64) | [starhermit-1.5.1-windows-x86_64.zip](../engine/1.5.1/native/windows-x86_64/starhermit-1.5.1-windows-x86_64.zip) |
 | 1.5.0 | 1.9 | Web; Windows (x86-64) | [starhermit-1.5.0-windows-x86_64.zip](../engine/1.5.0/native/windows-x86_64/starhermit-1.5.0-windows-x86_64.zip) |
 | 1.4.1 | 1.8 | Web; Windows (x86-64) | [starhermit-1.4.1-windows-x86_64.zip](../engine/1.4.1/native/windows-x86_64/starhermit-1.4.1-windows-x86_64.zip) |
@@ -33,6 +34,28 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.6.0
+
+Host API 1.10. Games pinned to an earlier release keep running on it; re-pin (with `engine.minor=10` for the
+new members) to use these.
+
+- **Faster UI**: unchanged labels keep their layout across frames, and widget rectangles reach scripts without
+  JSON. A UI-heavy frame of about 800 widgets dropped from about 4 ms to 0.7 ms in browsers and from about 3 ms
+  to 0.75 ms natively, with pixel-identical output.
+- **Leaner script heap**: the native interpreter's tables give memory back after a burst of garbage (after 8
+  mostly empty collections in a row, to twice their use); in a big battle the heap's peaks dropped from about
+  205 MiB to under 185 MiB.
+- **Materials**: uniforms up to 16 KiB per material, and `textureLoad(tex, coords, 0)` for exact texel reads
+  (clamped into the texture on every runtime).
+- **Render targets and blending**: two- and one-channel half-float targets (`RGFormat`, `RedFormat` with
+  `HalfFloatType`) at half or a quarter of RGBA16F's memory; `CustomBlending` with blend equations and factors
+  (reverse subtract, min, max) and `SubtractiveBlending`; `renderer.render` into a target uses materials as they
+  are at the call.
+- **Texture memory**: a DataTexture's pixels can leave the script heap once uploaded (`image.data = null`, or
+  in `onUpdate`); it keeps drawing and survives device or context loss.
+- **Scene usage**: `engine.usage()` and `engine.budgets()` count nodes, objects, instances, instanced meshes,
+  sprites, materials, programs and lights against their limits.
 
 ### 1.5.1
 
