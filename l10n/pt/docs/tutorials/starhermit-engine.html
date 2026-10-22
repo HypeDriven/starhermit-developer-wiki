@@ -4,7 +4,7 @@ lang: "pt"
 title: "Tutorial: construir um jogo com o motor StarHermit"
 source_url: "/docs/tutorials/starhermit-engine.html"
 source_path: "docs/tutorials/starhermit-engine.md"
-source_hash: "d2b42c018e0985c178debe69ce6119c2afb0f302cbdad1625dc380afdb6d6ae7"
+source_hash: "c7df208b46a261e80ebb6e78380341591190b1befefef90597d3db77c93c91bd"
 translation: "machine"
 permalink: "/pt/docs/tutorials/starhermit-engine.html"
 ---
@@ -435,6 +435,19 @@ saves.onStatus((_, state) =&gt; {
 settings.onLegacy(() =&gt; {
   for (const key of settings.legacyKeys() ?? []) importOldSetting(key, settings.legacy(key));
 });
+</code></pre>
+<p>Se a construção do navegador registrou um service worker que atende primeiro a partir de seu cache, retornando
+os jogadores continuam obtendo a versão antiga em cache até que o trabalhador desapareça. Envie um substituto no
+mesmo caminho (por exemplo <code>sw.js</code>) no upload do mecanismo. Ele assume o controle imediatamente, limpa os caches antigos,
+cancela o registro e recarrega suas páginas no carregador do mecanismo. <code>navigate()</code> só funciona depois
+<code>clients.claim()</code>:</p>
+<pre><code class="language-js">self.addEventListener("install", () =&gt; self.skipWaiting());
+self.addEventListener("activate", (event) =&gt; event.waitUntil((async () =&gt; {
+  await self.clients.claim();
+  for (const key of await caches.keys()) await caches.delete(key);
+  await self.registration.unregister();
+  for (const client of await self.clients.matchAll({ type: "window" })) client.navigate(client.url);
+})()));
 </code></pre>
 <h2 id="8-publish-it">8. Publique</h2>
 <p>Um jogo de script publicado é um jogo StarHermit comum cujos arquivos são o seu pacote. Os jogadores encontram

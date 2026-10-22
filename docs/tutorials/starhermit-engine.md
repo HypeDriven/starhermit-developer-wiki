@@ -505,6 +505,22 @@ settings.onLegacy(() => {
 });
 ```
 
+If the browser build registered a service worker that serves from its cache first, returning
+players keep getting the cached old build until that worker is gone. Ship a replacement at the
+same path (for example `sw.js`) in the engine upload. It takes over at once, clears the old caches,
+unregisters itself and reloads its pages onto the engine loader. `navigate()` works only after
+`clients.claim()`:
+
+```js
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) => event.waitUntil((async () => {
+  await self.clients.claim();
+  for (const key of await caches.keys()) await caches.delete(key);
+  await self.registration.unregister();
+  for (const client of await self.clients.matchAll({ type: "window" })) client.navigate(client.url);
+})()));
+```
+
 ## 8. Publish it
 
 A published script game is an ordinary StarHermit game whose files are your package. Players find
