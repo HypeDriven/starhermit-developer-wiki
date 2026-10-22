@@ -16,6 +16,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.8.0 | 1.12 | Web; Windows (x86-64) | [starhermit-1.8.0-windows-x86_64.zip](../engine/1.8.0/native/windows-x86_64/starhermit-1.8.0-windows-x86_64.zip) |
 | 1.7.0 | 1.11 | Web; Windows (x86-64) | [starhermit-1.7.0-windows-x86_64.zip](../engine/1.7.0/native/windows-x86_64/starhermit-1.7.0-windows-x86_64.zip) |
 | 1.6.0 | 1.10 | Web; Windows (x86-64) | [starhermit-1.6.0-windows-x86_64.zip](../engine/1.6.0/native/windows-x86_64/starhermit-1.6.0-windows-x86_64.zip) |
 | 1.5.1 | 1.9 | Web; Windows (x86-64) | [starhermit-1.5.1-windows-x86_64.zip](../engine/1.5.1/native/windows-x86_64/starhermit-1.5.1-windows-x86_64.zip) |
@@ -35,6 +36,33 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.8.0
+
+Host API 1.12. Games pinned to an earlier release keep running on it; re-pin (with `engine.minor=12` for the
+new members) to use these.
+
+- **Styles for the game UI**: register looks once with `ui.setStyles` by widget kind and class, with
+  `ui.setTokens` values, and name classes per widget with `ui.style(...)`. Gradient, image and nine-slice
+  fills, per-side borders, rounded or cut corners, shadows and glows, decorations, backdrop blur, and text
+  with letter spacing, shadows, outlines and gradient fills. State blocks (hover, pressed, focus-visible,
+  checked, selected, disabled, first, last, odd, even, enter, exit) and `inside` rules work as in CSS, and
+  `parts` style sliders, checkboxes, selects, tabs, meters and dialogs. Sizes are border-box.
+- **Motion**: transitions between looks, keyframe animations with staggered children, enter and exit
+  animations, and scale and rotate. Reduced motion makes them instant or still.
+- **Layout and widgets**: grids with ruled and striped rows, stacks, anchored placement, `justify` and
+  spacers, stretch, fill and grow, margins; buttons built from content, `ui.widget` for widgets drawn by
+  hand that keep focus, navigation and screen readers, tooltips, meters, radio groups, switches and
+  `ui.document`.
+- **From CSS**: `ui.stylesFromCss` and the `starhermit css FILE` command convert a browser build's style
+  sheet into styles, animations, tokens and layouts, listing what has no style.
+- **Cursors**: `input.setCursor` sets the pointer by CSS cursor name, or to the game's own image up to
+  64x64.
+- The player's interface size, text size, high contrast and reduced motion still apply over styles.
+- **Fixes**: a Texture used only in a style is kept in browsers (its fill drew nothing); fonts added with
+  `canvas.fonts` draw in every frame; `engine.preferences()` agrees with `ui.preferences()` every frame;
+  `renderer.capture()` takes up to 4 captures at once and always settles; slider clicks and drags land on
+  steps, and the Options menu's sliders and footer behave at large sizes and on slow pages.
 
 ### 1.7.0
 
