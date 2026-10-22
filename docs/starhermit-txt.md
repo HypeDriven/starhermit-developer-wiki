@@ -102,6 +102,9 @@ launch=index.html
 | `name` | — | The display name players see. Required unless you pass a display name in the upload form. |
 | `launch` | `launch_path`, `html` | Path to the entry `.html`, relative to the manifest. Defaults to `index.html` when a file by that name sits at the root. |
 | `cover` | `cover_art`, `coverart` | Artwork on the game's library tile. A path relative to the launch file (`cover.png`, `art/box.jpg`) or an absolute `https://` URL. Optional — without one the tile shows the favicon. A bad value is dropped rather than refusing the game. |
+| `banner` | `banner_art`, `bannerart`, `hero` | The wide image across the top of your game's details page. Same rules as `cover`. Optional — without one the page shows the cover art. See [Details page](#details-page-banner-tags-and-links). |
+| `tags` | — | Comma-separated labels shown as chips on the banner, e.g. `tags=Multiplayer, Co-op, Puzzle`. At most 8, each at most 24 characters. |
+| `link.<label>` | — | A button on the details page: `link.Discord=https://discord.gg/...`. `_` in the label reads as a space (`link.Patch_Notes=`). At most 6, `https://` only. |
 | `description` | — | The store-page text players read about your game. One line; write `\n` for a line break. Or use `description.file` to keep it in a file. See [Description and release notes](#description-and-release-notes). |
 | `release_notes` | `releasenotes` | What changed in this build. Same rules as `description`; `release_notes.file` points at a file instead. |
 | `owner` | `username`, `user` | **Repository flow only.** The owning StarHermit **user ID (UUID)** from `GET /api/v1/me`, not a username. Lets you [claim a listing someone else added](tutorials/claim-existing-game.md) by proving you control the repository. Ignored on an upload — see [Who owns an uploaded game](#who-owns-an-uploaded-game). |
@@ -375,16 +378,42 @@ not fit. The tiles are not the same shape.
 
 | Surface | Tile | Crop |
 |---|---|---|
-| Windows client | 96×128 portrait (3:4) | Fills the portrait; wider art loses the sides |
-| Web dashboard | Square | Fills the square; taller art loses the top and bottom |
+| Windows client | 136×136 square | Fills the square; other shapes lose their edges |
+| Web dashboard | Square | Fills the square; other shapes lose their edges |
 
-Keep the subject in the **centre**. A 3:4 portrait whose middle square is the composition, or a
-square whose middle 3:4 strip is, survives both crops. Letterboxing is never applied — empty
+Keep the subject in the **centre**. Letterboxing is never applied — empty
 margins you add around the art are cropped away with everything else.
 
 SVG covers show on the web library. The Windows client has no SVG decoder, so that tile falls back
 to the favicon while the web tile still shows the cover. Prefer PNG, JPEG or WEBP when you want
 the same tile on both.
+
+### Details page: banner, tags and links
+
+Selecting your game in a library's **list** view opens its details page. The top of it is yours to
+dress:
+
+```text
+name=Asteroid Garden
+launch=index.html
+cover=art/cover.png
+banner=art/banner.jpg
+tags=Singleplayer, Puzzle, Relaxing
+link.Discord=https://discord.gg/asteroid-garden
+link.Patch_Notes=https://example.com/asteroid-garden/changelog
+```
+
+- **`banner`** follows the `cover` rules exactly (relative to the launch file or an absolute
+  `https://` URL, at most 6 MB). It is shown **full width at about 3.2:1** and centre-cropped to the
+  window, so a 1920×600 image fits best. The game's name is drawn over the **bottom-left** and the
+  tags over the **top-right** — keep those corners quiet. Without a banner the page uses your cover
+  art. SVG banners show on the web only, as with covers.
+- **`tags`** are shown as chips. A game with a server backend is also marked *Multiplayer*.
+- **`link.<label>`** lines become buttons under the play bar, in the order you write them.
+
+Everything else on the page — play time, last played, achievements, friends who play, reviews,
+activity and your release notes — comes from the platform. All three lines are re-read on every
+deploy, and removing one removes it.
 
 ### Game with a description and release notes
 
