@@ -16,6 +16,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.7.0 | 1.11 | Web; Windows (x86-64) | [starhermit-1.7.0-windows-x86_64.zip](../engine/1.7.0/native/windows-x86_64/starhermit-1.7.0-windows-x86_64.zip) |
 | 1.6.0 | 1.10 | Web; Windows (x86-64) | [starhermit-1.6.0-windows-x86_64.zip](../engine/1.6.0/native/windows-x86_64/starhermit-1.6.0-windows-x86_64.zip) |
 | 1.5.1 | 1.9 | Web; Windows (x86-64) | [starhermit-1.5.1-windows-x86_64.zip](../engine/1.5.1/native/windows-x86_64/starhermit-1.5.1-windows-x86_64.zip) |
 | 1.5.0 | 1.9 | Web; Windows (x86-64) | [starhermit-1.5.0-windows-x86_64.zip](../engine/1.5.0/native/windows-x86_64/starhermit-1.5.0-windows-x86_64.zip) |
@@ -34,6 +35,31 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.7.0
+
+Host API 1.11. Games pinned to an earlier release keep running on it; re-pin (with `engine.minor=11` for the
+new members) to use these.
+
+- **Display-space grade**: `renderer.grade.space = "display"` grades the color the screen shows, per channel
+  after tone mapping, as a web build's canvas grade does: saturation, contrast about display 0.5, shadow and
+  highlight tints, a `night` (desaturate and a moonlight tint that spares warm and bright pixels, with
+  `spareSaturation` and `brightScale`), a highlight `lift`, and `flashSpace: "display"` for a flash the night
+  doesn't tint. It costs nothing extra on any quality tier. The default `"linear"` grade is unchanged.
+- **Small render targets**: `RGFormat` and `RedFormat` with `UnsignedByteType` (RG8, R8) at 2 and 1 bytes a
+  pixel, every blend equation clamped to 0–1.
+- **The game UI follows the player's settings**, as documented: interface size, text size, high contrast (over
+  `setTheme`, a label's `color` and a container's `background`) and reduced motion. `ui.preferences()` says
+  what applies this frame and `ui.measureText()` measures text as the UI lays it out. A game that sizes its UI
+  by hand should check it at larger sizes.
+- **Large text**: a frame whose text outgrows the glyph atlas now grows it (to 1024, then 2048 px) instead of
+  drawing none of that frame's text.
+- **Audio in browsers**: `context.state` is `"suspended"` until the player's first press starts audio, then
+  `"running"`, with `statechange` and `resume()` resolving. A `setValueAtTime` or `setTargetAtTime` replaces one
+  at the same time right before it, so updating a parameter every frame no longer hits the event limit while
+  the clock stands still.
+- **Windows**: the runtime carries version information and the StarHermit icon, so Task Manager lists a game
+  under "StarHermit" (not a wrong name with a blank icon).
 
 ### 1.6.0
 

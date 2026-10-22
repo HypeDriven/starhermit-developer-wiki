@@ -4,7 +4,7 @@ The **StarHermit engine is the recommended way to create games for publishing on
 You build the game once, and the same package is automatically playable in a browser and natively
 across all platforms supported by the engine. Native play offers additional performance and features.
 Availability depends on the engine release: 1.1.0 and later have a Windows runtime and a web runtime
-(1.0.0 was Windows-only). This page describes engine **1.6.0**; what each release changed is listed
+(1.0.0 was Windows-only). This page describes engine **1.7.0**; what each release changed is listed
 under [Engine releases](../engine-releases.md#release-notes).
 
 The StarHermit engine runs **script games**: a whole game written in TypeScript (or JavaScript) and
@@ -37,7 +37,7 @@ root, your TypeScript modules and your assets. Three `engine.*` lines in the man
 ```ini
 engine.api=1
 engine.entry=src/main.ts
-engine.version=1.6.0
+engine.version=1.7.0
 ```
 
 `engine.api` is the major version of the host API your code is written against, `engine.entry` the
@@ -60,18 +60,18 @@ published hashes and starts it.
 
 **Developers** download the runtime of a release from the engine area:
 
-- [starhermit-1.6.0-windows-x86_64.zip](../../engine/1.6.0/native/windows-x86_64/starhermit-1.6.0-windows-x86_64.zip)
+- [starhermit-1.7.0-windows-x86_64.zip](../../engine/1.7.0/native/windows-x86_64/starhermit-1.7.0-windows-x86_64.zip)
   (Windows 10 or 11, 64-bit), 6.7 MB.
 
-The archive holds one folder, `starhermit-1.6.0-windows-x86_64`, with `starhermit.exe`, the
+The archive holds one folder, `starhermit-1.7.0-windows-x86_64`, with `starhermit.exe`, the
 `release.json` that tells the runtime which release it is, the release's `web-manifest.json`,
 `LICENSE-engine` and the third-party notices. It is the same engine the client installs, and it
 packages games for the release's web runtime without a network. Its size and SHA-256 are listed under
-`downloads` in the release's [native.json](../../engine/1.6.0/native/windows-x86_64/native.json); to
+`downloads` in the release's [native.json](../../engine/1.7.0/native/windows-x86_64/native.json); to
 check your copy in PowerShell, compare that `sha256` with:
 
 ```powershell
-Get-FileHash .\starhermit-1.6.0-windows-x86_64.zip -Algorithm SHA256
+Get-FileHash .\starhermit-1.7.0-windows-x86_64.zip -Algorithm SHA256
 ```
 
 Unpack the archive and open a terminal in the unpacked folder:
@@ -81,7 +81,7 @@ Unpack the archive and open a terminal in the unpacked folder:
 ```
 
 ```text
-starhermit 0.1.0 (host API 1.10, launcher 1; engine release 1.6.0)
+starhermit 1.7.0 (host API 1.11, launcher 1; engine release 1.7.0)
 ```
 
 The commands below are written as `starhermit`; run them as `.\starhermit.exe` from that folder, or
@@ -94,7 +94,7 @@ starhermit new star-catcher --title "Star Catcher"
 ```
 
 ```text
-Created Star Catcher in star-catcher: a script game pinned to engine 1.6.0
+Created Star Catcher in star-catcher: a script game pinned to engine 1.7.0
 Play it: starhermit star-catcher
 Check it: starhermit check star-catcher
 For a native upload (the StarHermit client plays it): starhermit package --native star-catcher
@@ -105,7 +105,7 @@ The new folder holds a playable starting point — a cube that hops when you pre
 
 ```text
 star-catcher/
-  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.6.0)
+  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.7.0)
   tsconfig.json              TypeScript settings for checking the game
   src/main.ts                the entry module
   .starhermit/starhermit.d.ts  the host API's declarations, for your editor and the type checker
@@ -150,7 +150,7 @@ description=Catch the falling stars before the time runs out.
 launch=index.html
 engine.api=1
 engine.entry=src/main.ts
-engine.version=1.6.0
+engine.version=1.7.0
 engine.capabilities=platform,storage
 control.left=KeyA+ArrowLeft | Move left
 control.right=KeyD+ArrowRight | Move right
@@ -538,8 +538,8 @@ starhermit package --web star-catcher --out upload
 ```text
 Web package: upload (5 files, 8620 bytes to upload; the platform takes at most 50 MiB)
 Left out (not part of the package): tsconfig.json (default rule tsconfig.json)
-Engine 1.6.0 from https://wiki.starhermit.com/engine (manifest sha384-NKRlD4xQw7FJPj8LgLFOoPrTNoYXCBjfIwxk8g4Tibr1rOoXT9VbPgJZxBx3mmXa)
-Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.6.0 is still current
+Engine 1.7.0 from https://wiki.starhermit.com/engine (manifest sha384-mcSM0KVbsUJxxdq1Vf1X3K+hN/ZzAOxcZ0FJokGIcllALOtnQR5zj53bUtZG0jU3)
+Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.7.0 is still current
 ```
 
 - `index.html`, the **loader page** `launch=index.html` names: markup only, no script of its own. It
@@ -673,6 +673,9 @@ runs the game natively *and* links its modules as browsers get them. What still 
 - **Limits.** Natively a string holds at most 2<sup>28</sup> − 16 code units, an array 2<sup>26</sup>
   elements and a BigInt 2<sup>20</sup> bits (more in browsers); a stack overflow natively ends the game rather
   than throwing a catchable `RangeError`. `Math.random` sequences differ.
+- **Audio start.** In browsers audio waits for the player's first press: until then
+  `context.state` is `"suspended"` and `currentTime` stands still, then it is `"running"` and
+  `statechange` fires. Natively it is `"running"` from the start.
 - **Host API values.** No host API takes a BigInt, and `JSON.stringify` refuses one (`TypeError`):
   convert with `Number(x)` or `String(x)` before saving or passing it.
 
@@ -696,6 +699,9 @@ assets are yours.
 - [ ] `starhermit check` passes, and `npx --package typescript tsc -p .` reports no errors.
 - [ ] `check` prints no `warning` about browser-only built-ins, and what else the game keeps out of the
       package is listed in `.starhermitignore`.
+- [ ] The game's UI fits at a larger interface and text size (F1 › Accessibility): it follows them, so
+      size anything placed by hand from `ui.preferences().scale` and measure UI text with
+      `ui.measureText`.
 - [ ] `launch=index.html` names the loader page.
 - [ ] `starhermit package --web --out upload` ran after the last change, and that folder was uploaded
       unchanged.
