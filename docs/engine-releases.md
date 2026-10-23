@@ -16,6 +16,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.9.0 | 1.13 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.9.0-windows-x86_64.zip](../engine/1.9.0/native/windows-x86_64/starhermit-1.9.0-windows-x86_64.zip), [starhermit-1.9.0-linux-x86_64.tar.gz](../engine/1.9.0/native/linux-x86_64/starhermit-1.9.0-linux-x86_64.tar.gz) |
 | 1.8.1 | 1.12 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.8.1-windows-x86_64.zip](../engine/1.8.1/native/windows-x86_64/starhermit-1.8.1-windows-x86_64.zip), [starhermit-1.8.1-linux-x86_64.tar.gz](../engine/1.8.1/native/linux-x86_64/starhermit-1.8.1-linux-x86_64.tar.gz) |
 | 1.8.0 | 1.12 | Web; Windows (x86-64) | [starhermit-1.8.0-windows-x86_64.zip](../engine/1.8.0/native/windows-x86_64/starhermit-1.8.0-windows-x86_64.zip) |
 | 1.7.0 | 1.11 | Web; Windows (x86-64) | [starhermit-1.7.0-windows-x86_64.zip](../engine/1.7.0/native/windows-x86_64/starhermit-1.7.0-windows-x86_64.zip) |
@@ -37,6 +38,29 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.9.0
+
+Host API 1.13. Games pinned to an earlier release keep running on it. Re-pin to 1.9.0 (`engine.version=1.9.0`)
+for the lifecycle fixes; add `engine.minor=13` for the new UI behavior.
+
+- **Rotated UI content** (`engine.minor=13`): a style's `rotate` turns everything its box draws, as a CSS
+  transform does: text with its shadows, glows, strokes and gradient fills, images, nine-slices, decoration
+  images and blurred shadows, with smooth edges. Layout, hit-testing and focus stay where the box is. A
+  game-drawn widget's own `draw` stays upright. Games declaring an older minor, or none, keep text, images
+  and blurred shadows upright.
+- **Fingers in the game's UI** (`engine.minor=13`): `hovered` and `hoverWithin` never match a finger, and
+  `pressed` matches only while the finger is down on the widget, so nothing stays lit after a tap. Taps get
+  touch-sized targets and a drag in a scroll area scrolls it. Mouse and pen are unchanged.
+- **`onSuspend` and `onResume` in browsers**: a hidden tab or minimized browser now suspends the game as a
+  minimized window does natively; `onSuspend` runs after the frame in progress and what it writes to storage
+  is kept, and `onResume` runs before the next frame when the page shows.
+- **`onQuit`**: it mostly never ran, natively or in browsers, because a closing window or page usually finds a
+  frame in progress. It now runs once, after that frame (after `onSuspend` if the game was hidden first), and
+  its storage writes are kept. Natively it has a second; in browsers a page going away waits 0.2 s for games
+  with the `storage` capability. Cloud saves, the account's copy of settings and platform calls made in
+  `onQuit` still do not go out: save during frames.
+- **Fixes**: a minimized window's first frame after it comes back no longer takes one long time step.
 
 ### 1.8.1
 
