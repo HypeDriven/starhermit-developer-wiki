@@ -4,7 +4,7 @@ The **StarHermit engine is the recommended way to create games for publishing on
 You build the game once, and the same package is automatically playable in a browser and natively
 across all platforms supported by the engine. Native play offers additional performance and features.
 Availability depends on the engine release: 1.1.0 and later have a Windows runtime and a web runtime
-(1.0.0 was Windows-only), and 1.8.1 and later also a Linux runtime for developers. This page describes engine **1.9.0**; what each release changed is listed
+(1.0.0 was Windows-only), and 1.8.1 and later also a Linux runtime for developers. This page describes engine **1.9.1**; what each release changed is listed
 under [Engine releases](../engine-releases.md#release-notes).
 
 The StarHermit engine runs **script games**: a whole game written in TypeScript (or JavaScript) and
@@ -37,7 +37,7 @@ root, your TypeScript modules and your assets. Three `engine.*` lines in the man
 ```ini
 engine.api=1
 engine.entry=src/main.ts
-engine.version=1.9.0
+engine.version=1.9.1
 ```
 
 `engine.api` is the major version of the host API your code is written against, `engine.entry` the
@@ -60,20 +60,20 @@ published hashes and starts it.
 
 **Developers** download the runtime of a release from the engine area:
 
-- [starhermit-1.9.0-windows-x86_64.zip](../../engine/1.9.0/native/windows-x86_64/starhermit-1.9.0-windows-x86_64.zip)
+- [starhermit-1.9.1-windows-x86_64.zip](../../engine/1.9.1/native/windows-x86_64/starhermit-1.9.1-windows-x86_64.zip)
   (Windows 10 or 11, 64-bit), 9.5 MB.
-- [starhermit-1.9.0-linux-x86_64.tar.gz](../../engine/1.9.0/native/linux-x86_64/starhermit-1.9.0-linux-x86_64.tar.gz)
-  (64-bit Linux with glibc 2.35 or newer: Ubuntu 22.04, Debian 12 or later), 9.6 MB.
+- [starhermit-1.9.1-linux-x86_64.tar.gz](../../engine/1.9.1/native/linux-x86_64/starhermit-1.9.1-linux-x86_64.tar.gz)
+  (64-bit Linux with glibc 2.35 or newer: Ubuntu 22.04, Debian 12 or later), 9.7 MB.
 
-The archive holds one folder, `starhermit-1.9.0-windows-x86_64`, with `starhermit.exe`, the
+The archive holds one folder, `starhermit-1.9.1-windows-x86_64`, with `starhermit.exe`, the
 `release.json` that tells the runtime which release it is, the release's `web-manifest.json`,
 `LICENSE-engine` and the third-party notices. It is the same engine the client installs, and it
 packages games for the release's web runtime without a network. Its size and SHA-256 are listed under
-`downloads` in the release's [native.json](../../engine/1.9.0/native/windows-x86_64/native.json); to
+`downloads` in the release's [native.json](../../engine/1.9.1/native/windows-x86_64/native.json); to
 check your copy in PowerShell, compare that `sha256` with:
 
 ```powershell
-Get-FileHash .\starhermit-1.9.0-windows-x86_64.zip -Algorithm SHA256
+Get-FileHash .\starhermit-1.9.1-windows-x86_64.zip -Algorithm SHA256
 ```
 
 Unpack the archive and open a terminal in the unpacked folder:
@@ -83,16 +83,16 @@ Unpack the archive and open a terminal in the unpacked folder:
 ```
 
 ```text
-starhermit 1.9.0 (host API 1.13, launcher 1; engine release 1.9.0)
+starhermit 1.9.1 (host API 1.13, launcher 1; engine release 1.9.1)
 ```
 
 On Linux, unpack the archive and run `starhermit` from its folder (its
-[native.json](../../engine/1.9.0/native/linux-x86_64/native.json) lists the archive's SHA-256 the same
+[native.json](../../engine/1.9.1/native/linux-x86_64/native.json) lists the archive's SHA-256 the same
 way; check it with `sha256sum`):
 
 ```sh
-tar -xzf starhermit-1.9.0-linux-x86_64.tar.gz
-./starhermit-1.9.0-linux-x86_64/starhermit --version
+tar -xzf starhermit-1.9.1-linux-x86_64.tar.gz
+./starhermit-1.9.1-linux-x86_64/starhermit --version
 ```
 
 `--version`, `new`, `types`, `check` and `package` need nothing more. To play a game in a window the
@@ -110,7 +110,7 @@ starhermit new star-catcher --title "Star Catcher"
 ```
 
 ```text
-Created Star Catcher in star-catcher: a script game pinned to engine 1.9.0
+Created Star Catcher in star-catcher: a script game pinned to engine 1.9.1
 Play it: starhermit star-catcher
 Check it: starhermit check star-catcher
 For a native upload (the StarHermit client plays it): starhermit package --native star-catcher
@@ -121,7 +121,7 @@ The new folder holds a playable starting point — a cube that hops when you pre
 
 ```text
 star-catcher/
-  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.9.0)
+  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.9.1)
   tsconfig.json              TypeScript settings for checking the game
   src/main.ts                the entry module
   .starhermit/starhermit.d.ts  the host API's declarations, for your editor and the type checker
@@ -166,7 +166,8 @@ description=Catch the falling stars before the time runs out.
 launch=index.html
 engine.api=1
 engine.entry=src/main.ts
-engine.version=1.9.0
+engine.version=1.9.1
+engine.minor=13
 engine.capabilities=platform,storage
 control.left=KeyA+ArrowLeft | Move left
 control.right=KeyD+ArrowRight | Move right
@@ -589,8 +590,8 @@ starhermit package --web star-catcher --out upload
 ```text
 Web package: upload (5 files, 8620 bytes to upload; the platform takes at most 50 MiB)
 Left out (not part of the package): tsconfig.json (default rule tsconfig.json)
-Engine 1.9.0 from https://wiki.starhermit.com/engine (manifest sha384-QLGhNG4uEVSr7+gOwj0l7kmqAbTO+K+QGtOAN/qB4cYZy95kLa6m69hY/eNDuXs5)
-Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.9.0 is still current
+Engine 1.9.1 from https://wiki.starhermit.com/engine (manifest sha384-73sVqbxVzc5h6sVQgk7/lvEK6GzBPcwlBU8/GLHc9SKH6M1zwW2OTdtP8iLruBim)
+Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.9.1 is still current
 ```
 
 - `index.html`, the **loader page** `launch=index.html` names: markup only, no script of its own. It
@@ -735,7 +736,10 @@ runs the game natively *and* links its modules as browsers get them. What still 
   or tab was hidden first); only what it writes to `storage` (and `settings` on the device) is kept.
   Natively it has a second; in browsers a page going away (a closed tab, a reload, a link followed)
   waits 0.2 s, and only for games with the `storage` capability. Save to the cloud during frames,
-  not in `onQuit`.
+  not in `onQuit`. Safari stops the game before the page hears it is going away, so there `onQuit`
+  does not run on a closed tab or a followed link: keep what must last saved as it changes, or in
+  `onSuspend`. A page the browser gives back from its back/forward cache loads again, and the game
+  starts anew with what it stored.
 - **Host API values.** No host API takes a BigInt, and `JSON.stringify` refuses one (`TypeError`):
   convert with `Number(x)` or `String(x)` before saving or passing it.
 

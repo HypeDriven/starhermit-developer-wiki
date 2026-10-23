@@ -16,6 +16,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.9.1 | 1.13 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.9.1-windows-x86_64.zip](../engine/1.9.1/native/windows-x86_64/starhermit-1.9.1-windows-x86_64.zip), [starhermit-1.9.1-linux-x86_64.tar.gz](../engine/1.9.1/native/linux-x86_64/starhermit-1.9.1-linux-x86_64.tar.gz) |
 | 1.9.0 | 1.13 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.9.0-windows-x86_64.zip](../engine/1.9.0/native/windows-x86_64/starhermit-1.9.0-windows-x86_64.zip), [starhermit-1.9.0-linux-x86_64.tar.gz](../engine/1.9.0/native/linux-x86_64/starhermit-1.9.0-linux-x86_64.tar.gz) |
 | 1.8.1 | 1.12 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.8.1-windows-x86_64.zip](../engine/1.8.1/native/windows-x86_64/starhermit-1.8.1-windows-x86_64.zip), [starhermit-1.8.1-linux-x86_64.tar.gz](../engine/1.8.1/native/linux-x86_64/starhermit-1.8.1-linux-x86_64.tar.gz) |
 | 1.8.0 | 1.12 | Web; Windows (x86-64) | [starhermit-1.8.0-windows-x86_64.zip](../engine/1.8.0/native/windows-x86_64/starhermit-1.8.0-windows-x86_64.zip) |
@@ -38,6 +39,33 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.9.1
+
+Host API 1.13, as 1.9.0: re-pin to 1.9.1 (`engine.version=1.9.1`) to get these.
+
+- **Custom shaders checked as browsers check them**: a material's WGSL is now held to the rules WebGPU
+  enforces, natively and in `starhermit check`, with the part, line and column. That covers a name declared
+  twice in one scope, a value hiding a builtin it is then used as (`let min = …; min(a, b)`), reserved words
+  as names (`target`, `filter`, `set`, `type`, `self`, `common`, `active`, …, uniforms' and textures' names
+  too), a builtin's value left unused, `break` or `continue` outside a loop and constant expressions that
+  overflow or divide by zero. Such code used to draw natively and nothing in browsers. If `check` now refuses
+  your material, rename or fix what the message names. Constant integer math inside float expressions computes
+  as WGSL does everywhere (`1 / 2 * 0.5` is 0).
+- **Refused shaders reported in browsers**: a material or `renderer.post` program the browser's WebGPU refuses
+  is logged once in the game's log with WebGPU's message at your line, and `shaderError` reports it.
+- **Firefox and Safari**: console lines and error screens carry their file, line and column; running out of
+  memory ends the game with "ran out of script memory"; sounds loaded in a burst are playable at once in
+  Firefox; and the first tone of a game's first oscillator starts on time in every browser.
+- **Back/forward cache**: a page the browser gives back loads again, and the game starts anew with what it
+  stored (it showed the game stopped).
+- **Known in Safari**: `onQuit` does not run when the page closes or navigates. Keep what must last saved as
+  it changes, or in `onSuspend`. Known in Firefox: a game that takes all the memory the browser allows can
+  freeze the tab.
+- **Tooling**: `starhermit new` writes `engine.minor=13` for a game pinned to the runtime's own release, so new
+  games get 1.9's UI behavior. Native downloads (remote files, `cargo starhermit publish`) reuse HTTPS
+  connections, about 3.5× faster for many files.
+- **Rust games**: the UI handles a finger as script games' does (`ui::PointerInput`).
 
 ### 1.9.0
 
