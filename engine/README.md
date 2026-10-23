@@ -9,8 +9,9 @@ browsers. Each directory here is one release,
 published. Games do not carry the engine: their loader page imports one exact
 release from here, pinned by hash, so a game's upload holds only its own files
 and every game a player opens on starhermit.com shares one cached copy of each
-release. A release also holds the native runtime for Windows, which the
-StarHermit Windows client installs by version to run every game pinned to it.
+release. A release also holds the native runtimes for Windows and Linux: the
+StarHermit Windows client installs the Windows one by version to run every game
+pinned to it, and developers download either to write, check and package games.
 
 This area is written by `cargo starhermit release`; do not edit it by hand.
 
@@ -18,6 +19,7 @@ This area is written by `cargo starhermit release`; do not edit it by hand.
 
 | Version | Host API | Built | Manifest (SRI) | Native |
 |---|---|---|---|---|
+| 1.8.1 | 1.12 | 2026-10-23T01:36:24Z | `sha384-oEOhGhZCcfv7ogR0LBMsxy62oYg+ZnsOqZkcFQ5cHJONuVJqk4tTZL4FiEbsDtwp` | linux-x86_64, windows-x86_64 |
 | 1.8.0 | 1.12 | 2026-10-22T17:32:33Z | `sha384-CbjYgGVwxFk+wyJaQ+xx3YrULOSMl312bqxC06f5ABZZ7qt/9VJtW9MDiOxOu/XB` | windows-x86_64 |
 | 1.7.0 | 1.11 | 2026-10-22T06:24:29Z | `sha384-mcSM0KVbsUJxxdq1Vf1X3K+hN/ZzAOxcZ0FJokGIcllALOtnQR5zj53bUtZG0jU3` | windows-x86_64 |
 | 1.6.0 | 1.10 | 2026-10-22T01:40:23Z | `sha384-NKRlD4xQw7FJPj8LgLFOoPrTNoYXCBjfIwxk8g4Tibr1rOoXT9VbPgJZxBx3mmXa` | windows-x86_64 |
@@ -56,6 +58,12 @@ engine/
     native/windows-x86_64/starhermit-X.Y.Z-windows-x86_64.zip
                        the developer download: the same files as one archive,
                        listed in native.json with its size and SHA-256
+    native/linux-x86_64/native.json
+                       the same for the Linux runtime (starhermit, its notices,
+                       release.json, the web manifest), and what it requires of
+                       the system: the newest glibc, the libraries it links and loads
+    native/linux-x86_64/starhermit-X.Y.Z-linux-x86_64.tar.gz
+                       its developer download (starhermit executable, 0755)
   chunks/ab/<sha256>.z every native file's chunks, zlib-compressed, named by the SHA-256
                        of their bytes and shared by all releases
   patches/ab/<sha256>.p
@@ -72,14 +80,22 @@ SHA-256. A chunk or patch is never changed or removed while a release lists it.
 
 ## Developing games
 
-A release with a Windows runtime has a developer download beside its
-native.json: the runtime (`starhermit.exe`) with its `release.json` and
-license notices, the engine a game needs to be written, checked and packaged.
-The newest: [starhermit-1.8.0-windows-x86_64.zip](1.8.0/native/windows-x86_64/starhermit-1.8.0-windows-x86_64.zip).
+Each native runtime has a developer download beside its native.json: the
+runtime (`starhermit.exe` on Windows, `starhermit` on Linux) with its
+`release.json` and license notices, the engine a game needs to be written,
+checked and packaged. The newest:
+
+- windows-x86_64: [starhermit-1.8.1-windows-x86_64.zip](1.8.1/native/windows-x86_64/starhermit-1.8.1-windows-x86_64.zip)
+- linux-x86_64: [starhermit-1.8.1-linux-x86_64.tar.gz](1.8.1/native/linux-x86_64/starhermit-1.8.1-linux-x86_64.tar.gz)
 
 Unpack it and run `starhermit new <game>` for a game pinned to the release,
 `starhermit types <game>` for the host API's declarations, `starhermit check
-<game>` to check it and `starhermit <game>` to play it.
+<game>` to check it and `starhermit <game>` to play it. On Linux, unpack it with
+`tar -xzf starhermit-X.Y.Z-linux-x86_64.tar.gz` and run
+`./starhermit-X.Y.Z-linux-x86_64/starhermit`; it needs glibc 2.35 or newer
+(Ubuntu 22.04, Debian 12 or later; the newest version each release needs is in
+its native.json), and to open a window Wayland or X11 with Vulkan or OpenGL ES
+3.0 drivers. Checking and packaging need none of them.
 
 ## Using a release
 
@@ -93,7 +109,7 @@ and checks that the release the game pins (`engine.version`) is published
 with a native runtime and not revoked.
 
 ```
-starhermit package --web <game> --engine-version 1.8.0 --out <upload>
+starhermit package --web <game> --engine-version 1.8.1 --out <upload>
 ```
 
 (the runtime of that release; `cargo starhermit package --web` is the same,
@@ -106,9 +122,12 @@ so a changed or damaged file stops the game with an error instead of running it.
 ## Publishing a release
 
 1. In a clone of the wiki repository:
-   `cargo starhermit release --version X.Y.Z --into <wiki>/engine --from <runtime files> --native windows-x86_64=<starhermit.exe>`,
+   `cargo starhermit release --version X.Y.Z --into <wiki>/engine --from <runtime files> --native windows-x86_64=<starhermit.exe> --native linux-x86_64=<starhermit>`,
    the Windows runtime built from the same checkout with MSVC and the static C
-   runtime. It refuses a release that exists, checks every published release
+   runtime, and the Linux runtime built for `x86_64-unknown-linux-gnu` (as
+   `cargo starhermit package --script --release --target linux` builds it),
+   which must link glibc's and GCC's runtime libraries only and need glibc 2.35
+   at most. It refuses a release that exists, checks every published release
    against its manifest, native.json and chunks first, and refuses any file
    Jekyll would change or leave out.
 2. Commit `engine/X.Y.Z/`, the new files of `engine/chunks/` and

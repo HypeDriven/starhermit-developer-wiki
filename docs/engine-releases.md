@@ -16,6 +16,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.8.1 | 1.12 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.8.1-windows-x86_64.zip](../engine/1.8.1/native/windows-x86_64/starhermit-1.8.1-windows-x86_64.zip), [starhermit-1.8.1-linux-x86_64.tar.gz](../engine/1.8.1/native/linux-x86_64/starhermit-1.8.1-linux-x86_64.tar.gz) |
 | 1.8.0 | 1.12 | Web; Windows (x86-64) | [starhermit-1.8.0-windows-x86_64.zip](../engine/1.8.0/native/windows-x86_64/starhermit-1.8.0-windows-x86_64.zip) |
 | 1.7.0 | 1.11 | Web; Windows (x86-64) | [starhermit-1.7.0-windows-x86_64.zip](../engine/1.7.0/native/windows-x86_64/starhermit-1.7.0-windows-x86_64.zip) |
 | 1.6.0 | 1.10 | Web; Windows (x86-64) | [starhermit-1.6.0-windows-x86_64.zip](../engine/1.6.0/native/windows-x86_64/starhermit-1.6.0-windows-x86_64.zip) |
@@ -36,6 +37,27 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.8.1
+
+Host API 1.12, as 1.8.0: re-pin to 1.8.1 (`engine.version=1.8.1`) to get these; no code changes are needed.
+
+- **Short sounds in browsers**: sounds on the synthesis graph (`starhermit:audio`'s `context`) that started at
+  `context.currentTime` and lasted less than a few seconds were never heard in browsers: the graph's commands
+  reached the mixer seconds late. They now arrive at once, and `currentTime` is the mixer's time on both
+  runtimes, also right after a hidden tab or minimized window comes back. If your game is silent or misses short
+  effects in browsers on 1.8.0 or earlier, re-pin to 1.8.1.
+- **Linux runtime**: a developer download, `starhermit-1.8.1-linux-x86_64.tar.gz`, for 64-bit Linux with glibc
+  2.35 or newer. Its `native.json` lists what it requires. Native uploads are still played by the Windows client.
+- **Browser defaults**: while a game runs, its page keeps the browser's right-click menu, selection, copy and
+  paste, dropped files, middle-click autoscroll, the mouse's back and forward buttons and shortcuts such as
+  Ctrl+S, Ctrl+F, Ctrl+P, zoom, F1, F3 and Alt from the game, and keys the game binds reach it with Ctrl, Alt or
+  Cmd too. F11, F12, reload and the browser's tab keys still work. A page embedding a game in a larger document
+  can keep the browser's behavior with `browserDefaults: "page"`.
+- **Out of memory in browsers**: a game that uses up the browser's memory ends with "the game ran out of script
+  memory" instead of breaking the page.
+- **Fixes**: native `http://` requests try every address a name resolves to (`localhost` on Windows); the
+  Windows download's `starhermit.exe` keeps its executable bit when unzipped on Linux or WSL.
 
 ### 1.8.0
 

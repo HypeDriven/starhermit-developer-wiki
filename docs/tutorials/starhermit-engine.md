@@ -4,7 +4,7 @@ The **StarHermit engine is the recommended way to create games for publishing on
 You build the game once, and the same package is automatically playable in a browser and natively
 across all platforms supported by the engine. Native play offers additional performance and features.
 Availability depends on the engine release: 1.1.0 and later have a Windows runtime and a web runtime
-(1.0.0 was Windows-only). This page describes engine **1.8.0**; what each release changed is listed
+(1.0.0 was Windows-only), and 1.8.1 and later also a Linux runtime for developers. This page describes engine **1.8.1**; what each release changed is listed
 under [Engine releases](../engine-releases.md#release-notes).
 
 The StarHermit engine runs **script games**: a whole game written in TypeScript (or JavaScript) and
@@ -37,7 +37,7 @@ root, your TypeScript modules and your assets. Three `engine.*` lines in the man
 ```ini
 engine.api=1
 engine.entry=src/main.ts
-engine.version=1.8.0
+engine.version=1.8.1
 ```
 
 `engine.api` is the major version of the host API your code is written against, `engine.entry` the
@@ -60,18 +60,20 @@ published hashes and starts it.
 
 **Developers** download the runtime of a release from the engine area:
 
-- [starhermit-1.8.0-windows-x86_64.zip](../../engine/1.8.0/native/windows-x86_64/starhermit-1.8.0-windows-x86_64.zip)
-  (Windows 10 or 11, 64-bit), 6.7 MB.
+- [starhermit-1.8.1-windows-x86_64.zip](../../engine/1.8.1/native/windows-x86_64/starhermit-1.8.1-windows-x86_64.zip)
+  (Windows 10 or 11, 64-bit), 9.5 MB.
+- [starhermit-1.8.1-linux-x86_64.tar.gz](../../engine/1.8.1/native/linux-x86_64/starhermit-1.8.1-linux-x86_64.tar.gz)
+  (64-bit Linux with glibc 2.35 or newer: Ubuntu 22.04, Debian 12 or later), 9.6 MB.
 
-The archive holds one folder, `starhermit-1.8.0-windows-x86_64`, with `starhermit.exe`, the
+The archive holds one folder, `starhermit-1.8.1-windows-x86_64`, with `starhermit.exe`, the
 `release.json` that tells the runtime which release it is, the release's `web-manifest.json`,
 `LICENSE-engine` and the third-party notices. It is the same engine the client installs, and it
 packages games for the release's web runtime without a network. Its size and SHA-256 are listed under
-`downloads` in the release's [native.json](../../engine/1.8.0/native/windows-x86_64/native.json); to
+`downloads` in the release's [native.json](../../engine/1.8.1/native/windows-x86_64/native.json); to
 check your copy in PowerShell, compare that `sha256` with:
 
 ```powershell
-Get-FileHash .\starhermit-1.8.0-windows-x86_64.zip -Algorithm SHA256
+Get-FileHash .\starhermit-1.8.1-windows-x86_64.zip -Algorithm SHA256
 ```
 
 Unpack the archive and open a terminal in the unpacked folder:
@@ -81,11 +83,25 @@ Unpack the archive and open a terminal in the unpacked folder:
 ```
 
 ```text
-starhermit 1.8.0 (host API 1.12, launcher 1; engine release 1.8.0)
+starhermit 1.8.1 (host API 1.12, launcher 1; engine release 1.8.1)
 ```
 
-The commands below are written as `starhermit`; run them as `.\starhermit.exe` from that folder, or
-add the folder to your `PATH`.
+On Linux, unpack the archive and run `starhermit` from its folder (its
+[native.json](../../engine/1.8.1/native/linux-x86_64/native.json) lists the archive's SHA-256 the same
+way; check it with `sha256sum`):
+
+```sh
+tar -xzf starhermit-1.8.1-linux-x86_64.tar.gz
+./starhermit-1.8.1-linux-x86_64/starhermit --version
+```
+
+`--version`, `new`, `types`, `check` and `package` need nothing more. To play a game in a window the
+runtime needs Wayland or X11 with Vulkan or OpenGL ES 3.0 drivers, and ALSA or PulseAudio for sound;
+`native.json`'s `requires` lists every library it uses. Players still play native uploads in the
+StarHermit Windows client; the Linux runtime is for writing, checking and packaging games.
+
+The commands below are written as `starhermit`; run them as `.\starhermit.exe` (Windows) or
+`./starhermit` (Linux) from that folder, or add the folder to your `PATH`.
 
 ## 3. Create the game
 
@@ -94,7 +110,7 @@ starhermit new star-catcher --title "Star Catcher"
 ```
 
 ```text
-Created Star Catcher in star-catcher: a script game pinned to engine 1.8.0
+Created Star Catcher in star-catcher: a script game pinned to engine 1.8.1
 Play it: starhermit star-catcher
 Check it: starhermit check star-catcher
 For a native upload (the StarHermit client plays it): starhermit package --native star-catcher
@@ -105,7 +121,7 @@ The new folder holds a playable starting point — a cube that hops when you pre
 
 ```text
 star-catcher/
-  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.8.0)
+  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.8.1)
   tsconfig.json              TypeScript settings for checking the game
   src/main.ts                the entry module
   .starhermit/starhermit.d.ts  the host API's declarations, for your editor and the type checker
@@ -150,7 +166,7 @@ description=Catch the falling stars before the time runs out.
 launch=index.html
 engine.api=1
 engine.entry=src/main.ts
-engine.version=1.8.0
+engine.version=1.8.1
 engine.capabilities=platform,storage
 control.left=KeyA+ArrowLeft | Move left
 control.right=KeyD+ArrowRight | Move right
@@ -568,8 +584,8 @@ starhermit package --web star-catcher --out upload
 ```text
 Web package: upload (5 files, 8620 bytes to upload; the platform takes at most 50 MiB)
 Left out (not part of the package): tsconfig.json (default rule tsconfig.json)
-Engine 1.8.0 from https://wiki.starhermit.com/engine (manifest sha384-CbjYgGVwxFk+wyJaQ+xx3YrULOSMl312bqxC06f5ABZZ7qt/9VJtW9MDiOxOu/XB)
-Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.8.0 is still current
+Engine 1.8.1 from https://wiki.starhermit.com/engine (manifest sha384-oEOhGhZCcfv7ogR0LBMsxy62oYg+ZnsOqZkcFQ5cHJONuVJqk4tTZL4FiEbsDtwp)
+Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.8.1 is still current
 ```
 
 - `index.html`, the **loader page** `launch=index.html` names: markup only, no script of its own. It
@@ -706,6 +722,10 @@ runs the game natively *and* links its modules as browsers get them. What still 
 - **Audio start.** In browsers audio waits for the player's first press: until then
   `context.state` is `"suspended"` and `currentTime` stands still, then it is `"running"` and
   `statechange` fires. Natively it is `"running"` from the start.
+- **Browser defaults.** While the game runs, its page keeps the browser's right-click menu, text
+  selection, copy and paste, dropped files and shortcuts such as Ctrl+S, Ctrl+F, zoom and the menu
+  bar's Alt from the game, and a key your game binds reaches it with Ctrl, Alt or Cmd too. F11, F12,
+  reload and the browser's tab keys still work, and text fields keep paste.
 - **Host API values.** No host API takes a BigInt, and `JSON.stringify` refuses one (`TypeError`):
   convert with `Number(x)` or `String(x)` before saving or passing it.
 
