@@ -53,6 +53,11 @@ screen, and an uncaught error ends the game on an error screen the player can re
 
 ## 2. Get the engine
 
+For automated publishing and a script-game development MCP server, get the
+[standalone developer tools](../../engine/tools/README.md). They also package
+web games on macOS without Rust or private repository access; playtest in a
+browser there. Native Windows/Linux play uses the runtime below.
+
 **Players** do nothing: in a browser, the game's page loads the release the game pins from this wiki
 and checks it against the hashes the page carries; in the StarHermit Windows client, Play downloads
 the release (once, shared by every game that pins it), checks every file against the release's

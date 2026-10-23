@@ -69,7 +69,14 @@ test('internal links retain the locale and resolve, including downloads and sect
         if(target.hash) assert.ok(page.source.document.getElementById(decodeURIComponent(target.hash.slice(1))),`Missing anchor ${url} -> ${value}`);
       }else{
         assert.ok(!sources.has(target.pathname),`English document link leaked: ${url} -> ${value}`);
-        await access(resolve(root,'.'+target.pathname));
+        // Jekyll also renders Markdown pages outside the translated docs
+        // corpus, such as the engine download guides, as .html.
+        const path = resolve(root, '.' + target.pathname);
+        try { await access(path); }
+        catch (error) {
+          if (!path.endsWith('.html')) throw error;
+          await access(path.replace(/\.html$/, '.md'));
+        }
       }
     }
   });

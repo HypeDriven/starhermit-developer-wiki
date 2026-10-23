@@ -71,6 +71,12 @@ patterns, not the subject of the docs.
   The reference page has per-release notes and covers `engine/` (versions.json format 2, native.json, chunks and patches, the
   developer download, the web runtime with its loader and bundled fonts), the integrity chain, `GET /api/v1/engine/releases`, and what the platform does
   for a game that declares `engine.version` (deploy record and warning, Content-Security-Policy).
+- `engine/tools/README.md` — standalone developer-tool downloads and guide for macOS
+  (Apple Silicon and Intel), Linux and Windows: package validation, web/native packaging,
+  automated publishing with the developer’s own credentials, and stdio development MCP.
+  Immutable archives and checksums live under `engine/tools/<version>/`; `latest.json`
+  lists reviewed downloads. These releases are independent of pinned game runtimes.
+  The tools do not provide native macOS play, and MCP never publishes.
 - `engine/` — the engine area, written only by the engine's `cargo starhermit release` (never by hand):
   `versions.json`, one immutable directory per release (`<version>/native/windows-x86_64/native.json`
   and the developer download `starhermit-<version>-windows-x86_64.zip`; a web runtime's files in a

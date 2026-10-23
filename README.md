@@ -105,6 +105,7 @@ WebSockets under `ws/v1/...`, JWT bearer auth
 |---|---|---|
 | Shared conventions | [conventions.md](docs/api/conventions.md) | Base URLs, body/error parsing, timestamps, paging, updates, retries and concurrency |
 | Machine-readable contracts | [contracts.md](docs/api/contracts.md) | Public REST operations and models, WebSocket frame schemas, and binary layouts |
+| Developer tools | [Standalone tools](engine/tools/README.md) | macOS, Linux and Windows binaries for packaging, automated publishing and development MCP; no private repositories or Rust required |
 | Engine releases | [engine-releases.md](docs/engine-releases.md) | StarHermit engine versions on this wiki: `versions.json`, the web runtime and its loader, native runtimes and their chunks, the developer download, integrity, `GET /api/v1/engine/releases`, and script games' Content-Security-Policy |
 | Content moderation | [moderation.md](docs/api/moderation.md) | Exact hashes, scoped checks/discovery, screened flags, owner review, approval validity and withdrawal recovery; current service availability |
 | Auth | [auth.md](docs/api/auth.md) | Public-key registration/login, live OAuth providers (`GET /auth/oauth/providers`), refresh rotation, launch tokens & game-scope fencing, WebSocket connection tickets |

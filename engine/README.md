@@ -80,6 +80,12 @@ lacks, or a file's patch from the build it holds where native.json lists one
 (smaller where code moved). versions.json pins each release's native.json by its
 SHA-256. A chunk or patch is never changed or removed while a release lists it.
 
+## Developer tools
+
+For automated publishing and a script-game development MCP server, download the
+[standalone developer tools](tools/README.html). They work on macOS (Apple Silicon
+and Intel), Linux and Windows without Rust or private repository access.
+
 ## Developing games
 
 Each native runtime has a developer download beside its native.json: the

@@ -7,6 +7,13 @@ their [`starhermit.txt`](starhermit-txt.md); a game's page loads the release's w
 here in the browser, the StarHermit Windows client installs the release's native runtime and plays
 the game on it, and developers download a release's runtime from here to build with.
 
+## Developer tools
+
+The [standalone developer tools](../engine/tools/README.md) provide automated
+publishing and script-game development MCP on macOS (Apple Silicon and Intel),
+Linux and Windows. No Rust installation or private repository access is needed.
+Tool releases are independent of the game runtime a game pins.
+
 ## Versions
 
 A release is `X.Y.Z`. `X` is the **host API's major version**, the `engine.api` a game declares, so
