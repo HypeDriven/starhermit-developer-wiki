@@ -23,6 +23,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.10.0 | 1.14 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.10.0-windows-x86_64.zip](../engine/1.10.0/native/windows-x86_64/starhermit-1.10.0-windows-x86_64.zip), [starhermit-1.10.0-linux-x86_64.tar.gz](../engine/1.10.0/native/linux-x86_64/starhermit-1.10.0-linux-x86_64.tar.gz) |
 | 1.9.1 | 1.13 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.9.1-windows-x86_64.zip](../engine/1.9.1/native/windows-x86_64/starhermit-1.9.1-windows-x86_64.zip), [starhermit-1.9.1-linux-x86_64.tar.gz](../engine/1.9.1/native/linux-x86_64/starhermit-1.9.1-linux-x86_64.tar.gz) |
 | 1.9.0 | 1.13 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.9.0-windows-x86_64.zip](../engine/1.9.0/native/windows-x86_64/starhermit-1.9.0-windows-x86_64.zip), [starhermit-1.9.0-linux-x86_64.tar.gz](../engine/1.9.0/native/linux-x86_64/starhermit-1.9.0-linux-x86_64.tar.gz) |
 | 1.8.1 | 1.12 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.8.1-windows-x86_64.zip](../engine/1.8.1/native/windows-x86_64/starhermit-1.8.1-windows-x86_64.zip), [starhermit-1.8.1-linux-x86_64.tar.gz](../engine/1.8.1/native/linux-x86_64/starhermit-1.8.1-linux-x86_64.tar.gz) |
@@ -46,6 +47,42 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.10.0
+
+Host API 1.14: pin `engine.version=1.10.0` and declare `engine.minor=14` to use what is new; games on older
+minors keep their behaviour.
+
+- **Ten graphics levels**: Options › Graphics offers Auto and `quantum`, `atomic`, `molecular`, `cellular`,
+  `terrestrial`, `planetary`, `stellar`, `galactic`, `cosmic` and `infinite`, phone to fastest desktop. Auto
+  detects one (GPU, memory, a short benchmark), starts at most at `stellar` and steps down under load. Read it
+  with `frame().level`, `levelIndex` and `graphics`, and the level's budgets with `levelSettings()`;
+  `frame().quality` still gives the four tiers. Players' saved Low, Balanced, High and Ultra load as quantum,
+  molecular, terrestrial and galactic. With `engine.minor=14` the level caps shadow map sizes and MSAA samples.
+- **What a device cannot run is disabled, with the reason**: levels above its ceiling (`frame().levelCeiling`),
+  VSync in browsers, render scale where a script game draws at the window's size, exclusive fullscreen without
+  a video mode switch, frame limits above the display. `ui.select` options take `disabled` and `description`
+  for your own menus. A choice saved on a stronger device is kept and used again there.
+- **Streamed music**: `audio.stream(path, options)` plays Ogg Opus or Vorbis as it decodes, without a clip,
+  from package files or remote files that play while they download (each 256 KiB piece checked) and stay
+  cached for offline play. At most 4 at once. Repackage a game with remote Ogg files so its index lists the
+  pieces.
+- **Bigger scenes**: raise `engine.limits.mesh_mib` (124 MiB standing, up to 1,536), `engine.limits.meshes`
+  (1,008, up to 4,096), `engine.limits.instanced_meshes` (1,024, up to 4,096) and, natively,
+  `engine.limits.heap_mib` (256, up to 1,024), within `gpu_mib`. Meshes under 65,536 vertices upload 16-bit
+  indices and count at what they upload. The collector now works in short paced steps (a 256 MiB heap's worst
+  pause fell from about 110 to 20 ms), and a device that cannot give memory ends the game as out of script
+  memory rather than crashing.
+- **Longer loading**: `setBusy(label, { seconds })` asks for up to 600 s before the not-responding screen; a
+  call keeps the longest allowance it asked for, and a shorter one counts from the next call.
+- **What `onQuit` saves goes out**: its `saves.save`, the account's settings and platform calls' writes are
+  sent as the game closes, natively and in browsers (where the page sends at most 16 requests and 64 KiB with
+  `keepalive`; a larger save uploads next session).
+
+The Windows runtime is built from engine a5ba81ec, the same code as the release's commit (7e778bf3) but for
+diagnostics: Microsoft Defender's machine-learning scan flagged builds of the release commit as
+Trojan:Win32/Bearfoos.B!ml, a false positive. Its `--version` reads `starhermit 1.9.1 (host API 1.14, …;
+engine release 1.10.0)`.
 
 ### 1.9.1
 

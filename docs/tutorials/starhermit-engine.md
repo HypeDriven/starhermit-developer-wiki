@@ -4,7 +4,7 @@ The **StarHermit engine is the recommended way to create games for publishing on
 You build the game once, and the same package is automatically playable in a browser and natively
 across all platforms supported by the engine. Native play offers additional performance and features.
 Availability depends on the engine release: 1.1.0 and later have a Windows runtime and a web runtime
-(1.0.0 was Windows-only), and 1.8.1 and later also a Linux runtime for developers. This page describes engine **1.9.1**; what each release changed is listed
+(1.0.0 was Windows-only), and 1.8.1 and later also a Linux runtime for developers. This page describes engine **1.10.0**; what each release changed is listed
 under [Engine releases](../engine-releases.md#release-notes).
 
 The StarHermit engine runs **script games**: a whole game written in TypeScript (or JavaScript) and
@@ -37,7 +37,7 @@ root, your TypeScript modules and your assets. Three `engine.*` lines in the man
 ```ini
 engine.api=1
 engine.entry=src/main.ts
-engine.version=1.9.1
+engine.version=1.10.0
 ```
 
 `engine.api` is the major version of the host API your code is written against, `engine.entry` the
@@ -65,20 +65,20 @@ published hashes and starts it.
 
 **Developers** download the runtime of a release from the engine area:
 
-- [starhermit-1.9.1-windows-x86_64.zip](../../engine/1.9.1/native/windows-x86_64/starhermit-1.9.1-windows-x86_64.zip)
-  (Windows 10 or 11, 64-bit), 9.5 MB.
-- [starhermit-1.9.1-linux-x86_64.tar.gz](../../engine/1.9.1/native/linux-x86_64/starhermit-1.9.1-linux-x86_64.tar.gz)
-  (64-bit Linux with glibc 2.35 or newer: Ubuntu 22.04, Debian 12 or later), 9.7 MB.
+- [starhermit-1.10.0-windows-x86_64.zip](../../engine/1.10.0/native/windows-x86_64/starhermit-1.10.0-windows-x86_64.zip)
+  (Windows 10 or 11, 64-bit), 9.7 MB.
+- [starhermit-1.10.0-linux-x86_64.tar.gz](../../engine/1.10.0/native/linux-x86_64/starhermit-1.10.0-linux-x86_64.tar.gz)
+  (64-bit Linux with glibc 2.35 or newer: Ubuntu 22.04, Debian 12 or later), 9.9 MB.
 
-The archive holds one folder, `starhermit-1.9.1-windows-x86_64`, with `starhermit.exe`, the
+The archive holds one folder, `starhermit-1.10.0-windows-x86_64`, with `starhermit.exe`, the
 `release.json` that tells the runtime which release it is, the release's `web-manifest.json`,
 `LICENSE-engine` and the third-party notices. It is the same engine the client installs, and it
 packages games for the release's web runtime without a network. Its size and SHA-256 are listed under
-`downloads` in the release's [native.json](../../engine/1.9.1/native/windows-x86_64/native.json); to
+`downloads` in the release's [native.json](../../engine/1.10.0/native/windows-x86_64/native.json); to
 check your copy in PowerShell, compare that `sha256` with:
 
 ```powershell
-Get-FileHash .\starhermit-1.9.1-windows-x86_64.zip -Algorithm SHA256
+Get-FileHash .\starhermit-1.10.0-windows-x86_64.zip -Algorithm SHA256
 ```
 
 Unpack the archive and open a terminal in the unpacked folder:
@@ -88,16 +88,16 @@ Unpack the archive and open a terminal in the unpacked folder:
 ```
 
 ```text
-starhermit 1.9.1 (host API 1.13, launcher 1; engine release 1.9.1)
+starhermit 1.9.1 (host API 1.14, launcher 1; engine release 1.10.0)
 ```
 
 On Linux, unpack the archive and run `starhermit` from its folder (its
-[native.json](../../engine/1.9.1/native/linux-x86_64/native.json) lists the archive's SHA-256 the same
+[native.json](../../engine/1.10.0/native/linux-x86_64/native.json) lists the archive's SHA-256 the same
 way; check it with `sha256sum`):
 
 ```sh
-tar -xzf starhermit-1.9.1-linux-x86_64.tar.gz
-./starhermit-1.9.1-linux-x86_64/starhermit --version
+tar -xzf starhermit-1.10.0-linux-x86_64.tar.gz
+./starhermit-1.10.0-linux-x86_64/starhermit --version
 ```
 
 `--version`, `new`, `types`, `check` and `package` need nothing more. To play a game in a window the
@@ -115,7 +115,7 @@ starhermit new star-catcher --title "Star Catcher"
 ```
 
 ```text
-Created Star Catcher in star-catcher: a script game pinned to engine 1.9.1
+Created Star Catcher in star-catcher: a script game pinned to engine 1.10.0
 Play it: starhermit star-catcher
 Check it: starhermit check star-catcher
 For a native upload (the StarHermit client plays it): starhermit package --native star-catcher
@@ -126,7 +126,7 @@ The new folder holds a playable starting point — a cube that hops when you pre
 
 ```text
 star-catcher/
-  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.9.1)
+  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.10.0)
   tsconfig.json              TypeScript settings for checking the game
   src/main.ts                the entry module
   .starhermit/starhermit.d.ts  the host API's declarations, for your editor and the type checker
@@ -171,8 +171,8 @@ description=Catch the falling stars before the time runs out.
 launch=index.html
 engine.api=1
 engine.entry=src/main.ts
-engine.version=1.9.1
-engine.minor=13
+engine.version=1.10.0
+engine.minor=14
 engine.capabilities=platform,storage
 control.left=KeyA+ArrowLeft | Move left
 control.right=KeyD+ArrowRight | Move right
@@ -359,6 +359,16 @@ starhermit star-catcher
 Press Space to start a round and the arrow keys (or A and D, or a gamepad) to steer. **F1** always
 opens the runtime's own menu: graphics, audio, controls (rebinding), the account and quitting. Your
 game cannot draw over that menu or read it, and no game can bind F1.
+
+Its Graphics page offers Auto and ten levels, from `quantum` (a phone) through `atomic`,
+`molecular`, `cellular`, `terrestrial`, `planetary`, `stellar`, `galactic` and `cosmic` to
+`infinite` (the fastest desktops). Auto picks one from the GPU and a short benchmark the first
+time, starts no higher than `stellar` and steps down when frames run late. Your game reads the level
+with `frame().level` and its budgets with `levelSettings()` (host API 1.14, so `engine.minor=14`);
+`frame().quality` still gives `low`, `balanced`, `high` or `ultra`. Levels the device cannot run
+(from its GPU's largest texture size; phones, tablets and 4 GiB devices stop at `cellular`) show
+disabled with the reason, and `frame().levelCeiling` gives the highest it can: a game drawing its own
+graphics menu disables the levels above it (`ui.select` options take `disabled` and `description`).
 
 While developing, add `--dev` (`starhermit star-catcher --dev`): the runtime then prints the game's
 `console` output in the same form and points errors at your TypeScript lines.
@@ -595,8 +605,8 @@ starhermit package --web star-catcher --out upload
 ```text
 Web package: upload (5 files, 8620 bytes to upload; the platform takes at most 50 MiB)
 Left out (not part of the package): tsconfig.json (default rule tsconfig.json)
-Engine 1.9.1 from https://wiki.starhermit.com/engine (manifest sha384-73sVqbxVzc5h6sVQgk7/lvEK6GzBPcwlBU8/GLHc9SKH6M1zwW2OTdtP8iLruBim)
-Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.9.1 is still current
+Engine 1.10.0 from https://wiki.starhermit.com/engine (manifest sha384-xAd1CtyJtIpwkQSaQZ659MueprbQgbausrOUAgcjyYy/ROv+QDl+OvR1alYx4BNc)
+Not checked against versions.json (read offline): https://wiki.starhermit.com/engine/versions.json says whether 1.10.0 is still current
 ```
 
 - `index.html`, the **loader page** `launch=index.html` names: markup only, no script of its own. It
@@ -686,7 +696,9 @@ browsers have no fuel but the same "not responding" limits:
 
 A call that uses up its fuel is paused, not ended: it continues on the next frames while the game
 draws nothing new. Once a phase runs past its limit, the runtime's "not responding" screen lets the
-player wait or stop the game (60 s while the game has called `engine.setBusy`). An error for time names
+player wait or stop the game (60 s while the game has called `engine.setBusy`, or as long as it asks
+with `setBusy(label, { seconds })`, up to 600 s, with `engine.minor=14`; a call keeps the longest
+allowance it asked for, and a shorter one counts from the next call). An error for time names
 the phase, the time it ran and the limit, for example `module evaluation of src/main.ts ran past its
 time budget (it ran 61234 ms; the limit is 60000 ms of the reference machine's instructions)`. Slice
 long work across frames (`fuelLeft()` says what is left of this call's fuel), or announce it with
@@ -701,6 +713,17 @@ commands, or `--game-id` to read its limits). Large assets can stay off the uplo
 (or `engine.remote.urls=platform`: StarHermit serves them, and `cargo starhermit publish` uploads them),
 the packaging commands pin each by size and SHA-256, and the runtime fetches and checks them
 (`files.fetch` in `starhermit:engine`; see the host API's declarations).
+A big scene can raise its limits in `starhermit.txt` (host API 1.14, so `engine.minor=14`):
+`engine.limits.mesh_mib` (default 124, up to 1,536), `engine.limits.meshes` (1,008, up to 4,096),
+`engine.limits.instanced_meshes` (1,024, up to 4,096) and, natively, `engine.limits.heap_mib`
+(256, up to 1,024; browsers do not limit the heap). Meshes and images together stay within
+`engine.limits.gpu_mib` (2 GiB), and limits raised to their ceilings are for desktops: a full mesh
+budget also takes about twice its size in main memory, a full heap about 1.2 times. `engine.budgets()` and `game.limits`
+report what applies, and the `RangeError` for a full budget names the key that raises it.
+For long music, `audio.stream(path)` plays an Ogg Opus or Ogg Vorbis file as it decodes, without
+loading it as a clip (host API 1.14, so `engine.minor=14`; at most 4 streams at once). A remote Ogg
+file plays while it downloads, each 256 KiB piece checked as it arrives, and stays cached on the
+device for later plays, offline too; repackage the game so its remote index lists the pieces.
 Going past a limit where an operation can fail (an allocation, a host call) throws a `RangeError`;
 running out of heap or call depth ends the game on the error screen. The host API's declarations
 list every limit.
@@ -738,10 +761,12 @@ runs the game natively *and* links its modules as browsers get them. What still 
   bar's Alt from the game, and a key your game binds reaches it with Ctrl, Alt or Cmd too. F11, F12,
   reload and the browser's tab keys still work, and text fields keep paste.
 - **Closing.** `onQuit` runs once, after the frame in progress (and after `onSuspend` if the window
-  or tab was hidden first); only what it writes to `storage` (and `settings` on the device) is kept.
-  Natively it has a second; in browsers a page going away (a closed tab, a reload, a link followed)
-  waits 0.2 s, and only for games with the `storage` capability. Save to the cloud during frames,
-  not in `onQuit`. Safari stops the game before the page hears it is going away, so there `onQuit`
+  or tab was hidden first). What it writes to `storage` and `settings` is kept, and its
+  `saves.save`, the account's copy of its settings and its platform calls go out as the game closes
+  (their answers reach no one). Natively it has a second, and its uploads up to three more; in
+  browsers a page going away (a closed tab, a reload, a link followed) waits 0.2 s, for games with
+  the `storage` capability or a signed-in player, and sends at most 16 requests with 64 KiB of
+  bodies in all: a larger save uploads in the next session. Safari stops the game before the page hears it is going away, so there `onQuit`
   does not run on a closed tab or a followed link: keep what must last saved as it changes, or in
   `onSuspend`. A page the browser gives back from its back/forward cache loads again, and the game
   starts anew with what it stored.

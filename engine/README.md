@@ -19,6 +19,7 @@ This area is written by `cargo starhermit release`; do not edit it by hand.
 
 | Version | Host API | Built | Manifest (SRI) | Native |
 |---|---|---|---|---|
+| 1.10.0 | 1.14 | 2026-10-25T08:40:14Z | `sha384-xAd1CtyJtIpwkQSaQZ659MueprbQgbausrOUAgcjyYy/ROv+QDl+OvR1alYx4BNc` | linux-x86_64, windows-x86_64 |
 | 1.9.1 | 1.13 | 2026-10-23T12:32:49Z | `sha384-73sVqbxVzc5h6sVQgk7/lvEK6GzBPcwlBU8/GLHc9SKH6M1zwW2OTdtP8iLruBim` | linux-x86_64, windows-x86_64 |
 | 1.9.0 | 1.13 | 2026-10-23T07:05:52Z | `sha384-QLGhNG4uEVSr7+gOwj0l7kmqAbTO+K+QGtOAN/qB4cYZy95kLa6m69hY/eNDuXs5` | linux-x86_64, windows-x86_64 |
 | 1.8.1 | 1.12 | 2026-10-23T01:36:24Z | `sha384-oEOhGhZCcfv7ogR0LBMsxy62oYg+ZnsOqZkcFQ5cHJONuVJqk4tTZL4FiEbsDtwp` | linux-x86_64, windows-x86_64 |
@@ -80,21 +81,20 @@ lacks, or a file's patch from the build it holds where native.json lists one
 (smaller where code moved). versions.json pins each release's native.json by its
 SHA-256. A chunk or patch is never changed or removed while a release lists it.
 
-## Developer tools
-
-For automated publishing and a script-game development MCP server, download the
-[standalone developer tools](tools/README.html). They work on macOS (Apple Silicon
-and Intel), Linux and Windows without Rust or private repository access.
-
 ## Developing games
+
+For automated publishing and a development MCP server, download the
+[standalone developer tools](tools/README.html). They run on macOS
+(Apple Silicon and Intel), Linux and Windows without Rust, Cargo, or
+access to the engine's source repository.
 
 Each native runtime has a developer download beside its native.json: the
 runtime (`starhermit.exe` on Windows, `starhermit` on Linux) with its
 `release.json` and license notices, the engine a game needs to be written,
 checked and packaged. The newest:
 
-- windows-x86_64: [starhermit-1.9.1-windows-x86_64.zip](1.9.1/native/windows-x86_64/starhermit-1.9.1-windows-x86_64.zip)
-- linux-x86_64: [starhermit-1.9.1-linux-x86_64.tar.gz](1.9.1/native/linux-x86_64/starhermit-1.9.1-linux-x86_64.tar.gz)
+- windows-x86_64: [starhermit-1.10.0-windows-x86_64.zip](1.10.0/native/windows-x86_64/starhermit-1.10.0-windows-x86_64.zip)
+- linux-x86_64: [starhermit-1.10.0-linux-x86_64.tar.gz](1.10.0/native/linux-x86_64/starhermit-1.10.0-linux-x86_64.tar.gz)
 
 Unpack it and run `starhermit new <game>` for a game pinned to the release,
 `starhermit types <game>` for the host API's declarations, `starhermit check
@@ -117,7 +117,7 @@ and checks that the release the game pins (`engine.version`) is published
 with a native runtime and not revoked.
 
 ```
-starhermit package --web <game> --engine-version 1.9.1 --out <upload>
+starhermit package --web <game> --engine-version 1.10.0 --out <upload>
 ```
 
 (the runtime of that release; `cargo starhermit package --web` is the same,
