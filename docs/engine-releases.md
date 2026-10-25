@@ -23,6 +23,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.12.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.12.0-windows-x86_64.zip](../engine/1.12.0/native/windows-x86_64/starhermit-1.12.0-windows-x86_64.zip), [starhermit-1.12.0-linux-x86_64.tar.gz](../engine/1.12.0/native/linux-x86_64/starhermit-1.12.0-linux-x86_64.tar.gz) |
 | 1.11.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.11.0-windows-x86_64.zip](../engine/1.11.0/native/windows-x86_64/starhermit-1.11.0-windows-x86_64.zip), [starhermit-1.11.0-linux-x86_64.tar.gz](../engine/1.11.0/native/linux-x86_64/starhermit-1.11.0-linux-x86_64.tar.gz) |
 | 1.10.0 | 1.14 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.10.0-windows-x86_64.zip](../engine/1.10.0/native/windows-x86_64/starhermit-1.10.0-windows-x86_64.zip), [starhermit-1.10.0-linux-x86_64.tar.gz](../engine/1.10.0/native/linux-x86_64/starhermit-1.10.0-linux-x86_64.tar.gz) |
 | 1.9.1 | 1.13 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.9.1-windows-x86_64.zip](../engine/1.9.1/native/windows-x86_64/starhermit-1.9.1-windows-x86_64.zip), [starhermit-1.9.1-linux-x86_64.tar.gz](../engine/1.9.1/native/linux-x86_64/starhermit-1.9.1-linux-x86_64.tar.gz) |
@@ -48,6 +49,24 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.12.0
+
+Host API 1.15, as 1.11.0: pin `engine.version=1.12.0`; nothing new to declare, and every change applies to every
+game.
+
+- **Faster scripts natively** on branchy grid code and calls: conditions with `&&`, `||` and `!` jump on each
+  operand, more instruction sequences run as one (`x + y * w`, `table[i]`), and calls of plain functions skip the
+  interpreter's general call path. A 1024×768 height pass takes 1.04 s instead of 1.37 s; object-heavy code runs
+  about as before. Results are the same.
+- **Fuel buys more work**: a fused instruction counts as one, so branchy code spends about 29% fewer units; the
+  rate is unchanged.
+- **Lost socket messages (native)**: a platform socket (rooms, game and realtime sockets, the voice relay) could
+  drop a message that arrived as the runtime checked an idle socket, most often the first one as it opened;
+  `cargo starhermit publish --socket` then sometimes waited three minutes.
+- **Classic scripts** (`loadClassic`, `sandbox`, `authority`, `worker`) without `"use strict"` ignore a failed
+  assignment and answer `false` for a refused `delete` natively, as in browsers, instead of throwing.
+- **Linux voice capture**: giving up on a slow PulseAudio connection no longer waits up to 8 s for its teardown.
 
 ### 1.11.0
 
