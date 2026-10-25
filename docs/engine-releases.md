@@ -23,6 +23,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.11.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.11.0-windows-x86_64.zip](../engine/1.11.0/native/windows-x86_64/starhermit-1.11.0-windows-x86_64.zip), [starhermit-1.11.0-linux-x86_64.tar.gz](../engine/1.11.0/native/linux-x86_64/starhermit-1.11.0-linux-x86_64.tar.gz) |
 | 1.10.0 | 1.14 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.10.0-windows-x86_64.zip](../engine/1.10.0/native/windows-x86_64/starhermit-1.10.0-windows-x86_64.zip), [starhermit-1.10.0-linux-x86_64.tar.gz](../engine/1.10.0/native/linux-x86_64/starhermit-1.10.0-linux-x86_64.tar.gz) |
 | 1.9.1 | 1.13 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.9.1-windows-x86_64.zip](../engine/1.9.1/native/windows-x86_64/starhermit-1.9.1-windows-x86_64.zip), [starhermit-1.9.1-linux-x86_64.tar.gz](../engine/1.9.1/native/linux-x86_64/starhermit-1.9.1-linux-x86_64.tar.gz) |
 | 1.9.0 | 1.13 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.9.0-windows-x86_64.zip](../engine/1.9.0/native/windows-x86_64/starhermit-1.9.0-windows-x86_64.zip), [starhermit-1.9.0-linux-x86_64.tar.gz](../engine/1.9.0/native/linux-x86_64/starhermit-1.9.0-linux-x86_64.tar.gz) |
@@ -47,6 +48,28 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.11.0
+
+Host API 1.15: pin `engine.version=1.11.0`; declare `engine.minor=15` for the compact vertex formats and the
+new usage fields. Everything else applies to every game.
+
+- **Big frames no longer fail**: meshes and images a frame makes past 96 MiB wait and go over the next frames,
+  first in, first out, instead of throwing; objects draw once their mesh and images have arrived. Loading code
+  that staged uploads across frames can go. `engine.usage().waitingUploads` and `waitingUploadBytes` (1.15)
+  read 0 once everything is sent.
+- **Compact vertices** (1.15): Int16 positions, normalized Int8 normals, Uint8 colors and Uint16 UVs stay compact
+  on the GPU and in the mesh budget (16 bytes a vertex where floats take 48); unindexed geometry draws without
+  an index list; a geometry with no attributes drawn with `setDrawRange(0, N)` and a `boundingSphere` gives a
+  vertex hook N vertices at no mesh cost.
+- **No hitches from dropped resources**: the runtime no longer collects garbage from scratch every 512 scene
+  resources (about 100 ms at a 240 MiB heap); it releases dropped resources in short steps, and a creation a
+  budget would refuse first reclaims them.
+- **Faster scripts natively**: numeric code runs about 1.8× faster in the engine's interpreter. Module
+  evaluation's budget is now 60 s by the clock, and a busy call's overdraft inside a callback is a time.
+- **Direct3D 12** shares buffer blocks between small meshes and instance buffers, as Vulkan does (4,096 small
+  meshes take 1 MiB of video memory rather than 16-256 MiB).
+- **Linux sound**: a slow PulseAudio lookup no longer delays the ALSA fallback past 2 s.
 
 ### 1.10.0
 
