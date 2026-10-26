@@ -23,6 +23,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.15.0 | 1.17 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.15.0-windows-x86_64.zip](../engine/1.15.0/native/windows-x86_64/starhermit-1.15.0-windows-x86_64.zip), [starhermit-1.15.0-linux-x86_64.tar.gz](../engine/1.15.0/native/linux-x86_64/starhermit-1.15.0-linux-x86_64.tar.gz) |
 | 1.14.0 | 1.16 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.14.0-windows-x86_64.zip](../engine/1.14.0/native/windows-x86_64/starhermit-1.14.0-windows-x86_64.zip), [starhermit-1.14.0-linux-x86_64.tar.gz](../engine/1.14.0/native/linux-x86_64/starhermit-1.14.0-linux-x86_64.tar.gz) |
 | 1.13.2 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.13.2-windows-x86_64.zip](../engine/1.13.2/native/windows-x86_64/starhermit-1.13.2-windows-x86_64.zip), [starhermit-1.13.2-linux-x86_64.tar.gz](../engine/1.13.2/native/linux-x86_64/starhermit-1.13.2-linux-x86_64.tar.gz) |
 | 1.13.1 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.13.1-windows-x86_64.zip](../engine/1.13.1/native/windows-x86_64/starhermit-1.13.1-windows-x86_64.zip), [starhermit-1.13.1-linux-x86_64.tar.gz](../engine/1.13.1/native/linux-x86_64/starhermit-1.13.1-linux-x86_64.tar.gz) |
@@ -37,8 +38,8 @@ never changes: a fix is the next version.
 | 1.7.0 | 1.11 | Web; Windows (x86-64) | [starhermit-1.7.0-windows-x86_64.zip](../engine/1.7.0/native/windows-x86_64/starhermit-1.7.0-windows-x86_64.zip) |
 | 1.6.0 | 1.10 | Web; Windows (x86-64) | [starhermit-1.6.0-windows-x86_64.zip](../engine/1.6.0/native/windows-x86_64/starhermit-1.6.0-windows-x86_64.zip) |
 | 1.5.1 | 1.9 | Web; Windows (x86-64) | [starhermit-1.5.1-windows-x86_64.zip](../engine/1.5.1/native/windows-x86_64/starhermit-1.5.1-windows-x86_64.zip) |
-| 1.5.0 | 1.9 | Web; Windows (x86-64) | [starhermit-1.5.0-windows-x86_64.zip](../engine/1.5.0/native/windows-x86_64/starhermit-1.5.0-windows-x86_64.zip) |
-| 1.4.1 | 1.8 | Web; Windows (x86-64) | [starhermit-1.4.1-windows-x86_64.zip](../engine/1.4.1/native/windows-x86_64/starhermit-1.4.1-windows-x86_64.zip) |
+| 1.5.0 | 1.9 | Web; Windows (x86-64) | Removed 2026-10-26 (wiki size limit) |
+| 1.4.1 | 1.8 | Web; Windows (x86-64) | Removed 2026-10-26 (wiki size limit) |
 | 1.4.0 | 1.8 | Web; Windows (x86-64) | Removed 2026-10-26 (wiki size limit) |
 | 1.3.0 | 1.7 | Web; Windows (x86-64) | Removed 2026-10-26 (wiki size limit) |
 | 1.2.0 | 1.6 | Web; Windows (x86-64) | Removed 2026-10-26 (wiki size limit) |
@@ -53,6 +54,34 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.15.0
+
+Host API 1.17: pin `engine.version=1.15.0` and add `engine.minor=17` for the new members and the behaviour changes
+marked below; the fixes apply to every game.
+
+- **Key art over 3D scenes**: package images and sounds decode on wall time, not one step per frame. Over a slow 3D
+  scene in a browser's software rendering, style image fills and `TextureLoader` images showed their fallback for a
+  minute or more.
+- **Shapes and lines** (1.17): three.js's 2D curves, `Path`, `Shape`, `ShapePath.toShapes`, `ShapeGeometry`,
+  `ExtrudeGeometry` and `EdgesGeometry` with three.js r185's own vertices, UVs and groups; material arrays
+  (`new Mesh(geometry, [a, b])` draws each of the geometry's `groups`); `Line`, `LineSegments` and `LineLoop` with
+  `LineBasicMaterial`, one pixel wide.
+- **Trusted time** (1.17): `platform.serverTime()` and `serverNow()` read the platform's clock, for guests too, so
+  daily challenges no longer follow the device clock.
+- **Guests read leaderboards**: `leaderboards.entries(id)` works signed out; `list()` still needs a player.
+- **Play scripts**: clicks only on what is in view, one matching rule for `until`, `expect` and `click` (exact, then
+  ignoring case, then containing), widgets before plain text, `click TEXT #N`, `click X Y`, a settle wait, a
+  fixed-step clock so `hold` is the same in every run, and `ui.target(text, rect)` (1.17) for canvas-drawn buttons.
+- **Focus and keyboard**: `ui.setFocus` takes `ui.id()` names and works in scroll areas; `ui.capturingKeys()` is true
+  while a text field has focus. With 1.17: typing in the game's UI presses no actions, arrows stay out of text
+  fields unless the player navigates there (`textField(..., { arrows: false })`), and `ui.dialog` with no title
+  draws no heading.
+- **Touch controls** show at once on phones and tablets, stay visible when the set changes, take quick taps, and
+  `onTouch` marks fingers on them (`control`, 1.17).
+- **Fixes**: no false "not responding" screen when a browser page is slow to draw; `onOverlay` is always balanced;
+  letter-spaced or tabular text keeps the letters of ligatures; a key held as a runtime screen opens no longer
+  blocks clicks.
 
 ### 1.14.0
 
@@ -522,7 +551,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.4.0 were removed this way on 2026-10-26).
+(1.0.0 to 1.5.0 were removed this way on 2026-10-26).
 
 ### native.json
 
