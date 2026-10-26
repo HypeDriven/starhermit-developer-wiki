@@ -23,6 +23,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.13.1 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.13.1-windows-x86_64.zip](../engine/1.13.1/native/windows-x86_64/starhermit-1.13.1-windows-x86_64.zip), [starhermit-1.13.1-linux-x86_64.tar.gz](../engine/1.13.1/native/linux-x86_64/starhermit-1.13.1-linux-x86_64.tar.gz) |
 | 1.13.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.13.0-windows-x86_64.zip](../engine/1.13.0/native/windows-x86_64/starhermit-1.13.0-windows-x86_64.zip), [starhermit-1.13.0-linux-x86_64.tar.gz](../engine/1.13.0/native/linux-x86_64/starhermit-1.13.0-linux-x86_64.tar.gz) |
 | 1.12.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.12.0-windows-x86_64.zip](../engine/1.12.0/native/windows-x86_64/starhermit-1.12.0-windows-x86_64.zip), [starhermit-1.12.0-linux-x86_64.tar.gz](../engine/1.12.0/native/linux-x86_64/starhermit-1.12.0-linux-x86_64.tar.gz) |
 | 1.11.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.11.0-windows-x86_64.zip](../engine/1.11.0/native/windows-x86_64/starhermit-1.11.0-windows-x86_64.zip), [starhermit-1.11.0-linux-x86_64.tar.gz](../engine/1.11.0/native/linux-x86_64/starhermit-1.11.0-linux-x86_64.tar.gz) |
@@ -39,8 +40,8 @@ never changes: a fix is the next version.
 | 1.4.0 | 1.8 | Web; Windows (x86-64) | [starhermit-1.4.0-windows-x86_64.zip](../engine/1.4.0/native/windows-x86_64/starhermit-1.4.0-windows-x86_64.zip) |
 | 1.3.0 | 1.7 | Web; Windows (x86-64) | [starhermit-1.3.0-windows-x86_64.zip](../engine/1.3.0/native/windows-x86_64/starhermit-1.3.0-windows-x86_64.zip) |
 | 1.2.0 | 1.6 | Web; Windows (x86-64) | [starhermit-1.2.0-windows-x86_64.zip](../engine/1.2.0/native/windows-x86_64/starhermit-1.2.0-windows-x86_64.zip) |
-| 1.1.0 | 1.4 | Web; Windows (x86-64) | [starhermit-1.1.0-windows-x86_64.zip](../engine/1.1.0/native/windows-x86_64/starhermit-1.1.0-windows-x86_64.zip) |
-| 1.0.0 | 1.4 | Windows (x86-64); no web runtime | [starhermit-1.0.0-windows-x86_64.zip](../engine/1.0.0/native/windows-x86_64/starhermit-1.0.0-windows-x86_64.zip) |
+| 1.1.0 | 1.4 | Web; Windows (x86-64) | Removed 2026-10-26 (wiki size limit) |
+| 1.0.0 | 1.4 | Windows (x86-64); no web runtime | Removed 2026-10-26 (wiki size limit) |
 
 [versions.json](../engine/versions.json) is the authoritative list, newest first, and the engine
 area's own page lists the same.
@@ -50,6 +51,13 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.13.1
+
+Host API 1.15, as 1.13.0, fixes only: re-pin to 1.13.1 (`engine.version=1.13.1`) to get it.
+
+- **Fix (native)**: HTTPS no longer fails when a server asks for an optional client certificate, as
+  api.starhermit.com now does; the engine answers without one and carries on, as browsers and curl do.
 
 ### 1.13.0
 
@@ -481,7 +489,9 @@ with `Access-Control-Allow-Origin: *`.
 `web` is `{"manifest": "sha384-…"}`, the SRI hash of the release's web `manifest.json`, or `null` for
 a release without a web runtime. `native` pins each platform's `native.json` by its SHA-256. A
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
-only change a published entry ever takes.
+only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
+oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
+(1.0.0 and 1.1.0 were removed this way on 2026-10-26).
 
 ### native.json
 
