@@ -23,6 +23,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.13.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.13.0-windows-x86_64.zip](../engine/1.13.0/native/windows-x86_64/starhermit-1.13.0-windows-x86_64.zip), [starhermit-1.13.0-linux-x86_64.tar.gz](../engine/1.13.0/native/linux-x86_64/starhermit-1.13.0-linux-x86_64.tar.gz) |
 | 1.12.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.12.0-windows-x86_64.zip](../engine/1.12.0/native/windows-x86_64/starhermit-1.12.0-windows-x86_64.zip), [starhermit-1.12.0-linux-x86_64.tar.gz](../engine/1.12.0/native/linux-x86_64/starhermit-1.12.0-linux-x86_64.tar.gz) |
 | 1.11.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.11.0-windows-x86_64.zip](../engine/1.11.0/native/windows-x86_64/starhermit-1.11.0-windows-x86_64.zip), [starhermit-1.11.0-linux-x86_64.tar.gz](../engine/1.11.0/native/linux-x86_64/starhermit-1.11.0-linux-x86_64.tar.gz) |
 | 1.10.0 | 1.14 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.10.0-windows-x86_64.zip](../engine/1.10.0/native/windows-x86_64/starhermit-1.10.0-windows-x86_64.zip), [starhermit-1.10.0-linux-x86_64.tar.gz](../engine/1.10.0/native/linux-x86_64/starhermit-1.10.0-linux-x86_64.tar.gz) |
@@ -49,6 +50,22 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.13.0
+
+Host API 1.15, as 1.11.0 and 1.12.0: pin `engine.version=1.13.0`; nothing new to declare, and every change applies
+to every game.
+
+- **Classic scripts follow sloppy mode natively**: a `loadClassic`, `sandbox`, `authority` or `worker` script
+  without `"use strict"` now creates a global when it assigns an undeclared name, gets `globalThis` as `this` in a
+  function called without one (a primitive `this` is boxed), may repeat parameter names, and reads
+  `arguments.callee`, as in browsers and on the platform. Legacy octal, `with`, block functions used outside their
+  block and `arguments` aliasing stay strict natively: start such files with `"use strict"`.
+- **Faster numeric scripts natively**: operators, element reads and comparisons take their operands straight from
+  locals; a 1024×768 height pass takes 0.98 s instead of 1.04 s and spends about a fifth less fuel. Results are the
+  same.
+- **Fix (native)**: `a + b` or `a < b` with an object on the left could lose the left side's string when the right
+  side's `valueOf` triggered a garbage collection.
 
 ### 1.12.0
 
