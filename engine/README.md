@@ -19,6 +19,7 @@ This area is written by `cargo starhermit release`; do not edit it by hand.
 
 | Version | Host API | Built | Manifest (SRI) | Native |
 |---|---|---|---|---|
+| 1.14.0 | 1.16 | 2026-10-26T16:19:18Z | `sha384-Mw6WVzO4yDvwyZd15YtZ7uB1g4iVFTWxIOav914pkLeagvowb2bVYXNS+MtL6NeS` | linux-x86_64, windows-x86_64 |
 | 1.13.2 | 1.15 | 2026-10-26T14:50:38Z | `sha384-m5UWCRKox9Hfw1jBKI41fuaCMHN9rnVEM+rGcE9deeUefBtiRRXBnEbbOW6c3Qx9` | linux-x86_64, windows-x86_64 |
 | 1.13.1 | 1.15 | 2026-10-26T13:54:01Z | `sha384-eQkVHgCLDmrlpY4LQrjMCPQXWKl1grSAvzammyuqz3l6IIw1Udl081GSsWBmk2nY` | linux-x86_64, windows-x86_64 |
 | 1.13.0 | 1.15 | 2026-10-26T02:06:41Z | `sha384-6CvFdAD7mwKguwAL6IoCrGSzfgvhBXyCtvzqi3Af+3AqG0eH1+EvJz6Dth0a9f5m` | linux-x86_64, windows-x86_64 |
@@ -34,9 +35,8 @@ This area is written by `cargo starhermit release`; do not edit it by hand.
 | 1.5.1 | 1.9 | 2026-10-21T23:35:08Z | `sha384-qvfHenvAWELGPzPXIpPYLPNFQ5xBa7uIM5Ck/W0UdrPkZ0psUBIWXTGHrfGKDbUA` | windows-x86_64 |
 | 1.5.0 | 1.9 | 2026-10-21T21:33:16Z | `sha384-2CaL5iDauLNsUqqBT917ByKkpYj1FCjd4hCx8cAURAuCJdFzMNY7wkE0OWypMSAA` | windows-x86_64 |
 | 1.4.1 | 1.8 | 2026-10-21T19:53:59Z | `sha384-UaBp278J70QO5xuz4bR58dPFW7Rjjt6BdvAM+SXQUeWPedaeOpzFvs5F1/SgRWA9` | windows-x86_64 |
-| 1.4.0 | 1.8 | 2026-10-21T18:24:00Z | `sha384-lznIP4UnJ/9yj1cgHeiiTPMANJ/BNG6SRkAXPM+YqD9G/l/1LwyLuSHZJUOiX9EL` | windows-x86_64 |
 
-Removed to keep the wiki within GitHub Pages' 1 GB (versions.json lists them as revoked): 1.3.0, 1.2.0, 1.1.0, 1.0.0.
+Removed to keep the wiki within GitHub Pages' 1 GB (versions.json lists them as revoked): 1.4.0, 1.3.0, 1.2.0, 1.1.0, 1.0.0.
 
 [versions.json](versions.json) lists the same, newest first. Release `X.Y.Z`
 offers host API `X` with the minor shown; `Y.Z` grow with features and fixes.
@@ -96,8 +96,8 @@ runtime (`starhermit.exe` on Windows, `starhermit` on Linux) with its
 `release.json` and license notices, the engine a game needs to be written,
 checked and packaged. The newest:
 
-- windows-x86_64: [starhermit-1.13.2-windows-x86_64.zip](1.13.2/native/windows-x86_64/starhermit-1.13.2-windows-x86_64.zip)
-- linux-x86_64: [starhermit-1.13.2-linux-x86_64.tar.gz](1.13.2/native/linux-x86_64/starhermit-1.13.2-linux-x86_64.tar.gz)
+- windows-x86_64: [starhermit-1.14.0-windows-x86_64.zip](1.14.0/native/windows-x86_64/starhermit-1.14.0-windows-x86_64.zip)
+- linux-x86_64: [starhermit-1.14.0-linux-x86_64.tar.gz](1.14.0/native/linux-x86_64/starhermit-1.14.0-linux-x86_64.tar.gz)
 
 Unpack it and run `starhermit new <game>` for a game pinned to the release,
 `starhermit types <game>` for the host API's declarations, `starhermit check
@@ -120,7 +120,7 @@ and checks that the release the game pins (`engine.version`) is published
 with a native runtime and not revoked.
 
 ```
-starhermit package --web <game> --engine-version 1.13.2 --out <upload>
+starhermit package --web <game> --engine-version 1.14.0 --out <upload>
 ```
 
 (the runtime of that release; `cargo starhermit package --web` is the same,

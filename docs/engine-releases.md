@@ -23,6 +23,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.14.0 | 1.16 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.14.0-windows-x86_64.zip](../engine/1.14.0/native/windows-x86_64/starhermit-1.14.0-windows-x86_64.zip), [starhermit-1.14.0-linux-x86_64.tar.gz](../engine/1.14.0/native/linux-x86_64/starhermit-1.14.0-linux-x86_64.tar.gz) |
 | 1.13.2 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.13.2-windows-x86_64.zip](../engine/1.13.2/native/windows-x86_64/starhermit-1.13.2-windows-x86_64.zip), [starhermit-1.13.2-linux-x86_64.tar.gz](../engine/1.13.2/native/linux-x86_64/starhermit-1.13.2-linux-x86_64.tar.gz) |
 | 1.13.1 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.13.1-windows-x86_64.zip](../engine/1.13.1/native/windows-x86_64/starhermit-1.13.1-windows-x86_64.zip), [starhermit-1.13.1-linux-x86_64.tar.gz](../engine/1.13.1/native/linux-x86_64/starhermit-1.13.1-linux-x86_64.tar.gz) |
 | 1.13.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.13.0-windows-x86_64.zip](../engine/1.13.0/native/windows-x86_64/starhermit-1.13.0-windows-x86_64.zip), [starhermit-1.13.0-linux-x86_64.tar.gz](../engine/1.13.0/native/linux-x86_64/starhermit-1.13.0-linux-x86_64.tar.gz) |
@@ -38,7 +39,7 @@ never changes: a fix is the next version.
 | 1.5.1 | 1.9 | Web; Windows (x86-64) | [starhermit-1.5.1-windows-x86_64.zip](../engine/1.5.1/native/windows-x86_64/starhermit-1.5.1-windows-x86_64.zip) |
 | 1.5.0 | 1.9 | Web; Windows (x86-64) | [starhermit-1.5.0-windows-x86_64.zip](../engine/1.5.0/native/windows-x86_64/starhermit-1.5.0-windows-x86_64.zip) |
 | 1.4.1 | 1.8 | Web; Windows (x86-64) | [starhermit-1.4.1-windows-x86_64.zip](../engine/1.4.1/native/windows-x86_64/starhermit-1.4.1-windows-x86_64.zip) |
-| 1.4.0 | 1.8 | Web; Windows (x86-64) | [starhermit-1.4.0-windows-x86_64.zip](../engine/1.4.0/native/windows-x86_64/starhermit-1.4.0-windows-x86_64.zip) |
+| 1.4.0 | 1.8 | Web; Windows (x86-64) | Removed 2026-10-26 (wiki size limit) |
 | 1.3.0 | 1.7 | Web; Windows (x86-64) | Removed 2026-10-26 (wiki size limit) |
 | 1.2.0 | 1.6 | Web; Windows (x86-64) | Removed 2026-10-26 (wiki size limit) |
 | 1.1.0 | 1.4 | Web; Windows (x86-64) | Removed 2026-10-26 (wiki size limit) |
@@ -52,6 +53,28 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.14.0
+
+Host API 1.16: pin `engine.version=1.14.0` and add `engine.minor=16` for the new members and the new CSS conversion;
+the fixes apply to every game.
+
+- **three.js view offsets**: `PerspectiveCamera` and `OrthographicCamera` take `setViewOffset(fullWidth, fullHeight,
+  x, y, width, height)`, `clearViewOffset()` and `view`, with three.js's projection: keep the subject centred beside
+  a side panel, or draw a tile of a larger image. Picking, culling and shadows follow it.
+- **RoomEnvironment**: `scene.environment = new PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture`
+  works after changing imports, and lights scenes within 1.5% of three.js's own room. Only a `RoomEnvironment` is
+  accepted; `near`, `far` and `options.size` are ignored.
+- **CSS conversion** (`engine.minor=16` for `ui.stylesFromCss`; `starhermit css` by default, `--minor N` for an older
+  one): `h1`–`h6` become the classes `.h1`–`.h6` (`ui.style("h2").heading(text)`), an id selector with no class
+  becomes a class of its name, and `box-sizing` is read from `*, *::before, *::after`, `html` with `inherit`, and
+  browsers' border-box buttons; what it cannot decide is listed in `dropped`.
+- **Fixes**: a widget's own `size` and `font` win over its style class's text; `ui.spacer()` returns a rectangle
+  spanning its column's width (its row's height), usable as a region; `bindingLabel` gives the same label natively,
+  in `--render-check` and in browsers (`"D"`, `"Space"`, `"Arrow Up"`); `--render-check` prints the game's console
+  lines as `check` does.
+- **Know**: `frame()` is 0 × 0 before the first frame (module scope and `onStart`), in a window, in browsers and in
+  checks alike; size layout and cameras in `onUpdate` or `onRender`.
 
 ### 1.13.2
 
@@ -499,7 +522,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0, 1.1.0, 1.2.0 and 1.3.0 were removed this way on 2026-10-26).
+(1.0.0 to 1.4.0 were removed this way on 2026-10-26).
 
 ### native.json
 
