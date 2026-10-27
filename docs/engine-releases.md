@@ -23,6 +23,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.19.0 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.19.0-windows-x86_64.zip](../engine/1.19.0/native/windows-x86_64/starhermit-1.19.0-windows-x86_64.zip), [starhermit-1.19.0-linux-x86_64.tar.gz](../engine/1.19.0/native/linux-x86_64/starhermit-1.19.0-linux-x86_64.tar.gz) |
 | 1.18.0 | 1.20 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.18.0-windows-x86_64.zip](../engine/1.18.0/native/windows-x86_64/starhermit-1.18.0-windows-x86_64.zip), [starhermit-1.18.0-linux-x86_64.tar.gz](../engine/1.18.0/native/linux-x86_64/starhermit-1.18.0-linux-x86_64.tar.gz) |
 | 1.17.1 | 1.19 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.17.1-windows-x86_64.zip](../engine/1.17.1/native/windows-x86_64/starhermit-1.17.1-windows-x86_64.zip), [starhermit-1.17.1-linux-x86_64.tar.gz](../engine/1.17.1/native/linux-x86_64/starhermit-1.17.1-linux-x86_64.tar.gz) |
 | 1.17.0 | 1.19 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.17.0-windows-x86_64.zip](../engine/1.17.0/native/windows-x86_64/starhermit-1.17.0-windows-x86_64.zip), [starhermit-1.17.0-linux-x86_64.tar.gz](../engine/1.17.0/native/linux-x86_64/starhermit-1.17.0-linux-x86_64.tar.gz) |
@@ -34,8 +35,8 @@ never changes: a fix is the next version.
 | 1.16.0 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.16.0-windows-x86_64.zip](../engine/1.16.0/native/windows-x86_64/starhermit-1.16.0-windows-x86_64.zip), [starhermit-1.16.0-linux-x86_64.tar.gz](../engine/1.16.0/native/linux-x86_64/starhermit-1.16.0-linux-x86_64.tar.gz) |
 | 1.15.2 | 1.17 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.15.2-windows-x86_64.zip](../engine/1.15.2/native/windows-x86_64/starhermit-1.15.2-windows-x86_64.zip), [starhermit-1.15.2-linux-x86_64.tar.gz](../engine/1.15.2/native/linux-x86_64/starhermit-1.15.2-linux-x86_64.tar.gz) |
 | 1.15.1 | 1.17 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.15.1-windows-x86_64.zip](../engine/1.15.1/native/windows-x86_64/starhermit-1.15.1-windows-x86_64.zip), [starhermit-1.15.1-linux-x86_64.tar.gz](../engine/1.15.1/native/linux-x86_64/starhermit-1.15.1-linux-x86_64.tar.gz) |
-| 1.15.0 | 1.17 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.15.0-windows-x86_64.zip](../engine/1.15.0/native/windows-x86_64/starhermit-1.15.0-windows-x86_64.zip), [starhermit-1.15.0-linux-x86_64.tar.gz](../engine/1.15.0/native/linux-x86_64/starhermit-1.15.0-linux-x86_64.tar.gz) |
-| 1.14.0 | 1.16 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.14.0-windows-x86_64.zip](../engine/1.14.0/native/windows-x86_64/starhermit-1.14.0-windows-x86_64.zip), [starhermit-1.14.0-linux-x86_64.tar.gz](../engine/1.14.0/native/linux-x86_64/starhermit-1.14.0-linux-x86_64.tar.gz) |
+| 1.15.0 | 1.17 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
+| 1.14.0 | 1.16 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
 | 1.13.2 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
 | 1.13.1 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
 | 1.13.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
@@ -65,6 +66,22 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.19.0
+
+Host API 1.21: pin `engine.version=1.19.0` and add `engine.minor=21` for the changes marked (1.21); everything else
+applies to every game. Games declaring 1.20 behave exactly as on 1.18.0.
+
+- **Images**: a canvas drawn to the overlay frees its image with the canvas (short-lived canvases ran out of the
+  120-image budget), and a full budget recycles images not drawn this frame. `engine.limits.images` raises the count
+  up to 1,024 (1.21). Hitting the limit is a catchable error that names it.
+- **Overlay**: up to 65,536 items and 524,288 vertices a frame; the docs give batching guidance.
+- **Timers** (1.21): a `setInterval` faster than the frame rate runs as often as in a browser.
+- **`crypto`**: `crypto.randomUUID()` and `crypto.getRandomValues()` natively and in workers; browsers keep their own.
+- **Emoji**: 114 more StarHermit Emoji glyphs (825): transport, buildings and office objects.
+- **Play scripts**: `drag`, `swipe` and `pinch` steps.
+- **Fixes**: a radial gradient fills a fully rounded box again; a camera other than the window's projects from its
+  own aspect in `project()`, `unproject()` and `Raycaster.setFromCamera` on every minor.
 
 ### 1.18.0
 
@@ -726,7 +743,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.13.2 on 2026-10-27).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.13.2, 1.14.0 and 1.15.0 on 2026-10-27).
 
 ### native.json
 
