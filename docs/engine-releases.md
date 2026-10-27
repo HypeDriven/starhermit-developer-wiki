@@ -23,6 +23,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.18.0 | 1.20 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.18.0-windows-x86_64.zip](../engine/1.18.0/native/windows-x86_64/starhermit-1.18.0-windows-x86_64.zip), [starhermit-1.18.0-linux-x86_64.tar.gz](../engine/1.18.0/native/linux-x86_64/starhermit-1.18.0-linux-x86_64.tar.gz) |
 | 1.17.1 | 1.19 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.17.1-windows-x86_64.zip](../engine/1.17.1/native/windows-x86_64/starhermit-1.17.1-windows-x86_64.zip), [starhermit-1.17.1-linux-x86_64.tar.gz](../engine/1.17.1/native/linux-x86_64/starhermit-1.17.1-linux-x86_64.tar.gz) |
 | 1.17.0 | 1.19 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.17.0-windows-x86_64.zip](../engine/1.17.0/native/windows-x86_64/starhermit-1.17.0-windows-x86_64.zip), [starhermit-1.17.0-linux-x86_64.tar.gz](../engine/1.17.0/native/linux-x86_64/starhermit-1.17.0-linux-x86_64.tar.gz) |
 | 1.16.5 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.16.5-windows-x86_64.zip](../engine/1.16.5/native/windows-x86_64/starhermit-1.16.5-windows-x86_64.zip), [starhermit-1.16.5-linux-x86_64.tar.gz](../engine/1.16.5/native/linux-x86_64/starhermit-1.16.5-linux-x86_64.tar.gz) |
@@ -35,7 +36,7 @@ never changes: a fix is the next version.
 | 1.15.1 | 1.17 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.15.1-windows-x86_64.zip](../engine/1.15.1/native/windows-x86_64/starhermit-1.15.1-windows-x86_64.zip), [starhermit-1.15.1-linux-x86_64.tar.gz](../engine/1.15.1/native/linux-x86_64/starhermit-1.15.1-linux-x86_64.tar.gz) |
 | 1.15.0 | 1.17 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.15.0-windows-x86_64.zip](../engine/1.15.0/native/windows-x86_64/starhermit-1.15.0-windows-x86_64.zip), [starhermit-1.15.0-linux-x86_64.tar.gz](../engine/1.15.0/native/linux-x86_64/starhermit-1.15.0-linux-x86_64.tar.gz) |
 | 1.14.0 | 1.16 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.14.0-windows-x86_64.zip](../engine/1.14.0/native/windows-x86_64/starhermit-1.14.0-windows-x86_64.zip), [starhermit-1.14.0-linux-x86_64.tar.gz](../engine/1.14.0/native/linux-x86_64/starhermit-1.14.0-linux-x86_64.tar.gz) |
-| 1.13.2 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.13.2-windows-x86_64.zip](../engine/1.13.2/native/windows-x86_64/starhermit-1.13.2-windows-x86_64.zip), [starhermit-1.13.2-linux-x86_64.tar.gz](../engine/1.13.2/native/linux-x86_64/starhermit-1.13.2-linux-x86_64.tar.gz) |
+| 1.13.2 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
 | 1.13.1 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
 | 1.13.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
 | 1.12.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
@@ -64,6 +65,30 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.18.0
+
+Host API 1.20: pin `engine.version=1.18.0` and add `engine.minor=20` for three.js parity and the other changes marked
+(1.20) below; everything else applies to every game.
+
+- **three.js r185 parity** (1.20): `starhermit:scene` follows three.js's defaults and conventions. Transparent
+  materials write depth by default; `material.transparent` alone decides the transparent list, sorted as three
+  sorts it; the depth test is `LessEqual`; cameras project from their own `aspect` and `left`/`right`/`top`/`bottom`;
+  a Color background is never tone mapped; attenuated points scale by the canvas height. Games declaring 1.19 or
+  older draw exactly as before.
+- **Curves and tubes**: three's 3D curves (`CatmullRomCurve3`, the Bézier and line curves), `TubeGeometry`,
+  `ExtrudeGeometry`'s `extrudePath`, and `BufferGeometry.setFromPoints`, bit-exact with three r185.
+- **Files**: `files.open` picks several files or a whole folder, and `files.onDrop` takes dropped files and folders,
+  each confirmed by the player in a trusted summary.
+- **Input and UI**: `input.touchControlsVisible()`; from 1.20 the arrows and Enter stay the game's until a widget has
+  focus, and `primaryPointer()` is `"coarse"` from the start on touch-first devices. Game UIs reach screen readers
+  and browser automation (`getByRole`).
+- **Runtime menus** take the StarHermit client's look.
+- **Fixes**: Restart or Stop on a busy machine could leave the game stuck stopping; shadows on WebGL 2 no longer
+  stripe at biases that are clean natively; `input.bindings()` works in `onStart`; text-style emoji symbols draw
+  without another emoji first; workers have `Date`, `Math.random` and `performance.now`.
+- **Play scripts**: `repeat FRAMES until TEXT … end`, `file`/`drop` answers to the Files dialog, and native render
+  checks honour `# viewport WxH@N`; checks can join the local platform with `--local-platform --player NAME`.
 
 ### 1.17.1
 
@@ -698,7 +723,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.13.1 on 2026-10-27).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.13.2 on 2026-10-27).
 
 ### native.json
 
