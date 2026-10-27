@@ -76,6 +76,9 @@ Host API 1.20: pin `engine.version=1.18.0` and add `engine.minor=20` for three.j
   sorts it; the depth test is `LessEqual`; cameras project from their own `aspect` and `left`/`right`/`top`/`bottom`;
   a Color background is never tone mapped; attenuated points scale by the canvas height. Games declaring 1.19 or
   older draw exactly as before.
+  **Migrating to 1.20:** as in three.js, nothing sets a camera's shape for you. Set `camera.aspect` (or an
+  orthographic camera's `left`/`right`) from `engine.frame()`'s size, and again when the window resizes, then call
+  `updateProjectionMatrix()`. A game that never sets it draws squeezed on phones and other non-default shapes.
 - **Curves and tubes**: three's 3D curves (`CatmullRomCurve3`, the Bézier and line curves), `TubeGeometry`,
   `ExtrudeGeometry`'s `extrudePath`, and `BufferGeometry.setFromPoints`, bit-exact with three r185.
 - **Files**: `files.open` picks several files or a whole folder, and `files.onDrop` takes dropped files and folders,
