@@ -23,6 +23,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.17.0 | 1.19 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.17.0-windows-x86_64.zip](../engine/1.17.0/native/windows-x86_64/starhermit-1.17.0-windows-x86_64.zip), [starhermit-1.17.0-linux-x86_64.tar.gz](../engine/1.17.0/native/linux-x86_64/starhermit-1.17.0-linux-x86_64.tar.gz) |
 | 1.16.5 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.16.5-windows-x86_64.zip](../engine/1.16.5/native/windows-x86_64/starhermit-1.16.5-windows-x86_64.zip), [starhermit-1.16.5-linux-x86_64.tar.gz](../engine/1.16.5/native/linux-x86_64/starhermit-1.16.5-linux-x86_64.tar.gz) |
 | 1.16.4 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.16.4-windows-x86_64.zip](../engine/1.16.4/native/windows-x86_64/starhermit-1.16.4-windows-x86_64.zip), [starhermit-1.16.4-linux-x86_64.tar.gz](../engine/1.16.4/native/linux-x86_64/starhermit-1.16.4-linux-x86_64.tar.gz) |
 | 1.16.3 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.16.3-windows-x86_64.zip](../engine/1.16.3/native/windows-x86_64/starhermit-1.16.3-windows-x86_64.zip), [starhermit-1.16.3-linux-x86_64.tar.gz](../engine/1.16.3/native/linux-x86_64/starhermit-1.16.3-linux-x86_64.tar.gz) |
@@ -35,7 +36,7 @@ never changes: a fix is the next version.
 | 1.14.0 | 1.16 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.14.0-windows-x86_64.zip](../engine/1.14.0/native/windows-x86_64/starhermit-1.14.0-windows-x86_64.zip), [starhermit-1.14.0-linux-x86_64.tar.gz](../engine/1.14.0/native/linux-x86_64/starhermit-1.14.0-linux-x86_64.tar.gz) |
 | 1.13.2 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.13.2-windows-x86_64.zip](../engine/1.13.2/native/windows-x86_64/starhermit-1.13.2-windows-x86_64.zip), [starhermit-1.13.2-linux-x86_64.tar.gz](../engine/1.13.2/native/linux-x86_64/starhermit-1.13.2-linux-x86_64.tar.gz) |
 | 1.13.1 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.13.1-windows-x86_64.zip](../engine/1.13.1/native/windows-x86_64/starhermit-1.13.1-windows-x86_64.zip), [starhermit-1.13.1-linux-x86_64.tar.gz](../engine/1.13.1/native/linux-x86_64/starhermit-1.13.1-linux-x86_64.tar.gz) |
-| 1.13.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.13.0-windows-x86_64.zip](../engine/1.13.0/native/windows-x86_64/starhermit-1.13.0-windows-x86_64.zip), [starhermit-1.13.0-linux-x86_64.tar.gz](../engine/1.13.0/native/linux-x86_64/starhermit-1.13.0-linux-x86_64.tar.gz) |
+| 1.13.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
 | 1.12.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
 | 1.11.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
 | 1.10.0 | 1.14 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
@@ -62,6 +63,25 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.17.0
+
+Host API 1.19: pin `engine.version=1.17.0` and add `engine.minor=19` for the change marked below; everything else
+applies to every game.
+
+- **Colour emoji**: StarHermit Emoji, the engine's own emoji font (699 glyphs of original art, under the engine's
+  licence), draws emoji in colour in `draw.text`, `ui` text and canvas `fillText`, natively and in browsers. It loads
+  only when text first needs it; until then emoji keep their room and draw nothing. Single emoji only in this
+  version: a ZWJ sequence draws its emoji one by one, skin tones draw the default tone, and flags are not drawn.
+- **Rooms**: `rooms.connect(roomId, { targeted: true })` lets the host send `sendData(payload, to)` and
+  `sendEvent(kind, fields, to)` to named participants (at most 100), checked before sending. Participants, rosters
+  and leaderboard entries carry `displayName`. A room refused because the player is in another room rejects with
+  `active-room-elsewhere` (1.19; older games keep `conflict`). A server script's `game.rooms = "host"` keeps its
+  rooms host-routed.
+- **Leaderboards**: `leaderboards.list()` works for signed-out players. Reads only: scores come only from the game's
+  server.
+- **Fix (UI)**: text larger than 256 window pixels (96-point text at a 3× pixel ratio) draws instead of being left
+  out of the overlay, and the generic `serif` and `monospace` families draw bold.
 
 ### 1.16.5
 
@@ -663,7 +683,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.12.0 on 2026-10-27).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.13.0 on 2026-10-27).
 
 ### native.json
 
