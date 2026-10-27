@@ -23,6 +23,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.16.0 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.16.0-windows-x86_64.zip](../engine/1.16.0/native/windows-x86_64/starhermit-1.16.0-windows-x86_64.zip), [starhermit-1.16.0-linux-x86_64.tar.gz](../engine/1.16.0/native/linux-x86_64/starhermit-1.16.0-linux-x86_64.tar.gz) |
 | 1.15.2 | 1.17 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.15.2-windows-x86_64.zip](../engine/1.15.2/native/windows-x86_64/starhermit-1.15.2-windows-x86_64.zip), [starhermit-1.15.2-linux-x86_64.tar.gz](../engine/1.15.2/native/linux-x86_64/starhermit-1.15.2-linux-x86_64.tar.gz) |
 | 1.15.1 | 1.17 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.15.1-windows-x86_64.zip](../engine/1.15.1/native/windows-x86_64/starhermit-1.15.1-windows-x86_64.zip), [starhermit-1.15.1-linux-x86_64.tar.gz](../engine/1.15.1/native/linux-x86_64/starhermit-1.15.1-linux-x86_64.tar.gz) |
 | 1.15.0 | 1.17 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.15.0-windows-x86_64.zip](../engine/1.15.0/native/windows-x86_64/starhermit-1.15.0-windows-x86_64.zip), [starhermit-1.15.0-linux-x86_64.tar.gz](../engine/1.15.0/native/linux-x86_64/starhermit-1.15.0-linux-x86_64.tar.gz) |
@@ -35,7 +36,7 @@ never changes: a fix is the next version.
 | 1.10.0 | 1.14 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.10.0-windows-x86_64.zip](../engine/1.10.0/native/windows-x86_64/starhermit-1.10.0-windows-x86_64.zip), [starhermit-1.10.0-linux-x86_64.tar.gz](../engine/1.10.0/native/linux-x86_64/starhermit-1.10.0-linux-x86_64.tar.gz) |
 | 1.9.1 | 1.13 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.9.1-windows-x86_64.zip](../engine/1.9.1/native/windows-x86_64/starhermit-1.9.1-windows-x86_64.zip), [starhermit-1.9.1-linux-x86_64.tar.gz](../engine/1.9.1/native/linux-x86_64/starhermit-1.9.1-linux-x86_64.tar.gz) |
 | 1.9.0 | 1.13 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.9.0-windows-x86_64.zip](../engine/1.9.0/native/windows-x86_64/starhermit-1.9.0-windows-x86_64.zip), [starhermit-1.9.0-linux-x86_64.tar.gz](../engine/1.9.0/native/linux-x86_64/starhermit-1.9.0-linux-x86_64.tar.gz) |
-| 1.8.1 | 1.12 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.8.1-windows-x86_64.zip](../engine/1.8.1/native/windows-x86_64/starhermit-1.8.1-windows-x86_64.zip), [starhermit-1.8.1-linux-x86_64.tar.gz](../engine/1.8.1/native/linux-x86_64/starhermit-1.8.1-linux-x86_64.tar.gz) |
+| 1.8.1 | 1.12 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
 | 1.8.0 | 1.12 | Web; Windows (x86-64) | Removed 2026-10-27 (wiki size limit) |
 | 1.7.0 | 1.11 | Web; Windows (x86-64) | Removed 2026-10-27 (wiki size limit) |
 | 1.6.0 | 1.10 | Web; Windows (x86-64) | Removed 2026-10-26 (wiki size limit) |
@@ -56,6 +57,37 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.16.0
+
+Host API 1.18: pin `engine.version=1.16.0` and add `engine.minor=18` for the new members and the behaviour changes
+marked below; the fixes apply to every game.
+
+- **three.js parity** (1.18): r185's full math (vectors, quaternions, matrices, colours, `Box3`, `Plane`, `Ray`,
+  `Frustum`, `MathUtils`…), `object.clone()` (instance a loaded glTF model as often as you like), `BufferAttribute`
+  accessors, `computeBoundingBox`, and rays that hit invisible meshes whose layers match.
+- **Geometries and materials** (1.18): Icosahedron, Octahedron, Dodecahedron, Tetrahedron, Lathe, TorusKnot,
+  Wireframe and RoundedBox geometries; `flatShading`, `bumpMap` and `wireframe`; `ShadowMaterial`; transparent meshes
+  cast shadows; `scene.background` takes textures and skies (cube, equirect, PMREM) with blurriness, intensity and
+  rotation; meshes honour `drawRange`.
+- **Lighting fixes**: no more speckles or white frames from a light at the camera or lined up with the view; the
+  background shows in render-target panes; `envMapIntensity` applies to `scene.environment`. With 1.18, environments
+  are filtered as three.js r16x's PMREM, and `new RoomEnvironment()` without a renderer is r155–r162's dim room (pass
+  the renderer for the bright one).
+- **GLTFLoader**: samplers (repeat and smooth filtering by default), every core material map, `EXT_texture_webp`,
+  large textures halved instead of dropped, and one warning per model naming what it did not apply. JPEG images are
+  not decoded yet.
+- **Drawing** (1.18): `draw.circle`, `ellipse`, `arc` and strokes, outlined `text`, and `blend` modes.
+- **Browser audio**: the "Unknown audio request", "output unavailable", "append timed out" and "play rejected"
+  failures are fixed, a lost output recovers by itself, and streams keep pace on slow pages. Natively the Auto sound
+  limit never drops below 16, and per-frame `fade`/`setPitch`/`setPan` no longer count against the operation limit.
+- **TypeScript** that broke only in browsers (multi-line arrow return types and other erasure cases) now loads there.
+- **UI**: a chained style always goes to its own widget (styled images), the topmost widget takes the pointer, and
+  touch controls draw at their radius.
+- **Images**: going past the image budget throws a catchable RangeError instead of ending the game, and many images
+  loading at once all succeed in browsers.
+- **Tools**: `--dev` runs read `.starhermitignore`d files, `check` summarises left-out files, play scripts take
+  `=TEXT`, and checks play audio on their simulated clock.
 
 ### 1.15.2
 
@@ -570,7 +602,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 and 1.8.0 on 2026-10-27).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.8.1 on 2026-10-27).
 
 ### native.json
 
