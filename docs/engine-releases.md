@@ -23,6 +23,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.16.1 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.16.1-windows-x86_64.zip](../engine/1.16.1/native/windows-x86_64/starhermit-1.16.1-windows-x86_64.zip), [starhermit-1.16.1-linux-x86_64.tar.gz](../engine/1.16.1/native/linux-x86_64/starhermit-1.16.1-linux-x86_64.tar.gz) |
 | 1.16.0 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.16.0-windows-x86_64.zip](../engine/1.16.0/native/windows-x86_64/starhermit-1.16.0-windows-x86_64.zip), [starhermit-1.16.0-linux-x86_64.tar.gz](../engine/1.16.0/native/linux-x86_64/starhermit-1.16.0-linux-x86_64.tar.gz) |
 | 1.15.2 | 1.17 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.15.2-windows-x86_64.zip](../engine/1.15.2/native/windows-x86_64/starhermit-1.15.2-windows-x86_64.zip), [starhermit-1.15.2-linux-x86_64.tar.gz](../engine/1.15.2/native/linux-x86_64/starhermit-1.15.2-linux-x86_64.tar.gz) |
 | 1.15.1 | 1.17 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.15.1-windows-x86_64.zip](../engine/1.15.1/native/windows-x86_64/starhermit-1.15.1-windows-x86_64.zip), [starhermit-1.15.1-linux-x86_64.tar.gz](../engine/1.15.1/native/linux-x86_64/starhermit-1.15.1-linux-x86_64.tar.gz) |
@@ -35,7 +36,7 @@ never changes: a fix is the next version.
 | 1.11.0 | 1.15 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.11.0-windows-x86_64.zip](../engine/1.11.0/native/windows-x86_64/starhermit-1.11.0-windows-x86_64.zip), [starhermit-1.11.0-linux-x86_64.tar.gz](../engine/1.11.0/native/linux-x86_64/starhermit-1.11.0-linux-x86_64.tar.gz) |
 | 1.10.0 | 1.14 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.10.0-windows-x86_64.zip](../engine/1.10.0/native/windows-x86_64/starhermit-1.10.0-windows-x86_64.zip), [starhermit-1.10.0-linux-x86_64.tar.gz](../engine/1.10.0/native/linux-x86_64/starhermit-1.10.0-linux-x86_64.tar.gz) |
 | 1.9.1 | 1.13 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.9.1-windows-x86_64.zip](../engine/1.9.1/native/windows-x86_64/starhermit-1.9.1-windows-x86_64.zip), [starhermit-1.9.1-linux-x86_64.tar.gz](../engine/1.9.1/native/linux-x86_64/starhermit-1.9.1-linux-x86_64.tar.gz) |
-| 1.9.0 | 1.13 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.9.0-windows-x86_64.zip](../engine/1.9.0/native/windows-x86_64/starhermit-1.9.0-windows-x86_64.zip), [starhermit-1.9.0-linux-x86_64.tar.gz](../engine/1.9.0/native/linux-x86_64/starhermit-1.9.0-linux-x86_64.tar.gz) |
+| 1.9.0 | 1.13 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
 | 1.8.1 | 1.12 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
 | 1.8.0 | 1.12 | Web; Windows (x86-64) | Removed 2026-10-27 (wiki size limit) |
 | 1.7.0 | 1.11 | Web; Windows (x86-64) | Removed 2026-10-27 (wiki size limit) |
@@ -57,6 +58,16 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.16.1
+
+Host API 1.18, as 1.16.0, fixes only: re-pin to 1.16.1 (`engine.version=1.16.1`) to get it.
+
+- **Fix (UI)**: 1.16.0's rule that the topmost widget takes the pointer now applies only to games declaring
+  `engine.minor=18`. Games declaring an older minor keep the earlier rule, so a game that draws effects over its UI in
+  a full-window placed widget is clickable again. From 18, a placed container that paints nothing (no background or
+  style) lets the pointer through between its interactive widgets: that is the way to draw over the UI without taking
+  the pointer.
 
 ### 1.16.0
 
@@ -602,7 +613,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.8.1 on 2026-10-27).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.9.0 on 2026-10-27).
 
 ### native.json
 
