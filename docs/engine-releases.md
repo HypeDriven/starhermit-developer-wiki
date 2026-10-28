@@ -23,6 +23,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.23.0 | 1.25 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.23.0-windows-x86_64.zip](../engine/1.23.0/native/windows-x86_64/starhermit-1.23.0-windows-x86_64.zip), [starhermit-1.23.0-linux-x86_64.tar.gz](../engine/1.23.0/native/linux-x86_64/starhermit-1.23.0-linux-x86_64.tar.gz) |
 | 1.22.0 | 1.24 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.22.0-windows-x86_64.zip](../engine/1.22.0/native/windows-x86_64/starhermit-1.22.0-windows-x86_64.zip), [starhermit-1.22.0-linux-x86_64.tar.gz](../engine/1.22.0/native/linux-x86_64/starhermit-1.22.0-linux-x86_64.tar.gz) |
 | 1.21.0 | 1.23 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.21.0-windows-x86_64.zip](../engine/1.21.0/native/windows-x86_64/starhermit-1.21.0-windows-x86_64.zip), [starhermit-1.21.0-linux-x86_64.tar.gz](../engine/1.21.0/native/linux-x86_64/starhermit-1.21.0-linux-x86_64.tar.gz) |
 | 1.20.2 | 1.22 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.20.2-windows-x86_64.zip](../engine/1.20.2/native/windows-x86_64/starhermit-1.20.2-windows-x86_64.zip), [starhermit-1.20.2-linux-x86_64.tar.gz](../engine/1.20.2/native/linux-x86_64/starhermit-1.20.2-linux-x86_64.tar.gz) |
@@ -34,7 +35,7 @@ never changes: a fix is the next version.
 | 1.19.0 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.19.0-windows-x86_64.zip](../engine/1.19.0/native/windows-x86_64/starhermit-1.19.0-windows-x86_64.zip), [starhermit-1.19.0-linux-x86_64.tar.gz](../engine/1.19.0/native/linux-x86_64/starhermit-1.19.0-linux-x86_64.tar.gz) |
 | 1.18.0 | 1.20 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.18.0-windows-x86_64.zip](../engine/1.18.0/native/windows-x86_64/starhermit-1.18.0-windows-x86_64.zip), [starhermit-1.18.0-linux-x86_64.tar.gz](../engine/1.18.0/native/linux-x86_64/starhermit-1.18.0-linux-x86_64.tar.gz) |
 | 1.17.1 | 1.19 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.17.1-windows-x86_64.zip](../engine/1.17.1/native/windows-x86_64/starhermit-1.17.1-windows-x86_64.zip), [starhermit-1.17.1-linux-x86_64.tar.gz](../engine/1.17.1/native/linux-x86_64/starhermit-1.17.1-linux-x86_64.tar.gz) |
-| 1.17.0 | 1.19 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.17.0-windows-x86_64.zip](../engine/1.17.0/native/windows-x86_64/starhermit-1.17.0-windows-x86_64.zip), [starhermit-1.17.0-linux-x86_64.tar.gz](../engine/1.17.0/native/linux-x86_64/starhermit-1.17.0-linux-x86_64.tar.gz) |
+| 1.17.0 | 1.19 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-28 (wiki size limit) |
 | 1.16.5 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-28 (wiki size limit) |
 | 1.16.4 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-28 (wiki size limit) |
 | 1.16.3 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-28 (wiki size limit) |
@@ -74,6 +75,29 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.23.0
+
+Host API 1.25: pin `engine.version=1.23.0` and add `engine.minor=25` for the changes marked (1.25); everything else
+applies to every game. Games declaring 1.24 or older behave as before.
+
+- **Skeletal animation** (1.25): `Bone`, `Skeleton` and `SkinnedMesh` as three.js r185 has them, skinned in every
+  material's vertex stage on every backend (hooks, shadows and prepasses included); GLTFLoader loads skins and
+  animation clips.
+- **WebAssembly** (1.25): the `WebAssembly` global natively and in `starhermit:script` workers, in the engine's own
+  sandboxed interpreter (WebAssembly 2.0 core and fixed-width SIMD, no JIT); memory limited by
+  `engine.limits.wasm_mib` (default 256 MiB). Integer results match browsers bit for bit.
+- **Float data textures** (1.25): `FloatType` and `HalfFloatType` DataTextures reach ShaderMaterial and hook WGSL
+  unclamped, stored as half floats.
+- **Binary worker messages** (1.25): worker messages may hold ArrayBuffers, typed arrays and DataViews, copied or
+  moved with a transfer list.
+- **Rooms** (1.25): `rooms.joined()` lists the rooms the player holds a seat in; `rooms.browse()` summaries carry
+  `metadata`; a game server still waking reaches scripts as `unavailable` with `code` `"server_starting"` and
+  `retryAfter`.
+- **Fixes and speed**: `TextEncoder.prototype.encodeInto` natively; many `TextureLoader` loads at once no longer
+  exceed the decoded-asset budget; checks keep workers in step with the simulated clock; native Wayland skips frames
+  the compositor would not show; textures changing every frame update in place on Vulkan and OpenGL ES.
+- **Development**: a loopback web page takes `?quality=LEVEL`.
 
 ### 1.22.0
 
@@ -860,7 +884,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.16.5 on 2026-10-28).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28).
 
 ### native.json
 
