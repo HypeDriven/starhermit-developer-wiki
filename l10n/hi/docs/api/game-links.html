@@ -4,7 +4,7 @@ lang: "hi"
 title: "बाहरी संबंध"
 source_url: "/docs/api/game-links.html"
 source_path: "docs/api/game-links.md"
-source_hash: "2947b0aad1d58974569c7968b25f55decf8eda6675ddc89666bb0fcd11653553"
+source_hash: "acedc36ff057a47202a0e6076f90ae03c1b149760e6ca4e4f4be1f5cb58aea31"
 translation: "machine"
 permalink: "/hi/docs/api/game-links.html"
 ---
@@ -16,19 +16,36 @@ permalink: "/hi/docs/api/game-links.html"
 <h2 id="declare-your-links">अपने लिंक घोषित करें</h2>
 <p>में <code>starhermit.txt</code>:</p>
 <pre><code>engine.minor=24
+engine.capabilities=platform
 engine.link.discord=https://discord.gg/abc
 engine.link.store=https://example.com/game
 </code></pre>
 <ul>
 <li>आप अधिकतम 16 लिंक घोषित कर सकते हैं। प्रत्येक आईडी 1-32 अक्षर की है <code>a-z 0-9 -</code> और केवल एक बार ही प्रकट हो सकता है.</li>
 <li>कोई <code>engine.link.*</code> प्रमुख जरूरतें <code>engine.minor=24</code>, इसलिए पुराने रनटाइम गेम को अस्वीकार कर देते हैं।</li>
-<li>आपकी स्क्रिप्ट कॉल करती हैं <code>openLink("discord")</code>. रनटाइम लिंक के साथ अपनी स्वयं की पुष्टि दिखाता है
-पूर्ण होस्ट और यूआरएल, और पेज तभी खुलता है जब खिलाड़ी ओपन चुनता है।</li>
+<li>एक प्रोडक्शन गेम की भी जरूरत है <code>engine.capabilities=platform</code>, क्योंकि रनटाइम अनुमोदन की जाँच करता है
+खिलाड़ी के लॉन्च टोकन के साथ। इसके बिना, <code>openLink</code> निराकरण <code>"unavailable"</code> बाहर
+विकास और मैनिफ़ेस्ट को एक चेतावनी मिलती है।</li>
 </ul>
+<h2 id="open-a-link">एक लिंक खोलें</h2>
+<p><code>openLink(id)</code> से <code>starhermit:engine</code> रिटर्न
+<code>Promise&lt;"opened" | "cancelled" | "unapproved" | "unavailable"&gt;</code>:</p>
+<ul>
+<li><code>"unapproved"</code>: लिंक लंबित है, अस्वीकृत है या निरस्त किया गया है, इसका यूआरएल स्वीकृत यूआरएल से अलग है, या
+आईडी घोषित नहीं की गई है.</li>
+<li><code>"unavailable"</code>: कोई प्लेटफ़ॉर्म सत्र नहीं, नेटवर्क त्रुटि, 401/403/429, या 10 सेकंड के भीतर कोई उत्तर नहीं।</li>
+</ul>
+<p>प्रेस (पॉइंटर, कुंजी या गेमपैड) को संभालते समय इसे कॉल करें; प्रत्येक प्रेस अधिकतम एक लिंक खोलता है। एक कॉल
+एक प्रेस के बाहर, एक लंबित होने पर दूसरी कॉल, और खिलाड़ी के रद्द होने के 2 सेकंड के भीतर एक कॉल
+सभी संकल्प करें <code>"unavailable"</code> और एक चेतावनी लॉग करें.</p>
+<p>रनटाइम लिंक के पूर्ण होस्ट और यूआरएल के साथ अपनी स्वयं की पुष्टि दिखाता है, और केवल पेज खोलता है
+यदि खिलाड़ी ओपन चुनता है। ब्राउज़र में गेमपैड का बैक रद्द हो जाता है, लेकिन पुष्टि के लिए एक क्लिक, टैप की आवश्यकता होती है।
+एंटर या स्पेस, क्योंकि ब्राउजर उन्हीं में से एक विंडो खोलता है।</p>
 <h2 id="what-a-link-may-be">लिंक क्या हो सकता है</h2>
 <p>एक लिंक होना चाहिए <code>https</code>, बिना पोर्ट के, नहीं <code>user@</code>, कोई आईपी पता और कोई स्थानीय नाम नहीं (<code>localhost</code>,
 <code>.local</code>, <code>.internal</code>). इसका होस्ट ASCII होना चाहिए, जिसमें अंतर्राष्ट्रीयकृत नाम पुनीकोड के रूप में लिखे जाएं,
-और कम से कम दो लेबल हों। इसमें बैकस्लैश, स्पेस, एन्कोडेड स्लैश शामिल नहीं हो सकते (<code>%2f</code>,
+और कम से कम दो लेबल हों। इसमें बैकस्लैश, रिक्त स्थान, वर्ण शामिल नहीं हो सकते हैं <code>"</code> <code>&lt;</code> <code>&gt;</code> <code>`</code> <code>{</code> <code>}</code> <code>|</code> <code>^</code>,
+विकृत <code>%</code> पलायन, एन्कोडेड स्लैश (<code>%2f</code>,
 <code>%5c</code>) या <code>.</code>/<code>..</code> पथ खंड. प्लेटफ़ॉर्म विहित रूप रखता है: योजना और होस्ट इन
 निचला मामला, और <code>/</code> एक खाली रास्ते के लिए. बाकी सब कुछ वैसा ही रखा गया है जैसा आपने लिखा था।</p>
 <p><strong>जब आप किसी नियम को तोड़ने वाले लिंक वाले पैकेज को प्रकाशित करते हैं तो उसे अस्वीकार कर दिया जाता है</strong>, साथ

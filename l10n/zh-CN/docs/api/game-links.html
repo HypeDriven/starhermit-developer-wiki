@@ -4,7 +4,7 @@ lang: "zh-CN"
 title: "外部链接"
 source_url: "/docs/api/game-links.html"
 source_path: "docs/api/game-links.md"
-source_hash: "2947b0aad1d58974569c7968b25f55decf8eda6675ddc89666bb0fcd11653553"
+source_hash: "acedc36ff057a47202a0e6076f90ae03c1b149760e6ca4e4f4be1f5cb58aea31"
 translation: "machine"
 permalink: "/zh-CN/docs/api/game-links.html"
 ---
@@ -16,19 +16,36 @@ permalink: "/zh-CN/docs/api/game-links.html"
 <h2 id="declare-your-links">声明您的链接</h2>
 <p>在 <code>starhermit.txt</code>:</p>
 <pre><code>engine.minor=24
+engine.capabilities=platform
 engine.link.discord=https://discord.gg/abc
 engine.link.store=https://example.com/game
 </code></pre>
 <ul>
 <li>您最多可以声明 16 个链接。每个 id 为 1–32 个字符 <code>a-z 0-9 -</code> 并且可能只出现一次。</li>
 <li>任何 <code>engine.link.*</code> 关键需求 <code>engine.minor=24</code>，因此较旧的运行时会拒绝该游戏。</li>
-<li>你的脚本调用 <code>openLink("discord")</code>。运行时显示其自己的确认，以及链接的
-完整的主机和 URL，并且仅当玩家选择“打开”时才打开页面。</li>
+<li>制作游戏还需要 <code>engine.capabilities=platform</code>，因为运行时会检查批准
+与玩家的启动令牌。没有它， <code>openLink</code> 决心 <code>"unavailable"</code> 外面
+开发和清单收到警告。</li>
 </ul>
+<h2 id="open-a-link">打开链接</h2>
+<p><code>openLink(id)</code> 从 <code>starhermit:engine</code> 回报
+<code>Promise&lt;"opened" | "cancelled" | "unapproved" | "unavailable"&gt;</code>:</p>
+<ul>
+<li><code>"unapproved"</code>：链接正在等待、拒绝或撤销，其 URL 与批准的 URL 不同，或者
+id 未声明。</li>
+<li><code>"unavailable"</code>：无平台会话、网络错误、401/403/429 或 10 秒内无应答。</li>
+</ul>
+<p>在按下按钮（指针、按键或游戏手柄）时调用它；每按一次最多打开一个链接。一个电话
+按下按钮外、等待等待时的第二个呼叫以及玩家取消后 2 秒内的呼叫
+全部解决 <code>"unavailable"</code> 并记录警告。</p>
+<p>运行时显示其自己的确认信息，以及链接的完整主机和 URL，并仅打开页面
+如果玩家选择“打开”。在浏览器中，游戏手柄的“后退”会取消，但需要单击、点击、确认
+Enter 或 Space，因为浏览器只能从这些窗口打开窗口。</p>
 <h2 id="what-a-link-may-be">链接可能是什么</h2>
 <p>必须有一个链接 <code>https</code>，没有端口，没有 <code>user@</code>，没有 IP 地址，也没有本地名称（<code>localhost</code>,
 <code>.local</code>, <code>.internal</code>）。它的主机必须是 ASCII，国际化名称写为 punycode，
-并且至少有两个标签。它不能包含反斜杠、空格、编码斜杠 (<code>%2f</code>,
+并且至少有两个标签。它不能包含反斜杠、空格、字符 <code>"</code> <code>&lt;</code> <code>&gt;</code> <code>`</code> <code>{</code> <code>}</code> <code>|</code> <code>^</code>,
+畸形的 <code>%</code> 转义符、编码斜杠 (<code>%2f</code>,
 <code>%5c</code>） 或者 <code>.</code>/<code>..</code> 路径段。该平台保持规范的形式：方案和主机
 小写，和 <code>/</code> 为空路径。其他一切都完全按照您编写的方式保留。</p>
 <p><strong>发布时，包含违反规则的链接的包会被拒绝</strong>， 和

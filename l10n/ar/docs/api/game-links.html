@@ -4,7 +4,7 @@ lang: "ar"
 title: "روابط خارجية"
 source_url: "/docs/api/game-links.html"
 source_path: "docs/api/game-links.md"
-source_hash: "2947b0aad1d58974569c7968b25f55decf8eda6675ddc89666bb0fcd11653553"
+source_hash: "acedc36ff057a47202a0e6076f90ae03c1b149760e6ca4e4f4be1f5cb58aea31"
 translation: "machine"
 permalink: "/ar/docs/api/game-links.html"
 ---
@@ -16,19 +16,36 @@ permalink: "/ar/docs/api/game-links.html"
 <h2 id="declare-your-links">أعلن عن الروابط الخاصة بك</h2>
 <p>في <code>starhermit.txt</code>:</p>
 <pre><code>engine.minor=24
+engine.capabilities=platform
 engine.link.discord=https://discord.gg/abc
 engine.link.store=https://example.com/game
 </code></pre>
 <ul>
 <li>يمكنك الإعلان عن ما يصل إلى 16 رابطًا. يتكون كل معرف من 1 إلى 32 حرفًا <code>a-z 0-9 -</code> وقد تظهر مرة واحدة فقط.</li>
 <li>أي <code>engine.link.*</code> الاحتياجات الرئيسية <code>engine.minor=24</code>، لذا فإن أوقات التشغيل الأقدم ترفض اللعبة.</li>
-<li>استدعاء البرامج النصية الخاصة بك <code>openLink("discord")</code>. يُظهر وقت التشغيل التأكيد الخاص به، مع الرابط
-المضيف الكامل وعنوان URL، ولا يفتح الصفحة إلا إذا اختار اللاعب فتح.</li>
+<li>لعبة الإنتاج تحتاج أيضا <code>engine.capabilities=platform</code>، لأن وقت التشغيل يتحقق من الموافقة
+مع رمز إطلاق اللاعب. بدونها، <code>openLink</code> يحل <code>"unavailable"</code> خارج
+التطوير والبيان يحصل على تحذير.</li>
 </ul>
+<h2 id="open-a-link">افتح الرابط</h2>
+<p><code>openLink(id)</code> من <code>starhermit:engine</code> يعود
+<code>Promise&lt;"opened" | "cancelled" | "unapproved" | "unavailable"&gt;</code>:</p>
+<ul>
+<li><code>"unapproved"</code>: الرابط معلق أو مرفوض أو ملغي، أو أن عنوان URL الخاص به يختلف عن الرابط المعتمد، أو
+لم يتم الإعلان عن الهوية.</li>
+<li><code>"unavailable"</code>: لا توجد جلسة منصة، خطأ في الشبكة، 401/403/429، أو لا توجد إجابة خلال 10 ثوانٍ.</li>
+</ul>
+<p>قم باستدعائه أثناء التعامل مع الضغط (المؤشر أو المفتاح أو لوحة الألعاب)؛ يتم فتح كل ضغطة على رابط واحد على الأكثر. مكالمة
+خارج الصحافة، ومكالمة ثانية أثناء انتظار المكالمة، ومكالمة خلال ثانيتين من إلغاء اللاعب
+كل حل <code>"unavailable"</code> وتسجيل تحذير.</p>
+<p>يعرض وقت التشغيل التأكيد الخاص به، مع المضيف الكامل للرابط وعنوان URL، ويفتح الصفحة فقط
+إذا اختار اللاعب فتح. في المتصفحات، يتم إلغاء رجوع لوحة الألعاب، لكن التأكيد يحتاج إلى نقرة، اضغط،
+أدخل أو مسافة، لأن المتصفح يفتح نافذة فقط من تلك.</p>
 <h2 id="what-a-link-may-be">ما قد يكون الرابط</h2>
 <p>يجب أن يكون الرابط <code>https</code>، مع عدم وجود ميناء، لا <code>user@</code>، لا يوجد عنوان IP ولا اسم محلي (<code>localhost</code>,
 <code>.local</code>, <code>.internal</code>). يجب أن يكون مضيفه ASCII، مع كتابة الأسماء الدولية كـ punycode،
-ولها علامتين على الأقل. لا يجوز أن تحتوي على خطوط مائلة عكسية أو مسافات أو خطوط مائلة مشفرة (<code>%2f</code>,
+ولها علامتين على الأقل. لا يجوز أن تحتوي على خطوط مائلة عكسية أو مسافات أو أحرف <code>"</code> <code>&lt;</code> <code>&gt;</code> <code>`</code> <code>{</code> <code>}</code> <code>|</code> <code>^</code>,
+مشوه <code>%</code> هروب، خطوط مائلة مشفرة (<code>%2f</code>,
 <code>%5c</code>) أو <code>.</code>/<code>..</code> قطاعات المسار. تحافظ المنصة على الشكل الأساسي: المخطط والمضيف
 حالة صغيرة، و <code>/</code> لمسار فارغ. يتم الاحتفاظ بكل شيء آخر تمامًا كما كتبته.</p>
 <p><strong>يتم رفض الحزمة التي تحتوي على رابط يخالف القاعدة عند النشر</strong>، مع

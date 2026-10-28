@@ -4,7 +4,7 @@ lang: "id"
 title: "Tautan eksternal"
 source_url: "/docs/api/game-links.html"
 source_path: "docs/api/game-links.md"
-source_hash: "2947b0aad1d58974569c7968b25f55decf8eda6675ddc89666bb0fcd11653553"
+source_hash: "acedc36ff057a47202a0e6076f90ae03c1b149760e6ca4e4f4be1f5cb58aea31"
 translation: "machine"
 permalink: "/id/docs/api/game-links.html"
 ---
@@ -16,19 +16,36 @@ apa pun menjadi satu.</p>
 <h2 id="declare-your-links">Deklarasikan tautan Anda</h2>
 <p>Di dalam <code>starhermit.txt</code>:</p>
 <pre><code>engine.minor=24
+engine.capabilities=platform
 engine.link.discord=https://discord.gg/abc
 engine.link.store=https://example.com/game
 </code></pre>
 <ul>
 <li>Anda dapat mendeklarasikan hingga 16 tautan. Setiap id terdiri dari 1–32 karakter <code>a-z 0-9 -</code> dan mungkin hanya muncul sekali.</li>
 <li>Setiap <code>engine.link.*</code> kebutuhan utama <code>engine.minor=24</code>, jadi runtime yang lebih lama menolak game tersebut.</li>
-<li>Panggilan skrip Anda <code>openLink("discord")</code>. Runtime menunjukkan konfirmasinya sendiri, dengan tautannya
-host dan URL lengkap, dan membuka halaman hanya jika pemain memilih Buka.</li>
+<li>Sebuah game produksi juga membutuhkan <code>engine.capabilities=platform</code>, karena runtime memeriksa persetujuan
+dengan token peluncuran pemain. Tanpa itu, <code>openLink</code> terselesaikan <code>"unavailable"</code> di luar
+pengembangan dan manifes mendapat peringatan.</li>
 </ul>
+<h2 id="open-a-link">Buka tautan</h2>
+<p><code>openLink(id)</code> dari <code>starhermit:engine</code> kembali
+<code>Promise&lt;"opened" | "cancelled" | "unapproved" | "unavailable"&gt;</code>:</p>
+<ul>
+<li><code>"unapproved"</code>: tautannya tertunda, ditolak atau dicabut, URL-nya berbeda dari yang disetujui, atau
+id tidak diumumkan.</li>
+<li><code>"unavailable"</code>: tidak ada sesi platform, kesalahan jaringan, 401/403/429, atau tidak ada jawaban dalam 10 detik.</li>
+</ul>
+<p>Menyebutnya sambil menangani pers (penunjuk, tombol, atau gamepad); setiap pers membuka paling banyak satu tautan. Sebuah panggilan
+di luar pers, panggilan kedua saat ada yang tertunda, dan panggilan dalam waktu 2 detik setelah Pembatalan pemain
+semua teratasi <code>"unavailable"</code> dan mencatat peringatan.</p>
+<p>Runtime menampilkan konfirmasinya sendiri, dengan host dan URL lengkap tautan, dan membuka halaman saja
+jika pemain memilih Buka. Di browser, Bagian Belakang gamepad dibatalkan, tetapi konfirmasi memerlukan satu klik, ketuk,
+Enter atau Spasi, karena browser hanya membuka jendela dari jendela tersebut.</p>
 <h2 id="what-a-link-may-be">Tautan apa yang mungkin ada</h2>
 <p>Tautan harus ada <code>https</code>, tanpa port, tidak <code>user@</code>, tidak ada alamat IP dan tidak ada nama lokal (<code>localhost</code>,
 <code>.local</code>, <code>.internal</code>). Hostnya harus ASCII, dengan nama internasional yang ditulis sebagai punycode,
-dan memiliki setidaknya dua label. Ini tidak boleh mengandung garis miring terbalik, spasi, garis miring yang dikodekan (<code>%2f</code>,
+dan memiliki setidaknya dua label. Tidak boleh mengandung garis miring terbalik, spasi, atau karakter <code>"</code> <code>&lt;</code> <code>&gt;</code> <code>`</code> <code>{</code> <code>}</code> <code>|</code> <code>^</code>,
+salah format <code>%</code> lolos, garis miring yang dikodekan (<code>%2f</code>,
 <code>%5c</code>) atau <code>.</code>/<code>..</code> segmen jalur. Platform ini mempertahankan bentuk kanoniknya: skema dan hostnya
 huruf kecil, dan <code>/</code> untuk jalan yang kosong. Segala sesuatu yang lain disimpan persis seperti yang Anda tulis.</p>
 <p><strong>Paket dengan tautan yang melanggar aturan akan ditolak saat Anda mempublikasikannya</strong>, dengan

@@ -4,7 +4,7 @@ lang: "fr"
 title: "Liens externes"
 source_url: "/docs/api/game-links.html"
 source_path: "docs/api/game-links.md"
-source_hash: "2947b0aad1d58974569c7968b25f55decf8eda6675ddc89666bb0fcd11653553"
+source_hash: "acedc36ff057a47202a0e6076f90ae03c1b149760e6ca4e4f4be1f5cb58aea31"
 translation: "machine"
 permalink: "/fr/docs/api/game-links.html"
 ---
@@ -16,19 +16,36 @@ n'importe quoi contre un.</p>
 <h2 id="declare-your-links">Déclarez vos liens</h2>
 <p>Dans <code>starhermit.txt</code>:</p>
 <pre><code>engine.minor=24
+engine.capabilities=platform
 engine.link.discord=https://discord.gg/abc
 engine.link.store=https://example.com/game
 </code></pre>
 <ul>
 <li>Vous pouvez déclarer jusqu'à 16 liens. Chaque identifiant comporte de 1 à 32&#160;caractères <code>a-z 0-9 -</code> et ne peut apparaître qu'une seule fois.</li>
 <li>N'importe lequel <code>engine.link.*</code> besoins clés <code>engine.minor=24</code>, donc les anciens runtimes refusent le jeu.</li>
-<li>Vos scripts appellent <code>openLink("discord")</code>. Le runtime affiche sa propre confirmation, avec le lien
-hôte et URL complets, et ouvre la page uniquement si le joueur choisit Ouvrir.</li>
+<li>Un jeu de production a également besoin <code>engine.capabilities=platform</code>, car le runtime vérifie l'approbation
+avec le jeton de lancement du joueur. Sans cela, <code>openLink</code> résout <code>"unavailable"</code> à l'extérieur
+développement et le manifeste reçoit un avertissement.</li>
 </ul>
+<h2 id="open-a-link">Ouvrir un lien</h2>
+<p><code>openLink(id)</code> depuis <code>starhermit:engine</code> retours
+<code>Promise&lt;"opened" | "cancelled" | "unapproved" | "unavailable"&gt;</code>:</p>
+<ul>
+<li><code>"unapproved"</code>: le lien est en attente, rejeté ou révoqué, son URL diffère de celle approuvée, ou
+l'identifiant n'est pas déclaré.</li>
+<li><code>"unavailable"</code>: pas de session plateforme, une erreur réseau, 401/403/429, ou pas de réponse dans les 10 s.</li>
+</ul>
+<p>Appelez-le en manipulant une pression (pointeur, touche ou manette de jeu)&#160;; chaque pression ouvre au plus un lien. Un appel
+en dehors d'une presse, un deuxième appel alors qu'un autre est en attente, et un appel dans les 2 s suivant l'annulation du joueur
+tout est résolu <code>"unavailable"</code> et enregistrez un avertissement.</p>
+<p>Le moteur d'exécution affiche sa propre confirmation, avec l'hôte complet et l'URL du lien, et ouvre uniquement la page
+si le joueur choisit Ouvrir. Dans les navigateurs, le retour d'une manette de jeu s'annule, mais la confirmation nécessite un clic, une tape,
+Entrée ou Espace, car un navigateur ouvre une fenêtre uniquement à partir de ceux-ci.</p>
 <h2 id="what-a-link-may-be">Qu'est-ce qu'un lien peut être</h2>
 <p>Un lien doit être <code>https</code>, sans port, non <code>user@</code>, pas d'adresse IP et pas de nom local (<code>localhost</code>,
 <code>.local</code>, <code>.internal</code>). Son hôte doit être ASCII, avec des noms internationalisés écrits en punycode,
-et avoir au moins deux étiquettes. Il ne peut pas contenir de barres obliques inverses, d'espaces, de barres obliques codées (<code>%2f</code>,
+et avoir au moins deux étiquettes. Il ne doit pas contenir de barres obliques inverses, d'espaces, de caractères <code>"</code> <code>&lt;</code> <code>&gt;</code> <code>`</code> <code>{</code> <code>}</code> <code>|</code> <code>^</code>,
+mal formé <code>%</code> échappements, barres obliques codées (<code>%2f</code>,
 <code>%5c</code>) ou <code>.</code>/<code>..</code> segments de chemin. La plateforme conserve la forme canonique : le schéma et l'hébergeur en
 minuscules, et <code>/</code> pour un chemin vide. Tout le reste est conservé exactement tel que vous l’avez écrit.</p>
 <p><strong>Un package avec un lien qui enfreint une règle est refusé lors de votre publication</strong>, avec

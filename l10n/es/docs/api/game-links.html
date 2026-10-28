@@ -4,7 +4,7 @@ lang: "es"
 title: "Enlaces externos"
 source_url: "/docs/api/game-links.html"
 source_path: "docs/api/game-links.md"
-source_hash: "2947b0aad1d58974569c7968b25f55decf8eda6675ddc89666bb0fcd11653553"
+source_hash: "acedc36ff057a47202a0e6076f90ae03c1b149760e6ca4e4f4be1f5cb58aea31"
 translation: "machine"
 permalink: "/es/docs/api/game-links.html"
 ---
@@ -16,19 +16,36 @@ cualquier cosa a uno.</p>
 <h2 id="declare-your-links">Declara tus enlaces</h2>
 <p>En <code>starhermit.txt</code>:</p>
 <pre><code>engine.minor=24
+engine.capabilities=platform
 engine.link.discord=https://discord.gg/abc
 engine.link.store=https://example.com/game
 </code></pre>
 <ul>
 <li>Puedes declarar hasta 16 enlaces. Cada identificación tiene entre 1 y 32 caracteres de <code>a-z 0-9 -</code> y podrá aparecer sólo una vez.</li>
 <li>Cualquier <code>engine.link.*</code> necesidades clave <code>engine.minor=24</code>, por lo que los tiempos de ejecución más antiguos rechazan el juego.</li>
-<li>Tus guiones llaman <code>openLink("discord")</code>. El tiempo de ejecución muestra su propia confirmación, con el enlace
-host completo y URL, y abre la página sólo si el jugador elige Abrir.</li>
+<li>Un juego de producción también necesita <code>engine.capabilities=platform</code>, porque el tiempo de ejecución verifica la aprobación
+con la ficha de lanzamiento del jugador. Sin él, <code>openLink</code> resuelve <code>"unavailable"</code> afuera
+desarrollo y el manifiesto recibe una advertencia.</li>
 </ul>
+<h2 id="open-a-link">Abrir un enlace</h2>
+<p><code>openLink(id)</code> de <code>starhermit:engine</code> regresa
+<code>Promise&lt;"opened" | "cancelled" | "unapproved" | "unavailable"&gt;</code>:</p>
+<ul>
+<li><code>"unapproved"</code>: el enlace está pendiente, rechazado o revocado, su URL difiere de la aprobada, o
+la identificación no está declarada.</li>
+<li><code>"unavailable"</code>: sin sesión en la plataforma, error de red, 401/403/429 o sin respuesta en 10 s.</li>
+</ul>
+<p>Llámalo mientras manejas una pulsación (puntero, tecla o gamepad); cada pulsación abre como máximo un enlace. una llamada
+fuera de una prensa, una segunda llamada mientras hay una pendiente, y una llamada dentro de los 2 s de la Cancelación del jugador
+todo resuelto <code>"unavailable"</code> y registrar una advertencia.</p>
+<p>El tiempo de ejecución muestra su propia confirmación, con el host completo y la URL del enlace, y abre solo la página.
+si el jugador elige Abierto. En los navegadores, la parte Atrás de un gamepad se cancela, pero para confirmar es necesario hacer clic, tocar,
+Ingrese o Espacio, porque un navegador abre una ventana solo desde esos.</p>
 <h2 id="what-a-link-may-be">¿Qué vínculo puede ser?</h2>
 <p>Un enlace debe ser <code>https</code>, sin puerto, no <code>user@</code>, sin dirección IP ni nombre local (<code>localhost</code>,
 <code>.local</code>, <code>.internal</code>). Su host debe ser ASCII, con nombres internacionalizados escritos como punycode,
-y tener al menos dos etiquetas. No puede contener barras invertidas, espacios, barras diagonales codificadas (<code>%2f</code>,
+y tener al menos dos etiquetas. No puede contener barras invertidas, espacios, los caracteres <code>"</code> <code>&lt;</code> <code>&gt;</code> <code>`</code> <code>{</code> <code>}</code> <code>|</code> <code>^</code>,
+mal formado <code>%</code> escapes, barras diagonales codificadas (<code>%2f</code>,
 <code>%5c</code>) o <code>.</code>/<code>..</code> segmentos de camino. La plataforma mantiene la forma canónica: el esquema y el host en
 minúscula, y <code>/</code> por un camino vacío. Todo lo demás se mantiene exactamente como lo escribiste.</p>
 <p><strong>Un paquete con un enlace que infringe una regla se rechaza cuando se publica</strong>, con

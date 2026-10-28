@@ -4,7 +4,7 @@ lang: "bn"
 title: "বাহ্যিক লিঙ্ক"
 source_url: "/docs/api/game-links.html"
 source_path: "docs/api/game-links.md"
-source_hash: "2947b0aad1d58974569c7968b25f55decf8eda6675ddc89666bb0fcd11653553"
+source_hash: "acedc36ff057a47202a0e6076f90ae03c1b149760e6ca4e4f4be1f5cb58aea31"
 translation: "machine"
 permalink: "/bn/docs/api/game-links.html"
 ---
@@ -16,19 +16,36 @@ permalink: "/bn/docs/api/game-links.html"
 <h2 id="declare-your-links">আপনার লিঙ্ক ঘোষণা</h2>
 <p>ইন <code>starhermit.txt</code>:</p>
 <pre><code>engine.minor=24
+engine.capabilities=platform
 engine.link.discord=https://discord.gg/abc
 engine.link.store=https://example.com/game
 </code></pre>
 <ul>
 <li>আপনি 16টি লিঙ্ক পর্যন্ত ঘোষণা করতে পারেন। প্রতিটি আইডি 1-32 অক্ষরের <code>a-z 0-9 -</code> এবং শুধুমাত্র একবার প্রদর্শিত হতে পারে.</li>
 <li>যে কোন <code>engine.link.*</code> মূল চাহিদা <code>engine.minor=24</code>, তাই পুরোনো রানটাইম খেলা প্রত্যাখ্যান.</li>
-<li>আপনার স্ক্রিপ্ট কল <code>openLink("discord")</code>. রানটাইম লিঙ্কের সাথে তার নিজস্ব নিশ্চিতকরণ দেখায়
-সম্পূর্ণ হোস্ট এবং URL, এবং প্লেয়ার খোলা নির্বাচন করলেই পৃষ্ঠাটি খোলে।</li>
+<li>একটি উত্পাদন খেলা প্রয়োজন <code>engine.capabilities=platform</code>, কারণ রানটাইম অনুমোদন চেক করে
+প্লেয়ারের লঞ্চ টোকেন সহ। তা ছাড়া, <code>openLink</code> সমাধান করে <code>"unavailable"</code> বাইরে
+উন্নয়ন এবং ম্যানিফেস্ট একটি সতর্কতা পায়।</li>
 </ul>
+<h2 id="open-a-link">একটি লিঙ্ক খুলুন</h2>
+<p><code>openLink(id)</code> থেকে <code>starhermit:engine</code> রিটার্ন
+<code>Promise&lt;"opened" | "cancelled" | "unapproved" | "unavailable"&gt;</code>:</p>
+<ul>
+<li><code>"unapproved"</code>: লিঙ্কটি মুলতুবি, প্রত্যাখ্যান বা প্রত্যাহার করা হয়েছে, এর ইউআরএল অনুমোদিত থেকে আলাদা, বা
+আইডি ঘোষণা করা হয় না।</li>
+<li><code>"unavailable"</code>: কোনো প্ল্যাটফর্ম সেশন নেই, একটি নেটওয়ার্ক ত্রুটি, 401/403/429, বা 10 সেকেন্ডের মধ্যে কোনো উত্তর নেই।</li>
+</ul>
+<p>একটি প্রেস (পয়েন্টার, কী বা গেমপ্যাড) পরিচালনা করার সময় এটি কল করুন; প্রতিটি প্রেস সর্বাধিক একটি লিঙ্ক খোলে। একটি কল
+একটি প্রেসের বাইরে, একটি মুলতুবি থাকা অবস্থায় একটি দ্বিতীয় কল এবং প্লেয়ারের বাতিল হওয়ার 2 সেকেন্ডের মধ্যে একটি কল
+সব সমাধান <code>"unavailable"</code> এবং একটি সতর্কতা লগ করুন।</p>
+<p>রানটাইম লিঙ্কের সম্পূর্ণ হোস্ট এবং URL সহ নিজস্ব নিশ্চিতকরণ দেখায় এবং শুধুমাত্র পৃষ্ঠাটি খোলে
+যদি প্লেয়ার ওপেন পছন্দ করে। ব্রাউজারগুলিতে একটি গেমপ্যাডের পিছনে বাতিল হয়, কিন্তু নিশ্চিত করার জন্য একটি ক্লিক, আলতো চাপুন,
+এন্টার বা স্পেস, কারণ একটি ব্রাউজার শুধুমাত্র সেগুলি থেকে একটি উইন্ডো খোলে।</p>
 <h2 id="what-a-link-may-be">কি একটি লিঙ্ক হতে পারে</h2>
 <p>একটি লিঙ্ক হতে হবে <code>https</code>, কোন পোর্ট ছাড়া, কোন <code>user@</code>, কোন IP ঠিকানা এবং কোন স্থানীয় নাম (<code>localhost</code>,
 <code>.local</code>, <code>.internal</code>) এর হোস্ট অবশ্যই ASCII হতে হবে, আন্তর্জাতিক নামগুলি punycode হিসাবে লিখিত,
-এবং অন্তত দুটি লেবেল আছে. এতে ব্যাকস্ল্যাশ, স্পেস, এনকোডেড স্ল্যাশ (<code>%2f</code>,
+এবং অন্তত দুটি লেবেল আছে. এতে ব্যাকস্ল্যাশ, স্পেস, অক্ষর থাকতে পারে না <code>"</code> <code>&lt;</code> <code>&gt;</code> <code>`</code> <code>{</code> <code>}</code> <code>|</code> <code>^</code>,
+বিকৃত <code>%</code> পালানো, এনকোডেড স্ল্যাশ (<code>%2f</code>,
 <code>%5c</code>) বা <code>.</code>/<code>..</code> পথের অংশ। প্ল্যাটফর্মটি ক্যানোনিকাল ফর্ম রাখে: স্কিম এবং হোস্ট ইন
 ছোট হাতের অক্ষর, এবং <code>/</code> একটি খালি পথের জন্য। অন্য সবকিছু ঠিক যেমন আপনি লিখেছেন ঠিক রাখা আছে.</p>
 <p><strong>আপনি প্রকাশ করার সময় একটি নিয়ম ভঙ্গকারী একটি লিঙ্ক সহ একটি প্যাকেজ প্রত্যাখ্যান করা হয়</strong>, সঙ্গে
