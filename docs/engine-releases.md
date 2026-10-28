@@ -23,6 +23,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.19.3 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.19.3-windows-x86_64.zip](../engine/1.19.3/native/windows-x86_64/starhermit-1.19.3-windows-x86_64.zip), [starhermit-1.19.3-linux-x86_64.tar.gz](../engine/1.19.3/native/linux-x86_64/starhermit-1.19.3-linux-x86_64.tar.gz) |
 | 1.19.2 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.19.2-windows-x86_64.zip](../engine/1.19.2/native/windows-x86_64/starhermit-1.19.2-windows-x86_64.zip), [starhermit-1.19.2-linux-x86_64.tar.gz](../engine/1.19.2/native/linux-x86_64/starhermit-1.19.2-linux-x86_64.tar.gz) |
 | 1.19.1 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.19.1-windows-x86_64.zip](../engine/1.19.1/native/windows-x86_64/starhermit-1.19.1-windows-x86_64.zip), [starhermit-1.19.1-linux-x86_64.tar.gz](../engine/1.19.1/native/linux-x86_64/starhermit-1.19.1-linux-x86_64.tar.gz) |
 | 1.19.0 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.19.0-windows-x86_64.zip](../engine/1.19.0/native/windows-x86_64/starhermit-1.19.0-windows-x86_64.zip), [starhermit-1.19.0-linux-x86_64.tar.gz](../engine/1.19.0/native/linux-x86_64/starhermit-1.19.0-linux-x86_64.tar.gz) |
@@ -34,7 +35,7 @@ never changes: a fix is the next version.
 | 1.16.3 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.16.3-windows-x86_64.zip](../engine/1.16.3/native/windows-x86_64/starhermit-1.16.3-windows-x86_64.zip), [starhermit-1.16.3-linux-x86_64.tar.gz](../engine/1.16.3/native/linux-x86_64/starhermit-1.16.3-linux-x86_64.tar.gz) |
 | 1.16.2 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.16.2-windows-x86_64.zip](../engine/1.16.2/native/windows-x86_64/starhermit-1.16.2-windows-x86_64.zip), [starhermit-1.16.2-linux-x86_64.tar.gz](../engine/1.16.2/native/linux-x86_64/starhermit-1.16.2-linux-x86_64.tar.gz) |
 | 1.16.1 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.16.1-windows-x86_64.zip](../engine/1.16.1/native/windows-x86_64/starhermit-1.16.1-windows-x86_64.zip), [starhermit-1.16.1-linux-x86_64.tar.gz](../engine/1.16.1/native/linux-x86_64/starhermit-1.16.1-linux-x86_64.tar.gz) |
-| 1.16.0 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.16.0-windows-x86_64.zip](../engine/1.16.0/native/windows-x86_64/starhermit-1.16.0-windows-x86_64.zip), [starhermit-1.16.0-linux-x86_64.tar.gz](../engine/1.16.0/native/linux-x86_64/starhermit-1.16.0-linux-x86_64.tar.gz) |
+| 1.16.0 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-28 (wiki size limit) |
 | 1.15.2 | 1.17 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-28 (wiki size limit) |
 | 1.15.1 | 1.17 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
 | 1.15.0 | 1.17 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
@@ -68,6 +69,16 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.19.3
+
+Host API 1.21, as 1.19.2, fixes only: re-pin to 1.19.3 (`engine.version=1.19.3`).
+
+- **Fix (scene)**: `Raycaster.intersectObject(s)` tests meshes in double precision, as three.js does in JavaScript,
+  so rays from far away no longer miss small objects and rays near a `CircleGeometry`'s centre no longer slip between
+  its triangles.
+- **Docs**: light units. At every minor, punctual lights use three's legacy (pre-r155) scaling: from three r155+,
+  divide ambient, hemisphere, directional, point and spot light intensities by π (spec, "light units").
 
 ### 1.19.2
 
@@ -767,7 +778,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 on 2026-10-28).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 and 1.16.0 on 2026-10-28).
 
 ### native.json
 
