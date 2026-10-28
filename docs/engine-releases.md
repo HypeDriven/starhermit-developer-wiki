@@ -23,6 +23,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.20.0 | 1.22 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.20.0-windows-x86_64.zip](../engine/1.20.0/native/windows-x86_64/starhermit-1.20.0-windows-x86_64.zip), [starhermit-1.20.0-linux-x86_64.tar.gz](../engine/1.20.0/native/linux-x86_64/starhermit-1.20.0-linux-x86_64.tar.gz) |
 | 1.19.3 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.19.3-windows-x86_64.zip](../engine/1.19.3/native/windows-x86_64/starhermit-1.19.3-windows-x86_64.zip), [starhermit-1.19.3-linux-x86_64.tar.gz](../engine/1.19.3/native/linux-x86_64/starhermit-1.19.3-linux-x86_64.tar.gz) |
 | 1.19.2 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.19.2-windows-x86_64.zip](../engine/1.19.2/native/windows-x86_64/starhermit-1.19.2-windows-x86_64.zip), [starhermit-1.19.2-linux-x86_64.tar.gz](../engine/1.19.2/native/linux-x86_64/starhermit-1.19.2-linux-x86_64.tar.gz) |
 | 1.19.1 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.19.1-windows-x86_64.zip](../engine/1.19.1/native/windows-x86_64/starhermit-1.19.1-windows-x86_64.zip), [starhermit-1.19.1-linux-x86_64.tar.gz](../engine/1.19.1/native/linux-x86_64/starhermit-1.19.1-linux-x86_64.tar.gz) |
@@ -34,7 +35,7 @@ never changes: a fix is the next version.
 | 1.16.4 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.16.4-windows-x86_64.zip](../engine/1.16.4/native/windows-x86_64/starhermit-1.16.4-windows-x86_64.zip), [starhermit-1.16.4-linux-x86_64.tar.gz](../engine/1.16.4/native/linux-x86_64/starhermit-1.16.4-linux-x86_64.tar.gz) |
 | 1.16.3 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.16.3-windows-x86_64.zip](../engine/1.16.3/native/windows-x86_64/starhermit-1.16.3-windows-x86_64.zip), [starhermit-1.16.3-linux-x86_64.tar.gz](../engine/1.16.3/native/linux-x86_64/starhermit-1.16.3-linux-x86_64.tar.gz) |
 | 1.16.2 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.16.2-windows-x86_64.zip](../engine/1.16.2/native/windows-x86_64/starhermit-1.16.2-windows-x86_64.zip), [starhermit-1.16.2-linux-x86_64.tar.gz](../engine/1.16.2/native/linux-x86_64/starhermit-1.16.2-linux-x86_64.tar.gz) |
-| 1.16.1 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.16.1-windows-x86_64.zip](../engine/1.16.1/native/windows-x86_64/starhermit-1.16.1-windows-x86_64.zip), [starhermit-1.16.1-linux-x86_64.tar.gz](../engine/1.16.1/native/linux-x86_64/starhermit-1.16.1-linux-x86_64.tar.gz) |
+| 1.16.1 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-28 (wiki size limit) |
 | 1.16.0 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-28 (wiki size limit) |
 | 1.15.2 | 1.17 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-28 (wiki size limit) |
 | 1.15.1 | 1.17 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-27 (wiki size limit) |
@@ -69,6 +70,23 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.20.0
+
+Host API 1.22: pin `engine.version=1.20.0` and add `engine.minor=22` for the changes marked (1.22); everything else
+applies to every game. Games declaring 1.21 or older behave exactly as before.
+
+- **Slider fill** (1.22): a slider style's `fill` part covers the track from its minimum to the value (from the right
+  in right-to-left layouts); CSS `accent-color` and `::-moz-range-progress` reach it.
+- **glTF lights** (1.22): `GLTFLoader` builds `KHR_lights_punctual` point, spot and directional lights as three r185
+  does, with intensities in the engine's light units (spec, "light units"). A file that requires the extension now
+  loads for every game (without lights below 1.22) instead of failing.
+- **Rooms**: `RoomSocket.sendReady(false)` withdraws ready.
+- **Accessibility**: `ui.announce` never throws for many announcements in one frame; it keeps the newest four and
+  warns once.
+- **Fix (audio)**: in browsers, `context.currentTime` could stay at 0 for good when the audio worklet's first report
+  came before it had rendered, so a game waiting for the clock never played sound.
+- **Docs**: porting rules for three.js room environments by release (spec, "environment ports").
 
 ### 1.19.3
 
@@ -778,7 +796,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 and 1.16.0 on 2026-10-28).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.16.1 on 2026-10-28).
 
 ### native.json
 
