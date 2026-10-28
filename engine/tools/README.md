@@ -18,15 +18,15 @@ provided separately for Apple Silicon (`macos-aarch64`) and Intel
 
 ## Downloads
 
-Developer tools 1.16.2 (Linux and Windows) are separate from the engine
+Developer tools 1.20.2 (Linux and Windows) are separate from the engine
 runtime a game pins.
 
 | Computer | Download | SHA-256 |
 |---|---|---|
 | macOS, Apple Silicon (1.10.0) | [starhermit-tools-1.10.0-macos-aarch64.tar.gz](1.10.0/starhermit-tools-1.10.0-macos-aarch64.tar.gz) | [checksum](1.10.0/starhermit-tools-1.10.0-macos-aarch64.tar.gz.sha256) |
 | macOS, Intel (1.10.0) | [starhermit-tools-1.10.0-macos-x86_64.tar.gz](1.10.0/starhermit-tools-1.10.0-macos-x86_64.tar.gz) | [checksum](1.10.0/starhermit-tools-1.10.0-macos-x86_64.tar.gz.sha256) |
-| Linux, x86-64 | [starhermit-tools-1.16.2-linux-x86_64.tar.gz](1.16.2/starhermit-tools-1.16.2-linux-x86_64.tar.gz) | [checksum](1.16.2/starhermit-tools-1.16.2-linux-x86_64.tar.gz.sha256) |
-| Windows, x86-64 | [starhermit-tools-1.16.2-windows-x86_64.zip](1.16.2/starhermit-tools-1.16.2-windows-x86_64.zip) | [checksum](1.16.2/starhermit-tools-1.16.2-windows-x86_64.zip.sha256) |
+| Linux, x86-64 | [starhermit-tools-1.20.2-linux-x86_64.tar.gz](1.20.2/starhermit-tools-1.20.2-linux-x86_64.tar.gz) | [checksum](1.20.2/starhermit-tools-1.20.2-linux-x86_64.tar.gz.sha256) |
+| Windows, x86-64 | [starhermit-tools-1.20.2-windows-x86_64.zip](1.20.2/starhermit-tools-1.20.2-windows-x86_64.zip) | [checksum](1.20.2/starhermit-tools-1.20.2-windows-x86_64.zip.sha256) |
 
 The macOS tools stay at 1.10.0 until a Mac build of a newer release is
 available. They still check and package games, but 1.10.0 cannot publish
