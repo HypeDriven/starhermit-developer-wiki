@@ -23,6 +23,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.22.0 | 1.24 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.22.0-windows-x86_64.zip](../engine/1.22.0/native/windows-x86_64/starhermit-1.22.0-windows-x86_64.zip), [starhermit-1.22.0-linux-x86_64.tar.gz](../engine/1.22.0/native/linux-x86_64/starhermit-1.22.0-linux-x86_64.tar.gz) |
 | 1.21.0 | 1.23 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.21.0-windows-x86_64.zip](../engine/1.21.0/native/windows-x86_64/starhermit-1.21.0-windows-x86_64.zip), [starhermit-1.21.0-linux-x86_64.tar.gz](../engine/1.21.0/native/linux-x86_64/starhermit-1.21.0-linux-x86_64.tar.gz) |
 | 1.20.2 | 1.22 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.20.2-windows-x86_64.zip](../engine/1.20.2/native/windows-x86_64/starhermit-1.20.2-windows-x86_64.zip), [starhermit-1.20.2-linux-x86_64.tar.gz](../engine/1.20.2/native/linux-x86_64/starhermit-1.20.2-linux-x86_64.tar.gz) |
 | 1.20.1 | 1.22 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.20.1-windows-x86_64.zip](../engine/1.20.1/native/windows-x86_64/starhermit-1.20.1-windows-x86_64.zip), [starhermit-1.20.1-linux-x86_64.tar.gz](../engine/1.20.1/native/linux-x86_64/starhermit-1.20.1-linux-x86_64.tar.gz) |
@@ -34,7 +35,7 @@ never changes: a fix is the next version.
 | 1.18.0 | 1.20 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.18.0-windows-x86_64.zip](../engine/1.18.0/native/windows-x86_64/starhermit-1.18.0-windows-x86_64.zip), [starhermit-1.18.0-linux-x86_64.tar.gz](../engine/1.18.0/native/linux-x86_64/starhermit-1.18.0-linux-x86_64.tar.gz) |
 | 1.17.1 | 1.19 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.17.1-windows-x86_64.zip](../engine/1.17.1/native/windows-x86_64/starhermit-1.17.1-windows-x86_64.zip), [starhermit-1.17.1-linux-x86_64.tar.gz](../engine/1.17.1/native/linux-x86_64/starhermit-1.17.1-linux-x86_64.tar.gz) |
 | 1.17.0 | 1.19 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.17.0-windows-x86_64.zip](../engine/1.17.0/native/windows-x86_64/starhermit-1.17.0-windows-x86_64.zip), [starhermit-1.17.0-linux-x86_64.tar.gz](../engine/1.17.0/native/linux-x86_64/starhermit-1.17.0-linux-x86_64.tar.gz) |
-| 1.16.5 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.16.5-windows-x86_64.zip](../engine/1.16.5/native/windows-x86_64/starhermit-1.16.5-windows-x86_64.zip), [starhermit-1.16.5-linux-x86_64.tar.gz](../engine/1.16.5/native/linux-x86_64/starhermit-1.16.5-linux-x86_64.tar.gz) |
+| 1.16.5 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-28 (wiki size limit) |
 | 1.16.4 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-28 (wiki size limit) |
 | 1.16.3 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-28 (wiki size limit) |
 | 1.16.2 | 1.18 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-28 (wiki size limit) |
@@ -73,6 +74,24 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.22.0
+
+Host API 1.24: pin `engine.version=1.22.0` and add `engine.minor=24` for the changes marked (1.24); everything else
+applies to every game. Games declaring 1.23 or older behave as before.
+
+- **External links** (1.24): a manifest declares up to 16 `engine.link.<id>=<https URL>` lines, and `openLink(id)`
+  from `starhermit:engine` opens one while handling the player's press, after the runtime's own confirmation, only
+  once a StarHermit administrator has approved that exact URL. Unreviewed links open, with a warning, only in
+  development runs.
+- **Material parameters** (1.24): copied as three.js r185's `setValues` copies them, so one Color passed to two
+  materials (or two fields) is no longer shared. Older games keep sharing it and are warned once in the console.
+- **Clearer 3D errors**: a refused 3D batch, pass data or instance names the field and value, and a non-finite
+  material value or uniform is named by material and property. An emissive colour times its intensity past the
+  half-float range is drawn at its largest instead of refusing the pass.
+- **Faster scripts**: IsoCity's tick and IsoCoaster's guest update 1.6×, chess searches 1.07–1.17× faster; fused
+  instructions charge a little less fuel. No behaviour changes.
+- **Accessibility**: in browsers a screen reader's activation of a widget works after a finger tap.
 
 ### 1.21.0
 
@@ -841,7 +860,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.16.4 on 2026-10-28).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.16.5 on 2026-10-28).
 
 ### native.json
 
