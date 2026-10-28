@@ -1,0 +1,218 @@
+---
+layout: "wiki"
+lang: "es"
+title: "arranca"
+source_url: "/docs/api/plucks.html"
+source_path: "docs/api/plucks.md"
+source_hash: "6f5d6476efe4d64c7a0af081980161f8b64492b4eb65467d9c8b70e598a31473"
+translation: "machine"
+permalink: "/es/docs/api/plucks.html"
+---
+{% raw %}
+<h1 id="plucks">arranca</h1>
+<p>Arranca (símbolo <strong>PLK</strong>) son la moneda de StarHermit. Los jugadores los gastan en acceso a tu juego o en
+artículos que vendes dentro de él. tu recibes <strong>99%</strong> de cada venta, y la plataforma se queda con una comisión del 1%,
+redondeado a un Pluck completo: 1 PLK en una venta de 1 a 100 PLK, 2 PLK en 101 a 200, y así sucesivamente. cada
+El saldo comienza en cero.</p>
+<p>Aún no se ha decidido cómo los jugadores compran o ganan Plucks. Hasta que lo sea, los saldos cambian sólo a través de
+subvenciones para ventas y operadores.</p>
+<h2 id="endpoints">Puntos finales</h2>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Camino</th>
+<th>autenticación</th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/me/plucks</code></td>
+<td>JWT</td>
+<td>Tu saldo: <code>{ balance, currency: "Plucks", symbol: "PLK" }</code></td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/me/plucks/transactions</code></td>
+<td>JWT</td>
+<td>Tu historia, lo más nuevo primero: <code>?before=&amp;limit=</code> (≤100)</td>
+</tr>
+<tr>
+<td>PONER</td>
+<td><code>/api/v1/me/github-games/{id}/plucks/access-price</code></td>
+<td>JWT (propietario)</td>
+<td><code>{ price }</code> (1–1.000.000.000, o <code>null</code> gratis)</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/me/github-games/{id}/plucks/items</code></td>
+<td>JWT (propietario)</td>
+<td>Tu catálogo de artículos</td>
+</tr>
+<tr>
+<td>PONER</td>
+<td><code>/api/v1/me/github-games/{id}/plucks/items/{key}</code></td>
+<td>JWT (propietario)</td>
+<td>Crear o actualizar <code>{ name, price, active }</code></td>
+</tr>
+<tr>
+<td>BORRAR</td>
+<td><code>/api/v1/me/github-games/{id}/plucks/items/{key}</code></td>
+<td>JWT (propietario)</td>
+<td>Eliminar un elemento → <code>204</code></td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/me/github-games/{id}/plucks/sales</code></td>
+<td>JWT (propietario)</td>
+<td>Pedidos de artículos pagados, los más nuevos primero</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/games/{slug}/plucks/access</code></td>
+<td>Token de lanzamiento o JWT</td>
+<td><code>{ price, hasAccess, isOwner }</code> para la persona que llama</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/games/{slug}/plucks/items</code></td>
+<td>Anónimo</td>
+<td>Tus artículos activos</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/games/{slug}/plucks/orders</code></td>
+<td>Token de lanzamiento o JWT</td>
+<td>Pídele al jugador que compre <code>{ itemKey }</code></td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/games/{slug}/plucks/orders/{id}</code></td>
+<td>Token de lanzamiento o JWT</td>
+<td>El orden del jugador y su estado.</td>
+</tr>
+<tr>
+<td>CONSEGUIR</td>
+<td><code>/api/v1/games/{slug}/server/plucks/orders?since=</code></td>
+<td>token de servidor</td>
+<td>Pedidos pagados para entregar, los más antiguos primero</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/me/plucks/game-access/{gameId}</code></td>
+<td>JWT, inicio de sesión OAuth</td>
+<td>El jugador compra acceso: <code>{ expectedPrice }</code></td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/me/plucks/orders/{id}/confirm</code></td>
+<td>JWT, inicio de sesión OAuth</td>
+<td>El jugador paga por un pedido.</td>
+</tr>
+<tr>
+<td>CORREO</td>
+<td><code>/api/v1/me/plucks/orders/{id}/cancel</code></td>
+<td>JWT</td>
+<td>El jugador rechaza un pedido.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="every-transaction-says-where-its-plucks-came-from">Cada transacción dice de dónde provienen sus Plucks.</h2>
+<p>Cada entrada del historial tiene un <code>source</code>:</p>
+<ul>
+<li><code>sale.game_access</code>: un jugador compró acceso a un juego.</li>
+<li><code>sale.game_item</code>: un jugador compró un artículo del juego.</li>
+<li><code>grant</code>: un operador emitió Plucks.</li>
+</ul>
+<p>Las entradas también llevan <code>amount</code> (firmado), <code>balanceAfter</code>, <code>fee</code>, el juego, la clave del artículo, el orden y
+la otra parte. El libro mayor es de sólo anexar: un error se corrige con una nueva transacción, nunca
+editando uno antiguo.</p>
+<h2 id="selling-access-to-your-game">Vender acceso a tu juego</h2>
+<p>Establece un precio y tu juego emitirá tokens de lanzamiento solo para ti y para los jugadores que compraron acceso. cualquiera
+más obtiene <code>402</code> con <code>code: "purchase_required"</code> y el <code>price</code>. Muéstreles una manera de comprar.</p>
+<p>Una compra envía el precio que se mostró al jugador. <code>expectedPrice</code>. Si has cambiado el precio
+ya que, se rechaza la compra con <code>409</code> (<code>code: "price_changed"</code>), por lo que nadie paga el precio que pagó
+no ver. El acceso es permanente y sobrevive a cambios de precios posteriores. Poner precio a un juego que también era gratuito
+cierra sus puertas a sus jugadores existentes.</p>
+<p><strong>Los archivos alojados de tu juego aún no están bloqueados.</strong> Un precio retiene las funciones de la plataforma (iniciar sesión,
+sesiones, guardados, logros), no la descarga de archivos de un juego de navegador.</p>
+<h2 id="selling-items">Vender artículos</h2>
+<p>Tu juego no puede gastar los Plucks de un jugador. El propio código de tu juego contiene el token de inicio del jugador, por lo que un
+La ficha que podría gastar permitiría que cualquier juego agotara a sus jugadores. El flujo es:</p>
+<ol>
+<li><strong>Tu juego pregunta.</strong> <code>POST /api/v1/games/{slug}/plucks/orders</code> con <code>{ "itemKey": "sword.gold" }</code>.
+El pedido toma el nombre y precio actual del artículo, comienza <code>pending</code>, y caduca después de 15
+minutos. Un jugador puede tener como máximo 20 pedidos en espera (<code>429</code>, <code>too_many_pending_orders</code>).</li>
+<li><strong>El jugador lo confirma en StarHermit</strong>, nunca dentro de tu juego. El cliente StarHermit muestra el
+artículo, el precio y su juego, y publicaciones <code>/me/plucks/orders/{id}/confirm</code>. Esa ruta necesita una
+cuenta iniciada con un proveedor de OAuth, que su juego nunca tiene.</li>
+<li><strong>Tú lo entregas.</strong> Encuesta <code>GET /api/v1/games/{slug}/plucks/orders/{id}</code> desde su cliente hasta
+<code>status</code> es <code>paid</code> (o <code>cancelled</code>, o pasado <code>expiresAt</code>). En su lugar, un contenedor backend puede leer
+<code>GET /api/v1/games/{slug}/server/plucks/orders?since=&lt;last completedAt&gt;</code>.</li>
+</ol>
+<p>La plataforma registra la venta; aplicar el elemento es el trabajo de tu juego. Hacer la entrega idempotente mediante
+identificación del pedido.</p>
+<pre><code class="language-http">POST /api/v1/games/{slug}/plucks/orders
+Authorization: Bearer &lt;launch-token&gt;
+Content-Type: application/json
+
+{ "itemKey": "sword.gold" }
+</code></pre>
+<pre><code class="language-json">{ "id": "2b0e…", "gameId": "c115…", "itemKey": "sword.gold", "itemName": "Golden Sword",
+  "price": 100, "status": "pending", "expiresAt": "2026-10-28T14:15:00Z" }
+</code></pre>
+<p>Las claves de elementos tienen entre 1 y 64 caracteres de <code>a-z 0-9 . _ -</code>; los nombres tienen entre 1 y 80 caracteres; los precios son
+1–1.000.000.000 PLK. No se puede pedir un artículo inactivo o eliminado, y los pedidos ya realizados se mantienen
+su instantánea.</p>
+<h2 id="errors">Errores</h2>
+<table>
+<thead>
+<tr>
+<th>Estado</th>
+<th><code>code</code></th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>402</td>
+<td><code>insufficient_plucks</code></td>
+<td>El saldo del jugador está por debajo del precio.</td>
+</tr>
+<tr>
+<td>402</td>
+<td><code>purchase_required</code></td>
+<td>Un token de lanzamiento para un juego con precio que el jugador no ha comprado.</td>
+</tr>
+<tr>
+<td>409</td>
+<td><code>price_changed</code></td>
+<td><code>expectedPrice</code> ya no es el precio</td>
+</tr>
+<tr>
+<td>409</td>
+<td><code>order_cancelled</code></td>
+<td>Confirmar un pedido que el jugador canceló</td>
+</tr>
+<tr>
+<td>410</td>
+<td><code>order_expired</code></td>
+<td>Confirmando después <code>expiresAt</code></td>
+</tr>
+<tr>
+<td>429</td>
+<td><code>too_many_pending_orders</code></td>
+<td>Demasiados pedidos pendientes de confirmación</td>
+</tr>
+</tbody>
+</table>
+<p>Un propietario que compra en su propio juego obtiene <code>409</code>.</p>
+<h2 id="your-revenue">Tus ingresos</h2>
+<p><code>GET /api/v1/me/github-games/{id}/analytics/sales</code> y <code>…/analytics/monetization</code> unidades de informe,
+bruto, la comisión de la plataforma y su neto por día, jugadores que pagan, conversión y por artículo
+totales. Sólo informan los totales y nunca nombran a un comprador. Tu propia historia en
+<code>/me/plucks/transactions</code> enumera cada venta.</p>
+
+{% endraw %}

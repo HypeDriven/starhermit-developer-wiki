@@ -121,6 +121,8 @@ WebSockets under `ws/v1/...`, JWT bearer auth
 | Achievements | [achievements.md](docs/api/achievements.md) | Server-authoritative game achievements (declared in code or created by the game's owner), client-claimed catalog-title achievements, secret achievements |
 | Leaderboards | [leaderboards.md](docs/api/leaderboards.md) | Definitions, entries, friends-only views, server-runtime-owned elo boards and per-player rating resets, **owner-created game boards written by the game's server**, daily/weekly/monthly reset schedules |
 | External libraries | [external-libraries.md](docs/api/external-libraries.md) | Linking Steam/Epic/GOG libraries, external launch URIs |
+| Plucks | [plucks.md](docs/api/plucks.md) | The PLK currency: balances and sourced history, selling access to your game (99% to you), in-game items the player confirms, delivery, revenue reports |
+| External links | [game-links.md](docs/api/game-links.md) | `engine.link.*` declarations, the URL rules, staff review, the runtime check |
 | Reports | [reports.md](docs/api/reports.md) | Player crash and bug reports: filing from a game, owner triage, attachments, limits |
 | Relay | [relay.md](docs/api/relay.md) | Match-bound opaque byte fan-out with roster authorization and tick-aware rate limits (`ws/v1/relay`) |
 | Realtime rooms | [realtime.md](docs/api/realtime.md) | Lobbies, browse/join-by-code, filtered quick-join, friend invites, party matchmaking, AI-seat backfill with a per-room allowance, host-authoritative frame routing (`ws/v1/realtime`) |

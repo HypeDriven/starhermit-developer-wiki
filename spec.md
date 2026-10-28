@@ -96,7 +96,9 @@ patterns, not the subject of the docs.
   `friends`, `chat`, `voice`, `catalog`, `activity`, `achievements`, `leaderboards`,
   `external-libraries`, `relay`, `realtime`, `github-games`, `publisher`, `moderation` (shared content hashes, checks and availability, screened evidence, owner review,
   withdrawal recovery and production readiness), `reports` (player crash and
-  bug reports: filing with a launch token, owner triage, attachments and limits). The
+  bug reports: filing with a launch token, owner triage, attachments and limits), `plucks` (the PLK
+  currency: sourced history, access and item sales, player-confirmed orders, revenue) and
+  `game-links` (approved external links: declarations, URL rules, review, the runtime check). The
   container-games page also covers the owner's server logs and crash records.
   The games page has a Limits section: `ws/v1/games` frame size, connection and message-rate
   limits (realtime inputs vs durable commands, container relay), and the elo rules (absolute
