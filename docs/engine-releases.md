@@ -52,6 +52,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.25.0 | 1.27 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.25.0-windows-x86_64.zip](../engine/1.25.0/native/windows-x86_64/starhermit-1.25.0-windows-x86_64.zip), [starhermit-1.25.0-linux-x86_64.tar.gz](../engine/1.25.0/native/linux-x86_64/starhermit-1.25.0-linux-x86_64.tar.gz) |
 | 1.24.0 | 1.26 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.24.0-windows-x86_64.zip](../engine/1.24.0/native/windows-x86_64/starhermit-1.24.0-windows-x86_64.zip), [starhermit-1.24.0-linux-x86_64.tar.gz](../engine/1.24.0/native/linux-x86_64/starhermit-1.24.0-linux-x86_64.tar.gz) |
 | 1.23.0 | 1.25 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.23.0-windows-x86_64.zip](../engine/1.23.0/native/windows-x86_64/starhermit-1.23.0-windows-x86_64.zip), [starhermit-1.23.0-linux-x86_64.tar.gz](../engine/1.23.0/native/linux-x86_64/starhermit-1.23.0-linux-x86_64.tar.gz) |
 | 1.22.0 | 1.24 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.22.0-windows-x86_64.zip](../engine/1.22.0/native/windows-x86_64/starhermit-1.22.0-windows-x86_64.zip), [starhermit-1.22.0-linux-x86_64.tar.gz](../engine/1.22.0/native/linux-x86_64/starhermit-1.22.0-linux-x86_64.tar.gz) |
@@ -62,7 +63,7 @@ never changes: a fix is the next version.
 | 1.19.3 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.19.3-windows-x86_64.zip](../engine/1.19.3/native/windows-x86_64/starhermit-1.19.3-windows-x86_64.zip), [starhermit-1.19.3-linux-x86_64.tar.gz](../engine/1.19.3/native/linux-x86_64/starhermit-1.19.3-linux-x86_64.tar.gz) |
 | 1.19.2 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.19.2-windows-x86_64.zip](../engine/1.19.2/native/windows-x86_64/starhermit-1.19.2-windows-x86_64.zip), [starhermit-1.19.2-linux-x86_64.tar.gz](../engine/1.19.2/native/linux-x86_64/starhermit-1.19.2-linux-x86_64.tar.gz) |
 | 1.19.1 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.19.1-windows-x86_64.zip](../engine/1.19.1/native/windows-x86_64/starhermit-1.19.1-windows-x86_64.zip), [starhermit-1.19.1-linux-x86_64.tar.gz](../engine/1.19.1/native/linux-x86_64/starhermit-1.19.1-linux-x86_64.tar.gz) |
-| 1.19.0 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.19.0-windows-x86_64.zip](../engine/1.19.0/native/windows-x86_64/starhermit-1.19.0-windows-x86_64.zip), [starhermit-1.19.0-linux-x86_64.tar.gz](../engine/1.19.0/native/linux-x86_64/starhermit-1.19.0-linux-x86_64.tar.gz) |
+| 1.19.0 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-29 (wiki size limit) |
 | 1.18.0 | 1.20 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-29 (wiki size limit) |
 | 1.17.1 | 1.19 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-29 (wiki size limit) |
 | 1.17.0 | 1.19 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-28 (wiki size limit) |
@@ -105,6 +106,18 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.25.0
+
+Host API 1.27: pin `engine.version=1.25.0` and add `engine.minor=27` for the changes marked (1.27); everything else
+applies to every game. Games declaring 1.26 or older behave as before.
+
+- **Worker lifetime** (1.27): a `starhermit:script` worker the game no longer references lives on while it has a
+  listener or a message still to run, as a browser's Web Worker does, until `terminate()`, it stops, or the game
+  ends. Older minors keep terminating a collected worker and log a one-time warning when it had listeners.
+- **Graphics quality**: the web's Auto now picks the level native's does on the same GPU (a steadier benchmark,
+  and slow presented frames count as missed deadlines in browsers).
+- **Speed**: per-pass culling reaches WebGL 2 and WebGPU, so a batch is left out of the passes it is culled from.
 
 ### 1.24.0
 
@@ -937,7 +950,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1 and 1.18.0 on 2026-10-29).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0 and 1.19.0 on 2026-10-29).
 
 ### native.json
 
