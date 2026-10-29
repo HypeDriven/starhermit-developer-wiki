@@ -13,26 +13,22 @@ https://wiki.starhermit.com/engine/tools/README.html and compare its SHA-256
 with the checksum beside it. Unpack it and put its directory on PATH, or
 use the executable's full path in the commands below. macOS downloads are
 provided separately for Apple Silicon (`macos-aarch64`) and Intel
-(`macos-x86_64`). They are not Apple-notarized.
+(`macos-x86_64`). They are not Apple-notarized, and no download is
+Authenticode or Developer ID signed. The Apple Silicon build is
+cross-compiled; report problems.
 
 
 ## Downloads
 
-Developer tools 1.21.0 (Linux and Windows) are separate from the engine
+Developer tools 1.26.0 (macOS, Linux and Windows) are separate from the engine
 runtime a game pins.
 
 | Computer | Download | SHA-256 |
 |---|---|---|
-| macOS, Apple Silicon (1.10.0) | [starhermit-tools-1.10.0-macos-aarch64.tar.gz](1.10.0/starhermit-tools-1.10.0-macos-aarch64.tar.gz) | [checksum](1.10.0/starhermit-tools-1.10.0-macos-aarch64.tar.gz.sha256) |
-| macOS, Intel (1.10.0) | [starhermit-tools-1.10.0-macos-x86_64.tar.gz](1.10.0/starhermit-tools-1.10.0-macos-x86_64.tar.gz) | [checksum](1.10.0/starhermit-tools-1.10.0-macos-x86_64.tar.gz.sha256) |
-| Linux, x86-64 | [starhermit-tools-1.21.0-linux-x86_64.tar.gz](1.21.0/starhermit-tools-1.21.0-linux-x86_64.tar.gz) | [checksum](1.21.0/starhermit-tools-1.21.0-linux-x86_64.tar.gz.sha256) |
-| Windows, x86-64 | [starhermit-tools-1.21.0-windows-x86_64.zip](1.21.0/starhermit-tools-1.21.0-windows-x86_64.zip) | [checksum](1.21.0/starhermit-tools-1.21.0-windows-x86_64.zip.sha256) |
-
-The macOS tools stay at 1.10.0 until a Mac build of a newer release is
-available. They still check and package games, but 1.10.0 cannot publish
-to production: its TLS client aborts when api.starhermit.com asks for an
-optional client certificate, a bug fixed in engine 1.13.1. Publish with
-the Linux or Windows tools instead, for example from CI.
+| macOS, Apple Silicon | [starhermit-tools-1.26.0-macos-aarch64.tar.gz](1.26.0/starhermit-tools-1.26.0-macos-aarch64.tar.gz) | [checksum](1.26.0/starhermit-tools-1.26.0-macos-aarch64.tar.gz.sha256) |
+| macOS, Intel | [starhermit-tools-1.26.0-macos-x86_64.tar.gz](1.26.0/starhermit-tools-1.26.0-macos-x86_64.tar.gz) | [checksum](1.26.0/starhermit-tools-1.26.0-macos-x86_64.tar.gz.sha256) |
+| Linux, x86-64 | [starhermit-tools-1.26.0-linux-x86_64.tar.gz](1.26.0/starhermit-tools-1.26.0-linux-x86_64.tar.gz) | [checksum](1.26.0/starhermit-tools-1.26.0-linux-x86_64.tar.gz.sha256) |
+| Windows, x86-64 | [starhermit-tools-1.26.0-windows-x86_64.zip](1.26.0/starhermit-tools-1.26.0-windows-x86_64.zip) | [checksum](1.26.0/starhermit-tools-1.26.0-windows-x86_64.zip.sha256) |
 
 [latest.json](latest.json) lists download sizes and SHA-256 hashes, and
 each download's version.
