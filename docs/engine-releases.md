@@ -9,10 +9,6 @@ runtime and plays the game on it, and developers download a release's runtime fr
 
 ## Load the engine from engine.starhermit.com
 
-> **Not yet open to the public.** `engine.starhermit.com` is being opened to players outside
-> StarHermit's own network. Until this note is removed, keep loading the engine from this wiki; the
-> platform still rewrites a hosted game's engine URLs once the wiki removes its version.
-
 **A game's page should load its engine from `https://engine.starhermit.com/engine/X.Y.Z/`, not from
 this wiki.** The wiki holds only recent releases: it is capped at 1 GB, so the oldest versions are
 removed as new ones are published, and a page that loads its engine from the wiki stops working
