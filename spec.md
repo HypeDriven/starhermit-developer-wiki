@@ -72,7 +72,7 @@ patterns, not the subject of the docs.
   developer download, the web runtime with its loader and bundled fonts), the integrity chain, `GET /api/v1/engine/releases`, and what the platform does
   for a game that declares `engine.version` (deploy record and warning, Content-Security-Policy).
 - `docs/native-performance.md` — native performance guidance for engine games: JavaScript on the engine's
-  JIT-free interpreter versus V8, WebAssembly speed and planned ahead-of-time compilation, where heavy
+  JIT-free interpreter versus V8, WebAssembly speed and platform ahead-of-time compilation (engine 1.26.1), where heavy
   per-frame work belongs (`runtime()`, workers), GPU-bound scenes, workers' lifetime and measuring. The
   engine session keeps its figures current.
 - `engine/tools/README.md` — standalone developer-tool downloads and guide for macOS

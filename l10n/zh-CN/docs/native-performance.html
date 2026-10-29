@@ -4,7 +4,7 @@ lang: "zh-CN"
 title: "脚本游戏的本机性能"
 source_url: "/docs/native-performance.html"
 source_path: "docs/native-performance.md"
-source_hash: "4d1405ac31c966cec92c89c4834e3818fce09b0154060b44bf6c49558f525464"
+source_hash: "38cad38d2b08927254b791b1fc9a532b0728e9f0a49c8a5779718ce85bf66204"
 translation: "machine"
 permalink: "/zh-CN/docs/native-performance.html"
 ---
@@ -13,7 +13,7 @@ permalink: "/zh-CN/docs/native-performance.html"
 <p>StarHermit 引擎游戏在浏览器和本机中运行相同的包。两者运行你的代码非常
 不同的是，因此在移植或编写繁重的工作之前选择它所在的位置。本页涵盖脚本
 速度、WebAssembly、GPU 绑定场景、工作人员和测量。数字是发动机测量值
-2026 年 10 月。</p>
+2026 年 10 月，自引擎 1.26.1 起。</p>
 <h2 id="how-your-code-runs">你的代码如何运行</h2>
 <table>
 <thead>
@@ -32,29 +32,47 @@ permalink: "/zh-CN/docs/native-performance.html"
 <tr>
 <td>WebAssembly，主要领域</td>
 <td>浏览器的 WebAssembly</td>
-<td>引擎的解释器（主机 API 1.25 及更高版本）</td>
+<td>来自引擎 1.26.1 的平台编译的本机代码（<a href="#compiled-webassembly">细节</a>）；否则引擎的解释器（主机 API 1.25 及更高版本）</td>
 </tr>
 <tr>
 <td>WebAssembly 中 <code>starhermit:script</code> 工人</td>
 <td>引擎的解释器，用于获得位精确的结果</td>
-<td>引擎的解释器</td>
+<td>平台编译的本机代码，与主领域一样</td>
 </tr>
 </tbody>
 </table>
 <ul>
 <li>本质上，真正的游戏 JavaScript 是关于 <strong>比 V8 慢 15–25 倍</strong>。微基准可以建议
 约8×。不要依赖他们。</li>
-<li>Native WebAssembly 是关于 <strong>比 V8 慢 8–17 倍</strong> 今天。平台计划编译WASM
-在发布时提前签署本机代码，这应该使其接近 V8 的速度。</li>
+<li>平台已编译的本机 WebAssembly 运行于 <strong>大致V8速度</strong>：大约快 7 倍
+比引擎模拟基准上的解释器耗时大约是 V8 的 1.4 倍。解释
+WebAssembly 比 V8 慢大约 8-18 倍。</li>
 <li><code>starhermit check</code> 运行 JavaScript 的方式与窗口游戏完全相同。基准测试 <code>--release</code>
 仅引擎构建。</li>
+</ul>
+<h2 id="compiled-webassembly">编译后的WebAssembly</h2>
+<p>从引擎 1.26.1 开始，当您发布包含 <code>.wasm</code> 模块，平台编译每个
+在沙盒构建中提前模块并对结果进行签名。本机运行时下载它，
+验证签名，缓存它并将其作为本机代码运行。你不需要改变游戏；
+只是发布它。</p>
+<ul>
+<li><strong>在哪里：</strong> Windows x86-64、Linux x86-64 和 Intel macOS，使用 x86-64-v2 或更高版本的 CPU
+（SSE4.2 和 POPCNT）。 Apple Silicon Mac 和较旧的 CPU 仍然可以解释，模块也可以解释
+使用SIMD。</li>
+<li><strong>什么时候：</strong> 在编译代码下载之前创建的实例会继续解释。后来
+实例运行已编译，包括下一次启动，它从磁盘缓存加载它。</li>
+<li><strong>相同的结果：</strong> 编译后的代码与解释器逐位匹配，包括燃料和陷阱。</li>
+<li><strong>检查并禁用：</strong> 和 <code>--dev</code>，日志显示每个模块是否运行编译或
+解释，以及为什么。 <code>STARHERMIT_WASM_AOT=0</code> 关闭编译。</li>
+<li><strong>浏览器不变：</strong> 主领域使用浏览器的 WebAssembly，工作人员使用
+引擎的解释器。</li>
 </ul>
 <h2 id="heavy-per-frame-work">每帧工作繁重</h2>
 <p>模拟、网格划分、寻路和实体构建是常见的热点。</p>
 <ol>
 <li><strong>用 Rust 或其他 WASM 语言编写热代码</strong> 并将其作为 WebAssembly 运行，最好在
-<code>starhermit:script</code> 工人。以这种方式编写的代码可以获得计划的提前加速，而无需
-变化。</li>
+<code>starhermit:script</code> 工人。游戏一旦发布，就会以接近 V8 的速度原生运行，
+而纯 JavaScript 的速度却慢了大约 15-25 倍。</li>
 <li><strong>选择一条路径 <code>runtime()</code></strong> 从 <code>starhermit:engine</code> （主机 API 1.26）。 <code>"web"</code> 意味着V8，所以
 JavaScript 在那里很好。 <code>"native"</code> 意味着您应该更喜欢 WASM 路径。工人们总是把
 本机路径，无法导入 <code>starhermit:engine</code>.</li>

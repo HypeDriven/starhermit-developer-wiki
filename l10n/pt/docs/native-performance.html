@@ -4,7 +4,7 @@ lang: "pt"
 title: "Desempenho nativo para jogos de script"
 source_url: "/docs/native-performance.html"
 source_path: "docs/native-performance.md"
-source_hash: "4d1405ac31c966cec92c89c4834e3818fce09b0154060b44bf6c49558f525464"
+source_hash: "38cad38d2b08927254b791b1fc9a532b0728e9f0a49c8a5779718ce85bf66204"
 translation: "machine"
 permalink: "/pt/docs/native-performance.html"
 ---
@@ -13,7 +13,7 @@ permalink: "/pt/docs/native-performance.html"
 <p>Um jogo com motor StarHermit executa o mesmo pacote em navegadores e nativamente. Os dois executam seu código muito
 de forma diferente, então escolha onde fica o trabalho pesado antes de transferi-lo ou escrevê-lo. Esta página cobre o script
 velocidade, WebAssembly, cenas vinculadas a GPU, trabalhadores e medição. Os números são medições do motor de
-Outubro de 2026.</p>
+Outubro de 2026, a partir do motor 1.26.1.</p>
 <h2 id="how-your-code-runs">Como seu código é executado</h2>
 <table>
 <thead>
@@ -32,29 +32,47 @@ Outubro de 2026.</p>
 <tr>
 <td>WebAssembly, domínio principal</td>
 <td>O WebAssembly do navegador</td>
-<td>O intérprete do mecanismo (API host 1.25 e posterior)</td>
+<td>Código nativo compilado pela plataforma do mecanismo 1.26.1 (<a href="#compiled-webassembly">detalhes</a>); caso contrário, o interpretador do mecanismo (API host 1.25 e posterior)</td>
 </tr>
 <tr>
 <td>WebAssembly em <code>starhermit:script</code> trabalhadores</td>
 <td>O intérprete do mecanismo, para resultados exatos em bits</td>
-<td>O intérprete do motor</td>
+<td>Código nativo compilado pela plataforma, como no domínio principal</td>
 </tr>
 </tbody>
 </table>
 <ul>
 <li>Nativamente, o JavaScript do jogo real trata <strong>15–25× mais lento que V8</strong>. Micro-benchmarks podem sugerir
 cerca de 8×. Não confie neles.</li>
-<li>WebAssembly nativo é sobre <strong>8–17× mais lento que V8</strong> hoje. A plataforma planeja compilar WASM
-com antecedência para assinar o código nativo no momento da publicação, o que deve aproximá-lo da velocidade V8.</li>
+<li>O WebAssembly nativo que a plataforma compilou é executado em <strong>aproximadamente velocidade V8</strong>: cerca de 7× mais rápido
+do que o intérprete no benchmark de simulação do motor, cerca de 1,4× o tempo do V8. Interpretado
+O WebAssembly é cerca de 8–18× mais lento que o V8.</li>
 <li><code>starhermit check</code> executa JavaScript exatamente como um jogo em janela. Referência com um <code>--release</code>
 apenas construção do motor.</li>
+</ul>
+<h2 id="compiled-webassembly">WebAssembly compilado</h2>
+<p>A partir do motor 1.26.1, quando você publica um jogo contendo <code>.wasm</code> módulos, a plataforma compila cada
+módulo antecipadamente em uma construção em sandbox e assina o resultado. O tempo de execução nativo faz o download,
+verifica a assinatura, armazena-a em cache e executa-a como código nativo. Você não precisa mudar o jogo;
+basta publicá-lo.</p>
+<ul>
+<li><strong>Onde:</strong> Windows x86-64, Linux x86-64 e Intel macOS, em CPUs x86-64-v2 ou mais recentes
+(SSE4.2 e POPCNT). Apple Silicon Macs e CPUs mais antigas ainda interpretam, assim como módulos que
+usar SIMD.</li>
+<li><strong>Quando:</strong> uma instância criada antes do download do código compilado continua sendo interpretada. Mais tarde
+as instâncias são executadas compiladas, incluindo a próxima inicialização, que as carrega do cache do disco.</li>
+<li><strong>Mesmos resultados:</strong> o código compilado corresponde ao interpretador bit por bit, incluindo combustível e armadilhas.</li>
+<li><strong>Verifique e desative:</strong> com <code>--dev</code>, o log mostra para cada módulo se ele executou compilado ou
+interpretado e por quê. <code>STARHERMIT_WASM_AOT=0</code> desativa a compilação.</li>
+<li><strong>Os navegadores permanecem inalterados:</strong> o domínio principal usa o WebAssembly do navegador e os trabalhadores usam o
+intérprete do motor.</li>
 </ul>
 <h2 id="heavy-per-frame-work">Trabalho pesado por quadro</h2>
 <p>Simulação, geração de malha, localização de caminhos e construção de entidades são os pontos críticos usuais.</p>
 <ol>
 <li><strong>Escreva o código quente em Rust ou outra linguagem WASM</strong> e executá-lo como WebAssembly, de preferência em um
-<code>starhermit:script</code> trabalhador. O código escrito dessa maneira obtém a aceleração planejada antecipadamente, sem
-mudanças.</li>
+<code>starhermit:script</code> trabalhador. Depois que o jogo é publicado ele roda nativamente próximo à velocidade V8
+enquanto o JavaScript simples permanece cerca de 15–25× mais lento.</li>
 <li><strong>Escolha um caminho com <code>runtime()</code></strong> de <code>starhermit:engine</code> (host API 1.26). <code>"web"</code> significa V8, então
 JavaScript está bem aí. <code>"native"</code> significa que você deve preferir o caminho WASM. Os trabalhadores sempre levam o
 caminho nativo e não é possível importar <code>starhermit:engine</code>.</li>

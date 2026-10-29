@@ -3,30 +3,49 @@
 A StarHermit engine game runs the same package in browsers and natively. The two run your code very
 differently, so choose where heavy work lives before you port or write it. This page covers script
 speed, WebAssembly, GPU-bound scenes, workers and measurement. Figures are engine measurements from
-October 2026.
+October 2026, as of engine 1.26.1.
 
 ## How your code runs
 
 | | In browsers | Natively |
 |---|---|---|
 | Game JavaScript | The browser's V8, full speed | The engine's own interpreter, no JIT (by design, for security) |
-| WebAssembly, main realm | The browser's WebAssembly | The engine's interpreter (host API 1.25 and later) |
-| WebAssembly in `starhermit:script` workers | The engine's interpreter, for bit-exact results | The engine's interpreter |
+| WebAssembly, main realm | The browser's WebAssembly | Platform-compiled native code from engine 1.26.1 ([details](#compiled-webassembly)); otherwise the engine's interpreter (host API 1.25 and later) |
+| WebAssembly in `starhermit:script` workers | The engine's interpreter, for bit-exact results | Platform-compiled native code, as in the main realm |
 
 - Natively, real game JavaScript is about **15–25× slower than V8**. Micro-benchmarks can suggest
   about 8×. Don't rely on them.
-- Native WebAssembly is about **8–17× slower than V8** today. The platform plans to compile WASM
-  ahead of time to signed native code at publish time, which should bring it close to V8 speed.
+- Native WebAssembly that the platform has compiled runs at **roughly V8 speed**: about 7× faster
+  than the interpreter on the engine's simulation benchmark, about 1.4× V8's time. Interpreted
+  WebAssembly is about 8–18× slower than V8.
 - `starhermit check` runs JavaScript exactly as a windowed game does. Benchmark with a `--release`
   engine build only.
+
+## Compiled WebAssembly
+
+From engine 1.26.1, when you publish a game containing `.wasm` modules, the platform compiles each
+module ahead of time in a sandboxed build and signs the result. The native runtime downloads it,
+verifies the signature, caches it and runs it as native code. You don't need to change the game;
+just publish it.
+
+- **Where:** Windows x86-64, Linux x86-64 and Intel macOS, on CPUs at x86-64-v2 or newer
+  (SSE4.2 and POPCNT). Apple Silicon Macs and older CPUs still interpret, and so do modules that
+  use SIMD.
+- **When:** an instance created before the compiled code has downloaded keeps interpreting. Later
+  instances run compiled, including the next launch, which loads it from the disk cache.
+- **Same results:** compiled code matches the interpreter bit for bit, including fuel and traps.
+- **Check and disable:** with `--dev`, the log shows for each module whether it ran compiled or
+  interpreted, and why. `STARHERMIT_WASM_AOT=0` turns compilation off.
+- **Browsers are unchanged:** the main realm uses the browser's WebAssembly, and workers use the
+  engine's interpreter.
 
 ## Heavy per-frame work
 
 Simulation, meshing, pathfinding and entity builds are the usual hot spots.
 
 1. **Write the hot code in Rust or another WASM language** and run it as WebAssembly, ideally in a
-   `starhermit:script` worker. Code written this way gets the planned ahead-of-time speed-up with no
-   changes.
+   `starhermit:script` worker. Once the game is published, it runs natively at close to V8 speed,
+   while plain JavaScript stays about 15–25× slower.
 2. **Choose a path with `runtime()`** from `starhermit:engine` (host API 1.26). `"web"` means V8, so
    JavaScript is fine there. `"native"` means you should prefer the WASM path. Workers always take the
    native path and can't import `starhermit:engine`.

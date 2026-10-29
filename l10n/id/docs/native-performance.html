@@ -4,7 +4,7 @@ lang: "id"
 title: "Performa asli untuk permainan skrip"
 source_url: "/docs/native-performance.html"
 source_path: "docs/native-performance.md"
-source_hash: "4d1405ac31c966cec92c89c4834e3818fce09b0154060b44bf6c49558f525464"
+source_hash: "38cad38d2b08927254b791b1fc9a532b0728e9f0a49c8a5779718ce85bf66204"
 translation: "machine"
 permalink: "/id/docs/native-performance.html"
 ---
@@ -13,7 +13,7 @@ permalink: "/id/docs/native-performance.html"
 <p>Game mesin StarHermit menjalankan paket yang sama di browser dan secara asli. Keduanya menjalankan kode Anda dengan sangat baik
 berbeda, jadi pilihlah di mana pekerjaan berat dilakukan sebelum Anda mem-porting atau menulisnya. Halaman ini mencakup skrip
 kecepatan, WebAssembly, adegan yang terikat GPU, pekerja dan pengukuran. Angka adalah pengukuran mesin dari
-Oktober 2026.</p>
+Oktober 2026, pada mesin 1.26.1.</p>
 <h2 id="how-your-code-runs">Bagaimana kode Anda berjalan</h2>
 <table>
 <thead>
@@ -32,29 +32,47 @@ Oktober 2026.</p>
 <tr>
 <td>WebAssembly, ranah utama</td>
 <td>WebAssembly browser</td>
-<td>Penerjemah mesin (host API 1.25 dan yang lebih baru)</td>
+<td>Kode asli yang dikompilasi platform dari mesin 1.26.1 (<a href="#compiled-webassembly">detail</a>); jika tidak, juru bahasa mesin (host API 1.25 dan yang lebih baru)</td>
 </tr>
 <tr>
 <td>WebPerakitan di <code>starhermit:script</code> pekerja</td>
 <td>Penerjemah mesin, untuk hasil yang sedikit persis</td>
-<td>Penerjemah mesin</td>
+<td>Kode asli yang dikompilasi platform, seperti di ranah utama</td>
 </tr>
 </tbody>
 </table>
 <ul>
 <li>Secara asli, permainan sebenarnya adalah tentang JavaScript <strong>15–25× lebih lambat dari V8</strong>. Tolok ukur mikro dapat memberi saran
 sekitar 8×. Jangan bergantung pada mereka.</li>
-<li>WebAssembly Asli adalah tentang <strong>8–17× lebih lambat dari V8</strong> Hari ini. Platform berencana untuk mengkompilasi WASM
-sebelumnya untuk menandatangani kode asli pada waktu publikasi, yang akan membuatnya mendekati kecepatan V8.</li>
+<li>WebAssembly asli yang telah dikompilasi oleh platform dijalankan <strong>kira-kira kecepatan V8</strong>: sekitar 7× lebih cepat
+daripada penerjemah pada patokan simulasi mesin, sekitar 1,4× waktu V8. Ditafsirkan
+WebAssembly sekitar 8–18× lebih lambat dari V8.</li>
 <li><code>starhermit check</code> menjalankan JavaScript persis seperti permainan berjendela. Tolok ukur dengan a <code>--release</code>
 pembuatan mesin saja.</li>
+</ul>
+<h2 id="compiled-webassembly">WebAssembly yang dikompilasi</h2>
+<p>Dari mesin 1.26.1, saat Anda menerbitkan game yang berisi <code>.wasm</code> modul, platform mengkompilasi masing-masing modul
+modul sebelumnya dalam build sandbox dan menandatangani hasilnya. Runtime asli mengunduhnya,
+memverifikasi tanda tangan, menyimpannya dalam cache, dan menjalankannya sebagai kode asli. Anda tidak perlu mengubah permainan;
+publikasikan saja.</p>
+<ul>
+<li><strong>Di mana:</strong> Windows x86-64, Linux x86-64 dan Intel macOS, pada CPU x86-64-v2 atau lebih baru
+(SSE4.2 dan POPCNT). Apple Silicon Mac dan CPU lama masih melakukan interpretasi, begitu pula modul-modulnya
+menggunakan SIMD.</li>
+<li><strong>Kapan:</strong> sebuah instance yang dibuat sebelum kode yang dikompilasi diunduh terus ditafsirkan. Nanti
+instance dijalankan dikompilasi, termasuk peluncuran berikutnya, yang memuatnya dari cache disk.</li>
+<li><strong>Hasil yang sama:</strong> kode yang dikompilasi cocok dengan penerjemah sedikit demi sedikit, termasuk bahan bakar dan jebakan.</li>
+<li><strong>Periksa dan nonaktifkan:</strong> dengan <code>--dev</code>, log menunjukkan untuk setiap modul apakah modul dijalankan dikompilasi atau
+ditafsirkan, dan alasannya. <code>STARHERMIT_WASM_AOT=0</code> mematikan kompilasi.</li>
+<li><strong>Browser tidak berubah:</strong> ranah utama menggunakan WebAssembly browser, dan pekerja menggunakan
+penerjemah mesin.</li>
 </ul>
 <h2 id="heavy-per-frame-work">Pekerjaan per frame yang berat</h2>
 <p>Simulasi, penyambungan, pencarian jalan, dan pembangunan entitas adalah titik-titik panas yang biasa terjadi.</p>
 <ol>
 <li><strong>Tulis kode panas dalam Rust atau bahasa WASM lainnya</strong> dan menjalankannya sebagai WebAssembly, idealnya di a
-<code>starhermit:script</code> pekerja. Kode yang ditulis dengan cara ini mendapatkan percepatan yang direncanakan sebelumnya tanpa no
-perubahan.</li>
+<code>starhermit:script</code> pekerja. Setelah game diterbitkan, game tersebut berjalan secara native dengan kecepatan mendekati V8,
+sementara JavaScript biasa tetap sekitar 15–25× lebih lambat.</li>
 <li><strong>Pilih jalur dengan <code>runtime()</code></strong> dari <code>starhermit:engine</code> (host API 1.26). <code>"web"</code> berarti V8, jadi
 JavaScript baik-baik saja di sana. <code>"native"</code> berarti Anda sebaiknya memilih jalur WASM. Pekerja selalu mengambil
 jalur asli dan tidak dapat mengimpor <code>starhermit:engine</code>.</li>
