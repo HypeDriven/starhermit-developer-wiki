@@ -49,6 +49,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.26.2 | 1.28 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.26.2-windows-x86_64.zip](../engine/1.26.2/native/windows-x86_64/starhermit-1.26.2-windows-x86_64.zip), [starhermit-1.26.2-linux-x86_64.tar.gz](../engine/1.26.2/native/linux-x86_64/starhermit-1.26.2-linux-x86_64.tar.gz), [starhermit-1.26.2-macos-x86_64.tar.gz](../engine/1.26.2/native/macos-x86_64/starhermit-1.26.2-macos-x86_64.tar.gz), [starhermit-1.26.2-macos-aarch64.tar.gz](../engine/1.26.2/native/macos-aarch64/starhermit-1.26.2-macos-aarch64.tar.gz) |
 | 1.26.1 | 1.28 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.26.1-windows-x86_64.zip](../engine/1.26.1/native/windows-x86_64/starhermit-1.26.1-windows-x86_64.zip), [starhermit-1.26.1-linux-x86_64.tar.gz](../engine/1.26.1/native/linux-x86_64/starhermit-1.26.1-linux-x86_64.tar.gz) |
 | 1.26.0 | 1.28 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.26.0-windows-x86_64.zip](../engine/1.26.0/native/windows-x86_64/starhermit-1.26.0-windows-x86_64.zip), [starhermit-1.26.0-linux-x86_64.tar.gz](../engine/1.26.0/native/linux-x86_64/starhermit-1.26.0-linux-x86_64.tar.gz) |
 | 1.25.0 | 1.27 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.25.0-windows-x86_64.zip](../engine/1.25.0/native/windows-x86_64/starhermit-1.25.0-windows-x86_64.zip), [starhermit-1.25.0-linux-x86_64.tar.gz](../engine/1.25.0/native/linux-x86_64/starhermit-1.25.0-linux-x86_64.tar.gz) |
@@ -58,8 +59,8 @@ never changes: a fix is the next version.
 | 1.21.0 | 1.23 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.21.0-windows-x86_64.zip](../engine/1.21.0/native/windows-x86_64/starhermit-1.21.0-windows-x86_64.zip), [starhermit-1.21.0-linux-x86_64.tar.gz](../engine/1.21.0/native/linux-x86_64/starhermit-1.21.0-linux-x86_64.tar.gz) |
 | 1.20.2 | 1.22 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.20.2-windows-x86_64.zip](../engine/1.20.2/native/windows-x86_64/starhermit-1.20.2-windows-x86_64.zip), [starhermit-1.20.2-linux-x86_64.tar.gz](../engine/1.20.2/native/linux-x86_64/starhermit-1.20.2-linux-x86_64.tar.gz) |
 | 1.20.1 | 1.22 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.20.1-windows-x86_64.zip](../engine/1.20.1/native/windows-x86_64/starhermit-1.20.1-windows-x86_64.zip), [starhermit-1.20.1-linux-x86_64.tar.gz](../engine/1.20.1/native/linux-x86_64/starhermit-1.20.1-linux-x86_64.tar.gz) |
-| 1.20.0 | 1.22 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.20.0-windows-x86_64.zip](../engine/1.20.0/native/windows-x86_64/starhermit-1.20.0-windows-x86_64.zip), [starhermit-1.20.0-linux-x86_64.tar.gz](../engine/1.20.0/native/linux-x86_64/starhermit-1.20.0-linux-x86_64.tar.gz) |
-| 1.19.3 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.19.3-windows-x86_64.zip](../engine/1.19.3/native/windows-x86_64/starhermit-1.19.3-windows-x86_64.zip), [starhermit-1.19.3-linux-x86_64.tar.gz](../engine/1.19.3/native/linux-x86_64/starhermit-1.19.3-linux-x86_64.tar.gz) |
+| 1.20.0 | 1.22 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-29 (wiki size limit) |
+| 1.19.3 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-29 (wiki size limit) |
 | 1.19.2 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-29 (wiki size limit) |
 | 1.19.1 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-29 (wiki size limit) |
 | 1.19.0 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-29 (wiki size limit) |
@@ -105,6 +106,22 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.26.2
+
+Host API 1.28, as 1.26.0: re-pin to 1.26.2 (`engine.version=1.26.2`); nothing changes for games.
+
+- **macOS runtimes**: the first release with native runtimes for macOS, on Intel (`macos-x86_64`) and Apple Silicon
+  (`macos-aarch64`), for the StarHermit macOS client; they need macOS 11 or later. Developer downloads:
+  [starhermit-1.26.2-macos-x86_64.tar.gz](../engine/1.26.2/native/macos-x86_64/starhermit-1.26.2-macos-x86_64.tar.gz)
+  (SHA-256 `460a39263a749407400cff4b1ecc093034f68fc138b2a8b881ad7bf0b8314c27`) and
+  [starhermit-1.26.2-macos-aarch64.tar.gz](../engine/1.26.2/native/macos-aarch64/starhermit-1.26.2-macos-aarch64.tar.gz)
+  (SHA-256 `6888857b3ef1608968484ad68f0b256da22273b9cc1b0f7a77233af9bd5cfb0c`).
+- They are signed ad hoc and **not notarized**. That is fine when the client installs them, but a tarball downloaded
+  in a browser carries Gatekeeper's quarantine and is blocked until it is cleared
+  (`xattr -dr com.apple.quarantine starhermit-1.26.2-macos-*`).
+- They have **not yet been tested on real Apple hardware or with a GPU**: the build host is an Intel virtual machine
+  without Metal, so the x86_64 runtime was run headless and the arm64 runtime was only checked statically.
 
 ### 1.26.1
 
@@ -977,7 +994,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1 and 1.19.2 on 2026-10-29).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1, 1.19.2, 1.19.3 and 1.20.0 on 2026-10-29).
 
 `aot` (from 1.26.1) is the revocation list for WebAssembly code the platform compiles ahead of time: native
 runtimes refuse compiled code from a listed compiler version or signing key, and with no list ever read they
