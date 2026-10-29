@@ -62,7 +62,7 @@ patterns, not the subject of the docs.
   supported platforms, with additional native performance and features and release-specific runtime
   availability. The tutorial builds a small TypeScript game (scene, input, HUD, storage) step by step: what a
   script game is, getting the engine (the client installs releases; developers download a release's
-  Windows runtime from `engine/`), `starhermit new`/`types`/`check` and TypeScript checking, running
+  Windows, Linux or macOS runtime from `engine/`), `starhermit new`/`types`/`check` and TypeScript checking, running
   natively, per-entity work with `starhermit:world` tables, kernels and bindings, the platform (sign-in
   from the client, `--game <id>` development launches, saves, online play with `server=`), publishing
   (`starhermit package --web --out` for the loader page and file index, `--native` for a client-only game,
@@ -80,7 +80,8 @@ patterns, not the subject of the docs.
   automated publishing with the developer’s own credentials, and stdio development MCP.
   Immutable archives and checksums live under `engine/tools/<version>/`; `latest.json`
   lists reviewed downloads. These releases are independent of pinned game runtimes.
-  The tools do not provide native macOS play, and MCP never publishes.
+  Native runtimes, macOS included from engine 1.26.2, come from engine releases rather than the
+  tools, and MCP never publishes.
 - `engine/` — the engine area, written only by the engine's `cargo starhermit release` (never by hand):
   `versions.json`, one immutable directory per release (`<version>/native/windows-x86_64/native.json`
   and the developer download `starhermit-<version>-windows-x86_64.zip`; a web runtime's files in a

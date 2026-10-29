@@ -50,9 +50,14 @@ when `engine.remote.urls=platform`, publishing uploads them first.
 
 `check` validates the manifest, package paths and file structure. It does
 not execute scripts. Test the packaged web game in a browser before
-publishing. Windows and Linux developers can additionally download the
-matching native runtime and use `starhermit check my-game` for a headless
-execution check. The tools do not provide a macOS game runtime.
+publishing. Developers can additionally download the matching native
+runtime from an engine release (Windows, Linux, and from engine 1.26.2
+macOS 11 or later on Intel and Apple Silicon) and use
+`starhermit check my-game` for a headless execution check. The macOS
+runtimes are ad-hoc signed and not notarized, and they have not yet been
+tested on real Apple hardware. A tarball downloaded in a browser is
+quarantined: run `xattr -d com.apple.quarantine starhermit` or allow it
+in System Settings.
 
 ## Publish
 
@@ -107,10 +112,10 @@ that configured script; it does not accept arbitrary commands from MCP.
 relative output paths are relative to the game directory. By default it
 writes `starhermit-build/upload` and `starhermit-build/remote` beside the
 game directory. `package_native` writes the game's native file index for
-installation by a supported StarHermit client; it does not build a macOS
-runtime. Neither tool publishes anything.
+installation by a supported StarHermit client, which installs the engine
+runtime for the player's platform (macOS included, from engine 1.26.2). Neither tool publishes anything.
 
-With a Windows or Linux runtime installed, append `--runtime` and its
+With a native runtime installed, append `--runtime` and its
 absolute executable path to the MCP arguments to enable `run_checks`.
 That tool executes the game's code in the configured runtime. Publishing
 is available only as an explicit CLI command and is never an MCP tool.
