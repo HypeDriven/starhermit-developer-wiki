@@ -71,6 +71,10 @@ patterns, not the subject of the docs.
   The reference page has per-release notes and covers `engine/` (versions.json format 2, native.json, chunks and patches, the
   developer download, the web runtime with its loader and bundled fonts), the integrity chain, `GET /api/v1/engine/releases`, and what the platform does
   for a game that declares `engine.version` (deploy record and warning, Content-Security-Policy).
+- `docs/native-performance.md` — native performance guidance for engine games: JavaScript on the engine's
+  JIT-free interpreter versus V8, WebAssembly speed and planned ahead-of-time compilation, where heavy
+  per-frame work belongs (`runtime()`, workers), GPU-bound scenes, workers' lifetime and measuring. The
+  engine session keeps its figures current.
 - `engine/tools/README.md` — standalone developer-tool downloads and guide for macOS
   (Apple Silicon and Intel), Linux and Windows: package validation, web/native packaging,
   automated publishing with the developer’s own credentials, and stdio development MCP.

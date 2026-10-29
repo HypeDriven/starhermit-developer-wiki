@@ -27,6 +27,7 @@ not the subject of the docs.
 - **[Browser quickstart](docs/tutorials/browser-quickstart.md)** — download a complete game with account sign-in, explicit terms acceptance, safe cloud saves, and untracked single-player play.
 - **[Choose an integration](docs/choosing-an-integration.md)** — compare browser-only games, host-routed rooms, scripts, containers, and catalog titles.
 - **[Tutorial: build a game with the StarHermit engine](docs/tutorials/starhermit-engine.md)** — write a TypeScript script game, run it natively on the engine's Windows runtime, move thousands of objects with native kernels, sign players in, and publish it to play in browsers on the engine's web runtime and natively in the StarHermit client.
+- **[Native performance for script games](docs/native-performance.md)** — where heavy work should live natively: interpreter and WebAssembly speed, `runtime()`, GPU-bound scenes, workers and measuring.
 - **[Credentials and identifiers](docs/credentials.md)** — which tokens can call which APIs, and how game, user, session, room, and participant IDs differ.
 - **[API conventions](docs/api/conventions.md)** — response/error parsing, timestamp units, pagination, update semantics, and retries.
 - **[Troubleshooting](docs/troubleshooting.md)** — diagnose sign-in, scope, save conflicts, sockets, uploads, and container startup.

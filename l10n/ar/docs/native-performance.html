@@ -1,0 +1,90 @@
+---
+layout: "wiki"
+lang: "ar"
+title: "الأداء الأصلي للألعاب النصية"
+source_url: "/docs/native-performance.html"
+source_path: "docs/native-performance.md"
+source_hash: "4d1405ac31c966cec92c89c4834e3818fce09b0154060b44bf6c49558f525464"
+translation: "machine"
+permalink: "/ar/docs/native-performance.html"
+---
+{% raw %}
+<h1 id="native-performance-for-script-games">الأداء الأصلي للألعاب النصية</h1>
+<p>تعمل لعبة محرك StarHermit على نفس الحزمة في المتصفحات ومحليًا. يقوم الاثنان بتشغيل التعليمات البرمجية الخاصة بك للغاية
+بشكل مختلف، لذا اختر مكان العمل الثقيل قبل نقله أو كتابته. تغطي هذه الصفحة البرنامج النصي
+السرعة وWebAssembly والمشاهد المرتبطة بوحدة معالجة الرسومات والعاملين والقياس. الأرقام هي قياسات المحرك من
+أكتوبر 2026.</p>
+<h2 id="how-your-code-runs">كيف يعمل الكود الخاص بك</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>في المتصفحات</th>
+<th>محليا</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>لعبة جافا سكريبت</td>
+<td>المتصفح V8، بأقصى سرعة</td>
+<td>مترجم المحرك الخاص، لا يوجد JIT (حسب التصميم، للأمان)</td>
+</tr>
+<tr>
+<td>WebAssembly، المجال الرئيسي</td>
+<td>WebAssembly الخاص بالمتصفح</td>
+<td>مترجم المحرك (المضيف API 1.25 والإصدارات الأحدث)</td>
+</tr>
+<tr>
+<td>تجميع الويب في <code>starhermit:script</code> العمال</td>
+<td>مترجم المحرك للحصول على نتائج دقيقة</td>
+<td>مترجم المحرك</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>في الأصل، لعبة جافا سكريبت الحقيقية تدور حول <strong>15-25× أبطأ من محرك V8</strong>. يمكن أن توحي المعايير الدقيقة
+حوالي 8×. لا تعتمد عليهم.</li>
+<li>Native WebAssembly على وشك <strong>8–17× أبطأ من محرك V8</strong> اليوم. تخطط المنصة لتجميع WASM
+مسبقًا لتوقيع التعليمات البرمجية الأصلية في وقت النشر، مما يجب أن يجعلها قريبة من سرعة V8.</li>
+<li><code>starhermit check</code> يقوم بتشغيل JavaScript تمامًا كما تفعل اللعبة ذات الإطارات. المعيار مع أ <code>--release</code>
+بناء المحرك فقط.</li>
+</ul>
+<h2 id="heavy-per-frame-work">عمل ثقيل لكل إطار</h2>
+<p>تعد المحاكاة والشبكات وإيجاد المسار وبناء الكيانات هي النقاط الساخنة المعتادة.</p>
+<ol>
+<li><strong>اكتب الرمز الساخن بلغة Rust أو لغة WASM أخرى</strong> وتشغيله كـ WebAssembly، ومن الأفضل أن يكون في ملف
+<code>starhermit:script</code> عامل. الكود المكتوب بهذه الطريقة يحصل على التسريع المخطط له مسبقًا بدون أي
+التغييرات.</li>
+<li><strong>اختر المسار مع <code>runtime()</code></strong> من <code>starhermit:engine</code> (المضيف API 1.26). <code>"web"</code> يعني V8، لذلك
+جافا سكريبت جيد هناك. <code>"native"</code> يعني أنك يجب أن تفضل مسار WASM. العمال يأخذون دائما
+المسار الأصلي ولا يمكن الاستيراد <code>starhermit:engine</code>.</li>
+<li><strong>احتفظ بجافا سكريبت العادي لمنطق اللعبة وواجهة المستخدم والتنسيق.</strong> انشر العمل الثقيل النادر عبر الإطارات.</li>
+<li><strong>لا تقم بتجميع JavaScript أو TypeScript إلى WebAssembly من أجل السرعة.</strong> النتيجة لا تزال بحاجة إلى
+نموذج كائن JavaScript، لذلك لا يكسب شيئًا.</li>
+</ol>
+<p>للعديد من الكيانات المماثلة، <a href="/ar/docs/tutorials/starhermit-engine.html#6-many-things-at-once-starhermitworld"><code>starhermit:world</code> حبات</a>
+تشغيل محليا أيضا.</p>
+<h2 id="gpu-bound-scenes">مشاهد مرتبطة بوحدة معالجة الرسومات</h2>
+<p>في الأصل، عادةً ما تصبح وحدة معالجة الرسومات هي الحد الأقصى فقط بعد أن يصبح وقت البرنامج النصي تحت السيطرة.</p>
+<ul>
+<li>يستخدم <code>InstancedMesh.setLevels([...])</code> بمستويات بولي منخفضة ومسافة رسم وثلاثة <code>LOD</code>
+(المضيف API 1.26).</li>
+<li>دور <code>castShadow</code> قبالة للدعائم الصغيرة أو البعيدة.</li>
+<li>الحد من شلالات الظل مع <code>shadow.cascades = { count, maxDistance }</code>، امتداد المحرك.</li>
+<li>تعيين <code>STARHERMIT_GPU_PASS_TIMES=1</code> لطباعة وقت GPU لكل تمريرة.</li>
+</ul>
+<h2 id="workers">العمال</h2>
+<ul>
+<li>قبل Host API 1.27، احتفظ بمرجع لكل عامل تستخدمه، لأن تجميع البيانات المهملة
+ينهيها. من 1.27، يعيش العامل مع المستمعين حتى <code>terminate()</code>.</li>
+<li>يمكن للعمال قراءة ملفات الحزمة (<code>files</code>) من المضيف API 1.26.</li>
+<li>يمكن للعمال إرسال رسائل ثنائية وقابلة للتحويل من المضيف API 1.25.</li>
+</ul>
+<h2 id="measuring">القياس</h2>
+<ul>
+<li>قارن بين النسخة الأصلية والويب باستخدام نفس البنية.</li>
+<li>تُبلغ إحصائيات إطار المحرك عن وقت البرنامج بشكل منفصل عن وقت الإطار. أرقام مقاعد البدلاء النصي هي
+مناسبة للاقتباس.</li>
+</ul>
+
+{% endraw %}

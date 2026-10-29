@@ -1,0 +1,90 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "脚本游戏的本机性能"
+source_url: "/docs/native-performance.html"
+source_path: "docs/native-performance.md"
+source_hash: "4d1405ac31c966cec92c89c4834e3818fce09b0154060b44bf6c49558f525464"
+translation: "machine"
+permalink: "/zh-CN/docs/native-performance.html"
+---
+{% raw %}
+<h1 id="native-performance-for-script-games">脚本游戏的本机性能</h1>
+<p>StarHermit 引擎游戏在浏览器和本机中运行相同的包。两者运行你的代码非常
+不同的是，因此在移植或编写繁重的工作之前选择它所在的位置。本页涵盖脚本
+速度、WebAssembly、GPU 绑定场景、工作人员和测量。数字是发动机测量值
+2026 年 10 月。</p>
+<h2 id="how-your-code-runs">你的代码如何运行</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>在浏览器中</th>
+<th>原生地</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>游戏JavaScript</td>
+<td>浏览器的V8，全速</td>
+<td>引擎自己的解释器，无 JIT（出于安全考虑而设计）</td>
+</tr>
+<tr>
+<td>WebAssembly，主要领域</td>
+<td>浏览器的 WebAssembly</td>
+<td>引擎的解释器（主机 API 1.25 及更高版本）</td>
+</tr>
+<tr>
+<td>WebAssembly 中 <code>starhermit:script</code> 工人</td>
+<td>引擎的解释器，用于获得位精确的结果</td>
+<td>引擎的解释器</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>本质上，真正的游戏 JavaScript 是关于 <strong>比 V8 慢 15–25 倍</strong>。微基准可以建议
+约8×。不要依赖他们。</li>
+<li>Native WebAssembly 是关于 <strong>比 V8 慢 8–17 倍</strong> 今天。平台计划编译WASM
+在发布时提前签署本机代码，这应该使其接近 V8 的速度。</li>
+<li><code>starhermit check</code> 运行 JavaScript 的方式与窗口游戏完全相同。基准测试 <code>--release</code>
+仅引擎构建。</li>
+</ul>
+<h2 id="heavy-per-frame-work">每帧工作繁重</h2>
+<p>模拟、网格划分、寻路和实体构建是常见的热点。</p>
+<ol>
+<li><strong>用 Rust 或其他 WASM 语言编写热代码</strong> 并将其作为 WebAssembly 运行，最好在
+<code>starhermit:script</code> 工人。以这种方式编写的代码可以获得计划的提前加速，而无需
+变化。</li>
+<li><strong>选择一条路径 <code>runtime()</code></strong> 从 <code>starhermit:engine</code> （主机 API 1.26）。 <code>"web"</code> 意味着V8，所以
+JavaScript 在那里很好。 <code>"native"</code> 意味着您应该更喜欢 WASM 路径。工人们总是把
+本机路径，无法导入 <code>starhermit:engine</code>.</li>
+<li><strong>为游戏逻辑、UI 和编排保留简单的 JavaScript。</strong> 将罕见的繁重工作分散到各个框架之间。</li>
+<li><strong>不要为了速度而将 JavaScript 或 TypeScript 编译为 WebAssembly。</strong> 结果还需要
+JavaScript 对象模型，因此它一无所获。</li>
+</ol>
+<p>对于许多类似的实体来说， <a href="/zh-CN/docs/tutorials/starhermit-engine.html#6-many-things-at-once-starhermitworld"><code>starhermit:world</code> 内核</a>
+也可以本地运行。</p>
+<h2 id="gpu-bound-scenes">GPU 密集场景</h2>
+<p>本质上，GPU 通常只有在脚本时间得到控制后才成为限制。</p>
+<ul>
+<li>使用 <code>InstancedMesh.setLevels([...])</code> 具有低多边形水平和绘制距离，以及三 <code>LOD</code>
+（主机 API 1.26）。</li>
+<li>转动 <code>castShadow</code> 关闭小或远距离的道具。</li>
+<li>限制阴影级联 <code>shadow.cascades = { count, maxDistance }</code>，引擎扩展。</li>
+<li>放 <code>STARHERMIT_GPU_PASS_TIMES=1</code> 打印每次传递的 GPU 时间。</li>
+</ul>
+<h2 id="workers">工人</h2>
+<ul>
+<li>在主机 API 1.27 之前，请保留对您使用的每个工作线程的引用，因为垃圾收集
+终止它。从 1.27 开始，一个有听众的工人生活到 <code>terminate()</code>.</li>
+<li>工作人员可以读取包文件（<code>files</code>）来自主机 API 1.26。</li>
+<li>Worker 可以从主机 API 1.25 发送二进制和可传输消息。</li>
+</ul>
+<h2 id="measuring">测量</h2>
+<ul>
+<li>使用相同的构建来比较本机和网络。</li>
+<li>引擎的帧统计数据将脚本时间与帧时间分开报告。脚本台编号是
+适合引用。</li>
+</ul>
+
+{% endraw %}

@@ -684,6 +684,9 @@ commands refuse it whenever they read versions.json. A revoked release is always
 
 ## 10. Limits and the licence
 
+Natively, game JavaScript runs on an interpreter with no JIT, well below browser speed; see
+[Native performance for script games](../native-performance.md) before writing heavy per-frame code.
+
 The runtime keeps every game within budgets, which a package may lower with `engine.limits.*` but
 never raise, except its image budget: `engine.limits.image_mib` (host API 1.9) raises the default 56 MiB up
 to 512 MiB, within `gpu_mib`. Script time is measured natively in instructions of a reference machine (**fuel**);

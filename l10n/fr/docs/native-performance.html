@@ -1,0 +1,90 @@
+---
+layout: "wiki"
+lang: "fr"
+title: "Performances natives pour les jeux de script"
+source_url: "/docs/native-performance.html"
+source_path: "docs/native-performance.md"
+source_hash: "4d1405ac31c966cec92c89c4834e3818fce09b0154060b44bf6c49558f525464"
+translation: "machine"
+permalink: "/fr/docs/native-performance.html"
+---
+{% raw %}
+<h1 id="native-performance-for-script-games">Performances natives pour les jeux de script</h1>
+<p>Un jeu avec moteur StarHermit exécute le même package dans les navigateurs et de manière native. Les deux exécutent votre code très
+différemment, alors choisissez où se trouve le travail le plus lourd avant de le porter ou de l'écrire. Cette page couvre le script
+vitesse, WebAssembly, scènes liées au GPU, travailleurs et mesures. Les chiffres sont des mesures du moteur de
+Octobre 2026.</p>
+<h2 id="how-your-code-runs">Comment fonctionne votre code</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Dans les navigateurs</th>
+<th>Nativement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Jeu Javascript</td>
+<td>Le V8 du navigateur, à pleine vitesse</td>
+<td>Le propre interprète du moteur, pas de JIT (par conception, pour des raisons de sécurité)</td>
+</tr>
+<tr>
+<td>WebAssembly, domaine principal</td>
+<td>Le WebAssembly du navigateur</td>
+<td>L'interpréteur du moteur (API hôte 1.25 et versions ultérieures)</td>
+</tr>
+<tr>
+<td>WebAssembly dans <code>starhermit:script</code> ouvriers</td>
+<td>L'interprète du moteur, pour des résultats précis</td>
+<td>L'interprète du moteur</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Nativement, le vrai jeu JavaScript concerne <strong>15 à 25 fois plus lent que le V8</strong>. Les micro-benchmarks peuvent suggérer
+environ 8×. Ne comptez pas sur eux.</li>
+<li>Native WebAssembly concerne <strong>8 à 17 fois plus lent que le V8</strong> aujourd'hui. La plateforme prévoit de compiler WASM
+à l'avance au code natif signé au moment de la publication, ce qui devrait le rapprocher de la vitesse V8.</li>
+<li><code>starhermit check</code> exécute JavaScript exactement comme le fait un jeu fenêtré. Benchmark avec un <code>--release</code>
+construction de moteur uniquement.</li>
+</ul>
+<h2 id="heavy-per-frame-work">Travail lourd par image</h2>
+<p>La simulation, le maillage, la recherche de chemin et la construction d'entités sont les points chauds habituels.</p>
+<ol>
+<li><strong>Écrivez le code chaud dans Rust ou dans un autre langage WASM</strong> et exécutez-le en tant que WebAssembly, idéalement dans un
+<code>starhermit:script</code> travailleur. Le code écrit de cette façon obtient l'accélération prévue à l'avance sans
+changements.</li>
+<li><strong>Choisissez un chemin avec <code>runtime()</code></strong> depuis <code>starhermit:engine</code> (API hôte 1.26). <code>"web"</code> ça veut dire V8, donc
+JavaScript est bien là-bas. <code>"native"</code> signifie que vous devriez préférer le chemin WASM. Les travailleurs prennent toujours le dessus
+chemin natif et je ne peux pas importer <code>starhermit:engine</code>.</li>
+<li><strong>Conservez du JavaScript simple pour la logique du jeu, l’interface utilisateur et l’orchestration.</strong> Répartissez les travaux lourds et rares sur les cadres.</li>
+<li><strong>Ne compilez pas JavaScript ou TypeScript sur WebAssembly pour plus de rapidité.</strong> Le résultat a encore besoin d'un
+Modèle objet JavaScript, donc il ne gagne rien.</li>
+</ol>
+<p>Pour de nombreuses entités similaires, <a href="/fr/docs/tutorials/starhermit-engine.html#6-many-things-at-once-starhermitworld"><code>starhermit:world</code> graines</a>
+fonctionne également de manière native.</p>
+<h2 id="gpu-bound-scenes">Scènes liées au GPU</h2>
+<p>Nativement, le GPU ne devient généralement la limite qu'une fois le temps de script maîtrisé.</p>
+<ul>
+<li>Utiliser <code>InstancedMesh.setLevels([...])</code> avec des niveaux low-poly et une distance de tirage, et trois <code>LOD</code>
+(API hôte 1.26).</li>
+<li>Tourner <code>castShadow</code> désactivé pour les accessoires petits ou éloignés.</li>
+<li>Limitez les cascades d’ombres avec <code>shadow.cascades = { count, maxDistance }</code>, une extension de moteur.</li>
+<li>Ensemble <code>STARHERMIT_GPU_PASS_TIMES=1</code> pour imprimer le temps GPU pour chaque passe.</li>
+</ul>
+<h2 id="workers">Ouvriers</h2>
+<ul>
+<li>Avant l'API hôte 1.27, conservez une référence à chaque travailleur que vous utilisez, car le garbage collection
+le termine. À partir de 1.27, un travailleur avec des auditeurs vit jusqu'à <code>terminate()</code>.</li>
+<li>Les travailleurs peuvent lire les fichiers de package (<code>files</code>) à partir de l'API hôte 1.26.</li>
+<li>Les travailleurs peuvent envoyer des messages binaires et transférables à partir de l'API hôte 1.25.</li>
+</ul>
+<h2 id="measuring">Mesurer</h2>
+<ul>
+<li>Comparez le natif et le Web en utilisant la même version.</li>
+<li>Les statistiques d'image du moteur rapportent le temps de script séparément du temps d'image. Les numéros de script-bench sont
+convient pour citer.</li>
+</ul>
+
+{% endraw %}
