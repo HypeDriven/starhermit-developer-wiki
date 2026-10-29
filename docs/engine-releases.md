@@ -22,13 +22,14 @@ the ones the wiki published, so the same SRI hashes pin them.
 - **A loader page you write yourself** imports `https://engine.starhermit.com/engine/X.Y.Z/starhermit.js`
   and names `https://engine.starhermit.com/engine/X.Y.Z/manifest.json` in `#starhermit-config`, with the
   same `integrity` values as the wiki URLs.
-- **Packaged games:** `starhermit package --web` writes this loader from developer tools 1.26.0 when
-  asked with `--loader-base https://engine.starhermit.com/engine/` (or `STARHERMIT_WEB_LOADER_BASE`).
-  It still reads the list from the wiki, and if the release is not on `engine.starhermit.com` yet, it
-  writes wiki URLs and warns you to package again. The default becomes the archive in a later
-  release. Packages without the option carry wiki URLs, and the platform rewrites a hosted game's two
-  engine URLs to `engine.starhermit.com` when the wiki has removed its version. Games hosted
-  elsewhere get no rewrite, so repackage them with the newer tools.
+- **Packaged games:** from developer tools 1.26.0, `starhermit package --web` writes this loader on
+  `https://engine.starhermit.com/engine/X.Y.Z/` by default. It still reads `versions.json` and the
+  manifest from the wiki. If the archive does not serve the release's manifest yet (shortly after
+  publication), it writes wiki URLs and warns you to package again. `--loader-base URL` (or
+  `STARHERMIT_WEB_LOADER_BASE`) overrides the default, for example to keep wiki URLs. Packages from
+  older tools carry wiki URLs, and the platform rewrites a hosted game's two engine URLs to
+  `engine.starhermit.com` when the wiki has removed its version. Games hosted elsewhere get no
+  rewrite, so repackage them with tools 1.26.0 or later.
 - **Revoked releases are not kept.** A release withdrawn as unsafe is served from neither origin.
   Pin a newer one.
 

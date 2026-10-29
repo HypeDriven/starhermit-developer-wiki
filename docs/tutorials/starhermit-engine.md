@@ -610,8 +610,8 @@ Not checked against versions.json (read offline): https://wiki.starhermit.com/en
 ```
 
 - `index.html`, the **loader page** `launch=index.html` names: markup only, no script of its own. It
-  loads the release's `starhermit.js` and `manifest.json` from this wiki, or from `engine.starhermit.com`
-  with `--loader-base` (tools 1.26.0 and later) pinned by their SRI hashes, so the page keeps working after the wiki
+  loads the release's `starhermit.js` and `manifest.json` from `engine.starhermit.com` (tools 1.26.0
+  and later by default; older tools and `--loader-base` choices may use this wiki) pinned by their SRI hashes, so the page keeps working after the wiki
   removes the release ([why](../engine-releases.md#load-the-engine-from-enginestarhermitcom)),
   and the engine checks every other file it loads against that manifest, so the page can run only
   that exact release. Package again rather than edit it.
