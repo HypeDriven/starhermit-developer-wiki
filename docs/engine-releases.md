@@ -26,7 +26,7 @@ the ones the wiki published, so the same SRI hashes pin them.
 - **A loader page you write yourself** imports `https://engine.starhermit.com/engine/X.Y.Z/starhermit.js`
   and names `https://engine.starhermit.com/engine/X.Y.Z/manifest.json` in `#starhermit-config`, with the
   same `integrity` values as the wiki URLs.
-- **Packaged games:** `starhermit package --web` writes this loader from developer tools 1.25.1 when
+- **Packaged games:** `starhermit package --web` writes this loader from developer tools 1.26.0 when
   asked with `--loader-base https://engine.starhermit.com/engine/` (or `STARHERMIT_WEB_LOADER_BASE`).
   It still reads the list from the wiki, and if the release is not on `engine.starhermit.com` yet, it
   writes wiki URLs and warns you to package again. The default becomes the archive in a later
