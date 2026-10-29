@@ -4,8 +4,32 @@ The StarHermit engine — the runtime that plays [script games](tutorials/starhe
 published on this wiki as versioned, immutable releases under
 [wiki.starhermit.com/engine/](../engine/). Games pin one release exactly with `engine.version` in
 their [`starhermit.txt`](starhermit-txt.md); a game's page loads the release's web runtime from
-here in the browser, the StarHermit Windows client installs the release's native runtime and plays
-the game on it, and developers download a release's runtime from here to build with.
+from the engine origin in the browser, the StarHermit Windows client installs the release's native
+runtime and plays the game on it, and developers download a release's runtime from here to build with.
+
+## Load the engine from engine.starhermit.com
+
+**A game's page should load its engine from `https://engine.starhermit.com/engine/X.Y.Z/`, not from
+this wiki.** The wiki holds only recent releases: it is capped at 1 GB, so the oldest versions are
+removed as new ones are published, and a page that loads its engine from the wiki stops working
+when its version goes. `engine.starhermit.com` serves every release the wiki lists, within about ten
+minutes of publication, and keeps every release removed for space. The files there are byte for byte
+the ones the wiki published, so the same SRI hashes pin them.
+
+- **The release list stays here.** `versions.json` is read only from
+  `https://wiki.starhermit.com/engine/versions.json`. It decides which releases exist and which are
+  revoked, and `engine.starhermit.com` deliberately does not serve it.
+- **A loader page you write yourself** imports `https://engine.starhermit.com/engine/X.Y.Z/starhermit.js`
+  and names `https://engine.starhermit.com/engine/X.Y.Z/manifest.json` in `#starhermit-config`, with the
+  same `integrity` values as the wiki URLs.
+- **Packaged games:** `starhermit package --web` writes this loader from developer tools 1.25.1
+  (it reads the list from the wiki and writes the engine origin into the page; if the release is not
+  on `engine.starhermit.com` yet, it writes wiki URLs and warns you to package again). Packages
+  from older tools carry wiki URLs, and the platform rewrites a hosted game's two
+  engine URLs to `engine.starhermit.com` when the wiki has removed its version. Games hosted
+  elsewhere get no rewrite, so repackage them with the newer tools.
+- **Revoked releases are not kept.** A release withdrawn as unsafe is served from neither origin.
+  Pin a newer one.
 
 ## Developer tools
 
@@ -928,7 +952,8 @@ manifest, so the developer download packages games for the web without a network
 A release's web runtime is the files beside its `manifest.json`, which lists each with its `size` and
 `sha384` and records the release's version, host API and build. A game's loader page (`index.html`,
 written by `starhermit package --web`) has no script of its own: it loads `starhermit.js` and
-`manifest.json` from `https://wiki.starhermit.com/engine/X.Y.Z/` with SRI hashes, and the engine
+`manifest.json` from `https://engine.starhermit.com/engine/X.Y.Z/` (or, from older tools,
+`https://wiki.starhermit.com/engine/X.Y.Z/`) with SRI hashes, and the engine
 fetches every other file it needs (`starhermit.wasm`, the audio worklets, the fonts) and checks it
 against the manifest. The page runs only the engine — input, the runtime's menus, audio, storage, the
 platform session and voice — and the game's TypeScript runs in a worker it starts and can stop.
@@ -983,13 +1008,13 @@ game:
   `hosting.deployWarning` (also in a bundle push's answer) when that release is not listed or is
   revoked. A warning never stops a publish.
 - every page of the hosted game is served with a Content-Security-Policy that admits scripts only
-  from this wiki (and the engine's own `blob:` workers), so the only code a script game's page can
-  run is the official engine:
+  from the two engine origins (and the engine's own `blob:` workers), so the only code a script
+  game's page can run is the official engine:
 
 ```text
-default-src 'self'; script-src https://wiki.starhermit.com 'wasm-unsafe-eval' blob:; worker-src blob:;
-connect-src 'self' https://wiki.starhermit.com; img-src 'self' blob: data:; media-src 'self' blob:;
-style-src 'self' 'unsafe-inline'; font-src 'self' https://wiki.starhermit.com;
+default-src 'self'; script-src https://wiki.starhermit.com https://engine.starhermit.com 'wasm-unsafe-eval' blob:; worker-src blob:;
+connect-src 'self' https://wiki.starhermit.com https://engine.starhermit.com; img-src 'self' blob: data:; media-src 'self' blob:;
+style-src 'self' 'unsafe-inline'; font-src 'self' https://wiki.starhermit.com https://engine.starhermit.com;
 frame-ancestors https://dashboard.starhermit.com; base-uri 'self'; form-action 'none'
 ```
 
