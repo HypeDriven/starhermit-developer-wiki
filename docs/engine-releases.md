@@ -49,16 +49,17 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.27.0 | 1.29 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.27.0-windows-x86_64.zip](../engine/1.27.0/native/windows-x86_64/starhermit-1.27.0-windows-x86_64.zip), [starhermit-1.27.0-linux-x86_64.tar.gz](../engine/1.27.0/native/linux-x86_64/starhermit-1.27.0-linux-x86_64.tar.gz), [starhermit-1.27.0-macos-x86_64.tar.gz](../engine/1.27.0/native/macos-x86_64/starhermit-1.27.0-macos-x86_64.tar.gz), [starhermit-1.27.0-macos-aarch64.tar.gz](../engine/1.27.0/native/macos-aarch64/starhermit-1.27.0-macos-aarch64.tar.gz) |
 | 1.26.2 | 1.28 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.26.2-windows-x86_64.zip](../engine/1.26.2/native/windows-x86_64/starhermit-1.26.2-windows-x86_64.zip), [starhermit-1.26.2-linux-x86_64.tar.gz](../engine/1.26.2/native/linux-x86_64/starhermit-1.26.2-linux-x86_64.tar.gz), [starhermit-1.26.2-macos-x86_64.tar.gz](../engine/1.26.2/native/macos-x86_64/starhermit-1.26.2-macos-x86_64.tar.gz), [starhermit-1.26.2-macos-aarch64.tar.gz](../engine/1.26.2/native/macos-aarch64/starhermit-1.26.2-macos-aarch64.tar.gz) |
 | 1.26.1 | 1.28 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.26.1-windows-x86_64.zip](../engine/1.26.1/native/windows-x86_64/starhermit-1.26.1-windows-x86_64.zip), [starhermit-1.26.1-linux-x86_64.tar.gz](../engine/1.26.1/native/linux-x86_64/starhermit-1.26.1-linux-x86_64.tar.gz) |
 | 1.26.0 | 1.28 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.26.0-windows-x86_64.zip](../engine/1.26.0/native/windows-x86_64/starhermit-1.26.0-windows-x86_64.zip), [starhermit-1.26.0-linux-x86_64.tar.gz](../engine/1.26.0/native/linux-x86_64/starhermit-1.26.0-linux-x86_64.tar.gz) |
 | 1.25.0 | 1.27 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.25.0-windows-x86_64.zip](../engine/1.25.0/native/windows-x86_64/starhermit-1.25.0-windows-x86_64.zip), [starhermit-1.25.0-linux-x86_64.tar.gz](../engine/1.25.0/native/linux-x86_64/starhermit-1.25.0-linux-x86_64.tar.gz) |
 | 1.24.0 | 1.26 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.24.0-windows-x86_64.zip](../engine/1.24.0/native/windows-x86_64/starhermit-1.24.0-windows-x86_64.zip), [starhermit-1.24.0-linux-x86_64.tar.gz](../engine/1.24.0/native/linux-x86_64/starhermit-1.24.0-linux-x86_64.tar.gz) |
 | 1.23.0 | 1.25 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.23.0-windows-x86_64.zip](../engine/1.23.0/native/windows-x86_64/starhermit-1.23.0-windows-x86_64.zip), [starhermit-1.23.0-linux-x86_64.tar.gz](../engine/1.23.0/native/linux-x86_64/starhermit-1.23.0-linux-x86_64.tar.gz) |
-| 1.22.0 | 1.24 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.22.0-windows-x86_64.zip](../engine/1.22.0/native/windows-x86_64/starhermit-1.22.0-windows-x86_64.zip), [starhermit-1.22.0-linux-x86_64.tar.gz](../engine/1.22.0/native/linux-x86_64/starhermit-1.22.0-linux-x86_64.tar.gz) |
+| 1.22.0 | 1.24 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-29 (wiki size limit) |
 | 1.21.0 | 1.23 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.21.0-windows-x86_64.zip](../engine/1.21.0/native/windows-x86_64/starhermit-1.21.0-windows-x86_64.zip), [starhermit-1.21.0-linux-x86_64.tar.gz](../engine/1.21.0/native/linux-x86_64/starhermit-1.21.0-linux-x86_64.tar.gz) |
 | 1.20.2 | 1.22 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.20.2-windows-x86_64.zip](../engine/1.20.2/native/windows-x86_64/starhermit-1.20.2-windows-x86_64.zip), [starhermit-1.20.2-linux-x86_64.tar.gz](../engine/1.20.2/native/linux-x86_64/starhermit-1.20.2-linux-x86_64.tar.gz) |
-| 1.20.1 | 1.22 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.20.1-windows-x86_64.zip](../engine/1.20.1/native/windows-x86_64/starhermit-1.20.1-windows-x86_64.zip), [starhermit-1.20.1-linux-x86_64.tar.gz](../engine/1.20.1/native/linux-x86_64/starhermit-1.20.1-linux-x86_64.tar.gz) |
+| 1.20.1 | 1.22 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-29 (wiki size limit) |
 | 1.20.0 | 1.22 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-29 (wiki size limit) |
 | 1.19.3 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-29 (wiki size limit) |
 | 1.19.2 | 1.21 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-29 (wiki size limit) |
@@ -106,6 +107,36 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.27.0
+
+Host API 1.29: pin `engine.version=1.27.0` and add `engine.minor=29` for the changes marked (1.29); games declaring
+1.28 or older keep their look.
+
+- **Post-processing as three.js r185** (1.29): ported games drew 10 to 15 levels darker at High than their three.js
+  builds. The post chain now follows r185:
+  - **Bloom** is r185's `UnrealBloomPass`, which adds 3 × strength of the blurred levels with wider kernels; the
+    older pass (r176 and before) added 3 × strength², so the same strength now gives more light (about 2.9 times at
+    0.35). **Games written for three.js r176 or older should square their bloom strength at 1.29** (use about
+    strength² as the strength) to keep their bloom.
+  - **The background goes through the chain**: a Color background now passes through the effects, the grade, its
+    vignette and tone mapping whenever any effect but multisampling is on, as r185's `RenderPass` clears the
+    composer's target to it. From 1.20 to 1.28 it skipped them.
+  - **Grade `levels` and `overRange`**: a linear `renderer.grade` takes `levels: [scale, offset]` and
+    `overRange: "keep"`, for the grade passes ports carried (such as `s = s * 0.98 + 0.015`, with light past 1 kept
+    for tone mapping).
+- **Phong, Toon and Matcap materials** (1.29): starhermit:scene exports three.js r185's `MeshPhongMaterial`,
+  `MeshToonMaterial` and `MeshMatcapMaterial`, drawn as r185 draws them on every backend: Blinn-Phong highlights
+  (`specular`, `shininess`, `specularMap`), a Phong `envMap` combined by `combine` and `reflectivity`
+  (`MultiplyOperation`, `MixOperation` and `AddOperation` are exported), toon light through a `gradientMap` or r185's
+  two tones, and matcaps looked up by the view-space normal; with normal and bump maps, flat shading, emissive and AO
+  maps, wireframes and shadows. `lightMap`, `alphaMap`, `displacementMap`, `envMapRotation` and refraction are kept
+  but not drawn.
+- **Downloads**: Windows SHA-256 `7d184cf20d49a114608135c8e5b9f0acceb6658f630ac4d38c0e39ad17839d75`, Linux
+  `f23f7558358bdc32f447cd66b3c0f27e26e9abb71117cfb4ff105fa411609380`, macOS x86_64
+  `7bd25ce3029f5869c621a1ac2a58df939290fb560831aaee4f59fa89b179b9cb`, macOS aarch64
+  `d3c7205a3ba2e5dc1205e5c75ad66db0481d794ac25f181850d71ad14d01e08f`. The macOS runtimes are signed ad hoc and not
+  notarized, as in 1.26.2.
 
 ### 1.26.2
 
@@ -994,7 +1025,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1, 1.19.2, 1.19.3 and 1.20.0 on 2026-10-29).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1, 1.19.2, 1.19.3, 1.20.0, 1.20.1 and 1.22.0 on 2026-10-29).
 
 `aot` (from 1.26.1) is the revocation list for WebAssembly code the platform compiles ahead of time: native
 runtimes refuse compiled code from a listed compiler version or signing key, and with no list ever read they
