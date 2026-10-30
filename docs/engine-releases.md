@@ -49,6 +49,7 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.28.0 | 1.30 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.28.0-windows-x86_64.zip](../engine/1.28.0/native/windows-x86_64/starhermit-1.28.0-windows-x86_64.zip), [starhermit-1.28.0-linux-x86_64.tar.gz](../engine/1.28.0/native/linux-x86_64/starhermit-1.28.0-linux-x86_64.tar.gz), [starhermit-1.28.0-macos-x86_64.tar.gz](../engine/1.28.0/native/macos-x86_64/starhermit-1.28.0-macos-x86_64.tar.gz), [starhermit-1.28.0-macos-aarch64.tar.gz](../engine/1.28.0/native/macos-aarch64/starhermit-1.28.0-macos-aarch64.tar.gz) |
 | 1.27.0 | 1.29 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.27.0-windows-x86_64.zip](../engine/1.27.0/native/windows-x86_64/starhermit-1.27.0-windows-x86_64.zip), [starhermit-1.27.0-linux-x86_64.tar.gz](../engine/1.27.0/native/linux-x86_64/starhermit-1.27.0-linux-x86_64.tar.gz), [starhermit-1.27.0-macos-x86_64.tar.gz](../engine/1.27.0/native/macos-x86_64/starhermit-1.27.0-macos-x86_64.tar.gz), [starhermit-1.27.0-macos-aarch64.tar.gz](../engine/1.27.0/native/macos-aarch64/starhermit-1.27.0-macos-aarch64.tar.gz) |
 | 1.26.2 | 1.28 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.26.2-windows-x86_64.zip](../engine/1.26.2/native/windows-x86_64/starhermit-1.26.2-windows-x86_64.zip), [starhermit-1.26.2-linux-x86_64.tar.gz](../engine/1.26.2/native/linux-x86_64/starhermit-1.26.2-linux-x86_64.tar.gz), [starhermit-1.26.2-macos-x86_64.tar.gz](../engine/1.26.2/native/macos-x86_64/starhermit-1.26.2-macos-x86_64.tar.gz), [starhermit-1.26.2-macos-aarch64.tar.gz](../engine/1.26.2/native/macos-aarch64/starhermit-1.26.2-macos-aarch64.tar.gz) |
 | 1.26.1 | 1.28 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.26.1-windows-x86_64.zip](../engine/1.26.1/native/windows-x86_64/starhermit-1.26.1-windows-x86_64.zip), [starhermit-1.26.1-linux-x86_64.tar.gz](../engine/1.26.1/native/linux-x86_64/starhermit-1.26.1-linux-x86_64.tar.gz) |
@@ -57,7 +58,7 @@ never changes: a fix is the next version.
 | 1.24.0 | 1.26 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.24.0-windows-x86_64.zip](../engine/1.24.0/native/windows-x86_64/starhermit-1.24.0-windows-x86_64.zip), [starhermit-1.24.0-linux-x86_64.tar.gz](../engine/1.24.0/native/linux-x86_64/starhermit-1.24.0-linux-x86_64.tar.gz) |
 | 1.23.0 | 1.25 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.23.0-windows-x86_64.zip](../engine/1.23.0/native/windows-x86_64/starhermit-1.23.0-windows-x86_64.zip), [starhermit-1.23.0-linux-x86_64.tar.gz](../engine/1.23.0/native/linux-x86_64/starhermit-1.23.0-linux-x86_64.tar.gz) |
 | 1.22.0 | 1.24 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-29 (wiki size limit) |
-| 1.21.0 | 1.23 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.21.0-windows-x86_64.zip](../engine/1.21.0/native/windows-x86_64/starhermit-1.21.0-windows-x86_64.zip), [starhermit-1.21.0-linux-x86_64.tar.gz](../engine/1.21.0/native/linux-x86_64/starhermit-1.21.0-linux-x86_64.tar.gz) |
+| 1.21.0 | 1.23 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-30 (wiki size limit) |
 | 1.20.2 | 1.22 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.20.2-windows-x86_64.zip](../engine/1.20.2/native/windows-x86_64/starhermit-1.20.2-windows-x86_64.zip), [starhermit-1.20.2-linux-x86_64.tar.gz](../engine/1.20.2/native/linux-x86_64/starhermit-1.20.2-linux-x86_64.tar.gz) |
 | 1.20.1 | 1.22 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-29 (wiki size limit) |
 | 1.20.0 | 1.22 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-29 (wiki size limit) |
@@ -107,6 +108,33 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.28.0
+
+Host API 1.30: pin `engine.version=1.28.0` and add `engine.minor=30` for the changes marked (1.30); games declaring
+1.29 or older keep their look. All of these are RangeErrors or unchanged below 1.30.
+
+- **Bloom model** (1.30): `renderer.bloom.model` picks three.js's `UnrealBloomPass` of `"r185"` (the default),
+  `"r176"` or `"r160"` exactly. The older passes blur nearly flat, which gives the square glows and broad haze that
+  squaring the strength cannot. **Ports of three.js r160 to r176 pages should set their model (such as
+  `model: "r160"`) and keep the page's own, unsquared strength**, instead of squaring it as 1.27.0 suggested.
+- **Display-space grade `levels`** (1.30): a display-space `renderer.grade` takes `levels: [scale, offset]`, applied
+  to the encoded color after the tints and lift, as a page's grade pass after `OutputPass` does (such as
+  `s = s * 0.98 + 0.015`). `overRange` stays linear only.
+- **S-curve contrast** (1.30): `renderer.grade.contrastCurve: "s"` makes a display-space grade's contrast the weight
+  of an S-curve, `s = mix(c, c²(3 − 2c), contrast)`, with Rec. 601 luma of the curved color, exactly as the
+  `GradeShader` passes after `OutputPass` in ported pages write it. The default `"linear"` slope crushed their darks
+  6 to 10 levels at High.
+- **Environment light on surfaces facing straight up** (1.30): flat ground, floors and box tops (and surfaces facing
+  straight down) read a prefiltered environment's light at the pole, as three.js's cube PMREM does. Before, they
+  read a row 11° off the pole at a longitude that depended on the mesh: under `RoomEnvironment` about 0.8 times
+  three.js's diffuse light or more. A white roughness-1 plane at `envMapIntensity` 0.25 now reads 162 sRGB where it
+  read 155 (three.js r185: 170).
+- **Downloads**: Windows SHA-256 `5af118bd225abd9378c84b76db8373655f159b73aee72456de15b04ff60f8af9`, Linux
+  `861e652280535cf06ee5035d42c6048524929e5d6f62c3da5c6ec2fae93fefdd`, macOS x86_64
+  `1f23a8213dd59cf4503622f011ca6eb173d162d218ad3dce8aef9f49574306c2`, macOS aarch64
+  `73b74b26eb23331f17c7b31879957c2e1770931955d2a6a2dcb141e85ca82937`. The macOS runtimes are signed ad hoc and not
+  notarized, as in 1.26.2.
 
 ### 1.27.0
 
@@ -1025,7 +1053,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1, 1.19.2, 1.19.3, 1.20.0, 1.20.1 and 1.22.0 on 2026-10-29).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1, 1.19.2, 1.19.3, 1.20.0, 1.20.1 and 1.22.0 on 2026-10-29, 1.21.0 on 2026-10-30).
 
 `aot` (from 1.26.1) is the revocation list for WebAssembly code the platform compiles ahead of time: native
 runtimes refuse compiled code from a listed compiler version or signing key, and with no list ever read they
