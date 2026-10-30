@@ -20,15 +20,15 @@ cross-compiled; report problems.
 
 ## Downloads
 
-Developer tools 1.28.0 (macOS, Linux and Windows) are separate from the engine
+Developer tools 1.29.0 (macOS, Linux and Windows) are separate from the engine
 runtime a game pins.
 
 | Computer | Download | SHA-256 |
 |---|---|---|
-| macOS, Apple Silicon | [starhermit-tools-1.28.0-macos-aarch64.tar.gz](1.28.0/starhermit-tools-1.28.0-macos-aarch64.tar.gz) | [checksum](1.28.0/starhermit-tools-1.28.0-macos-aarch64.tar.gz.sha256) |
-| macOS, Intel | [starhermit-tools-1.28.0-macos-x86_64.tar.gz](1.28.0/starhermit-tools-1.28.0-macos-x86_64.tar.gz) | [checksum](1.28.0/starhermit-tools-1.28.0-macos-x86_64.tar.gz.sha256) |
-| Linux, x86-64 | [starhermit-tools-1.28.0-linux-x86_64.tar.gz](1.28.0/starhermit-tools-1.28.0-linux-x86_64.tar.gz) | [checksum](1.28.0/starhermit-tools-1.28.0-linux-x86_64.tar.gz.sha256) |
-| Windows, x86-64 | [starhermit-tools-1.28.0-windows-x86_64.zip](1.28.0/starhermit-tools-1.28.0-windows-x86_64.zip) | [checksum](1.28.0/starhermit-tools-1.28.0-windows-x86_64.zip.sha256) |
+| macOS, Apple Silicon | [starhermit-tools-1.29.0-macos-aarch64.tar.gz](1.29.0/starhermit-tools-1.29.0-macos-aarch64.tar.gz) | [checksum](1.29.0/starhermit-tools-1.29.0-macos-aarch64.tar.gz.sha256) |
+| macOS, Intel | [starhermit-tools-1.29.0-macos-x86_64.tar.gz](1.29.0/starhermit-tools-1.29.0-macos-x86_64.tar.gz) | [checksum](1.29.0/starhermit-tools-1.29.0-macos-x86_64.tar.gz.sha256) |
+| Linux, x86-64 | [starhermit-tools-1.29.0-linux-x86_64.tar.gz](1.29.0/starhermit-tools-1.29.0-linux-x86_64.tar.gz) | [checksum](1.29.0/starhermit-tools-1.29.0-linux-x86_64.tar.gz.sha256) |
+| Windows, x86-64 | [starhermit-tools-1.29.0-windows-x86_64.zip](1.29.0/starhermit-tools-1.29.0-windows-x86_64.zip) | [checksum](1.29.0/starhermit-tools-1.29.0-windows-x86_64.zip.sha256) |
 
 [latest.json](latest.json) lists download sizes and SHA-256 hashes, and
 each download's version.
