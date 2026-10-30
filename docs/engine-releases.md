@@ -49,14 +49,15 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.30.0 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.30.0-windows-x86_64.zip](../engine/1.30.0/native/windows-x86_64/starhermit-1.30.0-windows-x86_64.zip), [starhermit-1.30.0-linux-x86_64.tar.gz](../engine/1.30.0/native/linux-x86_64/starhermit-1.30.0-linux-x86_64.tar.gz), [starhermit-1.30.0-macos-x86_64.tar.gz](../engine/1.30.0/native/macos-x86_64/starhermit-1.30.0-macos-x86_64.tar.gz), [starhermit-1.30.0-macos-aarch64.tar.gz](../engine/1.30.0/native/macos-aarch64/starhermit-1.30.0-macos-aarch64.tar.gz) |
 | 1.29.0 | 1.31 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.29.0-windows-x86_64.zip](../engine/1.29.0/native/windows-x86_64/starhermit-1.29.0-windows-x86_64.zip), [starhermit-1.29.0-linux-x86_64.tar.gz](../engine/1.29.0/native/linux-x86_64/starhermit-1.29.0-linux-x86_64.tar.gz), [starhermit-1.29.0-macos-x86_64.tar.gz](../engine/1.29.0/native/macos-x86_64/starhermit-1.29.0-macos-x86_64.tar.gz), [starhermit-1.29.0-macos-aarch64.tar.gz](../engine/1.29.0/native/macos-aarch64/starhermit-1.29.0-macos-aarch64.tar.gz) |
 | 1.28.0 | 1.30 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.28.0-windows-x86_64.zip](../engine/1.28.0/native/windows-x86_64/starhermit-1.28.0-windows-x86_64.zip), [starhermit-1.28.0-linux-x86_64.tar.gz](../engine/1.28.0/native/linux-x86_64/starhermit-1.28.0-linux-x86_64.tar.gz), [starhermit-1.28.0-macos-x86_64.tar.gz](../engine/1.28.0/native/macos-x86_64/starhermit-1.28.0-macos-x86_64.tar.gz), [starhermit-1.28.0-macos-aarch64.tar.gz](../engine/1.28.0/native/macos-aarch64/starhermit-1.28.0-macos-aarch64.tar.gz) |
 | 1.27.0 | 1.29 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.27.0-windows-x86_64.zip](../engine/1.27.0/native/windows-x86_64/starhermit-1.27.0-windows-x86_64.zip), [starhermit-1.27.0-linux-x86_64.tar.gz](../engine/1.27.0/native/linux-x86_64/starhermit-1.27.0-linux-x86_64.tar.gz), [starhermit-1.27.0-macos-x86_64.tar.gz](../engine/1.27.0/native/macos-x86_64/starhermit-1.27.0-macos-x86_64.tar.gz), [starhermit-1.27.0-macos-aarch64.tar.gz](../engine/1.27.0/native/macos-aarch64/starhermit-1.27.0-macos-aarch64.tar.gz) |
 | 1.26.2 | 1.28 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.26.2-windows-x86_64.zip](../engine/1.26.2/native/windows-x86_64/starhermit-1.26.2-windows-x86_64.zip), [starhermit-1.26.2-linux-x86_64.tar.gz](../engine/1.26.2/native/linux-x86_64/starhermit-1.26.2-linux-x86_64.tar.gz), [starhermit-1.26.2-macos-x86_64.tar.gz](../engine/1.26.2/native/macos-x86_64/starhermit-1.26.2-macos-x86_64.tar.gz), [starhermit-1.26.2-macos-aarch64.tar.gz](../engine/1.26.2/native/macos-aarch64/starhermit-1.26.2-macos-aarch64.tar.gz) |
 | 1.26.1 | 1.28 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.26.1-windows-x86_64.zip](../engine/1.26.1/native/windows-x86_64/starhermit-1.26.1-windows-x86_64.zip), [starhermit-1.26.1-linux-x86_64.tar.gz](../engine/1.26.1/native/linux-x86_64/starhermit-1.26.1-linux-x86_64.tar.gz) |
 | 1.26.0 | 1.28 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.26.0-windows-x86_64.zip](../engine/1.26.0/native/windows-x86_64/starhermit-1.26.0-windows-x86_64.zip), [starhermit-1.26.0-linux-x86_64.tar.gz](../engine/1.26.0/native/linux-x86_64/starhermit-1.26.0-linux-x86_64.tar.gz) |
-| 1.25.0 | 1.27 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.25.0-windows-x86_64.zip](../engine/1.25.0/native/windows-x86_64/starhermit-1.25.0-windows-x86_64.zip), [starhermit-1.25.0-linux-x86_64.tar.gz](../engine/1.25.0/native/linux-x86_64/starhermit-1.25.0-linux-x86_64.tar.gz) |
-| 1.24.0 | 1.26 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.24.0-windows-x86_64.zip](../engine/1.24.0/native/windows-x86_64/starhermit-1.24.0-windows-x86_64.zip), [starhermit-1.24.0-linux-x86_64.tar.gz](../engine/1.24.0/native/linux-x86_64/starhermit-1.24.0-linux-x86_64.tar.gz) |
+| 1.25.0 | 1.27 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-30 (wiki size limit) |
+| 1.24.0 | 1.26 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-30 (wiki size limit) |
 | 1.23.0 | 1.25 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-30 (wiki size limit) |
 | 1.22.0 | 1.24 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-29 (wiki size limit) |
 | 1.21.0 | 1.23 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-30 (wiki size limit) |
@@ -109,6 +110,30 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.30.0
+
+Host API 1.32: pin `engine.version=1.30.0` and add `engine.minor=32` for the changes marked (1.32); games declaring
+1.31 or older keep their look (the r16x environment light).
+
+- **Environment specular as three.js r185** (1.32): environment light now follows r185 end to end.
+  - Prefiltered environments are r185's GGX PMREM chain (`PMREMGenerator`'s GGX mip chain), read at three's
+    `roughnessToMip`, in place of the earlier blur.
+  - Standard and physical materials take their split-sum terms from r185's DFG table.
+  - The reflection direction bends toward the normal by roughness⁴, as r185's does (clearcoat too).
+  - `RoomEnvironment` starts at `position.y = -3.5`, as in r183 and later. It is an absolute default: a position the
+    game sets replaces it.
+  - Mid-roughness reflections were well short of r185 at 1.31 (a metal at roughness 0.3 seen straight down read 211
+    against r185's 246 blue); `tools/post-parity.py`'s new `env-0`, `env-40`, `env-75` and `env-room0`
+    configurations now match within 3–11 levels at p99 (11–33 at 1.31), and kitchen-merge's board reads blue 78
+    against its page's 82 (65 before).
+  - Known remaining differences: surfaces facing straight up stay about 3 levels short (three.js's sigma blur at the
+    cube pole), and per-configuration p99 differences of up to 11 levels remain.
+- **Downloads**: Windows SHA-256 `75c7098c58b5a7551f5e703c4cdb34767311328344126bc7befadc62b6c142d6`, Linux
+  `3b7c7f2263b592db1e823866201299550044b08669cec7c18220aaa610ff25f0`, macOS x86_64
+  `1696f26c77a80fd48cdca87a4aad4d4acf72af8a52eff655868bfb903a404c45`, macOS aarch64
+  `b7461d0858b4ef92ee19f6e59e2832eea4622bb735f9fa99f9ff1f1ef9c14306`. The macOS runtimes are signed ad hoc and not
+  notarized, as in 1.26.2.
 
 ### 1.29.0
 
@@ -1078,7 +1103,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1, 1.19.2, 1.19.3, 1.20.0, 1.20.1 and 1.22.0 on 2026-10-29, 1.20.2, 1.21.0 and 1.23.0 on 2026-10-30).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1, 1.19.2, 1.19.3, 1.20.0, 1.20.1 and 1.22.0 on 2026-10-29, 1.20.2, 1.21.0, 1.23.0, 1.24.0 and 1.25.0 on 2026-10-30).
 
 `aot` (from 1.26.1) is the revocation list for WebAssembly code the platform compiles ahead of time: native
 runtimes refuse compiled code from a listed compiler version or signing key, and with no list ever read they
