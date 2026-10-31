@@ -19,6 +19,7 @@ This area is written by `cargo starhermit release`; do not edit it by hand.
 
 | Version | Host API | Built | Manifest (SRI) | Native |
 |---|---|---|---|---|
+| 1.31.0 | 1.32 | 2026-10-31T17:06:29Z | `sha384-+6LSJtgPavoBD9p/wXFDPfKnGdIrJrVZOQ746ANxbuT46sqYXej7tkanM9OVRfTJ` | linux-x86_64, macos-aarch64, macos-x86_64, windows-x86_64 |
 | 1.30.0 | 1.32 | 2026-10-30T07:56:50Z | `sha384-vakJNQavJ+FY9hT25PYLQ6OcINy2FCvK4YWTpapTLnQXT3K3IR8IfDnywM1V2lrU` | linux-x86_64, macos-aarch64, macos-x86_64, windows-x86_64 |
 | 1.29.0 | 1.31 | 2026-10-30T04:31:03Z | `sha384-Vfhr5pHtPXen/9Hliz+V+O+R5RX8V6oNc3j47XSOYt3GJTbIaQPjRE/NkSloBuA3` | linux-x86_64, macos-aarch64, macos-x86_64, windows-x86_64 |
 | 1.28.0 | 1.30 | 2026-10-30T00:04:56Z | `sha384-FmJmyq1EkhnPVwmbXLIBtL/RNKIKlPN5rzUM5X4yDlcPE2p8BFfTHV/BVKrJnwQV` | linux-x86_64, macos-aarch64, macos-x86_64, windows-x86_64 |
@@ -87,10 +88,10 @@ runtime (`starhermit.exe` on Windows, `starhermit` on Linux) with its
 `release.json` and license notices, the engine a game needs to be written,
 checked and packaged. The newest:
 
-- windows-x86_64: [starhermit-1.30.0-windows-x86_64.zip](1.30.0/native/windows-x86_64/starhermit-1.30.0-windows-x86_64.zip)
-- linux-x86_64: [starhermit-1.30.0-linux-x86_64.tar.gz](1.30.0/native/linux-x86_64/starhermit-1.30.0-linux-x86_64.tar.gz)
-- macos-x86_64: [starhermit-1.30.0-macos-x86_64.tar.gz](1.30.0/native/macos-x86_64/starhermit-1.30.0-macos-x86_64.tar.gz)
-- macos-aarch64: [starhermit-1.30.0-macos-aarch64.tar.gz](1.30.0/native/macos-aarch64/starhermit-1.30.0-macos-aarch64.tar.gz)
+- windows-x86_64: [starhermit-1.31.0-windows-x86_64.zip](1.31.0/native/windows-x86_64/starhermit-1.31.0-windows-x86_64.zip)
+- linux-x86_64: [starhermit-1.31.0-linux-x86_64.tar.gz](1.31.0/native/linux-x86_64/starhermit-1.31.0-linux-x86_64.tar.gz)
+- macos-x86_64: [starhermit-1.31.0-macos-x86_64.tar.gz](1.31.0/native/macos-x86_64/starhermit-1.31.0-macos-x86_64.tar.gz)
+- macos-aarch64: [starhermit-1.31.0-macos-aarch64.tar.gz](1.31.0/native/macos-aarch64/starhermit-1.31.0-macos-aarch64.tar.gz)
 
 Unpack it and run `starhermit new <game>` for a game pinned to the release,
 `starhermit types <game>` for the host API's declarations, `starhermit check
@@ -113,7 +114,7 @@ and checks that the release the game pins (`engine.version`) is published
 with a native runtime and not revoked.
 
 ```
-starhermit package --web <game> --engine-version 1.30.0 --out <upload>
+starhermit package --web <game> --engine-version 1.31.0 --out <upload>
 ```
 
 (the runtime of that release; `cargo starhermit package --web` is the same,
