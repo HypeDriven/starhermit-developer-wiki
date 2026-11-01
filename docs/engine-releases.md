@@ -49,13 +49,16 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.32.0 | 1.33 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.32.0-windows-x86_64.zip](../engine/1.32.0/native/windows-x86_64/starhermit-1.32.0-windows-x86_64.zip), [starhermit-1.32.0-linux-x86_64.tar.gz](../engine/1.32.0/native/linux-x86_64/starhermit-1.32.0-linux-x86_64.tar.gz), [starhermit-1.32.0-macos-x86_64.tar.gz](../engine/1.32.0/native/macos-x86_64/starhermit-1.32.0-macos-x86_64.tar.gz), [starhermit-1.32.0-macos-aarch64.tar.gz](../engine/1.32.0/native/macos-aarch64/starhermit-1.32.0-macos-aarch64.tar.gz) |
+| 1.31.1 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.31.1-windows-x86_64.zip](../engine/1.31.1/native/windows-x86_64/starhermit-1.31.1-windows-x86_64.zip), [starhermit-1.31.1-linux-x86_64.tar.gz](../engine/1.31.1/native/linux-x86_64/starhermit-1.31.1-linux-x86_64.tar.gz), [starhermit-1.31.1-macos-x86_64.tar.gz](../engine/1.31.1/native/macos-x86_64/starhermit-1.31.1-macos-x86_64.tar.gz), [starhermit-1.31.1-macos-aarch64.tar.gz](../engine/1.31.1/native/macos-aarch64/starhermit-1.31.1-macos-aarch64.tar.gz) |
+| 1.31.0 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.31.0-windows-x86_64.zip](../engine/1.31.0/native/windows-x86_64/starhermit-1.31.0-windows-x86_64.zip), [starhermit-1.31.0-linux-x86_64.tar.gz](../engine/1.31.0/native/linux-x86_64/starhermit-1.31.0-linux-x86_64.tar.gz), [starhermit-1.31.0-macos-x86_64.tar.gz](../engine/1.31.0/native/macos-x86_64/starhermit-1.31.0-macos-x86_64.tar.gz), [starhermit-1.31.0-macos-aarch64.tar.gz](../engine/1.31.0/native/macos-aarch64/starhermit-1.31.0-macos-aarch64.tar.gz) |
 | 1.30.0 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.30.0-windows-x86_64.zip](../engine/1.30.0/native/windows-x86_64/starhermit-1.30.0-windows-x86_64.zip), [starhermit-1.30.0-linux-x86_64.tar.gz](../engine/1.30.0/native/linux-x86_64/starhermit-1.30.0-linux-x86_64.tar.gz), [starhermit-1.30.0-macos-x86_64.tar.gz](../engine/1.30.0/native/macos-x86_64/starhermit-1.30.0-macos-x86_64.tar.gz), [starhermit-1.30.0-macos-aarch64.tar.gz](../engine/1.30.0/native/macos-aarch64/starhermit-1.30.0-macos-aarch64.tar.gz) |
 | 1.29.0 | 1.31 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.29.0-windows-x86_64.zip](../engine/1.29.0/native/windows-x86_64/starhermit-1.29.0-windows-x86_64.zip), [starhermit-1.29.0-linux-x86_64.tar.gz](../engine/1.29.0/native/linux-x86_64/starhermit-1.29.0-linux-x86_64.tar.gz), [starhermit-1.29.0-macos-x86_64.tar.gz](../engine/1.29.0/native/macos-x86_64/starhermit-1.29.0-macos-x86_64.tar.gz), [starhermit-1.29.0-macos-aarch64.tar.gz](../engine/1.29.0/native/macos-aarch64/starhermit-1.29.0-macos-aarch64.tar.gz) |
 | 1.28.0 | 1.30 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.28.0-windows-x86_64.zip](../engine/1.28.0/native/windows-x86_64/starhermit-1.28.0-windows-x86_64.zip), [starhermit-1.28.0-linux-x86_64.tar.gz](../engine/1.28.0/native/linux-x86_64/starhermit-1.28.0-linux-x86_64.tar.gz), [starhermit-1.28.0-macos-x86_64.tar.gz](../engine/1.28.0/native/macos-x86_64/starhermit-1.28.0-macos-x86_64.tar.gz), [starhermit-1.28.0-macos-aarch64.tar.gz](../engine/1.28.0/native/macos-aarch64/starhermit-1.28.0-macos-aarch64.tar.gz) |
 | 1.27.0 | 1.29 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.27.0-windows-x86_64.zip](../engine/1.27.0/native/windows-x86_64/starhermit-1.27.0-windows-x86_64.zip), [starhermit-1.27.0-linux-x86_64.tar.gz](../engine/1.27.0/native/linux-x86_64/starhermit-1.27.0-linux-x86_64.tar.gz), [starhermit-1.27.0-macos-x86_64.tar.gz](../engine/1.27.0/native/macos-x86_64/starhermit-1.27.0-macos-x86_64.tar.gz), [starhermit-1.27.0-macos-aarch64.tar.gz](../engine/1.27.0/native/macos-aarch64/starhermit-1.27.0-macos-aarch64.tar.gz) |
-| 1.26.2 | 1.28 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.26.2-windows-x86_64.zip](../engine/1.26.2/native/windows-x86_64/starhermit-1.26.2-windows-x86_64.zip), [starhermit-1.26.2-linux-x86_64.tar.gz](../engine/1.26.2/native/linux-x86_64/starhermit-1.26.2-linux-x86_64.tar.gz), [starhermit-1.26.2-macos-x86_64.tar.gz](../engine/1.26.2/native/macos-x86_64/starhermit-1.26.2-macos-x86_64.tar.gz), [starhermit-1.26.2-macos-aarch64.tar.gz](../engine/1.26.2/native/macos-aarch64/starhermit-1.26.2-macos-aarch64.tar.gz) |
-| 1.26.1 | 1.28 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.26.1-windows-x86_64.zip](../engine/1.26.1/native/windows-x86_64/starhermit-1.26.1-windows-x86_64.zip), [starhermit-1.26.1-linux-x86_64.tar.gz](../engine/1.26.1/native/linux-x86_64/starhermit-1.26.1-linux-x86_64.tar.gz) |
-| 1.26.0 | 1.28 | Web; Windows (x86-64); Linux (x86-64) | [starhermit-1.26.0-windows-x86_64.zip](../engine/1.26.0/native/windows-x86_64/starhermit-1.26.0-windows-x86_64.zip), [starhermit-1.26.0-linux-x86_64.tar.gz](../engine/1.26.0/native/linux-x86_64/starhermit-1.26.0-linux-x86_64.tar.gz) |
+| 1.26.2 | 1.28 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | Removed 2026-11-01 (wiki size limit) |
+| 1.26.1 | 1.28 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-31 (wiki size limit) |
+| 1.26.0 | 1.28 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-31 (wiki size limit) |
 | 1.25.0 | 1.27 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-30 (wiki size limit) |
 | 1.24.0 | 1.26 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-30 (wiki size limit) |
 | 1.23.0 | 1.25 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-30 (wiki size limit) |
@@ -110,6 +113,63 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.32.0
+
+Host API 1.33: pin `engine.version=1.32.0` and add `engine.minor=33` for the changes marked (1.33); games declaring
+1.32 or older behave as before.
+
+- **Interleaved and streaming geometry** (1.33): three.js r185's `InterleavedBuffer` and
+  `InterleavedBufferAttribute` (Float32), and StarHermit's `StreamingGeometry`, which uploads a large model in pages
+  over frames (`addPage(vertices, indices?, transfer?)`, at most 256 pages). A typed array made with a length is
+  zero-filled without per-element work.
+- **Pluck orders** (1.33): `platform.plucks` creates and reads Pluck orders for a game's items, behind
+  `engine.capabilities=platform,plucks`; the player confirms and pays outside the game (`openConfirmation`,
+  `openWallet`). Server scripts that declare `game.pluckOrders = true` receive paid orders in `ctx.pluckOrders` on
+  every minor's runtime.
+- **Up to 256 external links** (1.33), still each approved by exact URL; older minors keep 16.
+- **Launch parameters** (1.33): `engine.param.<key>=` declares up to 8 keys a play link may set
+  (`/play/<slug>?key=value` on the web, `starhermit://play/<slug>?key=value` in the desktop clients).
+- **Workers** (1.33): `reportProgress`, `setReady` and an awaitable `terminate()`.
+- **Streamed saves and compression** (1.33): `files.saveStream(name, {type})` and streaming compressors.
+- **Receiver-plane shadows** (1.33): `light.shadow.receiverPlane = true`, an opt-in engine extension (not three.js)
+  that removes shadow acne on large receivers; the default stays three.js r185.
+- **Styled `ui.select`** (1.33) sizes as CSS sizes a `select`.
+- Fixes on every minor: material-array groups draw as ranges of one mesh; a `boundingSphere` set after upload only
+  changes culling; `starhermit:ui` shadows no longer disappear past the styled-box vertex budget (over-budget
+  gradients settle flat, with a one-time warning); select-all in text fields; the WebGPU runtime stays at most two
+  frames ahead of the GPU, so captures no longer time out on slow GPUs.
+- Faster on every minor, output unchanged: gradient stops by bisection, skinned-mesh sync and `Skeleton.update`.
+- **Downloads**: Windows SHA-256 `f5626c99468696fa29cd3335c1fb80df6a8f6037ad110ba9880a29fe5537f6be`, Linux
+  `f28d7369b043b456776149c23fb1c3cd5458b7a4ef9a897c956c874313e282aa`, macOS x86_64
+  `291233f6636fcad5a6c3675b7daeeb85f54694a6ccea78f891465ba78b13fbe2`, macOS aarch64
+  `4ccd0df2fff12a72748883dffb0a7e3e4c8ec8f2d8baeddfdf81e45e13f00946`. The macOS runtimes are signed ad hoc and not
+  notarized, as in 1.26.2.
+
+### 1.31.1
+
+Host API 1.32, as 1.31.0: re-pin to 1.31.1 (`engine.version=1.31.1`); nothing changes for games.
+
+- Fix WebGPU ambient occlusion: the built-in normal prepass binds the skin-texture group its vertex shader reads.
+- **Downloads**: Windows SHA-256 `fb5bcfdd095b4e89619a2909ce1793ec582d81d74f841a9e7fe249435dac4971`, Linux
+  `2de69af46776e8c6e59851472f1dc5812a6c75b777a1e9a75d4e81c2d8ed06d8`, macOS x86_64
+  `3581d15fda388d4223066c3824cba2d2bb78e92bbee1be5eaad0934296da506a`, macOS aarch64
+  `349a2d5e2bfc3e7c49b86493afa8a4586b751e870c21de79ce02b76c32795def`. The macOS runtimes are signed ad hoc and not
+  notarized, as in 1.26.2.
+
+### 1.31.0
+
+Host API 1.32, as 1.30.0, with new scene helpers for games pinned to 1.31.0.
+
+- **Volume rendering**: offline-packed RGBA8 volume atlases, `VolumeMesh` (ray marching with frame interpolation,
+  self-shadowing, scattering and emission), shared `VolumeAtlas` storage, and `VolumeLayer` (reduced-resolution
+  rendering with temporal reconstruction).
+- Fixes: native Vulkan uniform arrays of matrices; the Direct3D 12 shadow-catcher shader.
+- **Downloads**: Windows SHA-256 `94ff142ab8fe9391436e7551099c42f2ac1e474c990496bb6eae3e32c5022126`, Linux
+  `ae3b1d5623ca9a12b6375fa04d96b7c30f95795cec22d57e3b4a4875c9f8f5e9`, macOS x86_64
+  `d36ba6d4d565993001618534863e9fdcb73e0b48fb629752103c9a742caba15d`, macOS aarch64
+  `dfd3c237e7165e7bb88dc12b7a18a49ea76434786dfd9dae561c26c96860d5b0`. The macOS runtimes are signed ad hoc and not
+  notarized, as in 1.26.2.
 
 ### 1.30.0
 
@@ -222,9 +282,9 @@ Host API 1.28, as 1.26.0: re-pin to 1.26.2 (`engine.version=1.26.2`); nothing ch
 
 - **macOS runtimes**: the first release with native runtimes for macOS, on Intel (`macos-x86_64`) and Apple Silicon
   (`macos-aarch64`), for the StarHermit macOS client; they need macOS 11 or later. Developer downloads:
-  [starhermit-1.26.2-macos-x86_64.tar.gz](../engine/1.26.2/native/macos-x86_64/starhermit-1.26.2-macos-x86_64.tar.gz)
+  `starhermit-1.26.2-macos-x86_64.tar.gz` (removed 2026-11-01)
   (SHA-256 `460a39263a749407400cff4b1ecc093034f68fc138b2a8b881ad7bf0b8314c27`) and
-  [starhermit-1.26.2-macos-aarch64.tar.gz](../engine/1.26.2/native/macos-aarch64/starhermit-1.26.2-macos-aarch64.tar.gz)
+  `starhermit-1.26.2-macos-aarch64.tar.gz` (removed 2026-11-01)
   (SHA-256 `6888857b3ef1608968484ad68f0b256da22273b9cc1b0f7a77233af9bd5cfb0c`).
 - They are signed ad hoc and **not notarized**. That is fine when the client installs them, but a tarball downloaded
   in a browser carries Gatekeeper's quarantine and is blocked until it is cleared
@@ -1103,7 +1163,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1, 1.19.2, 1.19.3, 1.20.0, 1.20.1 and 1.22.0 on 2026-10-29, 1.20.2, 1.21.0, 1.23.0, 1.24.0 and 1.25.0 on 2026-10-30).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1, 1.19.2, 1.19.3, 1.20.0, 1.20.1 and 1.22.0 on 2026-10-29, 1.20.2, 1.21.0, 1.23.0, 1.24.0 and 1.25.0 on 2026-10-30, 1.26.0 and 1.26.1 on 2026-10-31, 1.26.2 on 2026-11-01).
 
 `aot` (from 1.26.1) is the revocation list for WebAssembly code the platform compiles ahead of time: native
 runtimes refuse compiled code from a listed compiler version or signing key, and with no list ever read they
