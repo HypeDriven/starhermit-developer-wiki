@@ -49,12 +49,13 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.33.1 | 1.33 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.33.1-windows-x86_64.zip](../engine/1.33.1/native/windows-x86_64/starhermit-1.33.1-windows-x86_64.zip), [starhermit-1.33.1-linux-x86_64.tar.gz](../engine/1.33.1/native/linux-x86_64/starhermit-1.33.1-linux-x86_64.tar.gz), [starhermit-1.33.1-macos-x86_64.tar.gz](../engine/1.33.1/native/macos-x86_64/starhermit-1.33.1-macos-x86_64.tar.gz), [starhermit-1.33.1-macos-aarch64.tar.gz](../engine/1.33.1/native/macos-aarch64/starhermit-1.33.1-macos-aarch64.tar.gz) |
 | 1.33.0 | 1.33 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.33.0-windows-x86_64.zip](../engine/1.33.0/native/windows-x86_64/starhermit-1.33.0-windows-x86_64.zip), [starhermit-1.33.0-linux-x86_64.tar.gz](../engine/1.33.0/native/linux-x86_64/starhermit-1.33.0-linux-x86_64.tar.gz), [starhermit-1.33.0-macos-x86_64.tar.gz](../engine/1.33.0/native/macos-x86_64/starhermit-1.33.0-macos-x86_64.tar.gz), [starhermit-1.33.0-macos-aarch64.tar.gz](../engine/1.33.0/native/macos-aarch64/starhermit-1.33.0-macos-aarch64.tar.gz) |
 | 1.32.0 | 1.33 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.32.0-windows-x86_64.zip](../engine/1.32.0/native/windows-x86_64/starhermit-1.32.0-windows-x86_64.zip), [starhermit-1.32.0-linux-x86_64.tar.gz](../engine/1.32.0/native/linux-x86_64/starhermit-1.32.0-linux-x86_64.tar.gz), [starhermit-1.32.0-macos-x86_64.tar.gz](../engine/1.32.0/native/macos-x86_64/starhermit-1.32.0-macos-x86_64.tar.gz), [starhermit-1.32.0-macos-aarch64.tar.gz](../engine/1.32.0/native/macos-aarch64/starhermit-1.32.0-macos-aarch64.tar.gz) |
 | 1.31.1 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.31.1-windows-x86_64.zip](../engine/1.31.1/native/windows-x86_64/starhermit-1.31.1-windows-x86_64.zip), [starhermit-1.31.1-linux-x86_64.tar.gz](../engine/1.31.1/native/linux-x86_64/starhermit-1.31.1-linux-x86_64.tar.gz), [starhermit-1.31.1-macos-x86_64.tar.gz](../engine/1.31.1/native/macos-x86_64/starhermit-1.31.1-macos-x86_64.tar.gz), [starhermit-1.31.1-macos-aarch64.tar.gz](../engine/1.31.1/native/macos-aarch64/starhermit-1.31.1-macos-aarch64.tar.gz) |
 | 1.31.0 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.31.0-windows-x86_64.zip](../engine/1.31.0/native/windows-x86_64/starhermit-1.31.0-windows-x86_64.zip), [starhermit-1.31.0-linux-x86_64.tar.gz](../engine/1.31.0/native/linux-x86_64/starhermit-1.31.0-linux-x86_64.tar.gz), [starhermit-1.31.0-macos-x86_64.tar.gz](../engine/1.31.0/native/macos-x86_64/starhermit-1.31.0-macos-x86_64.tar.gz), [starhermit-1.31.0-macos-aarch64.tar.gz](../engine/1.31.0/native/macos-aarch64/starhermit-1.31.0-macos-aarch64.tar.gz) |
 | 1.30.0 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.30.0-windows-x86_64.zip](../engine/1.30.0/native/windows-x86_64/starhermit-1.30.0-windows-x86_64.zip), [starhermit-1.30.0-linux-x86_64.tar.gz](../engine/1.30.0/native/linux-x86_64/starhermit-1.30.0-linux-x86_64.tar.gz), [starhermit-1.30.0-macos-x86_64.tar.gz](../engine/1.30.0/native/macos-x86_64/starhermit-1.30.0-macos-x86_64.tar.gz), [starhermit-1.30.0-macos-aarch64.tar.gz](../engine/1.30.0/native/macos-aarch64/starhermit-1.30.0-macos-aarch64.tar.gz) |
-| 1.29.0 | 1.31 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.29.0-windows-x86_64.zip](../engine/1.29.0/native/windows-x86_64/starhermit-1.29.0-windows-x86_64.zip), [starhermit-1.29.0-linux-x86_64.tar.gz](../engine/1.29.0/native/linux-x86_64/starhermit-1.29.0-linux-x86_64.tar.gz), [starhermit-1.29.0-macos-x86_64.tar.gz](../engine/1.29.0/native/macos-x86_64/starhermit-1.29.0-macos-x86_64.tar.gz), [starhermit-1.29.0-macos-aarch64.tar.gz](../engine/1.29.0/native/macos-aarch64/starhermit-1.29.0-macos-aarch64.tar.gz) |
+| 1.29.0 | 1.31 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | Removed 2026-11-02 (wiki size limit) |
 | 1.28.0 | 1.30 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | Removed 2026-11-02 (wiki size limit) |
 | 1.27.0 | 1.29 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | Removed 2026-11-02 (wiki size limit) |
 | 1.26.2 | 1.28 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | Removed 2026-11-01 (wiki size limit) |
@@ -114,6 +115,19 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.33.1
+
+Host API 1.33, as 1.33.0: re-pin to 1.33.1 (`engine.version=1.33.1`); nothing changes for games.
+
+- Fix (native runtimes): a WebAssembly module's ahead-of-time compiled code is verified and cached as it arrives,
+  not only when a later instance in the same run loads it. Games that make a module's only instance before the
+  download finishes (most do) interpreted it on every run; now they run compiled from their second run.
+- **Downloads**: Windows SHA-256 `93c4f7303d7e604c644b48c9d972dec3d769cad4de9e3a9c7ddff365fdfbb805`, Linux
+  `34be108e122128c8ee1cb68077cbf427d285c2e23728ea49d433b72cd2f3d5e5`, macOS x86_64
+  `899d6e7d412889e5d4f5ffed75c2e2e90b644c05a717bb09a26fc4cd3ec08a9e`, macOS aarch64
+  `a8549ca02bd5ea581d06acff412631cb30eedc9338a785b64e5944f0f69fd9dd`. The macOS runtimes are signed ad hoc and not
+  notarized, as in 1.26.2.
 
 ### 1.33.0
 
@@ -1186,7 +1200,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1, 1.19.2, 1.19.3, 1.20.0, 1.20.1 and 1.22.0 on 2026-10-29, 1.20.2, 1.21.0, 1.23.0, 1.24.0 and 1.25.0 on 2026-10-30, 1.26.0 and 1.26.1 on 2026-10-31, 1.26.2 on 2026-11-01, 1.27.0 and 1.28.0 on 2026-11-02).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1, 1.19.2, 1.19.3, 1.20.0, 1.20.1 and 1.22.0 on 2026-10-29, 1.20.2, 1.21.0, 1.23.0, 1.24.0 and 1.25.0 on 2026-10-30, 1.26.0 and 1.26.1 on 2026-10-31, 1.26.2 on 2026-11-01, 1.27.0, 1.28.0 and 1.29.0 on 2026-11-02).
 
 `aot` (from 1.26.1) is the revocation list for WebAssembly code the platform compiles ahead of time: native
 runtimes refuse compiled code from a listed compiler version or signing key, and with no list ever read they
