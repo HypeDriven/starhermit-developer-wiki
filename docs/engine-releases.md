@@ -49,12 +49,13 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.34.0 | 1.34 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.34.0-windows-x86_64.zip](../engine/1.34.0/native/windows-x86_64/starhermit-1.34.0-windows-x86_64.zip), [starhermit-1.34.0-linux-x86_64.tar.gz](../engine/1.34.0/native/linux-x86_64/starhermit-1.34.0-linux-x86_64.tar.gz), [starhermit-1.34.0-macos-x86_64.tar.gz](../engine/1.34.0/native/macos-x86_64/starhermit-1.34.0-macos-x86_64.tar.gz), [starhermit-1.34.0-macos-aarch64.tar.gz](../engine/1.34.0/native/macos-aarch64/starhermit-1.34.0-macos-aarch64.tar.gz) |
 | 1.33.1 | 1.33 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.33.1-windows-x86_64.zip](../engine/1.33.1/native/windows-x86_64/starhermit-1.33.1-windows-x86_64.zip), [starhermit-1.33.1-linux-x86_64.tar.gz](../engine/1.33.1/native/linux-x86_64/starhermit-1.33.1-linux-x86_64.tar.gz), [starhermit-1.33.1-macos-x86_64.tar.gz](../engine/1.33.1/native/macos-x86_64/starhermit-1.33.1-macos-x86_64.tar.gz), [starhermit-1.33.1-macos-aarch64.tar.gz](../engine/1.33.1/native/macos-aarch64/starhermit-1.33.1-macos-aarch64.tar.gz) |
 | 1.33.0 | 1.33 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.33.0-windows-x86_64.zip](../engine/1.33.0/native/windows-x86_64/starhermit-1.33.0-windows-x86_64.zip), [starhermit-1.33.0-linux-x86_64.tar.gz](../engine/1.33.0/native/linux-x86_64/starhermit-1.33.0-linux-x86_64.tar.gz), [starhermit-1.33.0-macos-x86_64.tar.gz](../engine/1.33.0/native/macos-x86_64/starhermit-1.33.0-macos-x86_64.tar.gz), [starhermit-1.33.0-macos-aarch64.tar.gz](../engine/1.33.0/native/macos-aarch64/starhermit-1.33.0-macos-aarch64.tar.gz) |
 | 1.32.0 | 1.33 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.32.0-windows-x86_64.zip](../engine/1.32.0/native/windows-x86_64/starhermit-1.32.0-windows-x86_64.zip), [starhermit-1.32.0-linux-x86_64.tar.gz](../engine/1.32.0/native/linux-x86_64/starhermit-1.32.0-linux-x86_64.tar.gz), [starhermit-1.32.0-macos-x86_64.tar.gz](../engine/1.32.0/native/macos-x86_64/starhermit-1.32.0-macos-x86_64.tar.gz), [starhermit-1.32.0-macos-aarch64.tar.gz](../engine/1.32.0/native/macos-aarch64/starhermit-1.32.0-macos-aarch64.tar.gz) |
 | 1.31.1 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.31.1-windows-x86_64.zip](../engine/1.31.1/native/windows-x86_64/starhermit-1.31.1-windows-x86_64.zip), [starhermit-1.31.1-linux-x86_64.tar.gz](../engine/1.31.1/native/linux-x86_64/starhermit-1.31.1-linux-x86_64.tar.gz), [starhermit-1.31.1-macos-x86_64.tar.gz](../engine/1.31.1/native/macos-x86_64/starhermit-1.31.1-macos-x86_64.tar.gz), [starhermit-1.31.1-macos-aarch64.tar.gz](../engine/1.31.1/native/macos-aarch64/starhermit-1.31.1-macos-aarch64.tar.gz) |
 | 1.31.0 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.31.0-windows-x86_64.zip](../engine/1.31.0/native/windows-x86_64/starhermit-1.31.0-windows-x86_64.zip), [starhermit-1.31.0-linux-x86_64.tar.gz](../engine/1.31.0/native/linux-x86_64/starhermit-1.31.0-linux-x86_64.tar.gz), [starhermit-1.31.0-macos-x86_64.tar.gz](../engine/1.31.0/native/macos-x86_64/starhermit-1.31.0-macos-x86_64.tar.gz), [starhermit-1.31.0-macos-aarch64.tar.gz](../engine/1.31.0/native/macos-aarch64/starhermit-1.31.0-macos-aarch64.tar.gz) |
-| 1.30.0 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.30.0-windows-x86_64.zip](../engine/1.30.0/native/windows-x86_64/starhermit-1.30.0-windows-x86_64.zip), [starhermit-1.30.0-linux-x86_64.tar.gz](../engine/1.30.0/native/linux-x86_64/starhermit-1.30.0-linux-x86_64.tar.gz), [starhermit-1.30.0-macos-x86_64.tar.gz](../engine/1.30.0/native/macos-x86_64/starhermit-1.30.0-macos-x86_64.tar.gz), [starhermit-1.30.0-macos-aarch64.tar.gz](../engine/1.30.0/native/macos-aarch64/starhermit-1.30.0-macos-aarch64.tar.gz) |
+| 1.30.0 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | Removed 2026-11-02 (wiki size limit) |
 | 1.29.0 | 1.31 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | Removed 2026-11-02 (wiki size limit) |
 | 1.28.0 | 1.30 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | Removed 2026-11-02 (wiki size limit) |
 | 1.27.0 | 1.29 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | Removed 2026-11-02 (wiki size limit) |
@@ -115,6 +116,47 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.34.0
+
+Host API 1.34: pin `engine.version=1.34.0` and add `engine.minor=34` for the changes marked (1.34); games declaring
+1.33 or older behave as before.
+
+- **Kept world matrices** (1.34): an object keeps its world matrix between reads and makes it again only when its
+  transform, its parent or its parent's world matrix changed. Every read (`matrixWorld`, `getWorldPosition`,
+  `localToWorld`, `lookAt`, …) gives the same numbers bit for bit, nothing needs calling after a change, and deep
+  hierarchies read about 2.6 to 3.2 times faster.
+- **Bigger heaps** (1.34): `engine.limits.heap_mib` may be raised up to 4,096 MiB (was 1,024); a manifest past 1,024
+  must declare `engine.minor=34`. The web runtime holds a heap to 2,048 MiB and warns once.
+- **32-bit float render targets and textures** (1.34): `FloatType` render targets (RGBA, `RGFormat`, `RedFormat`) and
+  `FloatType` DataTextures hold 32-bit floats, as three.js's. Passes into float targets write their color unclamped
+  and unblended; `renderer.capabilities.floatRenderable` and `floatFilterable` say what the device supports. A
+  `FloatType` target with `generateMipmaps` stays half floats but now keeps negative values and alpha.
+- **Twelve textures in a `ShaderMaterial`** (1.34, was 5), each readable in both stages, and three.js's
+  `WebGLArrayRenderTarget`.
+- **`renderer.sceneColor`** (1.34): the opaque scene's color as a texture for transparent custom materials
+  (refraction, depth fog, shore effects). Frames that don't sample it draw as before.
+- **Writable camera projection** (1.34): a camera's `projectionMatrix` and `projectionMatrixInverse` are its own, as
+  in three.js r185. A written matrix (such as a Reflector's oblique near plane) is what the camera draws, clips, culls
+  and picks with until `updateProjectionMatrix()`.
+- **GPU pass times** (1.34): `engine.stats().gpu`, the mean GPU milliseconds a frame for each kind of pass, for
+  benchmarking; `null` where the device times nothing.
+- On every minor: gameplay sockets accept server frames up to 4 MiB (runtimes through 1.33.x take 16 KB), and native
+  WebSocket handshakes send `user-agent: starhermit-engine/<version> (<os>)`.
+- Fixes on every minor: cube-texture skies on Direct3D 12 show their ±X faces again; game shaders on Direct3D 12 get
+  the right `abs()` of a partly negated vector; non-ASCII text in a shader's `/* */` comment no longer crashes the
+  shader compiler; a resized game no longer shows its last frame stretched (browsers and native windows); a WeakMap or
+  WeakSet entry keyed by a symbol held through another weak entry keeps its value; two inline styles with `inside` or
+  `parts` rules no longer share a look.
+- **Faster on every minor, output unchanged**: 2D and 3D physics (contact solvers, broad phase, continuous
+  collision), shader compilation and code generation for every backend, `Math.pow` (about 4.5×), typed-array copies,
+  WebAssembly calls, `JSON.stringify`, weak collections in garbage collection, `input` and `engine.stats()` reads,
+  PNG and DEFLATE encoding, and gradients with many stops. The engine CHANGELOG lists each with its measurements.
+- **Downloads**: Windows SHA-256 `20037a0857686b987ee620627a566b272e259f36b4d4d2894335fe5b1a5b75ce`, Linux
+  `d55e47f8aee81a4a503f85b3c34845569113680da9397f624b0ae34bd5b23250`, macOS x86_64
+  `11c54361b536c9ee754128a1c2d264b3bef087ec30cb39f041a07d00c2a5142c`, macOS aarch64
+  `194d04c79205211ac2dbf68a28ac9de5abe04424c0ce99ad997ea1437fb354ef`. The macOS runtimes are signed ad hoc and not
+  notarized, as in 1.26.2.
 
 ### 1.33.1
 
@@ -1200,7 +1242,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1, 1.19.2, 1.19.3, 1.20.0, 1.20.1 and 1.22.0 on 2026-10-29, 1.20.2, 1.21.0, 1.23.0, 1.24.0 and 1.25.0 on 2026-10-30, 1.26.0 and 1.26.1 on 2026-10-31, 1.26.2 on 2026-11-01, 1.27.0, 1.28.0 and 1.29.0 on 2026-11-02).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1, 1.19.2, 1.19.3, 1.20.0, 1.20.1 and 1.22.0 on 2026-10-29, 1.20.2, 1.21.0, 1.23.0, 1.24.0 and 1.25.0 on 2026-10-30, 1.26.0 and 1.26.1 on 2026-10-31, 1.26.2 on 2026-11-01, 1.27.0, 1.28.0, 1.29.0 and 1.30.0 on 2026-11-02).
 
 `aot` (from 1.26.1) is the revocation list for WebAssembly code the platform compiles ahead of time: native
 runtimes refuse compiled code from a listed compiler version or signing key, and with no list ever read they
