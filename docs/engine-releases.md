@@ -49,13 +49,14 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.33.0 | 1.33 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.33.0-windows-x86_64.zip](../engine/1.33.0/native/windows-x86_64/starhermit-1.33.0-windows-x86_64.zip), [starhermit-1.33.0-linux-x86_64.tar.gz](../engine/1.33.0/native/linux-x86_64/starhermit-1.33.0-linux-x86_64.tar.gz), [starhermit-1.33.0-macos-x86_64.tar.gz](../engine/1.33.0/native/macos-x86_64/starhermit-1.33.0-macos-x86_64.tar.gz), [starhermit-1.33.0-macos-aarch64.tar.gz](../engine/1.33.0/native/macos-aarch64/starhermit-1.33.0-macos-aarch64.tar.gz) |
 | 1.32.0 | 1.33 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.32.0-windows-x86_64.zip](../engine/1.32.0/native/windows-x86_64/starhermit-1.32.0-windows-x86_64.zip), [starhermit-1.32.0-linux-x86_64.tar.gz](../engine/1.32.0/native/linux-x86_64/starhermit-1.32.0-linux-x86_64.tar.gz), [starhermit-1.32.0-macos-x86_64.tar.gz](../engine/1.32.0/native/macos-x86_64/starhermit-1.32.0-macos-x86_64.tar.gz), [starhermit-1.32.0-macos-aarch64.tar.gz](../engine/1.32.0/native/macos-aarch64/starhermit-1.32.0-macos-aarch64.tar.gz) |
 | 1.31.1 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.31.1-windows-x86_64.zip](../engine/1.31.1/native/windows-x86_64/starhermit-1.31.1-windows-x86_64.zip), [starhermit-1.31.1-linux-x86_64.tar.gz](../engine/1.31.1/native/linux-x86_64/starhermit-1.31.1-linux-x86_64.tar.gz), [starhermit-1.31.1-macos-x86_64.tar.gz](../engine/1.31.1/native/macos-x86_64/starhermit-1.31.1-macos-x86_64.tar.gz), [starhermit-1.31.1-macos-aarch64.tar.gz](../engine/1.31.1/native/macos-aarch64/starhermit-1.31.1-macos-aarch64.tar.gz) |
 | 1.31.0 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.31.0-windows-x86_64.zip](../engine/1.31.0/native/windows-x86_64/starhermit-1.31.0-windows-x86_64.zip), [starhermit-1.31.0-linux-x86_64.tar.gz](../engine/1.31.0/native/linux-x86_64/starhermit-1.31.0-linux-x86_64.tar.gz), [starhermit-1.31.0-macos-x86_64.tar.gz](../engine/1.31.0/native/macos-x86_64/starhermit-1.31.0-macos-x86_64.tar.gz), [starhermit-1.31.0-macos-aarch64.tar.gz](../engine/1.31.0/native/macos-aarch64/starhermit-1.31.0-macos-aarch64.tar.gz) |
 | 1.30.0 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.30.0-windows-x86_64.zip](../engine/1.30.0/native/windows-x86_64/starhermit-1.30.0-windows-x86_64.zip), [starhermit-1.30.0-linux-x86_64.tar.gz](../engine/1.30.0/native/linux-x86_64/starhermit-1.30.0-linux-x86_64.tar.gz), [starhermit-1.30.0-macos-x86_64.tar.gz](../engine/1.30.0/native/macos-x86_64/starhermit-1.30.0-macos-x86_64.tar.gz), [starhermit-1.30.0-macos-aarch64.tar.gz](../engine/1.30.0/native/macos-aarch64/starhermit-1.30.0-macos-aarch64.tar.gz) |
 | 1.29.0 | 1.31 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.29.0-windows-x86_64.zip](../engine/1.29.0/native/windows-x86_64/starhermit-1.29.0-windows-x86_64.zip), [starhermit-1.29.0-linux-x86_64.tar.gz](../engine/1.29.0/native/linux-x86_64/starhermit-1.29.0-linux-x86_64.tar.gz), [starhermit-1.29.0-macos-x86_64.tar.gz](../engine/1.29.0/native/macos-x86_64/starhermit-1.29.0-macos-x86_64.tar.gz), [starhermit-1.29.0-macos-aarch64.tar.gz](../engine/1.29.0/native/macos-aarch64/starhermit-1.29.0-macos-aarch64.tar.gz) |
-| 1.28.0 | 1.30 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.28.0-windows-x86_64.zip](../engine/1.28.0/native/windows-x86_64/starhermit-1.28.0-windows-x86_64.zip), [starhermit-1.28.0-linux-x86_64.tar.gz](../engine/1.28.0/native/linux-x86_64/starhermit-1.28.0-linux-x86_64.tar.gz), [starhermit-1.28.0-macos-x86_64.tar.gz](../engine/1.28.0/native/macos-x86_64/starhermit-1.28.0-macos-x86_64.tar.gz), [starhermit-1.28.0-macos-aarch64.tar.gz](../engine/1.28.0/native/macos-aarch64/starhermit-1.28.0-macos-aarch64.tar.gz) |
-| 1.27.0 | 1.29 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.27.0-windows-x86_64.zip](../engine/1.27.0/native/windows-x86_64/starhermit-1.27.0-windows-x86_64.zip), [starhermit-1.27.0-linux-x86_64.tar.gz](../engine/1.27.0/native/linux-x86_64/starhermit-1.27.0-linux-x86_64.tar.gz), [starhermit-1.27.0-macos-x86_64.tar.gz](../engine/1.27.0/native/macos-x86_64/starhermit-1.27.0-macos-x86_64.tar.gz), [starhermit-1.27.0-macos-aarch64.tar.gz](../engine/1.27.0/native/macos-aarch64/starhermit-1.27.0-macos-aarch64.tar.gz) |
+| 1.28.0 | 1.30 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | Removed 2026-11-02 (wiki size limit) |
+| 1.27.0 | 1.29 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | Removed 2026-11-02 (wiki size limit) |
 | 1.26.2 | 1.28 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | Removed 2026-11-01 (wiki size limit) |
 | 1.26.1 | 1.28 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-31 (wiki size limit) |
 | 1.26.0 | 1.28 | Web; Windows (x86-64); Linux (x86-64) | Removed 2026-10-31 (wiki size limit) |
@@ -113,6 +114,28 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.33.0
+
+Host API 1.33, as 1.32.0: re-pin to 1.33.0 (`engine.version=1.33.0`); every change below applies on every minor.
+
+- **Text fields select and edit as a browser's input does**: double-click selects a word and triple-click the field;
+  dragging selects a range; Shift with the arrows, Home and End extends the selection; Control (Option on macOS)
+  with the arrows moves by words; copy and cut (Control+C/X, Command on macOS, Control+Insert, Shift+Delete) put the
+  selection on the clipboard without the game's `clipboard` capability, and typing, pasting, Backspace and Delete
+  replace it. In browsers the text entry also passes Shift, Control and Command with editing keys to the game.
+- Fix: a native session's player preferences (reduced motion, language, text scale) reload after a settings
+  partition switch or restore that lands on a revision already seen.
+- **Faster on every minor, output unchanged**: script compilation and the interpreter (calls, property reads,
+  holes, `**`, `for…in`, JSON), garbage collection, 2D and canvas drawing, text layout and shaping, `starhermit:ui`,
+  3D passes on Vulkan, WebGL 2 and WebGPU, the browser worker's frames, audio mixing and Opus/Vorbis decoding, PNG
+  decoding (about 4×), DEFLATE encoding, 2D and 3D physics (about 40% and 60%), spatial queries and skinned-mesh
+  flattening. The engine CHANGELOG lists each with its measurements.
+- **Downloads**: Windows SHA-256 `6bb4746e26a8dea23c2061eaa5a5980d55f120dfc2c7652bfbe64bb1032d87c9`, Linux
+  `fd008f8471d16d895211be314c32c1a6e3934ef0bb186984818c4471effd0e4e`, macOS x86_64
+  `12d90d057bea189251a1da7a0e8ecf3fa4a02ac9699ce688b10a54d0f3a93564`, macOS aarch64
+  `4f45d97aeeb02a703e4ad461bc93fb49d89492ec72f5702243781bfdecc5ebd1`. The macOS runtimes are signed ad hoc and not
+  notarized, as in 1.26.2.
 
 ### 1.32.0
 
@@ -1163,7 +1186,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1, 1.19.2, 1.19.3, 1.20.0, 1.20.1 and 1.22.0 on 2026-10-29, 1.20.2, 1.21.0, 1.23.0, 1.24.0 and 1.25.0 on 2026-10-30, 1.26.0 and 1.26.1 on 2026-10-31, 1.26.2 on 2026-11-01).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1, 1.19.2, 1.19.3, 1.20.0, 1.20.1 and 1.22.0 on 2026-10-29, 1.20.2, 1.21.0, 1.23.0, 1.24.0 and 1.25.0 on 2026-10-30, 1.26.0 and 1.26.1 on 2026-10-31, 1.26.2 on 2026-11-01, 1.27.0 and 1.28.0 on 2026-11-02).
 
 `aot` (from 1.26.1) is the revocation list for WebAssembly code the platform compiles ahead of time: native
 runtimes refuse compiled code from a listed compiler version or signing key, and with no list ever read they
