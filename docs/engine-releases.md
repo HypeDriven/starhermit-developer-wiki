@@ -49,12 +49,13 @@ never changes: a fix is the next version.
 
 | Release | Host API | Runtimes | Developer download |
 |---|---|---|---|
+| 1.35.0 | 1.35 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.35.0-windows-x86_64.zip](../engine/1.35.0/native/windows-x86_64/starhermit-1.35.0-windows-x86_64.zip), [starhermit-1.35.0-linux-x86_64.tar.gz](../engine/1.35.0/native/linux-x86_64/starhermit-1.35.0-linux-x86_64.tar.gz), [starhermit-1.35.0-macos-x86_64.tar.gz](../engine/1.35.0/native/macos-x86_64/starhermit-1.35.0-macos-x86_64.tar.gz), [starhermit-1.35.0-macos-aarch64.tar.gz](../engine/1.35.0/native/macos-aarch64/starhermit-1.35.0-macos-aarch64.tar.gz) |
 | 1.34.0 | 1.34 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.34.0-windows-x86_64.zip](../engine/1.34.0/native/windows-x86_64/starhermit-1.34.0-windows-x86_64.zip), [starhermit-1.34.0-linux-x86_64.tar.gz](../engine/1.34.0/native/linux-x86_64/starhermit-1.34.0-linux-x86_64.tar.gz), [starhermit-1.34.0-macos-x86_64.tar.gz](../engine/1.34.0/native/macos-x86_64/starhermit-1.34.0-macos-x86_64.tar.gz), [starhermit-1.34.0-macos-aarch64.tar.gz](../engine/1.34.0/native/macos-aarch64/starhermit-1.34.0-macos-aarch64.tar.gz) |
 | 1.33.1 | 1.33 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.33.1-windows-x86_64.zip](../engine/1.33.1/native/windows-x86_64/starhermit-1.33.1-windows-x86_64.zip), [starhermit-1.33.1-linux-x86_64.tar.gz](../engine/1.33.1/native/linux-x86_64/starhermit-1.33.1-linux-x86_64.tar.gz), [starhermit-1.33.1-macos-x86_64.tar.gz](../engine/1.33.1/native/macos-x86_64/starhermit-1.33.1-macos-x86_64.tar.gz), [starhermit-1.33.1-macos-aarch64.tar.gz](../engine/1.33.1/native/macos-aarch64/starhermit-1.33.1-macos-aarch64.tar.gz) |
 | 1.33.0 | 1.33 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.33.0-windows-x86_64.zip](../engine/1.33.0/native/windows-x86_64/starhermit-1.33.0-windows-x86_64.zip), [starhermit-1.33.0-linux-x86_64.tar.gz](../engine/1.33.0/native/linux-x86_64/starhermit-1.33.0-linux-x86_64.tar.gz), [starhermit-1.33.0-macos-x86_64.tar.gz](../engine/1.33.0/native/macos-x86_64/starhermit-1.33.0-macos-x86_64.tar.gz), [starhermit-1.33.0-macos-aarch64.tar.gz](../engine/1.33.0/native/macos-aarch64/starhermit-1.33.0-macos-aarch64.tar.gz) |
 | 1.32.0 | 1.33 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.32.0-windows-x86_64.zip](../engine/1.32.0/native/windows-x86_64/starhermit-1.32.0-windows-x86_64.zip), [starhermit-1.32.0-linux-x86_64.tar.gz](../engine/1.32.0/native/linux-x86_64/starhermit-1.32.0-linux-x86_64.tar.gz), [starhermit-1.32.0-macos-x86_64.tar.gz](../engine/1.32.0/native/macos-x86_64/starhermit-1.32.0-macos-x86_64.tar.gz), [starhermit-1.32.0-macos-aarch64.tar.gz](../engine/1.32.0/native/macos-aarch64/starhermit-1.32.0-macos-aarch64.tar.gz) |
 | 1.31.1 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.31.1-windows-x86_64.zip](../engine/1.31.1/native/windows-x86_64/starhermit-1.31.1-windows-x86_64.zip), [starhermit-1.31.1-linux-x86_64.tar.gz](../engine/1.31.1/native/linux-x86_64/starhermit-1.31.1-linux-x86_64.tar.gz), [starhermit-1.31.1-macos-x86_64.tar.gz](../engine/1.31.1/native/macos-x86_64/starhermit-1.31.1-macos-x86_64.tar.gz), [starhermit-1.31.1-macos-aarch64.tar.gz](../engine/1.31.1/native/macos-aarch64/starhermit-1.31.1-macos-aarch64.tar.gz) |
-| 1.31.0 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | [starhermit-1.31.0-windows-x86_64.zip](../engine/1.31.0/native/windows-x86_64/starhermit-1.31.0-windows-x86_64.zip), [starhermit-1.31.0-linux-x86_64.tar.gz](../engine/1.31.0/native/linux-x86_64/starhermit-1.31.0-linux-x86_64.tar.gz), [starhermit-1.31.0-macos-x86_64.tar.gz](../engine/1.31.0/native/macos-x86_64/starhermit-1.31.0-macos-x86_64.tar.gz), [starhermit-1.31.0-macos-aarch64.tar.gz](../engine/1.31.0/native/macos-aarch64/starhermit-1.31.0-macos-aarch64.tar.gz) |
+| 1.31.0 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | Removed 2026-11-03 (wiki size limit) |
 | 1.30.0 | 1.32 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | Removed 2026-11-02 (wiki size limit) |
 | 1.29.0 | 1.31 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | Removed 2026-11-02 (wiki size limit) |
 | 1.28.0 | 1.30 | Web; Windows (x86-64); Linux (x86-64); macOS (x86-64, arm64) | Removed 2026-11-02 (wiki size limit) |
@@ -116,6 +117,39 @@ minutes after a release is published; [versions.json](../engine/versions.json) s
 newest.
 
 ## Release notes
+
+### 1.35.0
+
+Host API 1.35: pin `engine.version=1.35.0` and add `engine.minor=35` for the changes marked (1.35); games declaring
+1.34 or older behave as before.
+
+- **Asynchronous render target reads** (1.35): three.js r185's `renderer.readRenderTargetPixelsAsync(...)`. The GPU
+  copies the rectangle without the game waiting and the promise settles exactly two frames after the call on every
+  backend, so replays and checks see it in the same frame (at most 16 reads waiting, 1 MiB a frame).
+- **Depth textures** (1.35): three.js's `DepthTexture` as a render target's `depthTexture`, sampled by custom materials
+  as a depth texture or, with `compareFunction`, a comparison sampler (`sampler2DShadow`).
+- **3D textures and 3D render targets** (1.35): three.js's `Data3DTexture` (RGBA8, R8, half floats, R32F) and
+  `WebGL3DRenderTarget` (`renderer.setRenderTarget(target, layer)` draws into a slice), sampled by custom materials as
+  `texture_3d<f32>`, with region updates through `renderer.copyTextureToTexture`.
+- **`scene.overrideMaterial`, `Layers` and `material.colorWrite`** (1.35), as three.js r185: a pass draws every object
+  with the override material while set, draws an object only when `object.layers.test(camera.layers)`, and a
+  material with `colorWrite = false` writes depth only.
+- **More render targets and image budget** (1.35): a game holds up to 32 render targets (was 16), and its standing
+  image budget is 256 MiB unless `engine.limits.image_mib` says otherwise (was 56 MiB).
+- Fixes on every minor, in browsers on WebGPU: a shader with a `<` comparison WGSL read as a template list compiles;
+  a custom material draws from the pass that first uses its program, and a post program from its first frame.
+- **Faster on every minor, output unchanged**: the WebGPU renderer (kept attachment views, fewer submits, batched
+  uniforms and offsets), the 2D overlay (kept shapes tessellated and checked once, reused lists), large-argument
+  `Math.sin`/`cos`/`tan`, and the water, trees and crops kernels. The engine CHANGELOG lists each with its
+  measurements.
+- **Rust API** (embedding clients): new fields in `starhermit-gpu`'s `Sampler`, `TargetOptions3`, `Material3` and
+  `SceneMaterial3`, `starhermit-render-3d`'s `Material` and `starhermit-runtime`'s `MaterialModel`, `GpuOp::CreateTarget`
+  and `Tick`; new `GpuOp` variants and `starhermit-trees` `Species` variants. The engine CHANGELOG lists them.
+- **Downloads**: Windows SHA-256 `a3c39672f61c649c58629cbb890fd64815c35e3b389364168351be32085d89a7`, Linux
+  `6c877544ccddc3eb8f4018d3088fca4d278cde7f2b3cd163ec2790667a009486`, macOS x86_64
+  `a15c1f693d5bcb371079193c8c6d3336973998efecca0a3432ef21f428b93671`, macOS aarch64
+  `a08837edf71fbd22face2d714eb04661b3f62335c3cc05bf62ed32ba4b6e52f5`. The macOS runtimes are signed ad hoc and not
+  notarized, as in 1.26.2.
 
 ### 1.34.0
 
@@ -1242,7 +1276,7 @@ a release without a web runtime. `native` pins each platform's `native.json` by 
 release withdrawn because it is unsafe says `"revoked": true` with a `"revokedReason"`; that is the
 only change a published entry ever takes, except removal: to keep the wiki within GitHub Pages' 1 GB the
 oldest releases leave the engine area, and their entries stay listed as revoked with `"removed": true`
-(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1, 1.19.2, 1.19.3, 1.20.0, 1.20.1 and 1.22.0 on 2026-10-29, 1.20.2, 1.21.0, 1.23.0, 1.24.0 and 1.25.0 on 2026-10-30, 1.26.0 and 1.26.1 on 2026-10-31, 1.26.2 on 2026-11-01, 1.27.0, 1.28.0, 1.29.0 and 1.30.0 on 2026-11-02).
+(1.0.0 to 1.6.0 were removed this way on 2026-10-26, 1.7.0 to 1.15.1 on 2026-10-27, 1.15.2 to 1.17.0 on 2026-10-28, 1.17.1, 1.18.0, 1.19.0, 1.19.1, 1.19.2, 1.19.3, 1.20.0, 1.20.1 and 1.22.0 on 2026-10-29, 1.20.2, 1.21.0, 1.23.0, 1.24.0 and 1.25.0 on 2026-10-30, 1.26.0 and 1.26.1 on 2026-10-31, 1.26.2 on 2026-11-01, 1.27.0, 1.28.0, 1.29.0 and 1.30.0 on 2026-11-02, 1.31.0 on 2026-11-03).
 
 `aot` (from 1.26.1) is the revocation list for WebAssembly code the platform compiles ahead of time: native
 runtimes refuse compiled code from a listed compiler version or signing key, and with no list ever read they
