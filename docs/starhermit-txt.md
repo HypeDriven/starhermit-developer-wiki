@@ -265,7 +265,7 @@ and `engine.entry`, and browsers play it from the loader page `starhermit packag
 |---|---|
 | `engine.api` | The host API's major version the game is written for (`1`). |
 | `engine.entry` | The module the engine starts, such as `src/main.ts`. |
-| `engine.version` | The exact [engine release](engine-releases.md) the game runs on, `X.Y.Z`; its major is `engine.api`. The platform records it at every publish and serves a script game's pages under the engine's [Content-Security-Policy](engine-releases.md#script-games-on-the-platform). |
+| `engine.version` | The exact [engine release](api/engine.md) the game runs on, `X.Y.Z`; its major is `engine.api`. The platform records it at every publish and serves a script game's pages under the engine's [Content-Security-Policy](api/engine.md#script-games-on-the-platform). |
 | `engine.minor` | Optional: the host API minor version the game needs; an engine that offers less refuses it. |
 | `engine.capabilities` | Optional, comma-separated: `platform`, `voice`, `clipboard`, `storage`. |
 | `engine.gamepad.<action>` | Default gamepad controls for an action the `control.*` lines declare. |

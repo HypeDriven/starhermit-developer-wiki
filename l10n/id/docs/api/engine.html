@@ -1,0 +1,147 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Mesin"
+source_url: "/docs/api/engine.html"
+source_path: "docs/api/engine.md"
+source_hash: "d32f5cb71cfb85ae91c6d27921b6320d40e2279e8ad242776ba4f26b4e1776c7"
+translation: "machine"
+permalink: "/id/docs/api/engine.html"
+---
+{% raw %}
+<h1 id="engine">Mesin</h1>
+<p>Di mana mendapatkan mesin StarHermit, runtime yang diputar <a href="/id/docs/tutorials/starhermit-engine.html">permainan skrip</a>.
+API platform adalah tempat untuk menemukan rilis: ia mencantumkan setiap rilis, menyatakan mana yang dicabut, dan
+memberikan URL dan hash dari setiap file rilis. Bacaan bersifat anonim.</p>
+<p>URL Dasar: <code>https://api.starhermit.com</code>. Semua rute berada di bawah <code>/api/v1/...</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Metode</th>
+<th>Jalur</th>
+<th>Penulis</th>
+<th>Keterangan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/engine/releases</code></td>
+<td>Anonim</td>
+<td>Setiap rilis, versi terbaru terlebih dahulu, termasuk yang dicabut</td>
+</tr>
+<tr>
+<td>MENDAPATKAN</td>
+<td><code>/api/v1/engine/releases/{version}</code></td>
+<td>Anonim</td>
+<td>Satu rilis dengan versi persisnya (<code>X.Y.Z</code>), atau <code>404</code></td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-json">{"releases": [{
+  "version": "1.35.0", "api": {"major": 1, "minor": 35}, "revoked": false, "date": "2026-11-03T16:45:15Z",
+  "web": {"base": "https://wiki.starhermit.com/engine/1.35.0/", "manifestIntegrity": "sha384-&lt;SRI hash&gt;"},
+  "native": {"linux-x86_64": {
+    "manifestUrl": "https://wiki.starhermit.com/engine/1.35.0/native/linux-x86_64/native.json",
+    "manifestSha256": "&lt;SHA-256 of native.json&gt;"}}
+}]}
+</code></pre>
+<p><code>GET /api/v1/engine/releases/{version}</code> menjawab satu objek tersebut tanpa <code>releases</code> pembungkus.
+URL mengarah ke <code>wiki.starhermit.com</code> untuk rilis terkini dan di <code>engine.starhermit.com</code> untuk yang lebih tua;
+gunakan sebagaimana yang diberikan.</p>
+<ul>
+<li><code>api</code> adalah API host yang ditawarkan rilis. Jurusnya adalah jurusan rilis dan <code>engine.api</code> sebuah
+permainan menyatakan; minornya bertambah seiring bertambahnya anggota (permainan dapat memerlukannya <code>engine.minor</code>).</li>
+<li><code>revoked: true</code> dilengkapi dengan a <code>revokedReason</code>. Rilis yang dicabut tetap terdaftar sehingga klien dapat mengetahui alasannya
+mereka menolaknya.</li>
+<li><code>web</code> adalah <code>null</code> untuk rilis tanpa runtime web. <code>manifestIntegrity</code> adalah hash SRI web
+waktu proses <code>manifest.json</code>, nilai yang disematkan pada halaman pemuat.</li>
+<li><code>native</code> memiliki satu entri per platform (<code>windows-x86_64</code>, <code>linux-x86_64</code>, <code>macos-x86_64</code>,
+<code>macos-aarch64</code>), atau adalah <code>{}</code>. <code>manifestSha256</code> adalah hex SHA-256 dari platform itu <code>native.json</code>;
+periksa sebelum mempercayai daftar file di dalamnya.</li>
+</ul>
+<p>Kedua rute mengirim <code>Cache-Control: public, max-age=60</code> dengan sebuah <code>ETag</code> dan menjawab <code>304</code> ke pencocokan
+<code>If-None-Match</code>. Jika platform belum membaca daftar rilis sejak dimulai, mereka menjawab
+<code>503</code> dengan <code>Retry-After</code>.</p>
+<p>Rilis yang dipublikasikan tidak pernah berubah: perbaikan adalah versi berikutnya. Mesinnya
+<a href="/id/docs/tutorials/starhermit-engine.html">tutorial</a> menjelaskan rilis terbaru; API ini mengatakan yang mana
+itu.</p>
+<h2 id="download-the-engine">Unduh mesinnya</h2>
+<p>Pengembang mengunduh runtime asli rilis untuk menulis, memeriksa, mengemas, dan memainkan game. Pemain melakukannya
+tidak ada: klien StarHermit dan halaman game mengambil rilis pin game.</p>
+<ol>
+<li>
+<p>Tanyakan API untuk rilis, yang terbaru, atau yang disematkan game Anda:</p>
+<pre><code class="language-sh">curl -s https://api.starhermit.com/api/v1/engine/releases/1.35.0
+</code></pre>
+</li>
+<li>
+<p>Ambil platform Anda <code>native.&lt;platform&gt;.manifestUrl</code>, ambil itu <code>native.json</code> dan periksa
+SHA-256 melawan <code>manifestSha256</code>.</p>
+</li>
+<li>
+<p><code>native.json</code>'s <code>downloads</code> beri nama unduhan pengembang dengan miliknya <code>size</code> Dan <code>sha256</code>. Arsip
+duduk di sebelah <code>native.json</code>: mengganti <code>native.json</code> di akhir <code>manifestUrl</code> dengan arsipnya
+nama. Unduh dan periksa SHA-256-nya.</p>
+</li>
+</ol>
+<p>Langkah-langkah yang sama seperti satu skrip (kebutuhan <code>curl</code>, <code>jq</code> Dan <code>sha256sum</code>; pada penggunaan macOS <code>shasum -a 256</code>):</p>
+<pre><code class="language-sh">version=1.35.0 platform=linux-x86_64   # or windows-x86_64, macos-x86_64, macos-aarch64
+release=$(curl -fsS "https://api.starhermit.com/api/v1/engine/releases/$version")
+manifest_url=$(jq -r --arg p "$platform" '.native[$p].manifestUrl' &lt;&lt;&lt;"$release")
+manifest_sha=$(jq -r --arg p "$platform" '.native[$p].manifestSha256' &lt;&lt;&lt;"$release")
+curl -fsSO "$manifest_url"
+echo "$manifest_sha  native.json" | sha256sum -c -
+archive=$(jq -r '.downloads | keys[0]' native.json)
+curl -fsSO "${manifest_url%native.json}$archive"
+echo "$(jq -r --arg a "$archive" '.downloads[$a].sha256' native.json)  $archive" | sha256sum -c -
+</code></pre>
+<p>Di PowerShell, <code>Invoke-RestMethod</code> membaca rilis dan <code>Get-FileHash -Algorithm SHA256</code> memberikan
+hash untuk membandingkan. Itu <a href="/id/docs/tutorials/starhermit-engine.html#2-get-the-engine">tutorial</a> mencakup membongkar
+dan putaran pertama.</p>
+<p>Itu <a href="/engine/tools/README.html">alat pengembang mandiri</a> (penerbitan otomatis dan a
+server MCP pengembangan) dirilis secara terpisah dari runtime.</p>
+<h2 id="integrity">Integritas</h2>
+<p>Satu rantai hash mencakup setiap byte yang dijalankan klien:</p>
+<ol>
+<li>API memberikan SHA-256 dari rilis <code>native.json</code>.</li>
+<li><code>native.json</code> memberikan SHA-256 dan ukuran setiap file, dan unduhan pengembangnya ada di bawah <code>downloads</code>.</li>
+<li>Klien StarHermit hanya mengambil bagian dari rilis yang belum dimilikinya, memeriksa masing-masing,
+menyatukan setiap file dan memeriksanya sebelum memindahkan rilis ke tempatnya.</li>
+</ol>
+<p>Halaman pemuat game browser menyematkan waktu proses web <code>starhermit.js</code> Dan <code>manifest.json</code> dengan SRI
+hash, dan runtime memeriksa setiap file lain yang dimuat terhadap manifes.</p>
+<h2 id="the-web-runtime">Waktu proses web</h2>
+<p>Halaman pemuat game (<code>index.html</code>, ditulis oleh <code>starhermit package --web</code>) memuat <code>starhermit.js</code> Dan
+<code>manifest.json</code> dari <code>https://engine.starhermit.com/engine/X.Y.Z/</code>, dengan hash SRI yang sama dengan
+URL di bawah <code>web.base</code>. Menggunakan <code>engine.starhermit.com</code> di halaman pemuat mana pun yang Anda tulis sendiri: halaman itu tetap ada
+setiap rilis, sedangkan URL di bawah <code>web.base</code> hanya simpan yang terbaru dan rilis lama akan hilang
+dari mereka. Alat dari 1.26.0 menulis <code>engine.starhermit.com</code> secara default (<code>--loader-base URL</code> atau
+<code>STARHERMIT_WEB_LOADER_BASE</code> menimpanya). Untuk game yang dihosting yang dikemas dengan alat yang lebih lama, platform
+menulis ulang dua URL mesin ketika rilis tidak lagi berjalan <code>web.base</code>; mengemas ulang game yang dihosting
+di tempat lain. Rilis yang dicabut tidak dilayani dari kedua asal tersebut.</p>
+<h2 id="script-games-on-the-platform">Permainan skrip di platform</h2>
+<p>Saat root game <a href="/id/docs/starhermit-txt.html"><code>starhermit.txt</code></a> menyatakan <code>engine.version</code>, platformnya
+memperlakukannya sebagai permainan skrip:</p>
+<ul>
+<li>setiap penerbitan mencatat rilis pin file, sebagai <code>hosting.engineVersion</code>, dan set
+<code>hosting.deployWarning</code> (juga dalam jawaban bundel Push) ketika rilis itu tidak terdaftar atau terdaftar
+dicabut. Peringatan tidak pernah menghentikan publikasi.</li>
+<li>setiap halaman game yang dihosting disajikan dengan Kebijakan Keamanan Konten yang hanya menerima skrip
+dari dua asal mesin (dan mesin itu sendiri <code>blob:</code> pekerja), jadi satu-satunya kode adalah skrip
+halaman permainan yang dapat dijalankan adalah mesin resmi:</li>
+</ul>
+<pre><code class="language-text">default-src 'self'; script-src https://wiki.starhermit.com https://engine.starhermit.com 'wasm-unsafe-eval' blob:; worker-src blob:;
+connect-src 'self' https://wiki.starhermit.com https://engine.starhermit.com; img-src 'self' blob: data:; media-src 'self' blob:;
+style-src 'self' 'unsafe-inline'; font-src 'self' https://wiki.starhermit.com https://engine.starhermit.com;
+frame-ancestors https://dashboard.starhermit.com; base-uri 'self'; form-action 'none'
+</code></pre>
+<p>Halaman permainan skrip tanpa versi browser (seperti halaman biasa yang diunggah oleh game khusus Windows
+untuk browser) tidak memerlukan skrip dan tidak terpengaruh.</p>
+<h2 id="revocations">Pencabutan</h2>
+<p>Pelepasan yang ditemukan tidak aman akan dicabut. Klien StarHermit tidak menginstal atau memulainya dan memberitahukan
+pemain, perintah pengemasan menolak mengemas game untuk itu, dan platform memperingatkan pemiliknya
+game yang menyematkannya saat dipublikasikan. Rilis yang dicabut selalu diikuti dengan rilis yang diperbaiki: sematkan ulang ke rilis tersebut
+dan mempublikasikan (lihat <a href="/id/docs/tutorials/starhermit-engine.html#9-move-to-a-newer-engine">Pindah ke mesin yang lebih baru</a>).</p>
+
+{% endraw %}

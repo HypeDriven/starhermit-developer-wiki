@@ -1,0 +1,147 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Motor"
+source_url: "/docs/api/engine.html"
+source_path: "docs/api/engine.md"
+source_hash: "d32f5cb71cfb85ae91c6d27921b6320d40e2279e8ad242776ba4f26b4e1776c7"
+translation: "machine"
+permalink: "/pt/docs/api/engine.html"
+---
+{% raw %}
+<h1 id="engine">Motor</h1>
+<p>Onde obter o mecanismo StarHermit, o tempo de execução que reproduz <a href="/pt/docs/tutorials/starhermit-engine.html">jogos de roteiro</a>.
+A API da plataforma é o lugar para encontrar lançamentos: ela lista todos os lançamentos, diz quais são revogados e
+fornece os URLs e hashes dos arquivos de cada versão. As leituras são anônimas.</p>
+<p>URL base: <code>https://api.starhermit.com</code>. Todas as rotas estão sob <code>/api/v1/...</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Caminho</th>
+<th>Autenticação</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/engine/releases</code></td>
+<td>Anônimo</td>
+<td>Cada lançamento, a versão mais recente primeiro, incluindo as revogadas</td>
+</tr>
+<tr>
+<td>PEGAR</td>
+<td><code>/api/v1/engine/releases/{version}</code></td>
+<td>Anônimo</td>
+<td>Um lançamento por sua versão exata (<code>X.Y.Z</code>), ou <code>404</code></td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-json">{"releases": [{
+  "version": "1.35.0", "api": {"major": 1, "minor": 35}, "revoked": false, "date": "2026-11-03T16:45:15Z",
+  "web": {"base": "https://wiki.starhermit.com/engine/1.35.0/", "manifestIntegrity": "sha384-&lt;SRI hash&gt;"},
+  "native": {"linux-x86_64": {
+    "manifestUrl": "https://wiki.starhermit.com/engine/1.35.0/native/linux-x86_64/native.json",
+    "manifestSha256": "&lt;SHA-256 of native.json&gt;"}}
+}]}
+</code></pre>
+<p><code>GET /api/v1/engine/releases/{version}</code> responde a um desses objetos sem o <code>releases</code> invólucro.
+URLs apontam para <code>wiki.starhermit.com</code> para lançamentos recentes e em <code>engine.starhermit.com</code> para os mais velhos;
+use-os como dados.</p>
+<ul>
+<li><code>api</code> é a API host que o lançamento oferece. Seu major é o major do lançamento e o <code>engine.api</code> um
+declarações do jogo; seu menor cresce à medida que membros são adicionados (um jogo pode exigir um com <code>engine.minor</code>).</li>
+<li><code>revoked: true</code> vem com um <code>revokedReason</code>. Uma versão revogada permanece listada para que os clientes possam dizer o motivo
+eles recusam.</li>
+<li><code>web</code> é <code>null</code> para uma versão sem tempo de execução da web. <code>manifestIntegrity</code> é o hash SRI da web
+tempo de execução <code>manifest.json</code>, o valor que uma página do carregador fixa.</li>
+<li><code>native</code> tem uma entrada por plataforma (<code>windows-x86_64</code>, <code>linux-x86_64</code>, <code>macos-x86_64</code>,
+<code>macos-aarch64</code>), ou é <code>{}</code>. <code>manifestSha256</code> é o hexadecimal SHA-256 da plataforma <code>native.json</code>;
+verifique antes de confiar na lista de arquivos contida.</li>
+</ul>
+<p>Ambas as rotas enviam <code>Cache-Control: public, max-age=60</code> com um <code>ETag</code> e responda <code>304</code> para uma correspondência
+<code>If-None-Match</code>. Se a plataforma ainda não leu a lista de lançamentos desde que começou, eles respondem
+<code>503</code> com <code>Retry-After</code>.</p>
+<p>Uma versão publicada nunca muda: uma correção é a próxima versão. O motor
+<a href="/pt/docs/tutorials/starhermit-engine.html">tutorial</a> descreve o lançamento mais recente; esta API diz qual
+isso é.</p>
+<h2 id="download-the-engine">Baixe o mecanismo</h2>
+<p>Os desenvolvedores baixam o tempo de execução nativo de uma versão para escrever, verificar, empacotar e jogar. Os jogadores fazem
+nada: o cliente StarHermit e a página do jogo buscam a liberação dos pins do jogo.</p>
+<ol>
+<li>
+<p>Solicite à API o lançamento, o mais novo ou aquele dos pins do seu jogo:</p>
+<pre><code class="language-sh">curl -s https://api.starhermit.com/api/v1/engine/releases/1.35.0
+</code></pre>
+</li>
+<li>
+<p>Leve a sua plataforma <code>native.&lt;platform&gt;.manifestUrl</code>, busque isso <code>native.json</code> e verifique seu
+SHA-256 contra <code>manifestSha256</code>.</p>
+</li>
+<li>
+<p><code>native.json</code>'s <code>downloads</code> nomeia o download do desenvolvedor com seu <code>size</code> e <code>sha256</code>. O arquivo
+senta ao lado <code>native.json</code>: substituir <code>native.json</code> no final de <code>manifestUrl</code> com o arquivo
+nome. Faça o download e verifique seu SHA-256.</p>
+</li>
+</ol>
+<p>As mesmas etapas de um script (precisa <code>curl</code>, <code>jq</code> e <code>sha256sum</code>; no uso do macOS <code>shasum -a 256</code>):</p>
+<pre><code class="language-sh">version=1.35.0 platform=linux-x86_64   # or windows-x86_64, macos-x86_64, macos-aarch64
+release=$(curl -fsS "https://api.starhermit.com/api/v1/engine/releases/$version")
+manifest_url=$(jq -r --arg p "$platform" '.native[$p].manifestUrl' &lt;&lt;&lt;"$release")
+manifest_sha=$(jq -r --arg p "$platform" '.native[$p].manifestSha256' &lt;&lt;&lt;"$release")
+curl -fsSO "$manifest_url"
+echo "$manifest_sha  native.json" | sha256sum -c -
+archive=$(jq -r '.downloads | keys[0]' native.json)
+curl -fsSO "${manifest_url%native.json}$archive"
+echo "$(jq -r --arg a "$archive" '.downloads[$a].sha256' native.json)  $archive" | sha256sum -c -
+</code></pre>
+<p>No PowerShell, <code>Invoke-RestMethod</code> lê o comunicado e <code>Get-FileHash -Algorithm SHA256</code> dá o
+hash para comparar. O <a href="/pt/docs/tutorials/starhermit-engine.html#2-get-the-engine">tutorial</a> cobre desembalagem
+e a primeira corrida.</p>
+<p>O <a href="/engine/tools/README.html">ferramentas de desenvolvedor independentes</a> (publicação automatizada e um
+servidor MCP de desenvolvimento) são lançados separadamente do tempo de execução.</p>
+<h2 id="integrity">Integridade</h2>
+<p>Uma cadeia de hashes cobre cada byte que um cliente executa:</p>
+<ol>
+<li>A API fornece o SHA-256 de uma versão <code>native.json</code>.</li>
+<li><code>native.json</code> fornece o SHA-256 e o ​​tamanho de cada arquivo, e o download do desenvolvedor está em <code>downloads</code>.</li>
+<li>O cliente StarHermit busca apenas as partes de uma versão que ainda não possui, verifica cada uma,
+reúne todos os arquivos e os verifica antes de colocar a versão no lugar.</li>
+</ol>
+<p>A página de carregamento de um jogo de navegador fixa o tempo de execução da web <code>starhermit.js</code> e <code>manifest.json</code> com SRI
+hashes e o tempo de execução verifica todos os outros arquivos carregados no manifesto.</p>
+<h2 id="the-web-runtime">O tempo de execução da web</h2>
+<p>A página de carregamento de um jogo (<code>index.html</code>, escrito por <code>starhermit package --web</code>) cargas <code>starhermit.js</code> e
+<code>manifest.json</code> de <code>https://engine.starhermit.com/engine/X.Y.Z/</code>, com os mesmos hashes SRI que o
+URLs abaixo <code>web.base</code>. Usar <code>engine.starhermit.com</code> em qualquer página do carregador que você mesmo escreve: ela mantém
+cada versão, enquanto os URLs em <code>web.base</code> mantenha apenas os recentes e uma versão antiga desaparecerá
+deles. Ferramentas de gravação 1.26.0 <code>engine.starhermit.com</code> por padrão (<code>--loader-base URL</code> ou
+<code>STARHERMIT_WEB_LOADER_BASE</code> substitui). Para um jogo hospedado empacotado por ferramentas mais antigas, a plataforma
+reescreve os dois URLs do mecanismo quando a versão não está mais sob <code>web.base</code>; reempacotar jogos hospedados
+em outro lugar. Uma liberação revogada não é veiculada em nenhuma das origens.</p>
+<h2 id="script-games-on-the-platform">Jogos de script na plataforma</h2>
+<p>Quando a raiz de um jogo <a href="/pt/docs/starhermit-txt.html"><code>starhermit.txt</code></a> declara <code>engine.version</code>, a plataforma
+trata isso como um jogo de script:</p>
+<ul>
+<li>cada publicação registra a liberação do pin dos arquivos, conforme <code>hosting.engineVersion</code>e conjuntos
+<code>hosting.deployWarning</code> (também na resposta de um pacote push) quando esse lançamento não está listado ou é
+revogado. Um aviso nunca interrompe uma publicação.</li>
+<li>cada página do jogo hospedado é servida com uma Política de Segurança de Conteúdo que admite apenas scripts
+das duas origens do motor (e do próprio motor <code>blob:</code> trabalhadores), então o único código é um script
+a página do jogo pode rodar é o motor oficial:</li>
+</ul>
+<pre><code class="language-text">default-src 'self'; script-src https://wiki.starhermit.com https://engine.starhermit.com 'wasm-unsafe-eval' blob:; worker-src blob:;
+connect-src 'self' https://wiki.starhermit.com https://engine.starhermit.com; img-src 'self' blob: data:; media-src 'self' blob:;
+style-src 'self' 'unsafe-inline'; font-src 'self' https://wiki.starhermit.com https://engine.starhermit.com;
+frame-ancestors https://dashboard.starhermit.com; base-uri 'self'; form-action 'none'
+</code></pre>
+<p>Uma página de um jogo de script sem construção de navegador (como a página simples que um jogo somente para Windows carrega
+para navegadores) não precisa de script e não é afetado.</p>
+<h2 id="revocations">Revogações</h2>
+<p>Uma versão considerada insegura é revogada. O cliente StarHermit não o instala ou inicia e informa ao
+player, os comandos de empacotamento se recusam a empacotar um jogo para ele, e a plataforma avisa os proprietários sobre
+jogos que fixam quando são publicados. Uma versão revogada é sempre seguida por uma versão fixa: fixe-a novamente
+e publicar (ver <a href="/pt/docs/tutorials/starhermit-engine.html#9-move-to-a-newer-engine">Mude para um mecanismo mais novo</a>).</p>
+
+{% endraw %}

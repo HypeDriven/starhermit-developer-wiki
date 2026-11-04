@@ -1,7 +1,7 @@
 ---
-title: StarHermit engine releases
+title: StarHermit engine area
 ---
-# StarHermit engine releases
+# StarHermit engine area
 
 The StarHermit web runtime is the engine that runs StarHermit script games in
 browsers. Each directory here is one release,
@@ -15,21 +15,16 @@ pinned to it, and developers download either to write, check and package games.
 
 This area is written by `cargo starhermit release`; do not edit it by hand.
 
-## Releases
+## Finding a release
 
-| Version | Host API | Built | Manifest (SRI) | Native |
-|---|---|---|---|---|
-| 1.35.0 | 1.35 | 2026-11-03T16:45:15Z | `sha384-6OhxxNFz3EZvzdc77nzuM+Kw40DZj0jypmCZ6Nz9xbpbeFA0kIGvdWN7nGAzyLX5` | linux-x86_64, macos-aarch64, macos-x86_64, windows-x86_64 |
-| 1.34.0 | 1.34 | 2026-11-02T22:19:40Z | `sha384-46E85MGca/wL+T/MuCbpL732Uri8E2yRSeejc3SX9gRm/wilauq+GONypD9Sz980` | linux-x86_64, macos-aarch64, macos-x86_64, windows-x86_64 |
-| 1.33.1 | 1.33 | 2026-11-02T13:31:44Z | `sha384-j474eTuAnZ99SNMj5RNLNIaoeZWUPwxgBQ7x91XmU7HY30I3mipOsFCywt1GgFOV` | linux-x86_64, macos-aarch64, macos-x86_64, windows-x86_64 |
-| 1.33.0 | 1.33 | 2026-11-02T09:27:00Z | `sha384-bpcSKeYfKXFfkVh1KNNR82LPkfzQyQjeFn4kDhd5hQe/lXmygJbK0VWvM/Xp/XjV` | linux-x86_64, macos-aarch64, macos-x86_64, windows-x86_64 |
-| 1.32.0 | 1.33 | 2026-11-01T14:16:51Z | `sha384-BA07FFodu3BMOV26XXk0F3tVwhuZxZ8MFlbRL2H59nmwLtgDJzpz3ufqoxTTCqHA` | linux-x86_64, macos-aarch64, macos-x86_64, windows-x86_64 |
-| 1.31.1 | 1.32 | 2026-10-31T18:04:25Z | `sha384-NGGwWsQIszi35+vZ7O/dw8KTmrA3XhAzOz6NsMoet+Y2U86aBWV9XSgJixyghDcq` | linux-x86_64, macos-aarch64, macos-x86_64, windows-x86_64 |
-
-Removed to keep the wiki within GitHub Pages' 1 GB (versions.json lists them as revoked): 1.31.0, 1.30.0, 1.29.0, 1.28.0, 1.27.0, 1.26.2, 1.26.1, 1.26.0, 1.25.0, 1.24.0, 1.23.0, 1.22.0, 1.21.0, 1.20.2, 1.20.1, 1.20.0, 1.19.3, 1.19.2, 1.19.1, 1.19.0, 1.18.0, 1.17.1, 1.17.0, 1.16.5, 1.16.4, 1.16.3, 1.16.2, 1.16.1, 1.16.0, 1.15.2, 1.15.1, 1.15.0, 1.14.0, 1.13.2, 1.13.1, 1.13.0, 1.12.0, 1.11.0, 1.10.0, 1.9.1, 1.9.0, 1.8.1, 1.8.0, 1.7.0, 1.6.0, 1.5.1, 1.5.0, 1.4.1, 1.4.0, 1.3.0, 1.2.0, 1.1.0, 1.0.0.
-
-[versions.json](versions.json) lists the same, newest first. Release `X.Y.Z`
-offers host API `X` with the minor shown; `Y.Z` grow with features and fixes.
+The platform API lists every release, newest first, with its host API, its
+runtimes, the URLs and hashes of their files and any revocation:
+`GET https://api.starhermit.com/api/v1/engine/releases` (one release:
+`/api/v1/engine/releases/X.Y.Z`). It reads [versions.json](versions.json) here,
+and also serves releases this area no longer holds; the
+[engine API page](../docs/api/engine.html) explains it and how to download a
+runtime. This page lists no releases. Release `X.Y.Z`
+offers host API `X` with a minor; `Y.Z` grow with features and fixes.
 Games pin a release exactly and run on that release only, so a new runtime
 reaches a game when its developer re-pins after testing. A release found unsafe
 is marked revoked in versions.json with the reason; games cannot be packaged for
@@ -84,12 +79,10 @@ access to the engine's source repository.
 Each native runtime has a developer download beside its native.json: the
 runtime (`starhermit.exe` on Windows, `starhermit` on Linux) with its
 `release.json` and license notices, the engine a game needs to be written,
-checked and packaged. The newest:
-
-- windows-x86_64: [starhermit-1.35.0-windows-x86_64.zip](1.35.0/native/windows-x86_64/starhermit-1.35.0-windows-x86_64.zip)
-- linux-x86_64: [starhermit-1.35.0-linux-x86_64.tar.gz](1.35.0/native/linux-x86_64/starhermit-1.35.0-linux-x86_64.tar.gz)
-- macos-x86_64: [starhermit-1.35.0-macos-x86_64.tar.gz](1.35.0/native/macos-x86_64/starhermit-1.35.0-macos-x86_64.tar.gz)
-- macos-aarch64: [starhermit-1.35.0-macos-aarch64.tar.gz](1.35.0/native/macos-aarch64/starhermit-1.35.0-macos-aarch64.tar.gz)
+checked and packaged. Find it through the platform API: the release's
+`native.<platform>.manifestUrl` names its native.json, whose `downloads` names
+the archive beside it with its size and SHA-256
+([Download the engine](../docs/api/engine.html#download-the-engine)).
 
 Unpack it and run `starhermit new <game>` for a game pinned to the release,
 `starhermit types <game>` for the host API's declarations, `starhermit check

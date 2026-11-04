@@ -57,20 +57,22 @@ patterns, not the subject of the docs.
 - `docs/examples/browser-quickstart/` and its ZIP — complete no-build game with account sign-in,
   explicit terms consent, validated conditional cloud saves and untracked in-memory single-player play.
   `scripts/build-quickstart.py` refreshes its vendored helpers and deterministic archive.
-- `docs/tutorials/starhermit-engine.md` and `docs/engine-releases.md` — the StarHermit engine for script
+- `docs/tutorials/starhermit-engine.md` and `docs/api/engine.md` — the StarHermit engine for script
   games, recommended for publishing on StarHermit: one package for browser and native play across
   supported platforms, with additional native performance and features and release-specific runtime
   availability. The tutorial builds a small TypeScript game (scene, input, HUD, storage) step by step: what a
-  script game is, getting the engine (the client installs releases; developers download a release's
-  Windows, Linux or macOS runtime from `engine/`), `starhermit new`/`types`/`check` and TypeScript checking, running
+  script game is, getting the engine (the client installs releases; developers find a release's
+  Windows, Linux or macOS runtime through `GET /api/v1/engine/releases`), `starhermit new`/`types`/`check` and TypeScript checking, running
   natively, per-entity work with `starhermit:world` tables, kernels and bindings, the platform (sign-in
   from the client, `--game <id>` development launches, saves, online play with `server=`), publishing
   (`starhermit package --web --out` for the loader page and file index, `--native` for a client-only game,
   development files left out and `.starhermitignore`, folder upload or repository, the page's script lock),
   re-pinning and revocations, limits by phase, native and browser differences, and the licence.
-  The reference page has per-release notes and covers `engine/` (versions.json format 2, native.json, chunks and patches, the
-  developer download, the web runtime with its loader and bundled fonts), the integrity chain, `GET /api/v1/engine/releases`, and what the platform does
-  for a game that declares `engine.version` (deploy record and warning, Content-Security-Policy).
+  The reference page documents `GET /api/v1/engine/releases` (and `/{version}`) as the one place developers find
+  and download releases (API → `native.json` → developer download, each checked by SHA-256, with a tested script),
+  the integrity chain, loading the web runtime from `engine.starhermit.com`, what the platform does for a game that
+  declares `engine.version` (deploy record and warning, Content-Security-Policy), and revocations. The wiki carries
+  no release list or per-release notes; the API is the source.
 - `docs/native-performance.md` — native performance guidance for engine games: JavaScript on the engine's
   JIT-free interpreter versus V8, WebAssembly speed and platform ahead-of-time compilation (engine 1.26.1), where heavy
   per-frame work belongs (`runtime()`, workers), GPU-bound scenes, workers' lifetime and measuring. The
@@ -86,7 +88,9 @@ patterns, not the subject of the docs.
   `versions.json`, one immutable directory per release (`<version>/native/windows-x86_64/native.json`
   and the developer download `starhermit-<version>-windows-x86_64.zip`; a web runtime's files in a
   release that has one), the shared content-addressed `chunks/` (and `patches/`), and a README that
-  renders as `/engine/`. Its files are published verbatim (no `_`/`.` names, no front matter but the
+  renders as `/engine/` (the area's layout and publishing steps; it lists no releases and links no
+  downloads, pointing developers at the API instead). It is hosting, not documentation: the platform reads `versions.json` from it and
+  serves the files' URLs through its API, and older loader pages import runtimes from it, so it stays. Its files are published verbatim (no `_`/`.` names, no front matter but the
   README's) and it is not translated; release 1.0.0 is Windows-only, 1.1.0 has the web runtime and
   Windows.
 - `docs/starhermit-txt.md` — the manifest every published game needs (including `control.*` declarations), where it must sit in the uploaded

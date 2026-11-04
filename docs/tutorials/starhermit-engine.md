@@ -4,8 +4,8 @@ The **StarHermit engine is the recommended way to create games for publishing on
 You build the game once, and the same package is automatically playable in a browser and natively
 across all platforms supported by the engine. Native play offers additional performance and features.
 Availability depends on the engine release: 1.1.0 and later have a Windows runtime and a web runtime
-(1.0.0 was Windows-only), 1.8.1 and later also a Linux runtime for developers, and 1.26.2 and later macOS runtimes (Intel and Apple Silicon). This page describes engine **1.35.0**; what each release changed is listed
-under [Engine releases](../engine-releases.md#release-notes).
+(1.0.0 was Windows-only), 1.8.1 and later also a Linux runtime for developers, and 1.26.2 and later macOS runtimes (Intel and Apple Silicon). This page describes engine **1.35.0**; the [engine API](../api/engine.md) lists every
+release.
 
 The StarHermit engine runs **script games**: a whole game written in TypeScript (or JavaScript) and
 played by one prebuilt engine executable, the StarHermit runtime, without compiling any native code.
@@ -42,7 +42,7 @@ engine.version=1.35.0
 
 `engine.api` is the major version of the host API your code is written against, `engine.entry` the
 module the runtime starts, and `engine.version` the exact engine release the game is built and
-tested for. Releases are published on this wiki under [Engine releases](../engine-releases.md); the
+tested for. The [engine API](../api/engine.md) lists every release; the
 game never contains the engine itself, so an upload holds only your own files.
 
 The runtime treats every game as untrusted: your code reaches the machine only through the host API
@@ -58,21 +58,28 @@ For automated publishing and a script-game development MCP server, get the
 web games on macOS without Rust or private repository access; playtest in a
 browser there. Native Windows/Linux play uses the runtime below.
 
-**Players** do nothing: in a browser, the game's page loads the release the game pins from this wiki
-and checks it against the hashes the page carries; in the StarHermit Windows client, Play downloads
+**Players** do nothing: in a browser, the game's page loads the release the game pins from
+`engine.starhermit.com` and checks it against the hashes the page carries; in the StarHermit Windows client, Play downloads
 the release (once, shared by every game that pins it), checks every file against the release's
 published hashes and starts it.
 
-**Developers** download the runtime of a release from the engine area:
+**Developers** download a release's runtime through the platform API. Ask it for the release:
 
-- [starhermit-1.35.0-windows-x86_64.zip](../../engine/1.35.0/native/windows-x86_64/starhermit-1.35.0-windows-x86_64.zip)
-  (Windows 10 or 11, 64-bit), 12.4 MB.
-- [starhermit-1.35.0-linux-x86_64.tar.gz](../../engine/1.35.0/native/linux-x86_64/starhermit-1.35.0-linux-x86_64.tar.gz)
-  (64-bit Linux with glibc 2.35 or newer: Ubuntu 22.04, Debian 12 or later), 12.5 MB.
-- [starhermit-1.35.0-macos-x86_64.tar.gz](../../engine/1.35.0/native/macos-x86_64/starhermit-1.35.0-macos-x86_64.tar.gz)
-  (macOS 11 or later on Intel), 11.5 MB, and
-  [starhermit-1.35.0-macos-aarch64.tar.gz](../../engine/1.35.0/native/macos-aarch64/starhermit-1.35.0-macos-aarch64.tar.gz)
-  (macOS 11 or later on Apple Silicon), 10.1 MB. These are signed ad hoc and not notarized: the StarHermit
+```sh
+curl -s https://api.starhermit.com/api/v1/engine/releases/1.35.0
+```
+
+Its `native` object has one entry per platform with the URL of that platform's `native.json` and
+the file's SHA-256. `native.json` names the developer download under `downloads`, with its size and
+SHA-256, and the archive sits beside it: replace `native.json` at the end of the URL with the
+archive's name. [Download the engine](../api/engine.md#download-the-engine) has a script that
+fetches and checks both. The platforms:
+
+- `windows-x86_64`: `starhermit-1.35.0-windows-x86_64.zip` (Windows 10 or 11, 64-bit).
+- `linux-x86_64`: `starhermit-1.35.0-linux-x86_64.tar.gz` (64-bit Linux with glibc 2.35 or newer:
+  Ubuntu 22.04, Debian 12 or later).
+- `macos-x86_64` and `macos-aarch64`: `starhermit-1.35.0-macos-x86_64.tar.gz` (macOS 11 or later on
+  Intel) and `starhermit-1.35.0-macos-aarch64.tar.gz` (macOS 11 or later on Apple Silicon). These are signed ad hoc and not notarized: the StarHermit
   macOS client installs them without trouble, but a tarball downloaded in a browser is quarantined and
   Gatekeeper blocks it (clear it with `xattr -dr com.apple.quarantine` on the unpacked folder). They have
   not yet been tested on real Apple hardware or with a GPU.
@@ -81,8 +88,7 @@ The archive holds one folder, `starhermit-1.35.0-windows-x86_64`, with `starherm
 `release.json` that tells the runtime which release it is, the release's `web-manifest.json`,
 `LICENSE-engine` and the third-party notices. It is the same engine the client installs, and it
 packages games for the release's web runtime without a network. Its size and SHA-256 are listed under
-`downloads` in the release's [native.json](../../engine/1.35.0/native/windows-x86_64/native.json); to
-check your copy in PowerShell, compare that `sha256` with:
+`downloads` in the release's `native.json`; to check your copy in PowerShell, compare that `sha256` with:
 
 ```powershell
 Get-FileHash .\starhermit-1.35.0-windows-x86_64.zip -Algorithm SHA256
@@ -98,9 +104,8 @@ Unpack the archive and open a terminal in the unpacked folder:
 starhermit 1.35.0 (host API 1.35, launcher 1; engine release 1.35.0)
 ```
 
-On Linux, unpack the archive and run `starhermit` from its folder (its
-[native.json](../../engine/1.35.0/native/linux-x86_64/native.json) lists the archive's SHA-256 the same
-way; check it with `sha256sum`):
+On Linux, unpack the archive and run `starhermit` from its folder (its `native.json` lists the
+archive's SHA-256 the same way; check it with `sha256sum`):
 
 ```sh
 tar -xzf starhermit-1.35.0-linux-x86_64.tar.gz
@@ -619,7 +624,7 @@ Not checked against versions.json (read offline): https://wiki.starhermit.com/en
 - `index.html`, the **loader page** `launch=index.html` names: markup only, no script of its own. It
   loads the release's `starhermit.js` and `manifest.json` from `engine.starhermit.com` (tools 1.26.0
   and later by default; older tools and `--loader-base` choices may use this wiki) pinned by their SRI hashes, so the page keeps working after the wiki
-  removes the release ([why](../engine-releases.md#load-the-engine-from-enginestarhermitcom)),
+  removes the release ([why](../api/engine.md#the-web-runtime)),
   and the engine checks every other file it loads against that manifest, so the page can run only
   that exact release. Package again rather than edit it.
 - `starhermit-files.json`, the **file index**: every file with its size and SHA-256. The browser
@@ -670,7 +675,7 @@ with git, fetching only what each commit adds.
 **The page's lock.** The platform serves every page of a game whose `starhermit.txt` declares
 `engine.version` with a Content-Security-Policy that admits scripts only from this wiki, so the only
 code a script game's page can run is the official engine (see
-[Engine releases](../engine-releases.md#script-games-on-the-platform)). Your TypeScript runs in a
+[Script games on the platform](../api/engine.md#script-games-on-the-platform)). Your TypeScript runs in a
 worker the engine starts; the page itself runs only the engine: input, the runtime's menus, audio,
 storage and the platform session.
 
@@ -685,7 +690,7 @@ The release's major version is the host API's: `engine.api=1` games move freely 
 that needs host API members added in a minor version can say so with `engine.minor=N`; an older
 runtime then refuses it with a message instead of failing later.
 
-A release found unsafe is **revoked**: [versions.json](../../engine/versions.json) marks it with the
+A release found unsafe is **revoked**: the [engine API](../api/engine.md) marks it with the
 reason, the client refuses to install or start it (and tells the player why), and the packaging
 commands refuse it whenever they read versions.json. A revoked release is always followed by a fixed one; re-pin to it and publish.
 

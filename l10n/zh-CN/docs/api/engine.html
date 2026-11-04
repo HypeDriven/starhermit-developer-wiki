@@ -1,0 +1,147 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "引擎"
+source_url: "/docs/api/engine.html"
+source_path: "docs/api/engine.md"
+source_hash: "d32f5cb71cfb85ae91c6d27921b6320d40e2279e8ad242776ba4f26b4e1776c7"
+translation: "machine"
+permalink: "/zh-CN/docs/api/engine.html"
+---
+{% raw %}
+<h1 id="engine">引擎</h1>
+<p>哪里可以得到StarHermit引擎，运行时 <a href="/zh-CN/docs/tutorials/starhermit-engine.html">脚本游戏</a>。
+平台 API 是查找版本的地方：它列出了每个版本，说明哪些版本被撤销，以及
+给出每个版本文件的 URL 和哈希值。阅读是匿名的。</p>
+<p>基本网址： <code>https://api.starhermit.com</code>。所有路线均在 <code>/api/v1/...</code>.</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>小路</th>
+<th>授权</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/engine/releases</code></td>
+<td>匿名的</td>
+<td>每个版本，最新版本优先，包括撤销版本</td>
+</tr>
+<tr>
+<td>得到</td>
+<td><code>/api/v1/engine/releases/{version}</code></td>
+<td>匿名的</td>
+<td>按其确切版本发布的一个版本 (<code>X.Y.Z</code>）， 或者 <code>404</code></td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-json">{"releases": [{
+  "version": "1.35.0", "api": {"major": 1, "minor": 35}, "revoked": false, "date": "2026-11-03T16:45:15Z",
+  "web": {"base": "https://wiki.starhermit.com/engine/1.35.0/", "manifestIntegrity": "sha384-&lt;SRI hash&gt;"},
+  "native": {"linux-x86_64": {
+    "manifestUrl": "https://wiki.starhermit.com/engine/1.35.0/native/linux-x86_64/native.json",
+    "manifestSha256": "&lt;SHA-256 of native.json&gt;"}}
+}]}
+</code></pre>
+<p><code>GET /api/v1/engine/releases/{version}</code> 回答一个这样的对象，而不需要 <code>releases</code> 包装纸。
+网址指向 <code>wiki.starhermit.com</code> 对于最近发布的版本以及 <code>engine.starhermit.com</code> 对于年长的人；
+按给定的方式使用它们。</p>
+<ul>
+<li><code>api</code> 是该版本提供的主机 API。它的专业是发行版的专业，并且 <code>engine.api</code> 一个
+游戏声明；它的次要随着成员的增加而增长（游戏可能需要一个 <code>engine.minor</code>).</li>
+<li><code>revoked: true</code> 配有一个 <code>revokedReason</code>。已撤销的版本会保留在列表中，以便客户可以说出原因
+他们拒绝了。</li>
+<li><code>web</code> 是 <code>null</code> 对于没有 Web 运行时的版本。 <code>manifestIntegrity</code> 是网络的 SRI 哈希值
+运行时的 <code>manifest.json</code>，加载器页面固定的值。</li>
+<li><code>native</code> 每个平台有一个条目（<code>windows-x86_64</code>, <code>linux-x86_64</code>, <code>macos-x86_64</code>,
+<code>macos-aarch64</code>），或者是 <code>{}</code>. <code>manifestSha256</code> 是该平台的十六进制 SHA-256 <code>native.json</code>;
+在信任里面的文件列表之前检查一下。</li>
+</ul>
+<p>两条路线均发送 <code>Cache-Control: public, max-age=60</code> 与一个 <code>ETag</code> 并回答 <code>304</code> 到一个匹配的
+<code>If-None-Match</code>。如果平台自启动以来尚未读取发布列表，他们会回答
+<code>503</code> 和 <code>Retry-After</code>.</p>
+<p>已发布的版本永远不会改变：修复是下一个版本。发动机
+<a href="/zh-CN/docs/tutorials/starhermit-engine.html">教程</a> 描述最新版本；这个API说明了哪一个
+也就是说。</p>
+<h2 id="download-the-engine">下载引擎</h2>
+<p>开发人员下载版本的本机运行时来编写、检查、打包和玩游戏。玩家做
+什么也没有：StarHermit 客户端和游戏页面获取游戏引脚的发布。</p>
+<ol>
+<li>
+<p>向 API 询问版本、最新版本或您的游戏固定版本：</p>
+<pre><code class="language-sh">curl -s https://api.starhermit.com/api/v1/engine/releases/1.35.0
+</code></pre>
+</li>
+<li>
+<p>采取您的平台 <code>native.&lt;platform&gt;.manifestUrl</code>，获取那个 <code>native.json</code> 并检查其
+SHA-256 反对 <code>manifestSha256</code>.</p>
+</li>
+<li>
+<p><code>native.json</code>'s <code>downloads</code> 命名开发者下载及其 <code>size</code> 和 <code>sha256</code>。档案馆
+坐在旁边 <code>native.json</code>： 代替 <code>native.json</code> 结束时 <code>manifestUrl</code> 与档案的
+名字。下载它并检查其 SHA-256。</p>
+</li>
+</ol>
+<p>与一个脚本相同的步骤（需要 <code>curl</code>, <code>jq</code> 和 <code>sha256sum</code>;在 macOS 上使用 <code>shasum -a 256</code>):</p>
+<pre><code class="language-sh">version=1.35.0 platform=linux-x86_64   # or windows-x86_64, macos-x86_64, macos-aarch64
+release=$(curl -fsS "https://api.starhermit.com/api/v1/engine/releases/$version")
+manifest_url=$(jq -r --arg p "$platform" '.native[$p].manifestUrl' &lt;&lt;&lt;"$release")
+manifest_sha=$(jq -r --arg p "$platform" '.native[$p].manifestSha256' &lt;&lt;&lt;"$release")
+curl -fsSO "$manifest_url"
+echo "$manifest_sha  native.json" | sha256sum -c -
+archive=$(jq -r '.downloads | keys[0]' native.json)
+curl -fsSO "${manifest_url%native.json}$archive"
+echo "$(jq -r --arg a "$archive" '.downloads[$a].sha256' native.json)  $archive" | sha256sum -c -
+</code></pre>
+<p>在 PowerShell 中， <code>Invoke-RestMethod</code> 阅读新闻稿并 <code>Get-FileHash -Algorithm SHA256</code> 给出
+进行比较的哈希值。这 <a href="/zh-CN/docs/tutorials/starhermit-engine.html#2-get-the-engine">教程</a> 封面拆箱
+和第一次运行。</p>
+<p>这 <a href="/engine/tools/README.html">独立开发者工具</a> （自动出版和
+开发 MCP 服务器）与运行时分开发布。</p>
+<h2 id="integrity">正直</h2>
+<p>一个哈希链涵盖了客户端运行的每个字节：</p>
+<ol>
+<li>该 API 提供了版本的 SHA-256 <code>native.json</code>.</li>
+<li><code>native.json</code> 给出每个文件的 SHA-256 和大小，其开发人员下载位于 <code>downloads</code>.</li>
+<li>StarHermit 客户端仅获取它尚未保存的版本的各个部分，检查每个部分，
+将每个文件放在一起并在将版本移动到位之前进行检查。</li>
+</ol>
+<p>浏览器游戏的加载器页面固定网络运行时的 <code>starhermit.js</code> 和 <code>manifest.json</code> 与 SRI
+哈希值，运行时会根据清单检查它加载的所有其他文件。</p>
+<h2 id="the-web-runtime">网络运行时</h2>
+<p>游戏的加载页面（<code>index.html</code>，写者 <code>starhermit package --web</code>) 负载 <code>starhermit.js</code> 和
+<code>manifest.json</code> 从 <code>https://engine.starhermit.com/engine/X.Y.Z/</code>，具有与
+下的网址 <code>web.base</code>。使用 <code>engine.starhermit.com</code> 在您自己编写的任何加载器页面中：它会保留
+每个版本，而下面的 URL <code>web.base</code> 只保留最近的版本，旧版本会消失
+来自他们。 1.26.0 开始编写的工具 <code>engine.starhermit.com</code> 默认情况下 （<code>--loader-base URL</code> 或者
+<code>STARHERMIT_WEB_LOADER_BASE</code> 覆盖它）。对于由旧工具打包的托管游戏，该平台
+当版本不再存在时重写两个引擎 URL <code>web.base</code>;重新打包托管的游戏
+其他地方。任何一个来源都不会提供已撤销的发布。</p>
+<h2 id="script-games-on-the-platform">平台上的脚本游戏</h2>
+<p>当游戏的根 <a href="/zh-CN/docs/starhermit-txt.html"><code>starhermit.txt</code></a> 宣称 <code>engine.version</code>, 平台
+将其视为脚本游戏：</p>
+<ul>
+<li>每次发布都会记录文件 pin 的发布，如 <code>hosting.engineVersion</code>，并设置
+<code>hosting.deployWarning</code> （也在捆绑推送的答案中）当该版本未列出或已列出时
+撤销。警告永远不会停止发布。</li>
+<li>托管游戏的每个页面都提供仅允许脚本的内容安全策略
+来自两个引擎的起源（以及引擎自己的 <code>blob:</code> 工人），所以只编码一个脚本
+游戏页面可以运行的是官方引擎：</li>
+</ul>
+<pre><code class="language-text">default-src 'self'; script-src https://wiki.starhermit.com https://engine.starhermit.com 'wasm-unsafe-eval' blob:; worker-src blob:;
+connect-src 'self' https://wiki.starhermit.com https://engine.starhermit.com; img-src 'self' blob: data:; media-src 'self' blob:;
+style-src 'self' 'unsafe-inline'; font-src 'self' https://wiki.starhermit.com https://engine.starhermit.com;
+frame-ancestors https://dashboard.starhermit.com; base-uri 'self'; form-action 'none'
+</code></pre>
+<p>没有浏览器构建的脚本游戏页面（例如仅限 Windows 的游戏上传的纯页面
+对于浏览器）不需要脚本并且不受影响。</p>
+<h2 id="revocations">撤销</h2>
+<p>发现不安全的版本将被撤销。 StarHermit 客户端不会安装或启动它并告诉
+玩家，打包命令拒绝为其打包游戏，平台向业主发出警告
+发布时固定它的游戏。撤销的版本后面总是紧跟着一个固定的版本：重新固定它
+并发布（参见 <a href="/zh-CN/docs/tutorials/starhermit-engine.html#9-move-to-a-newer-engine">转向更新的引擎</a>).</p>
+
+{% endraw %}
