@@ -105,7 +105,7 @@ and checks that the release the game pins (`engine.version`) is published
 with a native runtime and not revoked.
 
 ```
-starhermit package --web <game> --engine-version 1.38.0 --out <upload>
+starhermit package --web <game> --engine-version 1.39.0 --out <upload>
 ```
 
 (the runtime of that release; `cargo starhermit package --web` is the same,
