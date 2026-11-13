@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:audio`
 
-Engine **1.40.0** (host API 1.40), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.41.0** (host API 1.41), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:audio";
@@ -911,6 +911,20 @@ export abstract class BiquadFilterNode extends AudioNode { … }
 
   Equal lengths, else `InvalidAccessError`.
 
+### IIRFilterNode
+
+*class*
+
+Since API\_MINOR 41 (`IIR_FILTER_MINOR`; `createIIRFilter` throws a TypeError before): Web Audio's IIRFilterNode, a filter of fixed coefficients (`createIIRFilter(feedforward, feedback)`), each output Σ feedforward\[k\]·x\[n−k\] − Σ feedback\[k\]·y\[n−k\] (k ≥ 1) over feedback\[0\], worked in binary64 per channel: the same bits natively, in browsers and offline. A one-pole low-pass smoothing by `p` (0..1) is `createIIRFilter([1 - p], [1, -p])`, a DC blocker `createIIRFilter([1, -1], [1, -0.995])`. 1 to 20 coefficients each (`NotSupportedError`), finite (TypeError), not every feedforward one 0 and feedback\[0\] not 0 (`InvalidStateError`). Like a biquad it rings on after its input stops (at most 30 s) and is charged a 20-tap filter's rendering cost whatever its length.
+
+```ts
+export abstract class IIRFilterNode extends AudioNode { … }
+```
+
+- `getFrequencyResponse(frequencyHz: Float32Array, magResponse: Float32Array, phaseResponse: Float32Array): void;`
+
+  Equal lengths, else `InvalidAccessError`; NaN outside 0..Nyquist.
+
 ### StereoPannerNode
 
 *class*
@@ -1126,6 +1140,11 @@ export class AudioContext { … }
 - `createGain(): GainNode;`
 - `createOscillator(): OscillatorNode;`
 - `createBiquadFilter(): BiquadFilterNode;`
+
+- `createIIRFilter(feedforward: Iterable<number>, feedback: Iterable<number>): IIRFilterNode;`
+
+  Since API\_MINOR 41 (see `IIRFilterNode`).
+
 - `createStereoPanner(): StereoPannerNode;`
 
 - `createPanner(): PannerNode;`
@@ -1187,7 +1206,7 @@ export const context: AudioContext;
 
 *class*
 
-Since API\_MINOR 37 (`OFFLINE_AUDIO_MINOR`; the constructor throws a TypeError before): Web Audio's OfflineAudioContext, for pads, beds, ticks and other procedural sound a game bakes once and plays as a clip. Its nodes are made as `context`'s are, with the same bounds (counted per context: at most 256 nodes alive, or `engine.limits.voices` if lower, else a RangeError "audio node limit reached"; 1,024 connections), and connect only to its own nodes and buses (`InvalidAccessError` across contexts); every bus of an offline context is its output. `startRendering()` renders natively, by the mixer's own synthesis code, a share of the render each frame as frames begin (counted in the graph's estimated cost, so a render settles at the same frame in every run; a 4 s pad of a few nodes takes a frame or two), and settles with an AudioBuffer. The samples are the bits the live graph gives for the same graph and sample rate at unity volume, with its sources' times from 0, except that they are not clamped to ±1. `createClip(buffer)` makes it a clip. At most 16 offline contexts at once that have not finished rendering (RangeError); a context gives up its place as its render completes, so one context per stem rendered in turn never reaches it. Finished contexts not yet collected: at most 256, holding no more than 16 graphs' budgets in all (RangeError). Each renders at most 8,388,608 samples (channels × length; RangeError).
+Since API\_MINOR 37 (`OFFLINE_AUDIO_MINOR`; the constructor throws a TypeError before): Web Audio's OfflineAudioContext, for pads, beds, ticks and other procedural sound a game bakes once and plays as a clip. Its nodes are made as `context`'s are, with the same bounds (counted per context: at most 256 nodes alive, or `engine.limits.voices` if lower, else a RangeError "audio node limit reached"; 1,024 connections), and connect only to its own nodes and buses (`InvalidAccessError` across contexts); every bus of an offline context is its output. `startRendering()` renders natively, by the mixer's own synthesis code, a share of the render each frame as frames begin (counted in the graph's estimated cost, so a render settles at the same frame in every run; a 4 s pad of a few nodes takes a frame or two), and settles with an AudioBuffer. The samples are the bits the live graph gives for the same graph and sample rate at unity volume, with its sources' times from 0, except that they are not clamped to ±1. `createClip(buffer)` makes it a clip. At most 16 offline contexts at once that have not finished rendering (RangeError); a context gives up its place as its render completes, so one context per stem rendered in turn never reaches it. Finished contexts not yet collected: at most 256, holding no more than 16 graphs' budgets in all (RangeError). The memory bound often comes first: a finished context keeps its graph's noise buffers, periodic waves, delay lines and automation until the script drops it and it is collected, so a game baking many stems can be refused well before 256 (one was at 244). Keep the rendered AudioBuffer or clip, not the context. Each renders at most 8,388,608 samples (channels × length; RangeError).
 
 ```ts
 export class OfflineAudioContext { … }
@@ -1227,6 +1246,11 @@ export class OfflineAudioContext { … }
 - `createGain(): GainNode;`
 - `createOscillator(): OscillatorNode;`
 - `createBiquadFilter(): BiquadFilterNode;`
+
+- `createIIRFilter(feedforward: Iterable<number>, feedback: Iterable<number>): IIRFilterNode;`
+
+  Since API\_MINOR 41 (see `IIRFilterNode`).
+
 - `createStereoPanner(): StereoPannerNode;`
 
 - `createPanner(): PannerNode;`

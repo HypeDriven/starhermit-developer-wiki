@@ -7,7 +7,7 @@ english_only: true
 
 # Engine API reference
 
-Engine **1.40.0** (host API 1.40), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game.
+Engine **1.41.0** (host API 1.41), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game.
 
 This is the complete host API of the StarHermit engine for script games: every module a game imports
 by name, every member, unit, limit and error. It follows the latest release only; a game pinned to an

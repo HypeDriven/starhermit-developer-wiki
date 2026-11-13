@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:water`
 
-Engine **1.40.0** (host API 1.40), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.41.0** (host API 1.41), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:water";
@@ -90,7 +90,7 @@ export type OceanSpectrum = JonswapSpectrum | ElfouhailySpectrum;
 
 *interface*
 
-A seabed height texture (red: the bed's height in metres) over a world rectangle; `heightAt` gives it on the CPU for heightAt's shoaling.
+A seabed height texture (red: the bed's height in metres) over a world rectangle; `heightAt` gives it on the CPU for heightAt's shoaling. Since API\_MINOR 41 (`WATER_SEABED_MINOR`) without one a float `DataTexture`'s own data does: sampled as the surface's shader samples it (red, clamped to its edges, linear or nearest by its `magFilter`, rows from `bounds`' minZ; 62 m below the sea outside `bounds`), read as it stands. Other textures (and `renderSeabed`'s depth map, which lives on the GPU) give the CPU no heights: gameplay then sums the waves unshoaled unless `heightAt` is given.
 
 ```ts
 export interface SeabedOptions { … }
@@ -323,7 +323,7 @@ export class Ocean extends Group { … }
 
 - `heightAt(x: number, z: number, time?: number): number;`
 
-  The water's height over (x, z) at `time` (default `this.time`): the CPU wave field, deterministic, plus the sea level (squeezed as drawn where the seabed's CPU height is known).
+  The water's height over (x, z) at `time` (default `this.time`): the CPU wave field, deterministic, plus the sea level (squeezed as drawn where the seabed's CPU height is known: a `heightAt` callback, or since API\_MINOR 41 a `setSeabed` float DataTexture's data; never a `renderSeabed` map's, which only the GPU holds).
 
 - `sampleAt(x: number, z: number, time?: number, target?: WaterSample): WaterSample;`
 

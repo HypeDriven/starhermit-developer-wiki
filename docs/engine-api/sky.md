@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:sky`
 
-Engine **1.40.0** (host API 1.40), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.41.0** (host API 1.41), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:sky";
@@ -405,7 +405,10 @@ export class SkyAtmosphere extends Mesh { … }
 - `moonPhase(): MoonPhase;`
 - `addLayer(layer: SkyLayer): this;`
 - `removeLayer(name: string): this;`
-- `readonly layers: readonly SkyLayer[];`
+
+- `readonly skyLayers: readonly SkyLayer[];`
+
+  The layers added with `addLayer`, in order (a copy). `layers` is `Object3D`'s `Layers`, as on every object.
 
 - `shading(): SkyShading;`
 

@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:ui`
 
-Engine **1.40.0** (host API 1.40), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.41.0** (host API 1.41), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:ui";
@@ -1647,7 +1647,7 @@ export interface ToastOptions { … }
 
 - `style?: string | Style | readonly (string | Style)[];`
 
-  The game's look for its box and text instead of the engine's, as `ui.style(…)` takes it.
+  The game's look for its box and text instead of the engine's, as `ui.style(…)` takes it. Since API\_MINOR 41 (`TOAST_STYLE_MINOR`) its text sets as a label's (`font`, `weight`, `align` for each wrapped line, spacing, transform, shadows), `maxWidth` replaces the 28-em cap (a percentage is of the safe area's width) and `minWidth`/`minHeight` widen the box; before, the text drew in the UI's first font, regular, from the box's start, at most 28 ems wide. Since API\_MINOR 41 toasts also stack in the window less its safe area whatever `setViewport` moved the UI to that frame (before, in the last viewport set, so opening a screen in a panel's rectangle moved them).
 
 ### Toast
 
@@ -1955,4 +1955,57 @@ export function setFont(font: { family?: string; weight?: FontWeight } | null): 
 ```
 
 The font the UI lays out and draws its text with: a family added with `canvas.fonts` (any case) at the face nearest `weight` (synthesized bold at 600 and more for a family without a bold face), falling back to the system's faces, or since API\_MINOR 8 a generic family (`serif`, `cursive`…, see `TextOptions.font`); null returns to the default faces (`system-ui`, see `starhermit:draw`). A family never added throws a TypeError.
+
+## Retained subtrees (since API\_MINOR 41, `RETAIN_MINOR`)
+
+A part of the UI that changes only now and then (a HUD page, a selection card, a sidebar of `starhermit:draw` items) need not run its script every frame. `retain(key, version, build)` runs `build` and records every `starhermit:ui` and `starhermit:draw` call it makes (the arguments as read, what each returned, the calls inside each container); on later frames it makes the same calls again natively, without calling `build`, while:
+
+- `version` (a number or a string the game changes whenever what `build` shows changes) is the same;
+- the subtree is laid out where it was: the same container state (its cursor, sizes and children before it), clip, scroll offset, viewport, window size, UI scale and text size, theme, language, styles, tokens and animations (`setStyles`, `setTokens`, `setAnimations`, `setTheme` and `setFont` make it build again), fonts, contrast, and the `id`, `style` or text tooltip chained onto its first widget;
+- the reads it made answer the same (`focused`, `capturingKeys`, `pointerOver`, `pointerCaptured`, `preferences`, `viewport`, `submitted`, and `back` with no Back waiting);
+- and no input this frame could make one of its calls return otherwise (Input, below).
+
+A record replays once two builds in a row recorded the same calls, so a subtree builds on its first two frames, twice after each change, and every frame while it changes by itself (a scroll area gliding).
+
+The UI gets the same calls in the same order either way, so widget ids, layout, hover and press looks, focus rings, transitions and animations, tooltips, scrolling, the accessibility tree, play scripts' targets and the frame's call and item budgets are what issuing them gives. Retained and issued calls interleave freely: siblings before and after it, containers around it, retains inside retains (an inner key replays inside its outer's build, so a page key holding panel keys builds only the panel that changed), a retain inside a scroll area and scroll areas inside a retain. `retain` adds no container and no id scope: its calls are placed and named as if issued where it is.
+
+Input: `build` runs, and its widgets answer there as they always do (`if (ui.button("Buy")) buy()`), on every frame where an input could change what one of its calls returns: a press, release or secondary press on one of its rectangles (one between them, over none, replays), a drag that began on one, the wheel over one, keys, text or navigation while one of its widgets has focus or captures keys, an assistive technology's activation of one, NextTab or PreviousTab while it holds tabs, focus moving while it holds a scroll area, a scroll area of it still gliding, flung or dragged; any input at all while it holds a dialog, an open select or a custom `widget`, and for a custom widget also the pointer moving, a button or the focus changing. On the other frames nothing in it could return anything new, so it replays: no click, key or result is ever lost or delayed.
+
+Rectangles: a replay hands nothing back to the game, but each replayed call returns what it returned when recorded (else the subtree builds): rectangles, scroll offsets and results the build kept (`const r = ui.label(…)`, kept for a tooltip or a minimap) stay right, and `lastRect()` after the retain is its last widget's, as issued.
+
+The contract: what `build` shows follows from `version` and from what the UI returns it. Only `starhermit:ui` and `starhermit:draw` calls are recorded; anything else `build` does (changing game state, drawing into a canvas, playing a sound, reading input or the clock) happens only on the frames it runs. A tooltip builder (`tooltip: () => …`) and a custom widget's `draw` are the recorded build's functions, run live as the calls that took them run them. A replayed call that returns other than it did makes the next frame build.
+
+Lifetime and limits: a key not issued in a frame is let go of, with its record and the functions it holds. At most 4,096 keys are kept at once, and all records together hold at most 32 MiB (their calls, arguments, results and nested keys' records, counted in every key holding them); past them a key builds every frame, unkept (the console says so once), and so does a key holding a nested key not kept. A call given a string longer than 1,048,576 UTF-16 units (more than any recordable native reads) is made unkept, and a key that built more than 4,096 widgets builds every frame. `retainStats()` tells how many keys are kept and how often they built and replayed. A key issued twice in a frame, a key that is not a string, a version neither a number nor a string, and a tooltip builder chained onto `retain` or left last in `build` for no widget are TypeErrors.
+
+Fuel: a replay costs 4 instructions plus 1 for each call it makes again (nested ones included), the same every frame, where issuing spends 40 to 80 on each call's options in script besides `build`'s own work; natives that charge for their work (an uncached text layout, a path not kept) charge as when issued. A frame that builds costs what issuing does, and recording it a little native time (a key whose version changes every frame records only every fourth build past its second, and replays from the third frame after it settles). The browser's engine records and replays the same way, with the same frames.
+
+### retain
+
+*const*
+
+```ts
+export const retain: ((key: string, version: number | string, build: () => void) => boolean) | undefined;
+```
+
+Records `build`'s calls and makes them again natively, without calling `build`, while `version`, the place it is laid out in and the input reaching it stay the same (see above). True on a frame `build` ran. Undefined for games declaring an older `engine.minor`.
+
+### retainStats
+
+*const*
+
+```ts
+export const retainStats:
+  | (() => {
+      keys: number;
+      confirmed: number;
+      calls: number;
+      bytes: number;
+      builds: number;
+      replays: number;
+      mismatches: number;
+    })
+  | undefined;
+```
+
+What `retain` keeps (both modules' keys, `ui.retain`'s and `draw.retain`'s): `keys` kept and of them `confirmed` (replaying when nothing reaches them), the `calls` and `bytes` their records hold (at most 32 MiB), and the `builds`, `replays` and `mismatches` (replays where a call returned other than recorded, so the next frame built) since the game started. Undefined for games declaring an older `engine.minor`.
 {% endraw %}

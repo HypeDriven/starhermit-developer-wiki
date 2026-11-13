@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:draw`
 
-Engine **1.40.0** (host API 1.40), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.41.0** (host API 1.41), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:draw";
@@ -359,4 +359,14 @@ export function image(source: Texture | OffscreenCanvas | ImageBitmap, x: number
 ```
 
 Draws a texture, canvas (as it is now) or bitmap; the width and height default to the source's size. A canvas or bitmap takes one of the game's images (`budgets().textures`, 120 unless raised) from the first frame it is drawn; see `Budgets` for when it goes and what a full budget does.
+
+### retain
+
+*const*
+
+```ts
+export const retain: ((key: string, version: number | string, paint: () => void) => boolean) | undefined;
+```
+
+`ui.retain` for the overlay (since API\_MINOR 41, `RETAIN_MINOR`): the `starhermit:draw` calls `paint` makes recorded, and made again natively without calling `paint` while `version` (a number or a string) is the same, and the fonts the game added and the UI's scale, text size, contrast and styles (`box`'s) are as they were. No input reaches drawing, so nothing else builds it. The items draw in call order among the frame's others, each counting toward the frame's budgets, with canvases and textures as they are now (a canvas redrawn shows its new pixels). `paint` builds and measures no widgets (a `starhermit:ui` call in it is a TypeError: put widgets in `ui.retain`); a `draw.retain` inside `ui.retain` replays with it. Draw keys are apart from UI keys. Records, lifetime, limits and fuel are `ui.retain`'s. True on a frame `paint` ran. Undefined for games declaring an older `engine.minor`.
 {% endraw %}

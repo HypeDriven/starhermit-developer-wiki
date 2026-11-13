@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:engine`
 
-Engine **1.40.0** (host API 1.40), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.41.0** (host API 1.41), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:engine";
@@ -577,6 +577,10 @@ export interface FrameStats { … }
 - `readonly gpu?: GpuStats | null;`
 
   Each kind of pass's GPU time, for benchmarking (since API\_MINOR 34; absent before). Null where the device times nothing: OpenGL ES without GL\_EXT\_disjoint\_timer\_query, WebGPU without `timestamp-query`, WebGL2 without `EXT_disjoint_timer_query_webgl2` (browsers often leave it out). The first read starts the runtime's timer where passes are not timed already (OpenGL ES and browsers; Vulkan, Direct3D 12 and Metal always time them), so a game that never reads it adds no GPU work; it reads null, then `frames: 0`, until the first results arrive a few frames later. Results always lag a few frames behind the frame drawn. One frozen object a frame.
+
+- `readonly resolutionScale?: number;`
+
+  The fraction of the drawing buffer's size (`renderer.setSize` × `setPixelRatio`) the scene renders at this frame, temporal anti-aliasing or resampling bringing it back to full size (since API\_MINOR 41; absent before): the player's render scale times the engine's dynamic resolution, which follows the frame budget (always under the Auto graphics preset, under a chosen level with the player's adaptive resolution; 0.5 of the player's scale at least, in steps of 1/32). 1 at full size, and for games that draw at the window's size. Engine-internal: `renderer.getPixelRatio()` and the drawing buffer's size never include it, as in three.js.
 
 ### GpuStats
 

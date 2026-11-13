@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:input`
 
-Engine **1.40.0** (host API 1.40), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.41.0** (host API 1.41), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:input";
@@ -225,6 +225,14 @@ export interface KeyEvent { … }
 
   The system's auto-repeat of a held key (not a user gesture).
 
+- `readonly shiftKey?: boolean;`
+
+  The modifier keys held as this key went down or up, either side (since API\_MINOR 41, `KEY_MODIFIERS_MINOR`; undefined before), as `KeyboardEvent`'s `shiftKey`, `ctrlKey`, `altKey` and `metaKey`: a modifier's own press holds it (`ShiftLeft` going down has `shiftKey` true) and its release no longer (unless the other side is still held), and an auto-repeat carries those held as it repeats. They are the keys the game heard go down and not up, the ones `isKeyDown` answers for, and the same an `ActionEvent` carries: none is held after the window loses focus or while the runtime's interface is open until it is pressed again, and the runtime's own releases (as its interface opens over the game) carry none. Right Alt is `altKey` (AltGr on Windows also holds `ControlLeft`, as browsers there report it); Caps Lock and Fn are none of them. The same natively and in browsers.
+
+- `readonly ctrlKey?: boolean;`
+- `readonly altKey?: boolean;`
+- `readonly metaKey?: boolean;`
+
 - `consume(): void;`
 
   Keeps the text this key press types from `onText` and the game's UI (as `preventDefault` does on the web): for a key that opens a text field.
@@ -284,6 +292,14 @@ export interface PointerButtonEvent { … }
 - `readonly pressed: boolean;`
 - `readonly x: number;`
 - `readonly y: number;`
+
+- `readonly shiftKey?: boolean;`
+
+  The modifier keys held as the button went down or up (since API\_MINOR 41, `KEY_MODIFIERS_MINOR`; undefined before), as `MouseEvent`'s and as `KeyEvent` has them (Shift-click, Ctrl-click); the runtime's own releases carry none. Wheel and motion listeners take numbers, not events: read `isKeyDown` there.
+
+- `readonly ctrlKey?: boolean;`
+- `readonly altKey?: boolean;`
+- `readonly metaKey?: boolean;`
 
 ### onPointerMove
 

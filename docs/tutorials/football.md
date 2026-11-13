@@ -7,14 +7,14 @@ languages. This page takes it apart step by step to show how a real game uses th
 step names the engine modules involved and links to the game's source, where you can read the
 full code.
 
-This walkthrough is written for engine **1.40.0**, the latest release. Every call shown is listed
+This walkthrough is written for engine **1.41.0**, the latest release. Every call shown is listed
 in the [engine API reference](../engine-api/index.md). Read the
 [engine tutorial](starhermit-engine.md) first if you have not built a script game yet.
 
 Source links point at commit
 [`33bd9bd`](https://github.com/HypeDriven/starhermit-football/tree/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f).
 At that commit the game pins engine 1.39.0 with `engine.minor=39`. It uses nothing newer, so it
-runs unchanged on 1.40.0; moving it is a one-line change to `engine.version` (see
+runs unchanged on 1.41.0; moving it is a one-line change to `engine.version` (see
 [step 12](#12-package-test-and-publish)).
 
 ## The shape of the game
@@ -338,11 +338,11 @@ the game still offers offline practice.
   `starhermit.txt`, runs `server.js` as the match script and creates the leaderboard from
   `leaderboards.json`.
 
-To move Football, or your own game, to engine 1.40.0:
+To move Football, or your own game, to engine 1.41.0:
 
-1. Download the 1.40.0 runtime.
-2. Set `engine.version=1.40.0`.
+1. Download the 1.41.0 runtime.
+2. Set `engine.version=1.41.0`.
 3. Run the checks and package again.
 
-Raise `engine.minor` to 40 only when you want host API 1.40's
+Raise `engine.minor` to 41 only when you want host API 1.41's
 [new features](../engine-features.md).

@@ -13,10 +13,10 @@ Base URL: `https://api.starhermit.com`. All routes are under `/api/v1/...`.
 
 ```json
 {"releases": [{
-  "version": "1.40.0", "api": {"major": 1, "minor": 40}, "revoked": false, "date": "2026-11-12T21:54:08Z",
-  "web": {"base": "https://wiki.starhermit.com/engine/1.40.0/", "manifestIntegrity": "sha384-<SRI hash>"},
+  "version": "1.41.0", "api": {"major": 1, "minor": 41}, "revoked": false, "date": "2026-11-13T18:26:01Z",
+  "web": {"base": "https://wiki.starhermit.com/engine/1.41.0/", "manifestIntegrity": "sha384-<SRI hash>"},
   "native": {"linux-x86_64": {
-    "manifestUrl": "https://wiki.starhermit.com/engine/1.40.0/native/linux-x86_64/native.json",
+    "manifestUrl": "https://wiki.starhermit.com/engine/1.41.0/native/linux-x86_64/native.json",
     "manifestSha256": "<SHA-256 of native.json>"}}
 }]}
 ```
@@ -51,7 +51,7 @@ nothing: the StarHermit client and a game's page fetch the release the game pins
 1. Ask the API for the release, the newest or the one your game pins:
 
    ```sh
-   curl -s https://api.starhermit.com/api/v1/engine/releases/1.40.0
+   curl -s https://api.starhermit.com/api/v1/engine/releases/1.41.0
    ```
 
 2. Take your platform's `native.<platform>.manifestUrl`, fetch that `native.json` and check its
@@ -63,7 +63,7 @@ nothing: the StarHermit client and a game's page fetch the release the game pins
 The same steps as one script (needs `curl`, `jq` and `sha256sum`; on macOS use `shasum -a 256`):
 
 ```sh
-version=1.40.0 platform=linux-x86_64   # or windows-x86_64, macos-x86_64, macos-aarch64
+version=1.41.0 platform=linux-x86_64   # or windows-x86_64, macos-x86_64, macos-aarch64
 release=$(curl -fsS "https://api.starhermit.com/api/v1/engine/releases/$version")
 manifest_url=$(jq -r --arg p "$platform" '.native[$p].manifestUrl' <<<"$release")
 manifest_sha=$(jq -r --arg p "$platform" '.native[$p].manifestSha256' <<<"$release")

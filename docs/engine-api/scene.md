@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:scene`
 
-Engine **1.40.0** (host API 1.40), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.41.0** (host API 1.41), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:scene";
@@ -7267,7 +7267,14 @@ export interface LightShadow { … }
        * when the light turns past its lag (0.03° for the nearest cascade
        * to 0.37° for the farthest), or when a caster joins or leaves the
        * cached ones (starts or
-       * stops moving, appears or goes). Far cascades take turns: at most
+       * stops moving, appears or goes). Since API_MINOR 41 a cached
+       * caster also leaves them for 30 frames when what it draws with
+       * changes though it stands still (its geometry or draw range, its
+       * opacity, its material's alpha, sides or map, that map's pixels
+       * written in place, an InstancedMesh's instances updated), a caster
+       * whose map is a render target's stays live, and a cascade draws
+       * its cache again when its light or the cascades' bounds change;
+       * before it only a caster's place counts. Far cascades take turns: at most
        * one draws its cache again a frame. Each cache takes another map's
        * bytes of the effect budget; one that does not fit draws every
        * caster each frame, as without it. Not a boolean is a TypeError;
