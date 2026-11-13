@@ -146,7 +146,9 @@ star-catcher/
 
 `.starhermit/` starts with a dot, so it is never part of the package.
 `starhermit types star-catcher` writes the declarations again, for example after you move to a newer
-runtime. Every module, member, unit, limit and error of the host API is documented in that file.
+runtime. Every module, member, unit, limit and error of the host API is documented in that file,
+and the [engine API reference](../engine-api/index.md) has the latest release's on the wiki. For a
+complete game built this way, see the [Football walkthrough](football.md).
 
 The runtime does not type-check: it removes TypeScript's types as it loads each module. Check them
 yourself with TypeScript 5 or newer; with Node.js installed, `npx` runs it without installing

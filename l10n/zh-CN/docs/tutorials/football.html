@@ -1,0 +1,402 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "示例游戏：Football 如何使用 StarHermit 引擎"
+source_url: "/docs/tutorials/football.html"
+source_path: "docs/tutorials/football.md"
+source_hash: "d083140f127033bfc8459dca9170b7a0d32d7c0a97fe4cdf6ebe96758f8ba2ce"
+translation: "machine"
+permalink: "/zh-CN/docs/tutorials/football.html"
+---
+{% raw %}
+<h1 id="example-game-how-football-uses-the-starhermit-engine">示例游戏：Football 如何使用 StarHermit 引擎</h1>
+<p><a href="https://github.com/HypeDriven/starhermit-football">星隐足球</a> 是公开的、完整的
+脚本游戏。这是 1 至 22 名球员的实时 3D 足球比赛，配有 AI 队友、泛光灯
+体育场、在线大厅、语音和文本聊天、重播、排行榜、成就和九
+语言。本页将逐步拆解，展示真实游戏如何使用该引擎。每个
+步骤命名所涉及的引擎模块并链接到游戏的源代码，您可以在其中阅读
+完整代码。</p>
+<p>本演练是为引擎编写的 <strong>1.40.0</strong>，最新发布。显示的每个调用都会列出
+在 <a href="/docs/engine-api/index.html">引擎API参考</a>。阅读
+<a href="/zh-CN/docs/tutorials/starhermit-engine.html">引擎教程</a> 首先，如果您还没有构建脚本游戏。</p>
+<p>源链接指向提交
+<a href="https://github.com/HypeDriven/starhermit-football/tree/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f"><code>33bd9bd</code></a>。
+在那次提交游戏引脚引擎 1.39.0 <code>engine.minor=39</code>。它没有使用更新的东西，所以它
+在 1.40.0 上运行不变；移动它是单行更改 <code>engine.version</code> （看
+<a href="#12-package-test-and-publish">步骤12</a>).</p>
+<h2 id="the-shape-of-the-game">游戏的形状</h2>
+<table>
+<thead>
+<tr>
+<th>小路</th>
+<th>角色</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>starhermit.txt</code></td>
+<td>清单：名称、引擎引脚、服务器脚本、控件、功能</td>
+</tr>
+<tr>
+<td><code>server.js</code></td>
+<td>一场比赛模拟：平台作为权威服务器运行，客户端加载进行离线练习和预测</td>
+</tr>
+<tr>
+<td><code>engine/src/main.ts</code></td>
+<td>入口模块：生命周期回调和屏幕状态机</td>
+</tr>
+<tr>
+<td><code>engine/src/match.ts</code>, <code>logic/</code></td>
+<td>匹配流程、网络代码、插值和预测</td>
+</tr>
+<tr>
+<td><code>engine/src/world/</code></td>
+<td>3D 场景中的体育场、足球运动员、球和人群</td>
+</tr>
+<tr>
+<td><code>engine/src/screens/</code>, <code>hud.ts</code></td>
+<td>菜单（<code>starhermit:ui</code>) 和比赛中的 HUD (<code>starhermit:draw</code>)</td>
+</tr>
+<tr>
+<td><code>engine/src/net.ts</code>, <code>platform.ts</code>, <code>chat.ts</code>, <code>voice.ts</code></td>
+<td>与 StarHermit 平台对话的所有内容</td>
+</tr>
+<tr>
+<td><code>engine/src/audio.ts</code>, <code>i18n.ts</code>, <code>quality.ts</code></td>
+<td>声音、语言和图形级别</td>
+</tr>
+<tr>
+<td><code>assets/</code>, <code>sfx/</code></td>
+<td>图像、弦表和声音片段</td>
+</tr>
+</tbody>
+</table>
+<h2 id="1-the-manifest">1. 清单</h2>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/starhermit.txt"><code>starhermit.txt</code></a>
+使该文件夹成为脚本游戏，并声明服务器脚本和控件：</p>
+<pre><code class="language-text">name=Football
+launch=index.html
+server=server.js
+control.up=KeyW+ArrowUp | Run forward
+control.shoot=Space+KeyJ | Shoot (hold) / tap to pass
+control.tackle=KeyK | Slide tackle / pressure
+engine.api=1
+engine.entry=engine/src/main.ts
+engine.version=1.39.0
+engine.minor=39
+engine.capabilities=platform,voice,clipboard,storage
+engine.gamepad.shoot=West+RightTrigger
+engine.gamepad.pass=South
+</code></pre>
+<ul>
+<li><code>launch=index.html</code> 是加载页面 <code>starhermit package --web</code> 写道。它玩游戏
+在固定版本的 Web 运行时的浏览器中。</li>
+<li><code>server=server.js</code> 是平台的权威匹配脚本（第6步）。</li>
+<li><code>control.*</code> 和 <code>engine.gamepad.*</code> 线条定义 <strong>行动</strong>。运行时将按键和键盘绑定到它们，
+玩家可以在运行时的选项菜单中重新绑定它们。游戏从未命名游戏玩法的键。</li>
+<li><code>engine.capabilities</code> 请求平台（房间、套接字、排行榜、重播、聊天）、语音、
+剪贴板（邀请链接）和存储（设置）。运行时拒绝它们之外的调用。</li>
+</ul>
+<p>完整的密钥列表位于 <a href="/zh-CN/docs/starhermit-txt.html">这 <code>starhermit.txt</code> 显现</a>.</p>
+<h2 id="2-the-entry-module-and-the-frame-loop">2. 入口模块和框架循环</h2>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/main.ts"><code>engine/src/main.ts</code></a>
+在模块范围内设置渲染器，然后注册四个生命周期回调
+<a href="/docs/engine-api/engine.html"><code>starhermit:engine</code></a>:</p>
+<pre><code class="language-ts">import { frame, onFixedUpdate, onRender, onStart, onUpdate, setFixedRate } from "starhermit:engine";
+import { ACESFilmicToneMapping, PCFSoftShadowMap, PerspectiveCamera, renderer, scene } from "starhermit:scene";
+
+const camera = new PerspectiveCamera(55, 16 / 9, 0.1, 800);
+renderer.camera = camera;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = PCFSoftShadowMap;
+renderer.toneMapping = ACESFilmicToneMapping;
+
+onStart(() =&gt; {
+  setFixedRate(60);
+  loadLanguages(); // string tables (step 10)
+  sim();           // evaluate server.js once (step 6)
+  menuScene.start(); // an AI-vs-AI match behind the menu
+  // … platform listeners, settings listeners, invite polling
+});
+
+onFixedUpdate((step) =&gt; {
+  if (match) match.fixedStep(step);
+  else if (!replay) menuScene.fixedStep(step);
+});
+
+onUpdate((delta) =&gt; {
+  pollQuality();
+  if (match) match.update(Math.min(delta, 0.1));
+  // … replay viewer or menu backdrop
+});
+
+onRender(() =&gt; {
+  const fr = frame();
+  if (Math.abs(camera.aspect - fr.width / fr.height) &gt; 1e-6) {
+    camera.aspect = fr.width / fr.height;
+    camera.updateProjectionMatrix();
+  }
+  hud.draw();
+  // … chat, in-match menu or the menu screens
+});
+</code></pre>
+<p>要复制的模式：</p>
+<ul>
+<li><strong>模拟运行于 <code>onFixedUpdate</code></strong>，固定 60 Hz。</li>
+<li><strong>每帧逻辑运行在 <code>onUpdate</code></strong>， 和 <code>delta</code> 封顶，因此停滞的框架不会使
+玩家跳跃。</li>
+<li><strong>绘图运行于 <code>onRender</code>.</strong> 每个回调只有一个，所以 <code>main.ts</code> 扇出到
+当前屏幕：菜单、大厅、比赛、重播或结果。</li>
+</ul>
+<h2 id="3-the-3d-world-starhermitscene">3. 3D世界： <code>starhermit:scene</code></h2>
+<p>体育场、足球运动员、球和官员是普通的 Three.js 风格对象
+<a href="/docs/engine-api/scene.html"><code>starhermit:scene</code></a>: <code>Mesh</code>, <code>Group</code>, <code>MeshStandardMaterial</code>,
+<code>CylinderGeometry</code>, <code>Sprite</code>, <code>CanvasTexture</code> 等等。从 Three.js 移植的代码大部分都可以工作
+不变。一些值得阅读的细节：</p>
+<ul>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/world/stadium.ts"><code>world/stadium.ts</code></a>
+建造球场、看台、泛光灯和雾气。它设置后期效果（<code>renderer.bloom</code>,
+<code>renderer.grade</code>, <code>renderer.antialias</code>）和每个图形级别的阴影。</li>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/world/environment.ts"><code>world/environment.ts</code></a>
+制作环境图 <code>PMREMGenerator</code> 从一个 <code>DataTexture</code>.</li>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/world/crest.ts"><code>world/crest.ts</code></a>
+和 <code>world/nametags.ts</code> 在上面画上队徽和浮动昵称
+<a href="/docs/engine-api/canvas.html"><code>starhermit:canvas</code></a> <code>OffscreenCanvas</code>，然后将它们用作
+<code>CanvasTexture</code>沙 <code>Sprite</code>s.</li>
+</ul>
+<h2 id="4-thousands-of-moving-parts-starhermitworld">4. 数千个活动部件： <code>starhermit:world</code></h2>
+<p>动画 22 名足球运动员联合起来，加上数千名人群成员，会太慢，因为
+本机解释器上的每个对象脚本。足球运动的作用
+<a href="/docs/engine-api/world.html"><code>starhermit:world</code></a> <strong>桌子</strong> （键入的列的行）和 <strong>内核</strong>
+（运行时运行在每一行上的函数）：</p>
+<pre><code class="language-ts">import { kernel, schedule, table } from "starhermit:world";
+
+const crowd = table("crowd", CROWD_ROWS, {
+  bx: "f32", by: "f32", bz: "f32", ph: "f32", fr: "f32", av: "f32",
+  q: "quat", s: "f32", sy: "f32", x: "f32", y: "f32", z: "f32",
+});
+const sway = kernel(crowd, (r, u: { t: number; amp: number; spd: number; sway: number; shake: number }) =&gt; {
+  const j = Math.sin(u.t * u.spd * r.fr + r.ph);
+  r.y = r.by + (j &gt; 0 ? j * j : 0) * u.amp * r.av;
+  // …
+});
+// An eighth of the crowd each frame: the work is sliced across frames.
+const swayRun = schedule.update(sway, { t: 0, amp: 0, spd: 0, sway: 0, shake: 0 }, { slices: 8 });
+</code></pre>
+<p>足球运动员装备
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/world/rig.ts"><code>world/rig.ts</code></a>
+使用相同的方法。一个 <code>rigs</code> 表保存每个足球运动员的动画状态。一个 <code>joints</code> 表，
+与一个 <code>ref:rigs</code> 柱，每个钻机可容纳 15 个接头，并且 <strong>绑定</strong> 从中驱动场景节点。
+两个内核安排在 <code>onUpdate</code> 计算姿势，运行时写入节点
+改变自身。每个足球运动员每帧的脚本工作量约为十几个。</p>
+<h2 id="5-input-actions-touch-and-gamepads">5. 输入：动作、触摸和游戏手柄</h2>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/input.ts"><code>engine/src/input.ts</code></a>
+通过读取清单的操作 <a href="/docs/engine-api/input.html"><code>starhermit:input</code></a>:</p>
+<ul>
+<li><code>value(action)</code> 返回动作保持的距离（移动是 <code>value("up") - value("down")</code>).
+<code>onAction</code> 提供按压和释放边缘。</li>
+<li>鼠标外观用途 <code>requestPointerLock</code>, <code>onPointerDelta</code> 和 <code>onPointerLockChange</code>。相机的
+右摇杆来自 <code>gamepads()</code>， 和 <code>vibrate</code> 发出短暂的触觉滴答声。</li>
+<li>在触摸屏上（<code>primaryPointer()</code> 是粗糙的）， <code>setTouchControls</code> 显示操纵杆和
+由运行时绘制的 SHOOT/PASS/TACKLE 按钮。这些按钮绑定到相同的操作：</li>
+</ul>
+<pre><code class="language-ts">setTouchControls([
+  { kind: "stick", up: "up", down: "down", left: "left", right: "right", anchor: "bottom-left", offset: [90, 90], radius: 66 },
+  { kind: "button", action: "shoot", label: T("SHOOT").slice(0, 16), anchor: "bottom-right", offset: [66, 66], radius: 46 },
+  // … PASS and TACKLE
+]);
+</code></pre>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/screens/controls.ts"><code>screens/controls.ts</code></a>
+列出当前的 <code>bindings()</code> 并打电话 <code>requestRebind</code>。然后运行时捕获新密钥或
+按钮。</p>
+<h2 id="6-one-simulation-for-client-and-server-starhermitscript">6. 客户端和服务器端的一次模拟： <code>starhermit:script</code></h2>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/server.js"><code>server.js</code></a>
+是一个简单的经典脚本，没有导入， <code>Date</code> 或者 <code>Math.random</code>，作为平台的沙箱
+需要。它定义了两个全局变量：</p>
+<ul>
+<li>
+<p><code>globalThis.game</code> 持有平台入口点（<code>createSession</code>, <code>onPlayerMessage</code>, <code>onTick</code>）
+以及在发布时读取的静态声明：</p>
+<pre><code class="language-js">globalThis.game = {
+  tickRateHz: 30,
+  replays: true,
+  achievements: [
+    { key: 'debut', name: 'Debut', description: 'Finish your first match.', points: 10 },
+    { key: 'hat-trick', name: 'Hat-Trick', description: 'Score three goals in one match.', points: 50 },
+    // …
+  ],
+  createSession: function (ctx) { /* seats, AI, seed from ctx.random */ },
+  // …
+};
+</code></pre>
+</li>
+<li>
+<p><code>globalThis.FootballSim</code> 保持相同的模拟（<code>createMatch</code>, <code>stepMatch</code>，人工智能）
+客户。</p>
+</li>
+</ul>
+<p>客户端将相同的文件加载到自己的领域中 <code>loadClassic</code> 从
+<a href="/docs/engine-api/script.html"><code>starhermit:script</code></a>
+(<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/sim.ts"><code>engine/src/sim.ts</code></a>):</p>
+<pre><code class="language-ts">import { loadClassic } from "starhermit:script";
+
+loadClassic("server.js");
+const S = (globalThis as unknown as { FootballSim?: FootballSimApi }).FootballSim;
+</code></pre>
+<p>离线练习步骤 <code>FootballSim</code> 本地频率为 60 Hz，每隔一个座位都有 AI。在线上，
+平台运行 <code>server.js</code> 权威的 30 Hz。该游戏从不保留其两份副本
+规则。</p>
+<h2 id="7-online-matches-rooms-and-game-sockets">7. 在线比赛：房间和游戏插座</h2>
+<p>大堂通过以下方式使用平台的房间 <a href="/docs/engine-api/platform.html"><code>starhermit:platform</code></a>
+(<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/screens/lobby.ts"><code>screens/lobby.ts</code></a>):</p>
+<pre><code class="language-ts">import * as P from "starhermit:platform";
+
+// Quick play: join any open room, or open one.
+let room = await P.rooms.quickJoin();
+if (!room) {
+  room = await P.rooms.create({ teamCount: 2, seatsPerTeam: teamSize, backfillAfterSeconds: 30, metadata: { game: "football" } });
+  room = await P.rooms.open(room.id);
+}
+
+// Ranked solo vs AI: every other seat is an AI player, so starting begins the match at once.
+room = await P.rooms.create({ teamCount: 2, seatsPerTeam: teamSize, backfillAfterSeconds: 30, aiPlayers: 2 * teamSize - 1, metadata: { game: "football" } });
+room = await P.rooms.start(room.id);
+</code></pre>
+<p>好友、邀请和座位变更都会经过 <code>P.friends.list</code>, <code>P.rooms.invite</code>,
+<code>P.rooms.acceptInvite</code> 和 <code>P.rooms.seat</code>. <code>P.rooms.mine</code> 让玩家重新加入他们离开的比赛。</p>
+<p>比赛开始后，
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/net.ts"><code>engine/src/net.ts</code></a>
+打开游戏套接字 <code>P.connectGame(sessionId)</code>:</p>
+<ul>
+<li>它以 30 Hz 的频率发送输入 <code>sendInput</code>.</li>
+<li>它要求完整的快照 <code>sendCommand({ type: "sync" })</code> 在每次打开和打开时
+<code>resumed</code>.</li>
+<li>它监听 <code>game</code> （快照和事件）， <code>achievement</code> 和 <code>stopped</code>. <code>stopped</code> 报告原因
+套接字停止：注销、更新条款或比赛消失。</li>
+</ul>
+<p>运行时保存玩家的凭据并自行重新连接，因此游戏不处理令牌
+并且没有重试循环。</p>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/logic/interp.ts"><code>logic/interp.ts</code></a>
+通过自适应插值平滑服务器的快照。
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/logic/predict.ts"><code>logic/predict.ts</code></a>
+预测当地足球运动员的动作并针对每个快照进行纠正。预测影响
+只画什么；服务器保持权威。</p>
+<h2 id="8-the-rest-of-the-platform">8. 平台的其余部分</h2>
+<table>
+<thead>
+<tr>
+<th>特征</th>
+<th>通话</th>
+<th>来源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>已登录玩家、登录、会话结束</td>
+<td><code>P.player()</code>, <code>P.onPlayerChange</code>, <code>P.requestSignIn</code>, <code>P.onSessionEnded</code></td>
+<td><code>platform.ts</code>, <code>main.ts</code></td>
+</tr>
+<tr>
+<td>排行榜</td>
+<td><code>P.leaderboards.list</code>, <code>P.leaderboards.entries</code> （董事会宣布于 <code>leaderboards.json</code>)</td>
+<td><code>screens/leaderboard.ts</code></td>
+</tr>
+<tr>
+<td>成就</td>
+<td>宣布于 <code>server.js</code>，全职授予，列出 <code>P.achievements.list</code></td>
+<td><code>screens/achievements.ts</code></td>
+</tr>
+<tr>
+<td>重播</td>
+<td><code>game.replays: true</code> 在 <code>server.js</code>; <code>P.replays.list</code>, <code>P.replays.get</code></td>
+<td><code>screens/replays.ts</code>, <code>replayView.ts</code></td>
+</tr>
+<tr>
+<td>文字聊天</td>
+<td><code>P.sessions.get</code> （比赛的对话）， <code>P.chat.messages</code>, <code>P.chat.subscribe</code>, <code>P.chat.post</code></td>
+<td><code>chat.ts</code></td>
+</tr>
+<tr>
+<td>语音聊天</td>
+<td><code>P.voice.join</code>, <code>P.voice.setVolume</code> 和 <code>P.voice.setPan</code> 根据足球运动员之间的距离， <code>P.voice.setMuted</code></td>
+<td><code>voice.ts</code></td>
+</tr>
+<tr>
+<td>邀请链接</td>
+<td><code>P.inviteLink</code> 和 <code>clipboard</code> 从 <code>starhermit:engine</code></td>
+<td><code>platform.ts</code></td>
+</tr>
+<tr>
+<td>错误报告</td>
+<td><code>P.reportBug</code></td>
+<td><code>screens/settings.ts</code></td>
+</tr>
+</tbody>
+</table>
+<p>每个呼叫都可以拒绝 <code>PlatformError</code>。足球将在线功能视为尽力而为：
+故障显示 "在线不可用" 或者陷入沉默，游戏永远不会结束。已退出，
+游戏仍然提供离线练习。</p>
+<h2 id="9-menus-and-hud-starhermitui-starhermitdraw-starhermitcanvas">9. 菜单和HUD： <code>starhermit:ui</code>, <code>starhermit:draw</code>, <code>starhermit:canvas</code></h2>
+<ul>
+<li><strong>菜单</strong> (<code>screens/*.ts</code>，匹配菜单和对话框 <code>main.ts</code>） 使用
+<a href="/docs/engine-api/ui.html"><code>starhermit:ui</code></a>，引擎的即时模式 UI。小部件被称为每个
+框架来自 <code>onRender</code>， 和 <code>ui.setTheme</code> 给他们游戏的颜色。运行时自己的选项
+菜单打开方式为 <code>openMenu</code>.</li>
+<li><strong>平视显示器</strong> (
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/hud.ts"><code>hud.ts</code></a>）
+绘制记分牌、时钟和标记 <a href="/docs/engine-api/draw.html"><code>starhermit:draw</code></a>:
+<code>draw.roundRect</code>, <code>draw.text</code> 和 <code>draw.image</code> （徽章画布），按照场景中的呼叫顺序。</li>
+<li><strong>图片</strong> 装载有 <code>createImageBitmap</code> 从 <a href="/docs/engine-api/canvas.html"><code>starhermit:canvas</code></a>,
+例如菜单的关键艺术。</li>
+</ul>
+<h2 id="10-settings-and-languages-starhermitstorage-strings">10. 设置和语言： <code>starhermit:storage</code>, 字符串</h2>
+<ul>
+<li>每个玩家的设置（静音、语音、语言、图形覆盖）实时显示 <code>settings</code> 从
+<a href="/docs/engine-api/storage.html"><code>starhermit:storage</code></a>。它们保存在设备和帐户中。
+<code>settings.onChange</code> 应用在另一台设备上所做的更改。</li>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/i18n.ts"><code>i18n.ts</code></a>
+负载 <code>assets/strings.json</code> 进入发动机的 <code>strings</code> 表（<code>strings.load</code>, <code>strings.t</code>,
+<code>strings.setLanguage</code>）。它从保存的选择中选择语言，然后选择玩家的语言
+StarHermit 语言，然后设备的 (<code>preferences</code>). <code>l10n/font.ts</code> 加载脚本字体
+<code>FontFace</code> 对于需要它们的语言。</li>
+</ul>
+<h2 id="11-sound-and-graphics-levels">11.声音和图形级别</h2>
+<ul>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/audio.ts"><code>audio.ts</code></a>
+构建一个网络音频图 <a href="/docs/engine-api/audio.html"><code>starhermit:audio</code></a>:
+<ul>
+<li>创作的剪辑列于 <code>sfx/manifest.json</code> （阅读与 <code>files.readJson</code>).</li>
+<li>合成器可以覆盖任何没有剪辑的事件，以及人群和体育场的混响。</li>
+<li>短命节点一旦结束就会被释放，因为主机图是有界的。</li>
+</ul>
+</li>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/quality.ts"><code>quality.ts</code></a>
+遵循玩家的图形级别（<code>frame().level</code>, <code>levelSettings</code>）。阴影、花朵和
+抗锯齿遵循该级别。游戏本身的内容（球场细节、人群密度、粒子）
+顶部有每个玩家的覆盖。</li>
+</ul>
+<h2 id="12-package-test-and-publish">12. 打包、测试、发布</h2>
+<ul>
+<li><strong>类型检查</strong> 和 <code>tsc -p engine</code>.
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/tsconfig.json"><code>engine/tsconfig.json</code></a>
+包括发行版的 <code>starhermit.d.ts</code> 和集 <code>"lib": ["ES2022"]</code>, <code>"types": []</code> 和
+<code>"allowImportingTsExtensions": true</code>.</li>
+<li><strong>测试。</strong> <code>npm test</code> 运行 <code>server.js</code> 回归测试。 <code>engine/tests/run.sh</code> 运行逻辑
+Node 下的测试（插值、预测、姿势、大厅）。 <code>starhermit &lt;folder&gt; --check</code>
+验证包并无头播放 120 帧。</li>
+<li><strong>包裹。</strong> <code>starhermit package --web .</code> 重写 <code>index.html</code> 和 <code>starhermit-files.json</code>,
+每一次变革都会做出承诺。</li>
+<li><strong>发布。</strong> 该游戏通过其存储库 URL 添加到 StarHermit 上。平台上写道
+<code>starhermit.txt</code>，运行 <code>server.js</code> 作为比赛脚本并从中创建排行榜
+<code>leaderboards.json</code>.</li>
+</ul>
+<p>要将 Football 或您自己的游戏移动到引擎 1.40.0：</p>
+<ol>
+<li>下载 1.40.0 运行时。</li>
+<li>放 <code>engine.version=1.40.0</code>.</li>
+<li>再次运行检查并打包。</li>
+</ol>
+<p>增加 <code>engine.minor</code> 仅当您需要主机 API 1.40 时才改为 40
+<a href="/zh-CN/docs/engine-features.html">新功能</a>.</p>
+
+{% endraw %}

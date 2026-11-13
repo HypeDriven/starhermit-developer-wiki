@@ -1,0 +1,402 @@
+---
+layout: "wiki"
+lang: "bn"
+title: "উদাহরণ গেম: ফুটবল কীভাবে স্টারহার্মিট ইঞ্জিন ব্যবহার করে"
+source_url: "/docs/tutorials/football.html"
+source_path: "docs/tutorials/football.md"
+source_hash: "d083140f127033bfc8459dca9170b7a0d32d7c0a97fe4cdf6ebe96758f8ba2ce"
+translation: "machine"
+permalink: "/bn/docs/tutorials/football.html"
+---
+{% raw %}
+<h1 id="example-game-how-football-uses-the-starhermit-engine">উদাহরণ গেম: ফুটবল কীভাবে স্টারহার্মিট ইঞ্জিন ব্যবহার করে</h1>
+<p><a href="https://github.com/HypeDriven/starhermit-football">স্টারহার্মিট ফুটবল</a> একটি সর্বজনীন, সম্পূর্ণ
+স্ক্রিপ্ট খেলা। এটি 1 থেকে 22 জন খেলোয়াড়ের জন্য রিয়েলটাইম 3D ফুটবল, এআই সতীর্থদের সাথে, একটি ফ্লাডলাইট
+স্টেডিয়াম, অনলাইন লবি, ভয়েস এবং টেক্সট চ্যাট, রিপ্লে, একটি লিডারবোর্ড, অর্জন এবং নয়টি
+ভাষা একটি বাস্তব গেম কিভাবে ইঞ্জিন ব্যবহার করে তা দেখানোর জন্য এই পৃষ্ঠাটি ধাপে ধাপে আলাদা করে। প্রতিটি
+ধাপে জড়িত ইঞ্জিন মডিউলগুলির নাম এবং গেমের উত্সের লিঙ্কগুলি, যেখানে আপনি পড়তে পারেন৷
+সম্পূর্ণ কোড।</p>
+<p>এই ওয়াকথ্রু ইঞ্জিনের জন্য লেখা <strong>1.40.0</strong>, সর্বশেষ রিলিজ. দেখানো প্রতিটি কল তালিকাভুক্ত করা হয়
+মধ্যে <a href="/docs/engine-api/index.html">ইঞ্জিন API রেফারেন্স</a>. পড়ুন
+<a href="/bn/docs/tutorials/starhermit-engine.html">ইঞ্জিন টিউটোরিয়াল</a> আপনি যদি এখনও একটি স্ক্রিপ্ট গেম তৈরি না করে থাকেন তবে প্রথমে।</p>
+<p>সোর্স লিঙ্ক পয়েন্ট এ কমিট
+<a href="https://github.com/HypeDriven/starhermit-football/tree/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f"><code>33bd9bd</code></a>.
+যে কমিট এ গেম পিন ইঞ্জিন 1.39.0 সঙ্গে <code>engine.minor=39</code>. এটি নতুন কিছু ব্যবহার করে, তাই এটি
+1.40.0 এ অপরিবর্তিত রান; এটি সরানো একটি এক লাইন পরিবর্তন <code>engine.version</code> (দেখুন
+<a href="#12-package-test-and-publish">ধাপ 12</a>).</p>
+<h2 id="the-shape-of-the-game">খেলার আকৃতি</h2>
+<table>
+<thead>
+<tr>
+<th>পথ</th>
+<th>ভূমিকা</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>starhermit.txt</code></td>
+<td>ম্যানিফেস্ট: নাম, ইঞ্জিন পিন, সার্ভার স্ক্রিপ্ট, নিয়ন্ত্রণ, ক্ষমতা</td>
+</tr>
+<tr>
+<td><code>server.js</code></td>
+<td>এক ম্যাচ সিমুলেশন: প্ল্যাটফর্ম দ্বারা অনুমোদিত সার্ভার হিসাবে চালিত, এবং অফলাইন অনুশীলন এবং পূর্বাভাসের জন্য ক্লায়েন্ট দ্বারা লোড করা হয়</td>
+</tr>
+<tr>
+<td><code>engine/src/main.ts</code></td>
+<td>এন্ট্রি মডিউল: লাইফসাইকেল কলব্যাক এবং স্ক্রিন স্টেট মেশিন</td>
+</tr>
+<tr>
+<td><code>engine/src/match.ts</code>, <code>logic/</code></td>
+<td>ম্যাচ ফ্লো, নেটকোড, ইন্টারপোলেশন এবং পূর্বাভাস</td>
+</tr>
+<tr>
+<td><code>engine/src/world/</code></td>
+<td>থ্রিডি দৃশ্যে স্টেডিয়াম, ফুটবলার, বল ও ভিড়</td>
+</tr>
+<tr>
+<td><code>engine/src/screens/</code>, <code>hud.ts</code></td>
+<td>মেনু (<code>starhermit:ui</code>) এবং ইন-ম্যাচ HUD (<code>starhermit:draw</code>)</td>
+</tr>
+<tr>
+<td><code>engine/src/net.ts</code>, <code>platform.ts</code>, <code>chat.ts</code>, <code>voice.ts</code></td>
+<td>StarHermit প্ল্যাটফর্মের সাথে কথা বলে সবকিছু</td>
+</tr>
+<tr>
+<td><code>engine/src/audio.ts</code>, <code>i18n.ts</code>, <code>quality.ts</code></td>
+<td>শব্দ, ভাষা এবং গ্রাফিক্স স্তর</td>
+</tr>
+<tr>
+<td><code>assets/</code>, <code>sfx/</code></td>
+<td>ছবি, স্ট্রিং টেবিল এবং সাউন্ড ক্লিপ</td>
+</tr>
+</tbody>
+</table>
+<h2 id="1-the-manifest">1. প্রকাশ</h2>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/starhermit.txt"><code>starhermit.txt</code></a>
+ফোল্ডারটিকে একটি স্ক্রিপ্ট গেম তৈরি করে এবং সার্ভার স্ক্রিপ্ট এবং নিয়ন্ত্রণগুলিও ঘোষণা করে:</p>
+<pre><code class="language-text">name=Football
+launch=index.html
+server=server.js
+control.up=KeyW+ArrowUp | Run forward
+control.shoot=Space+KeyJ | Shoot (hold) / tap to pass
+control.tackle=KeyK | Slide tackle / pressure
+engine.api=1
+engine.entry=engine/src/main.ts
+engine.version=1.39.0
+engine.minor=39
+engine.capabilities=platform,voice,clipboard,storage
+engine.gamepad.shoot=West+RightTrigger
+engine.gamepad.pass=South
+</code></pre>
+<ul>
+<li><code>launch=index.html</code> লোডার পাতা যে <code>starhermit package --web</code> লেখে এটা খেলা খেলে
+পিন করা রিলিজের ওয়েব রানটাইমে ব্রাউজারে।</li>
+<li><code>server=server.js</code> প্ল্যাটফর্মের প্রামাণিক ম্যাচ স্ক্রিপ্ট (ধাপ 6)।</li>
+<li><code>control.*</code> এবং <code>engine.gamepad.*</code> লাইন সংজ্ঞায়িত <strong>কর্ম</strong>. রানটাইম তাদের সাথে কী এবং প্যাড আবদ্ধ করে,
+এবং খেলোয়াড়রা রানটাইমের বিকল্প মেনুতে সেগুলিকে রিবাইন্ড করে। গেমটি কখনই গেমপ্লের জন্য একটি কী নাম দেয় না।</li>
+<li><code>engine.capabilities</code> প্ল্যাটফর্মের জন্য জিজ্ঞাসা করে (রুম, সকেট, লিডারবোর্ড, রিপ্লে, চ্যাট), ভয়েস,
+ক্লিপবোর্ড (আমন্ত্রণ লিঙ্ক) এবং স্টোরেজ (সেটিংস)। রানটাইম তাদের বাইরে কল প্রত্যাখ্যান.</li>
+</ul>
+<p>সম্পূর্ণ কী তালিকা আছে <a href="/bn/docs/starhermit-txt.html">দ <code>starhermit.txt</code> প্রকাশ</a>.</p>
+<h2 id="2-the-entry-module-and-the-frame-loop">2. এন্ট্রি মডিউল এবং ফ্রেম লুপ</h2>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/main.ts"><code>engine/src/main.ts</code></a>
+মডিউল সুযোগে রেন্ডারার সেট আপ করে, তারপর থেকে চারটি লাইফসাইকেল কলব্যাক নিবন্ধন করে
+<a href="/docs/engine-api/engine.html"><code>starhermit:engine</code></a>:</p>
+<pre><code class="language-ts">import { frame, onFixedUpdate, onRender, onStart, onUpdate, setFixedRate } from "starhermit:engine";
+import { ACESFilmicToneMapping, PCFSoftShadowMap, PerspectiveCamera, renderer, scene } from "starhermit:scene";
+
+const camera = new PerspectiveCamera(55, 16 / 9, 0.1, 800);
+renderer.camera = camera;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = PCFSoftShadowMap;
+renderer.toneMapping = ACESFilmicToneMapping;
+
+onStart(() =&gt; {
+  setFixedRate(60);
+  loadLanguages(); // string tables (step 10)
+  sim();           // evaluate server.js once (step 6)
+  menuScene.start(); // an AI-vs-AI match behind the menu
+  // … platform listeners, settings listeners, invite polling
+});
+
+onFixedUpdate((step) =&gt; {
+  if (match) match.fixedStep(step);
+  else if (!replay) menuScene.fixedStep(step);
+});
+
+onUpdate((delta) =&gt; {
+  pollQuality();
+  if (match) match.update(Math.min(delta, 0.1));
+  // … replay viewer or menu backdrop
+});
+
+onRender(() =&gt; {
+  const fr = frame();
+  if (Math.abs(camera.aspect - fr.width / fr.height) &gt; 1e-6) {
+    camera.aspect = fr.width / fr.height;
+    camera.updateProjectionMatrix();
+  }
+  hud.draw();
+  // … chat, in-match menu or the menu screens
+});
+</code></pre>
+<p>অনুলিপি করার প্যাটার্ন:</p>
+<ul>
+<li><strong>সিমুলেশন সঞ্চালিত হয় <code>onFixedUpdate</code></strong>, একটি নির্দিষ্ট 60 Hz এ।</li>
+<li><strong>প্রতি-ফ্রেমে লজিক চলে <code>onUpdate</code></strong>, সঙ্গে <code>delta</code> আটকানো যাতে একটি স্থবির ফ্রেম তৈরি না হয়
+খেলোয়াড়রা লাফ দেয়।</li>
+<li><strong>অঙ্কন চলে <code>onRender</code>.</strong> প্রতিটি কলব্যাক শুধুমাত্র একটি আছে, তাই <code>main.ts</code> ভক্তদের আউট
+বর্তমান পর্দা: মেনু, লবি, ম্যাচ, রিপ্লে বা ফলাফল।</li>
+</ul>
+<h2 id="3-the-3d-world-starhermitscene">3. 3D বিশ্ব: <code>starhermit:scene</code></h2>
+<p>স্টেডিয়াম, ফুটবলার, বল এবং কর্মকর্তারা সাধারণ থ্রি.জেএস-স্টাইলের বস্তু
+<a href="/docs/engine-api/scene.html"><code>starhermit:scene</code></a>: <code>Mesh</code>, <code>Group</code>, <code>MeshStandardMaterial</code>,
+<code>CylinderGeometry</code>, <code>Sprite</code>, <code>CanvasTexture</code> এবং তাই তিন.js থেকে পোর্ট করা কোড বেশিরভাগ কাজ করে
+অপরিবর্তিত পড়ার মতো কিছু বিবরণ:</p>
+<ul>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/world/stadium.ts"><code>world/stadium.ts</code></a>
+পিচ, স্ট্যান্ড, ফ্লাডলাইট এবং কুয়াশা তৈরি করে। এটি পোস্ট প্রভাব সেট করে (<code>renderer.bloom</code>,
+<code>renderer.grade</code>, <code>renderer.antialias</code>) এবং প্রতিটি গ্রাফিক্স স্তরের জন্য ছায়া।</li>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/world/environment.ts"><code>world/environment.ts</code></a>
+দিয়ে একটি পরিবেশ মানচিত্র তৈরি করে <code>PMREMGenerator</code> থেকে a <code>DataTexture</code>.</li>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/world/crest.ts"><code>world/crest.ts</code></a>
+এবং <code>world/nametags.ts</code> একটি উপর দলের ক্রেস্ট এবং ভাসমান ডাকনাম আঁকা
+<a href="/docs/engine-api/canvas.html"><code>starhermit:canvas</code></a> <code>OffscreenCanvas</code>, তারপর তাদের হিসাবে ব্যবহার করুন
+<code>CanvasTexture</code>s এবং <code>Sprite</code>s.</li>
+</ul>
+<h2 id="4-thousands-of-moving-parts-starhermitworld">4. হাজার হাজার চলমান অংশ: <code>starhermit:world</code></h2>
+<p>22 জন ফুটবলারকে যুগ্মভাবে অ্যানিমেট করা, প্লাস হাজার হাজার ভিড়ের সদস্য, খুব ধীর হবে
+নেটিভ ইন্টারপ্রেটারে প্রতি-অবজেক্ট স্ক্রিপ্ট। ফুটবল যে কাজ করে
+<a href="/docs/engine-api/world.html"><code>starhermit:world</code></a> <strong>টেবিল</strong> (টাইপ করা কলামের সারি) এবং <strong>কার্নেল</strong>
+(রানটাইমটি নেটিভভাবে প্রতিটি সারির উপর চলে)</p>
+<pre><code class="language-ts">import { kernel, schedule, table } from "starhermit:world";
+
+const crowd = table("crowd", CROWD_ROWS, {
+  bx: "f32", by: "f32", bz: "f32", ph: "f32", fr: "f32", av: "f32",
+  q: "quat", s: "f32", sy: "f32", x: "f32", y: "f32", z: "f32",
+});
+const sway = kernel(crowd, (r, u: { t: number; amp: number; spd: number; sway: number; shake: number }) =&gt; {
+  const j = Math.sin(u.t * u.spd * r.fr + r.ph);
+  r.y = r.by + (j &gt; 0 ? j * j : 0) * u.amp * r.av;
+  // …
+});
+// An eighth of the crowd each frame: the work is sliced across frames.
+const swayRun = schedule.update(sway, { t: 0, amp: 0, spd: 0, sway: 0, shake: 0 }, { slices: 8 });
+</code></pre>
+<p>ফুটবলার ঢুকে পড়ে
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/world/rig.ts"><code>world/rig.ts</code></a>
+একই পদ্ধতি ব্যবহার করুন। ক <code>rigs</code> টেবিলে প্রতিটি ফুটবলারের অ্যানিমেশন অবস্থা রয়েছে। ক <code>joints</code> টেবিল
+সঙ্গে a <code>ref:rigs</code> কলাম, প্রতি রিগ 15 জয়েন্ট ধারণ করে, এবং <strong>বাঁধাই</strong> এটি থেকে দৃশ্য নোডগুলি চালান।
+দুটি কার্নেল পরে নির্ধারিত <code>onUpdate</code> ভঙ্গি গণনা করে, এবং রানটাইম নোড লিখে
+নিজেকে রূপান্তরিত করে। প্রতি ফুটবলার স্ক্রিপ্টের কাজ প্রায় এক ডজন সংখ্যার ফ্রেমে আসে।</p>
+<h2 id="5-input-actions-touch-and-gamepads">5. ইনপুট: অ্যাকশন, টাচ এবং গেমপ্যাড</h2>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/input.ts"><code>engine/src/input.ts</code></a>
+এর মাধ্যমে ম্যানিফেস্টের কাজ পড়ে <a href="/docs/engine-api/input.html"><code>starhermit:input</code></a>:</p>
+<ul>
+<li><code>value(action)</code> একটি ক্রিয়া কতদূর অনুষ্ঠিত হয় তা ফেরত দেয় (আন্দোলন হল <code>value("up") - value("down")</code>).
+<code>onAction</code> প্রেস এবং রিলিজ প্রান্ত প্রদান করে।</li>
+<li>মাউস লুক ব্যবহার করে <code>requestPointerLock</code>, <code>onPointerDelta</code> এবং <code>onPointerLockChange</code>. ক্যামেরার
+ডান লাঠি থেকে আসে <code>gamepads()</code>, এবং <code>vibrate</code> একটি ছোট হ্যাপটিক টিক দেয়।</li>
+<li>টাচ স্ক্রিনে (<code>primaryPointer()</code> মোটা) <code>setTouchControls</code> একটি জয়স্টিক দেখায় এবং
+রানটাইম দ্বারা আঁকা শ্যুট/পাস/ট্যাকল বোতাম। বোতামগুলি একই ক্রিয়াতে আবদ্ধ:</li>
+</ul>
+<pre><code class="language-ts">setTouchControls([
+  { kind: "stick", up: "up", down: "down", left: "left", right: "right", anchor: "bottom-left", offset: [90, 90], radius: 66 },
+  { kind: "button", action: "shoot", label: T("SHOOT").slice(0, 16), anchor: "bottom-right", offset: [66, 66], radius: 46 },
+  // … PASS and TACKLE
+]);
+</code></pre>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/screens/controls.ts"><code>screens/controls.ts</code></a>
+বর্তমানের তালিকা করে <code>bindings()</code> এবং কল <code>requestRebind</code>. রানটাইম তখন নতুন কী ক্যাপচার করে বা
+বোতাম</p>
+<h2 id="6-one-simulation-for-client-and-server-starhermitscript">6. ক্লায়েন্ট এবং সার্ভারের জন্য একটি সিমুলেশন: <code>starhermit:script</code></h2>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/server.js"><code>server.js</code></a>
+কোনো আমদানি ছাড়াই একটি সাধারণ ক্লাসিক স্ক্রিপ্ট, <code>Date</code> বা <code>Math.random</code>, প্ল্যাটফর্মের স্যান্ডবক্স হিসাবে
+প্রয়োজন এটি দুটি বিশ্বকে সংজ্ঞায়িত করে:</p>
+<ul>
+<li>
+<p><code>globalThis.game</code> প্ল্যাটফর্ম এন্ট্রি পয়েন্ট ধরে রাখে (<code>createSession</code>, <code>onPlayerMessage</code>, <code>onTick</code>)
+এবং স্ট্যাটিক ঘোষণা প্রকাশের সময় পড়া হয়:</p>
+<pre><code class="language-js">globalThis.game = {
+  tickRateHz: 30,
+  replays: true,
+  achievements: [
+    { key: 'debut', name: 'Debut', description: 'Finish your first match.', points: 10 },
+    { key: 'hat-trick', name: 'Hat-Trick', description: 'Score three goals in one match.', points: 50 },
+    // …
+  ],
+  createSession: function (ctx) { /* seats, AI, seed from ctx.random */ },
+  // …
+};
+</code></pre>
+</li>
+<li>
+<p><code>globalThis.FootballSim</code> একই সিমুলেশন ধারণ করে (<code>createMatch</code>, <code>stepMatch</code>, AI) এর জন্য
+ক্লায়েন্ট</p>
+</li>
+</ul>
+<p>ক্লায়েন্ট একই ফাইলটি তার নিজস্ব রাজ্যে লোড করে <code>loadClassic</code> থেকে
+<a href="/docs/engine-api/script.html"><code>starhermit:script</code></a>
+(<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/sim.ts"><code>engine/src/sim.ts</code></a>):</p>
+<pre><code class="language-ts">import { loadClassic } from "starhermit:script";
+
+loadClassic("server.js");
+const S = (globalThis as unknown as { FootballSim?: FootballSimApi }).FootballSim;
+</code></pre>
+<p>অফলাইন অনুশীলন পদক্ষেপ <code>FootballSim</code> স্থানীয়ভাবে 60 Hz-এ AI সহ প্রতিটি অন্য সিটে। অনলাইন, দ
+প্ল্যাটফর্ম চলে <code>server.js</code> অনুমোদিতভাবে 30 Hz এ। গেমটি কখনই এর দুটি কপি বজায় রাখে না
+নিয়ম</p>
+<h2 id="7-online-matches-rooms-and-game-sockets">7. অনলাইন ম্যাচ: রুম এবং গেম সকেট</h2>
+<p>লবি প্ল্যাটফর্মের কক্ষগুলি ব্যবহার করে <a href="/docs/engine-api/platform.html"><code>starhermit:platform</code></a>
+(<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/screens/lobby.ts"><code>screens/lobby.ts</code></a>):</p>
+<pre><code class="language-ts">import * as P from "starhermit:platform";
+
+// Quick play: join any open room, or open one.
+let room = await P.rooms.quickJoin();
+if (!room) {
+  room = await P.rooms.create({ teamCount: 2, seatsPerTeam: teamSize, backfillAfterSeconds: 30, metadata: { game: "football" } });
+  room = await P.rooms.open(room.id);
+}
+
+// Ranked solo vs AI: every other seat is an AI player, so starting begins the match at once.
+room = await P.rooms.create({ teamCount: 2, seatsPerTeam: teamSize, backfillAfterSeconds: 30, aiPlayers: 2 * teamSize - 1, metadata: { game: "football" } });
+room = await P.rooms.start(room.id);
+</code></pre>
+<p>বন্ধুরা, আমন্ত্রণ এবং আসন পরিবর্তনের মধ্য দিয়ে যায় <code>P.friends.list</code>, <code>P.rooms.invite</code>,
+<code>P.rooms.acceptInvite</code> এবং <code>P.rooms.seat</code>. <code>P.rooms.mine</code> একজন খেলোয়াড়কে তাদের ছেড়ে যাওয়া ম্যাচে পুনরায় যোগদান করতে দেয়।</p>
+<p>ম্যাচ শুরু হলেই,
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/net.ts"><code>engine/src/net.ts</code></a>
+দিয়ে গেম সকেট খোলে <code>P.connectGame(sessionId)</code>:</p>
+<ul>
+<li>এটি 30 Hz এ ইনপুট পাঠায় <code>sendInput</code>.</li>
+<li>এটি একটি সম্পূর্ণ স্ন্যাপশট জন্য জিজ্ঞাসা <code>sendCommand({ type: "sync" })</code> প্রতিটি খোলা এবং উপর
+<code>resumed</code>.</li>
+<li>এটা জন্য শোনে <code>game</code> (স্ন্যাপশট এবং ঘটনা), <code>achievement</code> এবং <code>stopped</code>. <code>stopped</code> কেন রিপোর্ট
+সকেট বন্ধ: সাইন আউট, আপডেট শর্তাবলী, বা ম্যাচ চলে গেছে।</li>
+</ul>
+<p>রানটাইম প্লেয়ারের শংসাপত্র ধারণ করে এবং নিজে থেকেই পুনরায় সংযোগ করে, তাই গেমটি কোনও টোকেন পরিচালনা করে না
+এবং কোন পুনঃপ্রচার লুপ নেই।</p>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/logic/interp.ts"><code>logic/interp.ts</code></a>
+অভিযোজিত ইন্টারপোলেশন সহ সার্ভারের স্ন্যাপশটগুলিকে মসৃণ করে।
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/logic/predict.ts"><code>logic/predict.ts</code></a>
+স্থানীয় ফুটবলারের গতিবিধি ভবিষ্যদ্বাণী করে এবং প্রতিটি স্ন্যাপশটের দিকে তা সংশোধন করে। ভবিষ্যদ্বাণী প্রভাবিত করে
+শুধুমাত্র যা আঁকা হয়; সার্ভার কর্তৃত্বপূর্ণ থাকে।</p>
+<h2 id="8-the-rest-of-the-platform">8. প্ল্যাটফর্ম বাকি</h2>
+<table>
+<thead>
+<tr>
+<th>বৈশিষ্ট্য</th>
+<th>কল</th>
+<th>উৎস</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>সাইন-ইন করা প্লেয়ার, সাইন-ইন, সেশন শেষ</td>
+<td><code>P.player()</code>, <code>P.onPlayerChange</code>, <code>P.requestSignIn</code>, <code>P.onSessionEnded</code></td>
+<td><code>platform.ts</code>, <code>main.ts</code></td>
+</tr>
+<tr>
+<td>লিডারবোর্ড</td>
+<td><code>P.leaderboards.list</code>, <code>P.leaderboards.entries</code> (বোর্ড ঘোষিত <code>leaderboards.json</code>)</td>
+<td><code>screens/leaderboard.ts</code></td>
+</tr>
+<tr>
+<td>অর্জন</td>
+<td>মধ্যে ঘোষিত <code>server.js</code>, পূর্ণ সময় পুরস্কার, সঙ্গে তালিকাভুক্ত <code>P.achievements.list</code></td>
+<td><code>screens/achievements.ts</code></td>
+</tr>
+<tr>
+<td>রিপ্লে</td>
+<td><code>game.replays: true</code> মধ্যে <code>server.js</code>; <code>P.replays.list</code>, <code>P.replays.get</code></td>
+<td><code>screens/replays.ts</code>, <code>replayView.ts</code></td>
+</tr>
+<tr>
+<td>টেক্সট চ্যাট</td>
+<td><code>P.sessions.get</code> (ম্যাচের কথোপকথন), <code>P.chat.messages</code>, <code>P.chat.subscribe</code>, <code>P.chat.post</code></td>
+<td><code>chat.ts</code></td>
+</tr>
+<tr>
+<td>ভয়েস চ্যাট</td>
+<td><code>P.voice.join</code>, <code>P.voice.setVolume</code> এবং <code>P.voice.setPan</code> ফুটবলারদের মধ্যে দূরত্ব দ্বারা, <code>P.voice.setMuted</code></td>
+<td><code>voice.ts</code></td>
+</tr>
+<tr>
+<td>আমন্ত্রণ লিঙ্ক</td>
+<td><code>P.inviteLink</code> এবং <code>clipboard</code> থেকে <code>starhermit:engine</code></td>
+<td><code>platform.ts</code></td>
+</tr>
+<tr>
+<td>বাগ রিপোর্ট</td>
+<td><code>P.reportBug</code></td>
+<td><code>screens/settings.ts</code></td>
+</tr>
+</tbody>
+</table>
+<p>প্রতিটি কল একটি দিয়ে প্রত্যাখ্যান করতে পারে <code>PlatformError</code>. ফুটবল অনলাইন বৈশিষ্ট্যগুলিকে সর্বোত্তম প্রচেষ্টা হিসাবে বিবেচনা করে: ক
+ব্যর্থতা দেখায় "অনলাইন অনুপলব্ধ" অথবা নীরবতা ফিরে পড়ে, এবং খেলা শেষ হয় না. সাইন আউট,
+গেমটি এখনও অফলাইন অনুশীলন অফার করে।</p>
+<h2 id="9-menus-and-hud-starhermitui-starhermitdraw-starhermitcanvas">9. মেনু এবং HUD: <code>starhermit:ui</code>, <code>starhermit:draw</code>, <code>starhermit:canvas</code></h2>
+<ul>
+<li><strong>মেনু</strong> (<code>screens/*.ts</code>, ইন-ম্যাচ মেনু এবং ডায়ালগ ইন <code>main.ts</code>) ব্যবহার করুন
+<a href="/docs/engine-api/ui.html"><code>starhermit:ui</code></a>, ইঞ্জিনের তাৎক্ষণিক-মোড UI। উইজেট প্রতিটি বলা হয়
+ফ্রেম থেকে <code>onRender</code>, এবং <code>ui.setTheme</code> তাদের খেলার রং দেয়। রানটাইম এর নিজস্ব বিকল্প
+এর সাথে মেনু খোলে <code>openMenu</code>.</li>
+<li><strong>HUD</strong> (
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/hud.ts"><code>hud.ts</code></a>)
+স্কোরবোর্ড, ঘড়ি এবং মার্কারগুলি আঁকে <a href="/docs/engine-api/draw.html"><code>starhermit:draw</code></a>:
+<code>draw.roundRect</code>, <code>draw.text</code> এবং <code>draw.image</code> (একটি ক্রেস্ট ক্যানভাস), দৃশ্যের উপর কল অর্ডারে।</li>
+<li><strong>ছবি</strong> সঙ্গে লোড করা হয় <code>createImageBitmap</code> থেকে <a href="/docs/engine-api/canvas.html"><code>starhermit:canvas</code></a>,
+উদাহরণস্বরূপ মেনুর মূল শিল্প।</li>
+</ul>
+<h2 id="10-settings-and-languages-starhermitstorage-strings">10. সেটিংস এবং ভাষা: <code>starhermit:storage</code>, স্ট্রিং</h2>
+<ul>
+<li>প্রতি-প্লেয়ার সেটিংস (নিঃশব্দ, ভয়েস, ভাষা, গ্রাফিক্স ওভাররাইড) লাইভ ইন <code>settings</code> থেকে
+<a href="/docs/engine-api/storage.html"><code>starhermit:storage</code></a>. এগুলি ডিভাইসে এবং অ্যাকাউন্টে রাখা হয়।
+<code>settings.onChange</code> অন্য ডিভাইসে করা পরিবর্তন প্রয়োগ করে।</li>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/i18n.ts"><code>i18n.ts</code></a>
+লোড <code>assets/strings.json</code> ইঞ্জিনের মধ্যে <code>strings</code> টেবিল (<code>strings.load</code>, <code>strings.t</code>,
+<code>strings.setLanguage</code>) এটি সংরক্ষিত পছন্দ থেকে ভাষা বেছে নেয়, তারপর প্লেয়ারের
+StarHermit ভাষা, তারপর ডিভাইসের (<code>preferences</code>). <code>l10n/font.ts</code> সঙ্গে স্ক্রিপ্ট ফন্ট লোড
+<code>FontFace</code> যে ভাষার প্রয়োজন তাদের জন্য।</li>
+</ul>
+<h2 id="11-sound-and-graphics-levels">11. সাউন্ড এবং গ্রাফিক্স লেভেল</h2>
+<ul>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/audio.ts"><code>audio.ts</code></a>
+এর সাথে একটি ওয়েব অডিও গ্রাফ তৈরি করে <a href="/docs/engine-api/audio.html"><code>starhermit:audio</code></a>:
+<ul>
+<li>লেখক ক্লিপ তালিকাভুক্ত করা হয় <code>sfx/manifest.json</code> (সহ পড়ুন <code>files.readJson</code>).</li>
+<li>একটি সিনথেসাইজার ক্লিপ ছাড়াই যেকোন ইভেন্টকে কভার করে, প্লাস ভিড় এবং স্টেডিয়াম রিভার্ব।</li>
+<li>স্বল্পস্থায়ী নোডগুলি শেষ হওয়ার সাথে সাথে প্রকাশ করা হয়, কারণ হোস্ট গ্রাফটি আবদ্ধ থাকে।</li>
+</ul>
+</li>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/quality.ts"><code>quality.ts</code></a>
+প্লেয়ারের গ্রাফিক্স স্তর অনুসরণ করে (<code>frame().level</code>, <code>levelSettings</code>) ছায়া, পুষ্প এবং
+অ্যান্টি-আলিয়াসিং সেই স্তর অনুসরণ করুন। গেমের নিজস্ব বিষয়বস্তু (পিচের বিস্তারিত, ভিড়ের ঘনত্ব, কণা)
+শীর্ষে প্রতি খেলোয়াড় ওভাররাইড আছে।</li>
+</ul>
+<h2 id="12-package-test-and-publish">12. প্যাকেজ, পরীক্ষা এবং প্রকাশ</h2>
+<ul>
+<li><strong>টাইপ-চেক</strong> সঙ্গে <code>tsc -p engine</code>.
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/tsconfig.json"><code>engine/tsconfig.json</code></a>
+রিলিজ এর অন্তর্ভুক্ত <code>starhermit.d.ts</code> এবং সেট <code>"lib": ["ES2022"]</code>, <code>"types": []</code> এবং
+<code>"allowImportingTsExtensions": true</code>.</li>
+<li><strong>পরীক্ষা।</strong> <code>npm test</code> রান <code>server.js</code> রিগ্রেশন পরীক্ষা। <code>engine/tests/run.sh</code> যুক্তি চালায়
+নোডের অধীনে পরীক্ষা (ইন্টারপোলেশন, ভবিষ্যদ্বাণী, ভঙ্গি, লবি)। <code>starhermit &lt;folder&gt; --check</code>
+প্যাকেজ যাচাই করে এবং হেডলেস 120 ফ্রেম চালায়।</li>
+<li><strong>প্যাকেজ।</strong> <code>starhermit package --web .</code> পুনর্লিখন <code>index.html</code> এবং <code>starhermit-files.json</code>,
+যা প্রতিটি পরিবর্তনের সাথে প্রতিশ্রুতিবদ্ধ।</li>
+<li><strong>প্রকাশ করুন।</strong> গেমটি StarHermit-এ এর রিপোজিটরি URL থেকে যোগ করা হয়েছে। প্ল্যাটফর্ম পড়ে
+<code>starhermit.txt</code>, রান <code>server.js</code> ম্যাচ স্ক্রিপ্ট হিসাবে এবং থেকে লিডারবোর্ড তৈরি করে
+<code>leaderboards.json</code>.</li>
+</ul>
+<p>ফুটবল বা আপনার নিজের খেলাকে ইঞ্জিন 1.40.0 এ সরাতে:</p>
+<ol>
+<li>1.40.0 রানটাইম ডাউনলোড করুন।</li>
+<li>সেট <code>engine.version=1.40.0</code>.</li>
+<li>আবার চেক এবং প্যাকেজ চালান.</li>
+</ol>
+<p>বাড়ান <code>engine.minor</code> 40 তে শুধুমাত্র যখন আপনি হোস্ট API 1.40 চান
+<a href="/bn/docs/engine-features.html">নতুন বৈশিষ্ট্য</a>.</p>
+
+{% endraw %}

@@ -33,6 +33,7 @@ export const ui = {
   scroll_diagram: 'Scrollable diagram',
   translation_notice: 'Machine translation. Code examples and API identifiers are preserved in English.',
   original: 'Read the English original',
+  engine_api: 'Engine API reference', football: 'Example game: Football',
 };
 export const sha = s => createHash('sha256').update(s).digest('hex');
 const md = new MarkdownIt({ html: true });
@@ -47,6 +48,8 @@ async function markdownFiles(dir) {
   const paths = [];
   for (const entry of await readdir(resolve(root, dir), { withFileTypes: true })) {
     const path = `${dir}/${entry.name}`;
+    // The generated engine API reference is English only (scripts/build-engine-reference.mjs).
+    if (path === 'docs/engine-api') continue;
     if (entry.isDirectory()) paths.push(...await markdownFiles(path));
     else if (entry.name.endsWith('.md')) paths.push(path);
   }

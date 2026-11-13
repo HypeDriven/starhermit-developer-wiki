@@ -37,5 +37,9 @@ it. The API detail belongs in the pages themselves, not in `spec.md`.
   `/ws/**`, camelCase JSON, errors as `{"error":"..."}`.
 - Sibling game projects read `docs/api/*` from this checkout rather than fetching the live site, so a local
   edit is immediately load-bearing for them.
+- The engine API reference (`docs/engine-api/`, generated) and the engine example pages (the engine
+  tutorial and `docs/tutorials/football.md`) describe the **latest engine release only** — no per-version
+  copies. After an engine release lands in `engine/`, run `npm run engine-reference` and bring the
+  tutorial and Football walkthrough to the new version; `npm test` fails until you do.
 - Update `README.md`'s reference table whenever a page is added, removed or repurposed; it is the landing
   page's index.

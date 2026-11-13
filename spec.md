@@ -22,7 +22,8 @@ and second-language speakers in the Ethnologue 2026 ranking. Local SVG country f
 which also works without JavaScript. Flags render as images rather than relying on emoji fonts.
 English remains at its existing URLs;
 the nine other locales have static pages at `/<language>/` and `/<language>/docs/...html`, generated
-under `l10n/`. All 48 public documents, navigation labels, accessibility labels, and seven SVG diagrams
+under `l10n/`. All public documents except the generated engine API reference (`docs/engine-api/`,
+English only), navigation labels, accessibility labels, and seven SVG diagrams
 are translated. Arabic and Urdu use right-to-left layouts; code remains left-to-right. Heading IDs,
 code examples, API identifiers, downloadable examples, and contracts retain their original values.
 Links and the language selector keep readers on the corresponding page and preserve section anchors.
@@ -73,6 +74,22 @@ patterns, not the subject of the docs.
   the integrity chain, loading the web runtime from `engine.starhermit.com`, what the platform does for a game that
   declares `engine.version` (deploy record and warning, Content-Security-Policy), and revocations. The wiki carries
   no release list or per-release notes; the API is the source.
+- `docs/engine-api/` — the engine API reference: one page per `starhermit:*` module plus globals and an
+  index with the conventions for every module, **generated** by `scripts/build-engine-reference.mjs`
+  (`npm run engine-reference`, TypeScript's parser) from `engine/<latest>/starhermit.d.ts`, the newest
+  unrevoked release in `engine/versions.json`. It covers the **latest release only**; older releases'
+  games use their own `.starhermit/starhermit.d.ts`. Pages carry `english_only: true`: they are left out
+  of localization (the layout hides the language picker and alternates there, and localized pages link
+  to the English reference). Never edit them by hand; `npm test` fails when they are not current with
+  the latest release, so after every engine release run `npm run engine-reference` and commit.
+- `docs/tutorials/football.md` — the engine example: a step-by-step breakdown of how the public game
+  [starhermit-football](https://github.com/HypeDriven/starhermit-football) uses the engine (manifest,
+  lifecycle, scene, `starhermit:world` tables and kernels, input and touch, `server.js` shared through
+  `loadClassic`, rooms and game sockets with interpolation and prediction, leaderboards, achievements,
+  replays, chat, voice, UI, storage and strings, audio, graphics levels, packaging and publishing), with
+  source links pinned to a commit. Like the engine tutorial it describes the **latest engine release
+  only** (`npm test` checks both name it); when the engine releases, re-check it and update its version
+  and any changed API.
 - `docs/engine-features.md` — an overview of host API 1.40's script-game features by area (physics,
   vehicles, sky and weather, water, surfaces and grass, CPU and GPU particles, TAA and screen-space
   effects, shadows, compressed textures, animation, levels of detail): the `engine.minor=40` opt-in,

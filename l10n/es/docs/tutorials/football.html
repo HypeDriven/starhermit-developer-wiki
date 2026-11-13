@@ -1,0 +1,402 @@
+---
+layout: "wiki"
+lang: "es"
+title: "Juego de ejemplo: cómo el fútbol utiliza el motor StarHermit"
+source_url: "/docs/tutorials/football.html"
+source_path: "docs/tutorials/football.md"
+source_hash: "d083140f127033bfc8459dca9170b7a0d32d7c0a97fe4cdf6ebe96758f8ba2ce"
+translation: "machine"
+permalink: "/es/docs/tutorials/football.html"
+---
+{% raw %}
+<h1 id="example-game-how-football-uses-the-starhermit-engine">Juego de ejemplo: cómo el fútbol utiliza el motor StarHermit</h1>
+<p><a href="https://github.com/HypeDriven/starhermit-football">Fútbol StarHermit</a> es un publico, completo
+juego de guión. Es fútbol en 3D en tiempo real para 1 a 22 jugadores, con compañeros de equipo AI, un foco iluminado
+estadio, vestíbulos en línea, chat de voz y texto, repeticiones, tabla de clasificación, logros y nueve
+idiomas. Esta página lo desmonta paso a paso para mostrar cómo un juego real utiliza el motor. cada uno
+El paso nombra los módulos del motor involucrados y enlaza a la fuente del juego, donde puedes leer el
+código completo.</p>
+<p>Este tutorial está escrito para el motor. <strong>1.40.0</strong>, la última versión. Cada llamada mostrada está listada
+en el <a href="/docs/engine-api/index.html">referencia de API del motor</a>. Lea el
+<a href="/es/docs/tutorials/starhermit-engine.html">tutorial del motor</a> primero si aún no has creado un juego de script.</p>
+<p>Los enlaces de origen apuntan al compromiso
+<a href="https://github.com/HypeDriven/starhermit-football/tree/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f"><code>33bd9bd</code></a>.
+En ese compromiso, el juego fija el motor 1.39.0 con <code>engine.minor=39</code>. No utiliza nada más nuevo, por lo que
+se ejecuta sin cambios en 1.40.0; moverlo es un cambio de una línea a <code>engine.version</code> (ver
+<a href="#12-package-test-and-publish">paso 12</a>).</p>
+<h2 id="the-shape-of-the-game">La forma del juego.</h2>
+<table>
+<thead>
+<tr>
+<th>Camino</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>starhermit.txt</code></td>
+<td>El manifiesto: nombre, pin del motor, script del servidor, controles, capacidades</td>
+</tr>
+<tr>
+<td><code>server.js</code></td>
+<td>La simulación de un partido: ejecutada por la plataforma como servidor autorizado y cargada por el cliente para practicar y predecir fuera de línea.</td>
+</tr>
+<tr>
+<td><code>engine/src/main.ts</code></td>
+<td>El módulo de entrada: devoluciones de llamada del ciclo de vida y la máquina de estado de las pantallas</td>
+</tr>
+<tr>
+<td><code>engine/src/match.ts</code>, <code>logic/</code></td>
+<td>Flujo de coincidencias, código de red, interpolación y predicción.</td>
+</tr>
+<tr>
+<td><code>engine/src/world/</code></td>
+<td>El estadio, los futbolistas, el balón y el público en el escenario 3D</td>
+</tr>
+<tr>
+<td><code>engine/src/screens/</code>, <code>hud.ts</code></td>
+<td>Menús (<code>starhermit:ui</code>) y el HUD del partido (<code>starhermit:draw</code>)</td>
+</tr>
+<tr>
+<td><code>engine/src/net.ts</code>, <code>platform.ts</code>, <code>chat.ts</code>, <code>voice.ts</code></td>
+<td>Todo lo que habla de la plataforma StarHermit</td>
+</tr>
+<tr>
+<td><code>engine/src/audio.ts</code>, <code>i18n.ts</code>, <code>quality.ts</code></td>
+<td>Niveles de sonido, idiomas y gráficos.</td>
+</tr>
+<tr>
+<td><code>assets/</code>, <code>sfx/</code></td>
+<td>Imágenes, tablas de cuerdas y clips de sonido.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="1-the-manifest">1. El manifiesto</h2>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/starhermit.txt"><code>starhermit.txt</code></a>
+convierte la carpeta en un juego de script y también declara el script del servidor y los controles:</p>
+<pre><code class="language-text">name=Football
+launch=index.html
+server=server.js
+control.up=KeyW+ArrowUp | Run forward
+control.shoot=Space+KeyJ | Shoot (hold) / tap to pass
+control.tackle=KeyK | Slide tackle / pressure
+engine.api=1
+engine.entry=engine/src/main.ts
+engine.version=1.39.0
+engine.minor=39
+engine.capabilities=platform,voice,clipboard,storage
+engine.gamepad.shoot=West+RightTrigger
+engine.gamepad.pass=South
+</code></pre>
+<ul>
+<li><code>launch=index.html</code> es la página del cargador que <code>starhermit package --web</code> escribe. juega el juego
+en los navegadores en el tiempo de ejecución web de la versión anclada.</li>
+<li><code>server=server.js</code> es el script de coincidencia autorizado de la plataforma (paso 6).</li>
+<li><code>control.*</code> y <code>engine.gamepad.*</code> las líneas definen <strong>comportamiento</strong>. El tiempo de ejecución les vincula claves y pads,
+y los jugadores los vuelven a vincular en el menú de Opciones del tiempo de ejecución. El juego nunca menciona una clave para el juego.</li>
+<li><code>engine.capabilities</code> solicita la plataforma (salas, enchufes, tablas de clasificación, repeticiones, chat), voz,
+el portapapeles (enlaces de invitación) y el almacenamiento (configuraciones). El tiempo de ejecución rechaza llamadas fuera de ellos.</li>
+</ul>
+<p>La lista completa de claves está en <a href="/es/docs/starhermit-txt.html">el <code>starhermit.txt</code> manifiesto</a>.</p>
+<h2 id="2-the-entry-module-and-the-frame-loop">2. El módulo de entrada y el bucle del marco.</h2>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/main.ts"><code>engine/src/main.ts</code></a>
+configura el renderizador en el alcance del módulo, luego registra las cuatro devoluciones de llamadas del ciclo de vida de
+<a href="/docs/engine-api/engine.html"><code>starhermit:engine</code></a>:</p>
+<pre><code class="language-ts">import { frame, onFixedUpdate, onRender, onStart, onUpdate, setFixedRate } from "starhermit:engine";
+import { ACESFilmicToneMapping, PCFSoftShadowMap, PerspectiveCamera, renderer, scene } from "starhermit:scene";
+
+const camera = new PerspectiveCamera(55, 16 / 9, 0.1, 800);
+renderer.camera = camera;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = PCFSoftShadowMap;
+renderer.toneMapping = ACESFilmicToneMapping;
+
+onStart(() =&gt; {
+  setFixedRate(60);
+  loadLanguages(); // string tables (step 10)
+  sim();           // evaluate server.js once (step 6)
+  menuScene.start(); // an AI-vs-AI match behind the menu
+  // … platform listeners, settings listeners, invite polling
+});
+
+onFixedUpdate((step) =&gt; {
+  if (match) match.fixedStep(step);
+  else if (!replay) menuScene.fixedStep(step);
+});
+
+onUpdate((delta) =&gt; {
+  pollQuality();
+  if (match) match.update(Math.min(delta, 0.1));
+  // … replay viewer or menu backdrop
+});
+
+onRender(() =&gt; {
+  const fr = frame();
+  if (Math.abs(camera.aspect - fr.width / fr.height) &gt; 1e-6) {
+    camera.aspect = fr.width / fr.height;
+    camera.updateProjectionMatrix();
+  }
+  hud.draw();
+  // … chat, in-match menu or the menu screens
+});
+</code></pre>
+<p>El patrón a copiar:</p>
+<ul>
+<li><strong>La simulación se ejecuta <code>onFixedUpdate</code></strong>, a 60 Hz fijos.</li>
+<li><strong>La lógica por cuadro se ejecuta <code>onUpdate</code></strong>, con <code>delta</code> tapado para que un marco estancado no haga
+los jugadores saltan.</li>
+<li><strong>El dibujo se ejecuta <code>onRender</code>.</strong> Sólo hay una de cada devolución de llamada, por lo que <code>main.ts</code> abanicos hacia el
+pantalla actual: menú, lobby, partido, repetición o resultado.</li>
+</ul>
+<h2 id="3-the-3d-world-starhermitscene">3. El mundo 3D: <code>starhermit:scene</code></h2>
+<p>El estadio, los futbolistas, el balón y los árbitros son objetos ordinarios de estilo three.js de
+<a href="/docs/engine-api/scene.html"><code>starhermit:scene</code></a>: <code>Mesh</code>, <code>Group</code>, <code>MeshStandardMaterial</code>,
+<code>CylinderGeometry</code>, <code>Sprite</code>, <code>CanvasTexture</code> etcétera. El código portado desde three.js funciona principalmente
+sin cambios. Algunos detalles que vale la pena leer:</p>
+<ul>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/world/stadium.ts"><code>world/stadium.ts</code></a>
+construye el campo, las gradas, los focos y la niebla. Establece los efectos posteriores (<code>renderer.bloom</code>,
+<code>renderer.grade</code>, <code>renderer.antialias</code>) y sombras para cada nivel de gráficos.</li>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/world/environment.ts"><code>world/environment.ts</code></a>
+hace un mapa del entorno con <code>PMREMGenerator</code> de un <code>DataTexture</code>.</li>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/world/crest.ts"><code>world/crest.ts</code></a>
+y <code>world/nametags.ts</code> dibujar escudos de equipo y apodos flotantes en un
+<a href="/docs/engine-api/canvas.html"><code>starhermit:canvas</code></a> <code>OffscreenCanvas</code>, luego úselos como
+<code>CanvasTexture</code>arena <code>Sprite</code>s.</li>
+</ul>
+<h2 id="4-thousands-of-moving-parts-starhermitworld">4. Miles de piezas móviles: <code>starhermit:world</code></h2>
+<p>Animar a 22 futbolistas porro, además de miles de espectadores, sería demasiado lento ya que
+script por objeto en el intérprete nativo. Movimientos de fútbol que funcionan
+<a href="/docs/engine-api/world.html"><code>starhermit:world</code></a> <strong>mesas</strong> (filas de columnas escritas) y <strong>granos</strong>
+(funciona el tiempo de ejecución se ejecuta en cada fila de forma nativa):</p>
+<pre><code class="language-ts">import { kernel, schedule, table } from "starhermit:world";
+
+const crowd = table("crowd", CROWD_ROWS, {
+  bx: "f32", by: "f32", bz: "f32", ph: "f32", fr: "f32", av: "f32",
+  q: "quat", s: "f32", sy: "f32", x: "f32", y: "f32", z: "f32",
+});
+const sway = kernel(crowd, (r, u: { t: number; amp: number; spd: number; sway: number; shake: number }) =&gt; {
+  const j = Math.sin(u.t * u.spd * r.fr + r.ph);
+  r.y = r.by + (j &gt; 0 ? j * j : 0) * u.amp * r.av;
+  // …
+});
+// An eighth of the crowd each frame: the work is sliced across frames.
+const swayRun = schedule.update(sway, { t: 0, amp: 0, spd: 0, sway: 0, shake: 0 }, { slices: 8 });
+</code></pre>
+<p>El futbolista se infiltra
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/world/rig.ts"><code>world/rig.ts</code></a>
+utilizar el mismo enfoque. A <code>rigs</code> La tabla contiene el estado de animación de cada futbolista. A <code>joints</code> mesa,
+con un <code>ref:rigs</code> columna, admite 15 uniones por equipo y <strong>fijaciones</strong> expulse los nodos de escena de él.
+Dos núcleos programados después <code>onUpdate</code> calcula las poses y el tiempo de ejecución escribe el nodo
+se transforma. El trabajo de guión por futbolista asciende a una docena de números por fotograma.</p>
+<h2 id="5-input-actions-touch-and-gamepads">5. Entrada: acciones, toques y gamepads</h2>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/input.ts"><code>engine/src/input.ts</code></a>
+lee las acciones del manifiesto a través de <a href="/docs/engine-api/input.html"><code>starhermit:input</code></a>:</p>
+<ul>
+<li><code>value(action)</code> devuelve hasta qué punto se mantiene una acción (el movimiento es <code>value("up") - value("down")</code>).
+<code>onAction</code> Ofrece bordes de presión y liberación.</li>
+<li>Usos de la apariencia del mouse <code>requestPointerLock</code>, <code>onPointerDelta</code> y <code>onPointerLockChange</code>. la cámara
+El joystick derecho proviene de <code>gamepads()</code>, y <code>vibrate</code> da un tic háptico corto.</li>
+<li>En pantallas táctiles (<code>primaryPointer()</code> es grueso), <code>setTouchControls</code> muestra un joystick y
+Botones DISPARAR/PASAR/ENTRAR dibujados por el tiempo de ejecución. Los botones están vinculados a las mismas acciones:</li>
+</ul>
+<pre><code class="language-ts">setTouchControls([
+  { kind: "stick", up: "up", down: "down", left: "left", right: "right", anchor: "bottom-left", offset: [90, 90], radius: 66 },
+  { kind: "button", action: "shoot", label: T("SHOOT").slice(0, 16), anchor: "bottom-right", offset: [66, 66], radius: 46 },
+  // … PASS and TACKLE
+]);
+</code></pre>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/screens/controls.ts"><code>screens/controls.ts</code></a>
+enumera la corriente <code>bindings()</code> y llamadas <code>requestRebind</code>. Luego, el tiempo de ejecución captura la nueva clave o
+botón.</p>
+<h2 id="6-one-simulation-for-client-and-server-starhermitscript">6. Una simulación para cliente y servidor: <code>starhermit:script</code></h2>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/server.js"><code>server.js</code></a>
+es un script clásico simple sin importaciones, <code>Date</code> o <code>Math.random</code>, como sandbox de la plataforma
+requiere. Define dos globales:</p>
+<ul>
+<li>
+<p><code>globalThis.game</code> sostiene los puntos de entrada a la plataforma (<code>createSession</code>, <code>onPlayerMessage</code>, <code>onTick</code>)
+y declaraciones estáticas leídas en el momento de la publicación:</p>
+<pre><code class="language-js">globalThis.game = {
+  tickRateHz: 30,
+  replays: true,
+  achievements: [
+    { key: 'debut', name: 'Debut', description: 'Finish your first match.', points: 10 },
+    { key: 'hat-trick', name: 'Hat-Trick', description: 'Score three goals in one match.', points: 50 },
+    // …
+  ],
+  createSession: function (ctx) { /* seats, AI, seed from ctx.random */ },
+  // …
+};
+</code></pre>
+</li>
+<li>
+<p><code>globalThis.FootballSim</code> tiene la misma simulación (<code>createMatch</code>, <code>stepMatch</code>, la IA) para el
+cliente.</p>
+</li>
+</ul>
+<p>El cliente carga el mismo archivo en su propio dominio con <code>loadClassic</code> de
+<a href="/docs/engine-api/script.html"><code>starhermit:script</code></a>
+(<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/sim.ts"><code>engine/src/sim.ts</code></a>):</p>
+<pre><code class="language-ts">import { loadClassic } from "starhermit:script";
+
+loadClassic("server.js");
+const S = (globalThis as unknown as { FootballSim?: FootballSimApi }).FootballSim;
+</code></pre>
+<p>Pasos de práctica sin conexión <code>FootballSim</code> localmente a 60 Hz con IA en cada dos asientos. En línea, el
+carreras de plataforma <code>server.js</code> autoritariamente a 30 Hz. El juego nunca mantiene dos copias de su
+reglas.</p>
+<h2 id="7-online-matches-rooms-and-game-sockets">7. Partidos online: salas y enchufes de juego</h2>
+<p>Los lobbys utilizan las salas de la plataforma a través de <a href="/docs/engine-api/platform.html"><code>starhermit:platform</code></a>
+(<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/screens/lobby.ts"><code>screens/lobby.ts</code></a>):</p>
+<pre><code class="language-ts">import * as P from "starhermit:platform";
+
+// Quick play: join any open room, or open one.
+let room = await P.rooms.quickJoin();
+if (!room) {
+  room = await P.rooms.create({ teamCount: 2, seatsPerTeam: teamSize, backfillAfterSeconds: 30, metadata: { game: "football" } });
+  room = await P.rooms.open(room.id);
+}
+
+// Ranked solo vs AI: every other seat is an AI player, so starting begins the match at once.
+room = await P.rooms.create({ teamCount: 2, seatsPerTeam: teamSize, backfillAfterSeconds: 30, aiPlayers: 2 * teamSize - 1, metadata: { game: "football" } });
+room = await P.rooms.start(room.id);
+</code></pre>
+<p>Amigos, invitaciones y cambios de asiento pasan <code>P.friends.list</code>, <code>P.rooms.invite</code>,
+<code>P.rooms.acceptInvite</code> y <code>P.rooms.seat</code>. <code>P.rooms.mine</code> permite que un jugador se reincorpore a una partida que abandonó.</p>
+<p>Una vez que comience el partido,
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/net.ts"><code>engine/src/net.ts</code></a>
+abre la ranura del juego con <code>P.connectGame(sessionId)</code>:</p>
+<ul>
+<li>Envía entradas a 30 Hz con <code>sendInput</code>.</li>
+<li>Solicita una instantánea completa con <code>sendCommand({ type: "sync" })</code> en cada apertura y en
+<code>resumed</code>.</li>
+<li>escucha por <code>game</code> (instantáneas y eventos), <code>achievement</code> y <code>stopped</code>. <code>stopped</code> informa por qué
+el socket se detuvo: se cerró sesión, se actualizaron los términos o la coincidencia desapareció.</li>
+</ul>
+<p>El tiempo de ejecución conserva las credenciales del jugador y se vuelve a conectar por sí solo, por lo que el juego no maneja tokens.
+y no tiene bucle de reintento.</p>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/logic/interp.ts"><code>logic/interp.ts</code></a>
+suaviza las instantáneas del servidor con interpolación adaptativa.
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/logic/predict.ts"><code>logic/predict.ts</code></a>
+predice el movimiento del futbolista local y lo corrige hacia cada instantánea. La predicción afecta
+sólo lo que se dibuja; el servidor sigue teniendo autoridad.</p>
+<h2 id="8-the-rest-of-the-platform">8. El resto de la plataforma</h2>
+<table>
+<thead>
+<tr>
+<th>Característica</th>
+<th>llamadas</th>
+<th>Fuente</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Jugador registrado, inicio de sesión, fin de sesión</td>
+<td><code>P.player()</code>, <code>P.onPlayerChange</code>, <code>P.requestSignIn</code>, <code>P.onSessionEnded</code></td>
+<td><code>platform.ts</code>, <code>main.ts</code></td>
+</tr>
+<tr>
+<td>Tabla de clasificación</td>
+<td><code>P.leaderboards.list</code>, <code>P.leaderboards.entries</code> (junta declarada en <code>leaderboards.json</code>)</td>
+<td><code>screens/leaderboard.ts</code></td>
+</tr>
+<tr>
+<td>Logros</td>
+<td>Declarado en <code>server.js</code>, otorgado a tiempo completo, cotizado con <code>P.achievements.list</code></td>
+<td><code>screens/achievements.ts</code></td>
+</tr>
+<tr>
+<td>Repeticiones</td>
+<td><code>game.replays: true</code> en <code>server.js</code>; <code>P.replays.list</code>, <code>P.replays.get</code></td>
+<td><code>screens/replays.ts</code>, <code>replayView.ts</code></td>
+</tr>
+<tr>
+<td>Chat de texto</td>
+<td><code>P.sessions.get</code> (la conversación del partido), <code>P.chat.messages</code>, <code>P.chat.subscribe</code>, <code>P.chat.post</code></td>
+<td><code>chat.ts</code></td>
+</tr>
+<tr>
+<td>chat de voz</td>
+<td><code>P.voice.join</code>, <code>P.voice.setVolume</code> y <code>P.voice.setPan</code> por la distancia entre futbolistas, <code>P.voice.setMuted</code></td>
+<td><code>voice.ts</code></td>
+</tr>
+<tr>
+<td>Enlaces de invitación</td>
+<td><code>P.inviteLink</code> y <code>clipboard</code> de <code>starhermit:engine</code></td>
+<td><code>platform.ts</code></td>
+</tr>
+<tr>
+<td>Informes de errores</td>
+<td><code>P.reportBug</code></td>
+<td><code>screens/settings.ts</code></td>
+</tr>
+</tbody>
+</table>
+<p>Cada llamada puede rechazar con un <code>PlatformError</code>. El fútbol trata las funciones online como el mejor esfuerzo:
+el fracaso muestra "en línea no disponible" o vuelve a quedarse en silencio y nunca termina el juego. Cerrado sesión,
+el juego todavía ofrece práctica sin conexión.</p>
+<h2 id="9-menus-and-hud-starhermitui-starhermitdraw-starhermitcanvas">9. Menús y HUD: <code>starhermit:ui</code>, <code>starhermit:draw</code>, <code>starhermit:canvas</code></h2>
+<ul>
+<li><strong>Menús</strong> (<code>screens/*.ts</code>, el menú del partido y los cuadros de diálogo en <code>main.ts</code>) usar
+<a href="/docs/engine-api/ui.html"><code>starhermit:ui</code></a>, la interfaz de usuario en modo inmediato del motor. Los widgets se llaman cada
+marco de <code>onRender</code>, y <code>ui.setTheme</code> les da los colores del juego. Las opciones propias del tiempo de ejecución
+El menú se abre con <code>openMenu</code>.</li>
+<li><strong>El HUD</strong> (
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/hud.ts"><code>hud.ts</code></a>)
+Dibuja el marcador, el reloj y los marcadores con <a href="/docs/engine-api/draw.html"><code>starhermit:draw</code></a>:
+<code>draw.roundRect</code>, <code>draw.text</code> y <code>draw.image</code> (un lienzo de cresta), en orden de llamada sobre la escena.</li>
+<li><strong>Imágenes</strong> están cargados con <code>createImageBitmap</code> de <a href="/docs/engine-api/canvas.html"><code>starhermit:canvas</code></a>,
+por ejemplo, el arte clave del menú.</li>
+</ul>
+<h2 id="10-settings-and-languages-starhermitstorage-strings">10. Configuraciones e idiomas: <code>starhermit:storage</code>, cuerdas</h2>
+<ul>
+<li>Las configuraciones por jugador (silencio, voz, idioma, anulaciones de gráficos) se encuentran en <code>settings</code> de
+<a href="/docs/engine-api/storage.html"><code>starhermit:storage</code></a>. Se guardan en el dispositivo y en la cuenta.
+<code>settings.onChange</code> aplica un cambio realizado en otro dispositivo.</li>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/i18n.ts"><code>i18n.ts</code></a>
+cargas <code>assets/strings.json</code> en el motor <code>strings</code> mesas (<code>strings.load</code>, <code>strings.t</code>,
+<code>strings.setLanguage</code>). Elige el idioma de la elección guardada, luego el del jugador.
+idioma StarHermit, luego el dispositivo (<code>preferences</code>). <code>l10n/font.ts</code> carga fuentes script con
+<code>FontFace</code> para idiomas que los necesitan.</li>
+</ul>
+<h2 id="11-sound-and-graphics-levels">11. Niveles de sonido y gráficos.</h2>
+<ul>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/audio.ts"><code>audio.ts</code></a>
+construye un gráfico de audio web con <a href="/docs/engine-api/audio.html"><code>starhermit:audio</code></a>:
+<ul>
+<li>Los clips creados se enumeran en <code>sfx/manifest.json</code> (leer con <code>files.readJson</code>).</li>
+<li>Un sintetizador cubre cualquier evento sin clip, además de la reverberación del público y del estadio.</li>
+<li>Los nodos de corta duración se liberan tan pronto como finalizan, porque el gráfico del host está limitado.</li>
+</ul>
+</li>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/quality.ts"><code>quality.ts</code></a>
+sigue el nivel de gráficos del jugador (<code>frame().level</code>, <code>levelSettings</code>). Sombras, florecer y
+el suavizado sigue ese nivel. El contenido propio del juego (detalles del campo, densidad de público, partículas)
+tiene anulaciones por jugador en la parte superior.</li>
+</ul>
+<h2 id="12-package-test-and-publish">12. Empaquetar, probar y publicar</h2>
+<ul>
+<li><strong>Verificación de tipo</strong> con <code>tsc -p engine</code>.
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/tsconfig.json"><code>engine/tsconfig.json</code></a>
+incluye el lanzamiento <code>starhermit.d.ts</code> y conjuntos <code>"lib": ["ES2022"]</code>, <code>"types": []</code> y
+<code>"allowImportingTsExtensions": true</code>.</li>
+<li><strong>Prueba.</strong> <code>npm test</code> corre <code>server.js</code> pruebas de regresión. <code>engine/tests/run.sh</code> ejecuta la lógica
+pruebas (interpolación, predicción, pose, lobby) en Node. <code>starhermit &lt;folder&gt; --check</code>
+valida el paquete y reproduce 120 fotogramas sin cabeza.</li>
+<li><strong>Paquete.</strong> <code>starhermit package --web .</code> reescribe <code>index.html</code> y <code>starhermit-files.json</code>,
+que se comprometen con cada cambio.</li>
+<li><strong>Publicar.</strong> El juego se agrega a StarHermit desde la URL de su repositorio. La plataforma lee
+<code>starhermit.txt</code>, corre <code>server.js</code> como guión del partido y crea la tabla de clasificación a partir de
+<code>leaderboards.json</code>.</li>
+</ul>
+<p>Para mover Football, o tu propio juego, al motor 1.40.0:</p>
+<ol>
+<li>Descargue el tiempo de ejecución 1.40.0.</li>
+<li>Colocar <code>engine.version=1.40.0</code>.</li>
+<li>Ejecute las comprobaciones y empaquete nuevamente.</li>
+</ol>
+<p>Aumentar <code>engine.minor</code> a 40 solo cuando desea alojar API 1.40
+<a href="/es/docs/engine-features.html">nuevas características</a>.</p>
+
+{% endraw %}

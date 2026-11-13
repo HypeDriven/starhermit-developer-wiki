@@ -1,0 +1,402 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Contoh permainan: bagaimana Football menggunakan mesin StarHermit"
+source_url: "/docs/tutorials/football.html"
+source_path: "docs/tutorials/football.md"
+source_hash: "d083140f127033bfc8459dca9170b7a0d32d7c0a97fe4cdf6ebe96758f8ba2ce"
+translation: "machine"
+permalink: "/id/docs/tutorials/football.html"
+---
+{% raw %}
+<h1 id="example-game-how-football-uses-the-starhermit-engine">Contoh permainan: bagaimana Football menggunakan mesin StarHermit</h1>
+<p><a href="https://github.com/HypeDriven/starhermit-football">Sepak Bola Pertapa Bintang</a> adalah publik, lengkap
+permainan skrip. Ini adalah sepak bola 3D waktu nyata untuk 1 hingga 22 pemain, dengan rekan satu tim AI, dengan lampu sorot
+stadion, lobi online, obrolan suara dan teks, tayangan ulang, papan peringkat, prestasi, dan sembilan
+bahasa. Halaman ini menguraikannya selangkah demi selangkah untuk menunjukkan bagaimana game sebenarnya menggunakan mesin tersebut. Masing-masing
+langkah memberi nama modul mesin yang terlibat dan tautan ke sumber permainan, tempat Anda dapat membaca
+kode lengkap.</p>
+<p>Panduan ini ditulis untuk mesin <strong>1.40.0</strong>, rilis terbaru. Setiap panggilan yang ditampilkan terdaftar
+di <a href="/docs/engine-api/index.html">referensi API mesin</a>. Baca
+<a href="/id/docs/tutorials/starhermit-engine.html">tutorial mesin</a> pertama jika Anda belum membuat skrip permainan.</p>
+<p>Tautan sumber menunjuk ke komit
+<a href="https://github.com/HypeDriven/starhermit-football/tree/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f"><code>33bd9bd</code></a>.
+Saat itu komit mesin pin permainan 1.39.0 dengan <code>engine.minor=39</code>. Tidak ada yang lebih baru yang digunakan, jadi begitulah
+berjalan tidak berubah pada 1.40.0; memindahkannya adalah perubahan satu baris ke <code>engine.version</code> (melihat
+<a href="#12-package-test-and-publish">langkah 12</a>).</p>
+<h2 id="the-shape-of-the-game">Bentuk permainannya</h2>
+<table>
+<thead>
+<tr>
+<th>Jalur</th>
+<th>Peran</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>starhermit.txt</code></td>
+<td>Manifes: nama, pin mesin, skrip server, kontrol, kemampuan</td>
+</tr>
+<tr>
+<td><code>server.js</code></td>
+<td>Simulasi satu pertandingan: dijalankan oleh platform sebagai server resmi, dan dimuat oleh klien untuk latihan dan prediksi offline</td>
+</tr>
+<tr>
+<td><code>engine/src/main.ts</code></td>
+<td>Modul entri: callback siklus hidup dan mesin status layar</td>
+</tr>
+<tr>
+<td><code>engine/src/match.ts</code>, <code>logic/</code></td>
+<td>Alur kecocokan, netcode, interpolasi, dan prediksi</td>
+</tr>
+<tr>
+<td><code>engine/src/world/</code></td>
+<td>Stadion, pesepakbola, bola, dan penonton dalam adegan 3D</td>
+</tr>
+<tr>
+<td><code>engine/src/screens/</code>, <code>hud.ts</code></td>
+<td>Menu (<code>starhermit:ui</code>) dan HUD dalam pertandingan (<code>starhermit:draw</code>)</td>
+</tr>
+<tr>
+<td><code>engine/src/net.ts</code>, <code>platform.ts</code>, <code>chat.ts</code>, <code>voice.ts</code></td>
+<td>Segala sesuatu yang berhubungan dengan platform StarHermit</td>
+</tr>
+<tr>
+<td><code>engine/src/audio.ts</code>, <code>i18n.ts</code>, <code>quality.ts</code></td>
+<td>Tingkat suara, bahasa, dan grafik</td>
+</tr>
+<tr>
+<td><code>assets/</code>, <code>sfx/</code></td>
+<td>Gambar, tabel string dan klip suara</td>
+</tr>
+</tbody>
+</table>
+<h2 id="1-the-manifest">1. Manifes</h2>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/starhermit.txt"><code>starhermit.txt</code></a>
+menjadikan folder tersebut permainan skrip, dan juga mendeklarasikan skrip server dan kontrolnya:</p>
+<pre><code class="language-text">name=Football
+launch=index.html
+server=server.js
+control.up=KeyW+ArrowUp | Run forward
+control.shoot=Space+KeyJ | Shoot (hold) / tap to pass
+control.tackle=KeyK | Slide tackle / pressure
+engine.api=1
+engine.entry=engine/src/main.ts
+engine.version=1.39.0
+engine.minor=39
+engine.capabilities=platform,voice,clipboard,storage
+engine.gamepad.shoot=West+RightTrigger
+engine.gamepad.pass=South
+</code></pre>
+<ul>
+<li><code>launch=index.html</code> adalah halaman pemuat itu <code>starhermit package --web</code> menulis. Ia memainkan permainannya
+di browser pada runtime web rilis yang disematkan.</li>
+<li><code>server=server.js</code> adalah skrip pencocokan resmi platform (langkah 6).</li>
+<li><code>control.*</code> Dan <code>engine.gamepad.*</code> garis mendefinisikan <strong>tindakan</strong>. Runtime mengikat kunci dan pad ke dalamnya,
+dan pemain mengikatnya kembali di menu Opsi runtime. Game ini tidak pernah menyebutkan kunci gameplaynya.</li>
+<li><code>engine.capabilities</code> meminta platform (ruangan, soket, papan peringkat, pemutaran ulang, obrolan), suara,
+clipboard (tautan undangan) dan penyimpanan (pengaturan). Runtime menolak panggilan di luarnya.</li>
+</ul>
+<p>Daftar kunci lengkap ada di <a href="/id/docs/starhermit-txt.html">itu <code>starhermit.txt</code> tampak</a>.</p>
+<h2 id="2-the-entry-module-and-the-frame-loop">2. Modul entri dan loop bingkai</h2>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/main.ts"><code>engine/src/main.ts</code></a>
+menyiapkan perender pada cakupan modul, lalu mendaftarkan empat callback siklus hidup dari
+<a href="/docs/engine-api/engine.html"><code>starhermit:engine</code></a>:</p>
+<pre><code class="language-ts">import { frame, onFixedUpdate, onRender, onStart, onUpdate, setFixedRate } from "starhermit:engine";
+import { ACESFilmicToneMapping, PCFSoftShadowMap, PerspectiveCamera, renderer, scene } from "starhermit:scene";
+
+const camera = new PerspectiveCamera(55, 16 / 9, 0.1, 800);
+renderer.camera = camera;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = PCFSoftShadowMap;
+renderer.toneMapping = ACESFilmicToneMapping;
+
+onStart(() =&gt; {
+  setFixedRate(60);
+  loadLanguages(); // string tables (step 10)
+  sim();           // evaluate server.js once (step 6)
+  menuScene.start(); // an AI-vs-AI match behind the menu
+  // … platform listeners, settings listeners, invite polling
+});
+
+onFixedUpdate((step) =&gt; {
+  if (match) match.fixedStep(step);
+  else if (!replay) menuScene.fixedStep(step);
+});
+
+onUpdate((delta) =&gt; {
+  pollQuality();
+  if (match) match.update(Math.min(delta, 0.1));
+  // … replay viewer or menu backdrop
+});
+
+onRender(() =&gt; {
+  const fr = frame();
+  if (Math.abs(camera.aspect - fr.width / fr.height) &gt; 1e-6) {
+    camera.aspect = fr.width / fr.height;
+    camera.updateProjectionMatrix();
+  }
+  hud.draw();
+  // … chat, in-match menu or the menu screens
+});
+</code></pre>
+<p>Pola yang akan disalin:</p>
+<ul>
+<li><strong>Simulasi berjalan masuk <code>onFixedUpdate</code></strong>, pada 60 Hz tetap.</li>
+<li><strong>Logika per-frame berjalan <code>onUpdate</code></strong>, dengan <code>delta</code> dibatasi sehingga bingkai yang terhenti tidak dapat dibuat
+pemain melompat.</li>
+<li><strong>Gambar masuk <code>onRender</code>.</strong> Hanya ada satu dari setiap panggilan balik, jadi <code>main.ts</code> penggemar keluar ke
+layar saat ini: menu, lobi, pertandingan, pemutaran ulang, atau hasil.</li>
+</ul>
+<h2 id="3-the-3d-world-starhermitscene">3. Dunia 3D: <code>starhermit:scene</code></h2>
+<p>Stadion, pesepakbola, bola, dan ofisial adalah objek biasa bergaya three.js
+<a href="/docs/engine-api/scene.html"><code>starhermit:scene</code></a>: <code>Mesh</code>, <code>Group</code>, <code>MeshStandardMaterial</code>,
+<code>CylinderGeometry</code>, <code>Sprite</code>, <code>CanvasTexture</code> dan sebagainya. Kode yang di-porting dari three.js sebagian besar berfungsi
+tidak berubah. Beberapa detail yang patut dibaca:</p>
+<ul>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/world/stadium.ts"><code>world/stadium.ts</code></a>
+membangun lapangan, tribun, lampu sorot, dan kabut. Ini mengatur efek pasca (<code>renderer.bloom</code>,
+<code>renderer.grade</code>, <code>renderer.antialias</code>) dan bayangan untuk setiap level grafis.</li>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/world/environment.ts"><code>world/environment.ts</code></a>
+membuat peta lingkungan dengan <code>PMREMGenerator</code> dari a <code>DataTexture</code>.</li>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/world/crest.ts"><code>world/crest.ts</code></a>
+Dan <code>world/nametags.ts</code> menggambar lambang tim dan nama panggilan mengambang di a
+<a href="/docs/engine-api/canvas.html"><code>starhermit:canvas</code></a> <code>OffscreenCanvas</code>, lalu gunakan sebagai
+<code>CanvasTexture</code>pasir <code>Sprite</code>s.</li>
+</ul>
+<h2 id="4-thousands-of-moving-parts-starhermitworld">4. Ribuan bagian yang bergerak: <code>starhermit:world</code></h2>
+<p>Menganimasikan 22 pesepakbola secara bersama-sama, ditambah ribuan penonton, akan terlalu lambat
+skrip per objek pada penerjemah asli. Gerakan sepak bola yang berhasil
+<a href="/docs/engine-api/world.html"><code>starhermit:world</code></a> <strong>tabel</strong> (barisan kolom yang diketik) dan <strong>kernel</strong>
+(berfungsi runtime dijalankan pada setiap baris secara asli):</p>
+<pre><code class="language-ts">import { kernel, schedule, table } from "starhermit:world";
+
+const crowd = table("crowd", CROWD_ROWS, {
+  bx: "f32", by: "f32", bz: "f32", ph: "f32", fr: "f32", av: "f32",
+  q: "quat", s: "f32", sy: "f32", x: "f32", y: "f32", z: "f32",
+});
+const sway = kernel(crowd, (r, u: { t: number; amp: number; spd: number; sway: number; shake: number }) =&gt; {
+  const j = Math.sin(u.t * u.spd * r.fr + r.ph);
+  r.y = r.by + (j &gt; 0 ? j * j : 0) * u.amp * r.av;
+  // …
+});
+// An eighth of the crowd each frame: the work is sliced across frames.
+const swayRun = schedule.update(sway, { t: 0, amp: 0, spd: 0, sway: 0, shake: 0 }, { slices: 8 });
+</code></pre>
+<p>Pesepakbola itu masuk
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/world/rig.ts"><code>world/rig.ts</code></a>
+menggunakan pendekatan yang sama. A <code>rigs</code> tabel berisi status animasi setiap pesepakbola. A <code>joints</code> meja,
+dengan a <code>ref:rigs</code> kolom, menampung 15 sambungan per rig, dan <strong>ikatan</strong> mengusir node adegan darinya.
+Dua kernel dijadwalkan setelahnya <code>onUpdate</code> menghitung posenya, dan runtime menulis nodenya
+mengubah dirinya sendiri. Pekerjaan skrip per pesepakbola menghasilkan sekitar selusin angka dalam satu bingkai.</p>
+<h2 id="5-input-actions-touch-and-gamepads">5. Input: tindakan, sentuhan, dan gamepad</h2>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/input.ts"><code>engine/src/input.ts</code></a>
+membaca tindakan manifes <a href="/docs/engine-api/input.html"><code>starhermit:input</code></a>:</p>
+<ul>
+<li><code>value(action)</code> mengembalikan seberapa jauh suatu tindakan dilakukan (gerakannya <code>value("up") - value("down")</code>).
+<code>onAction</code> memberikan tepi tekan dan lepas.</li>
+<li>Tampilan mouse digunakan <code>requestPointerLock</code>, <code>onPointerDelta</code> Dan <code>onPointerLockChange</code>. Kameranya
+tongkat kanan berasal <code>gamepads()</code>, Dan <code>vibrate</code> memberikan tanda centang haptik singkat.</li>
+<li>Pada layar sentuh (<code>primaryPointer()</code> kasar), <code>setTouchControls</code> menunjukkan joystick dan
+Tombol SHOOT/PASS/TACKLE yang digambar pada saat runtime. Tombol-tombolnya terikat pada tindakan yang sama:</li>
+</ul>
+<pre><code class="language-ts">setTouchControls([
+  { kind: "stick", up: "up", down: "down", left: "left", right: "right", anchor: "bottom-left", offset: [90, 90], radius: 66 },
+  { kind: "button", action: "shoot", label: T("SHOOT").slice(0, 16), anchor: "bottom-right", offset: [66, 66], radius: 46 },
+  // … PASS and TACKLE
+]);
+</code></pre>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/screens/controls.ts"><code>screens/controls.ts</code></a>
+daftar saat ini <code>bindings()</code> dan panggilan <code>requestRebind</code>. Runtime kemudian menangkap kunci baru atau
+tombol.</p>
+<h2 id="6-one-simulation-for-client-and-server-starhermitscript">6. Satu simulasi untuk klien dan server: <code>starhermit:script</code></h2>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/server.js"><code>server.js</code></a>
+adalah skrip klasik biasa tanpa impor, <code>Date</code> atau <code>Math.random</code>, sebagai kotak pasir platform
+membutuhkan. Ini mendefinisikan dua global:</p>
+<ul>
+<li>
+<p><code>globalThis.game</code> memegang titik masuk platform (<code>createSession</code>, <code>onPlayerMessage</code>, <code>onTick</code>)
+dan deklarasi statis dibaca pada waktu publikasi:</p>
+<pre><code class="language-js">globalThis.game = {
+  tickRateHz: 30,
+  replays: true,
+  achievements: [
+    { key: 'debut', name: 'Debut', description: 'Finish your first match.', points: 10 },
+    { key: 'hat-trick', name: 'Hat-Trick', description: 'Score three goals in one match.', points: 50 },
+    // …
+  ],
+  createSession: function (ctx) { /* seats, AI, seed from ctx.random */ },
+  // …
+};
+</code></pre>
+</li>
+<li>
+<p><code>globalThis.FootballSim</code> memegang simulasi yang sama (<code>createMatch</code>, <code>stepMatch</code>, AI) untuk
+klien.</p>
+</li>
+</ul>
+<p>Klien memuat file yang sama ke dalam wilayahnya sendiri dengan <code>loadClassic</code> dari
+<a href="/docs/engine-api/script.html"><code>starhermit:script</code></a>
+(<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/sim.ts"><code>engine/src/sim.ts</code></a>):</p>
+<pre><code class="language-ts">import { loadClassic } from "starhermit:script";
+
+loadClassic("server.js");
+const S = (globalThis as unknown as { FootballSim?: FootballSimApi }).FootballSim;
+</code></pre>
+<p>Langkah-langkah latihan offline <code>FootballSim</code> secara lokal pada 60 Hz dengan AI di setiap kursi lainnya. Daring, itu
+platform berjalan <code>server.js</code> secara otoritatif pada 30 Hz. Game ini tidak pernah menyimpan dua salinannya
+aturan.</p>
+<h2 id="7-online-matches-rooms-and-game-sockets">7. Pertandingan online: ruangan dan soket permainan</h2>
+<p>Lobi menggunakan ruang platform melalui <a href="/docs/engine-api/platform.html"><code>starhermit:platform</code></a>
+(<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/screens/lobby.ts"><code>screens/lobby.ts</code></a>):</p>
+<pre><code class="language-ts">import * as P from "starhermit:platform";
+
+// Quick play: join any open room, or open one.
+let room = await P.rooms.quickJoin();
+if (!room) {
+  room = await P.rooms.create({ teamCount: 2, seatsPerTeam: teamSize, backfillAfterSeconds: 30, metadata: { game: "football" } });
+  room = await P.rooms.open(room.id);
+}
+
+// Ranked solo vs AI: every other seat is an AI player, so starting begins the match at once.
+room = await P.rooms.create({ teamCount: 2, seatsPerTeam: teamSize, backfillAfterSeconds: 30, aiPlayers: 2 * teamSize - 1, metadata: { game: "football" } });
+room = await P.rooms.start(room.id);
+</code></pre>
+<p>Teman, undangan, dan perubahan kursi dilakukan <code>P.friends.list</code>, <code>P.rooms.invite</code>,
+<code>P.rooms.acceptInvite</code> Dan <code>P.rooms.seat</code>. <code>P.rooms.mine</code> memungkinkan pemain bergabung kembali dengan pertandingan yang mereka tinggalkan.</p>
+<p>Begitu pertandingan dimulai,
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/net.ts"><code>engine/src/net.ts</code></a>
+membuka soket permainan dengan <code>P.connectGame(sessionId)</code>:</p>
+<ul>
+<li>Ini mengirimkan input pada 30 Hz dengan <code>sendInput</code>.</li>
+<li>Ia meminta cuplikan lengkap dengan <code>sendCommand({ type: "sync" })</code> pada setiap terbuka dan terus
+<code>resumed</code>.</li>
+<li>Ia mendengarkan <code>game</code> (foto dan acara), <code>achievement</code> Dan <code>stopped</code>. <code>stopped</code> melaporkan alasannya
+soket berhenti: keluar, persyaratan diperbarui, atau kecocokan hilang.</li>
+</ul>
+<p>Runtime menyimpan kredensial pemain dan terhubung kembali dengan sendirinya, sehingga game tidak menangani token
+dan tidak memiliki loop coba lagi.</p>
+<p><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/logic/interp.ts"><code>logic/interp.ts</code></a>
+menghaluskan snapshot server dengan interpolasi adaptif.
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/logic/predict.ts"><code>logic/predict.ts</code></a>
+memprediksi pergerakan pesepakbola lokal dan mengoreksinya pada setiap snapshot. Prediksi mempengaruhi
+hanya apa yang digambar; server tetap berwibawa.</p>
+<h2 id="8-the-rest-of-the-platform">8. Sisa platform</h2>
+<table>
+<thead>
+<tr>
+<th>Fitur</th>
+<th>Panggilan</th>
+<th>Sumber</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pemain masuk, masuk, sesi berakhir</td>
+<td><code>P.player()</code>, <code>P.onPlayerChange</code>, <code>P.requestSignIn</code>, <code>P.onSessionEnded</code></td>
+<td><code>platform.ts</code>, <code>main.ts</code></td>
+</tr>
+<tr>
+<td>Papan peringkat</td>
+<td><code>P.leaderboards.list</code>, <code>P.leaderboards.entries</code> (papan diumumkan di <code>leaderboards.json</code>)</td>
+<td><code>screens/leaderboard.ts</code></td>
+</tr>
+<tr>
+<td>Prestasi</td>
+<td>Dinyatakan masuk <code>server.js</code>, diberikan penuh waktu, terdaftar dengan <code>P.achievements.list</code></td>
+<td><code>screens/achievements.ts</code></td>
+</tr>
+<tr>
+<td>Pemutaran ulang</td>
+<td><code>game.replays: true</code> di dalam <code>server.js</code>; <code>P.replays.list</code>, <code>P.replays.get</code></td>
+<td><code>screens/replays.ts</code>, <code>replayView.ts</code></td>
+</tr>
+<tr>
+<td>Obrolan teks</td>
+<td><code>P.sessions.get</code> (percakapan pertandingan), <code>P.chat.messages</code>, <code>P.chat.subscribe</code>, <code>P.chat.post</code></td>
+<td><code>chat.ts</code></td>
+</tr>
+<tr>
+<td>Obrolan suara</td>
+<td><code>P.voice.join</code>, <code>P.voice.setVolume</code> Dan <code>P.voice.setPan</code> berdasarkan jarak antar pesepakbola, <code>P.voice.setMuted</code></td>
+<td><code>voice.ts</code></td>
+</tr>
+<tr>
+<td>Tautan undangan</td>
+<td><code>P.inviteLink</code> Dan <code>clipboard</code> dari <code>starhermit:engine</code></td>
+<td><code>platform.ts</code></td>
+</tr>
+<tr>
+<td>Laporan bug</td>
+<td><code>P.reportBug</code></td>
+<td><code>screens/settings.ts</code></td>
+</tr>
+</tbody>
+</table>
+<p>Setiap panggilan dapat ditolak dengan a <code>PlatformError</code>. Sepak bola memperlakukan fitur online sebagai upaya terbaik: a
+kegagalan menunjukkan "daring tidak tersedia" atau kembali terdiam, dan tidak pernah mengakhiri permainan. Keluar,
+permainan ini masih menawarkan latihan offline.</p>
+<h2 id="9-menus-and-hud-starhermitui-starhermitdraw-starhermitcanvas">9. Menu dan HUD: <code>starhermit:ui</code>, <code>starhermit:draw</code>, <code>starhermit:canvas</code></h2>
+<ul>
+<li><strong>Menu</strong> (<code>screens/*.ts</code>, menu dalam pertandingan dan dialog di <code>main.ts</code>) menggunakan
+<a href="/docs/engine-api/ui.html"><code>starhermit:ui</code></a>, UI mode langsung mesin. Widget dipanggil setiap
+bingkai dari <code>onRender</code>, Dan <code>ui.setTheme</code> memberi mereka warna permainan. Opsi runtime itu sendiri
+menu terbuka dengan <code>openMenu</code>.</li>
+<li><strong>HUD tersebut</strong> (
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/hud.ts"><code>hud.ts</code></a>)
+menggambar papan skor, jam dan spidol dengan <a href="/docs/engine-api/draw.html"><code>starhermit:draw</code></a>:
+<code>draw.roundRect</code>, <code>draw.text</code> Dan <code>draw.image</code> (kanvas lambang), dalam urutan panggilan di atas tempat kejadian.</li>
+<li><strong>Gambar</strong> sarat dengan <code>createImageBitmap</code> dari <a href="/docs/engine-api/canvas.html"><code>starhermit:canvas</code></a>,
+misalnya seni kunci menu.</li>
+</ul>
+<h2 id="10-settings-and-languages-starhermitstorage-strings">10. Pengaturan dan bahasa: <code>starhermit:storage</code>, string</h2>
+<ul>
+<li>Pengaturan per pemain (bisu, suara, bahasa, penggantian grafis) tetap ada <code>settings</code> dari
+<a href="/docs/engine-api/storage.html"><code>starhermit:storage</code></a>. Mereka disimpan di perangkat dan di akun.
+<code>settings.onChange</code> menerapkan perubahan yang dibuat pada perangkat lain.</li>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/i18n.ts"><code>i18n.ts</code></a>
+banyak <code>assets/strings.json</code> ke dalam mesin <code>strings</code> tabel (<code>strings.load</code>, <code>strings.t</code>,
+<code>strings.setLanguage</code>). Ia mengambil bahasa dari pilihan yang disimpan, lalu bahasa pemain
+Bahasa StarHermit, lalu perangkat (<code>preferences</code>). <code>l10n/font.ts</code> memuat font skrip dengan
+<code>FontFace</code> untuk bahasa yang membutuhkannya.</li>
+</ul>
+<h2 id="11-sound-and-graphics-levels">11. Tingkat suara dan grafis</h2>
+<ul>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/audio.ts"><code>audio.ts</code></a>
+membuat grafik Audio Web dengan <a href="/docs/engine-api/audio.html"><code>starhermit:audio</code></a>:
+<ul>
+<li>Klip yang ditulis tercantum dalam <code>sfx/manifest.json</code> (baca dengan <code>files.readJson</code>).</li>
+<li>Synthesizer meliput acara apa pun tanpa klip, ditambah penonton dan gaung stadion.</li>
+<li>Node berumur pendek dilepaskan segera setelah berakhir, karena grafik host dibatasi.</li>
+</ul>
+</li>
+<li><a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/src/quality.ts"><code>quality.ts</code></a>
+mengikuti level grafis pemain (<code>frame().level</code>, <code>levelSettings</code>). Bayangan, mekar dan
+anti-aliasing ikuti level itu. Konten game itu sendiri (detail nada, kepadatan penonton, partikel)
+memiliki penggantian per pemain di atas.</li>
+</ul>
+<h2 id="12-package-test-and-publish">12. Kemas, uji, dan publikasikan</h2>
+<ul>
+<li><strong>Tipe-periksa</strong> dengan <code>tsc -p engine</code>.
+<a href="https://github.com/HypeDriven/starhermit-football/blob/33bd9bdc2fa6ab162b718c92b9b9657c3203c62f/engine/tsconfig.json"><code>engine/tsconfig.json</code></a>
+termasuk rilisnya <code>starhermit.d.ts</code> dan set <code>"lib": ["ES2022"]</code>, <code>"types": []</code> Dan
+<code>"allowImportingTsExtensions": true</code>.</li>
+<li><strong>Tes.</strong> <code>npm test</code> berjalan <code>server.js</code> tes regresi. <code>engine/tests/run.sh</code> menjalankan logikanya
+tes (interpolasi, prediksi, pose, lobi) di bawah Node. <code>starhermit &lt;folder&gt; --check</code>
+memvalidasi paket dan memutar 120 frame tanpa kepala.</li>
+<li><strong>Kemasan.</strong> <code>starhermit package --web .</code> menulis ulang <code>index.html</code> Dan <code>starhermit-files.json</code>,
+yang berkomitmen dengan setiap perubahan.</li>
+<li><strong>Menerbitkan.</strong> Game ini ditambahkan di StarHermit dari URL repositorinya. Platformnya berbunyi
+<code>starhermit.txt</code>, berjalan <code>server.js</code> sebagai skrip pertandingan dan membuat papan peringkat dari
+<code>leaderboards.json</code>.</li>
+</ul>
+<p>Untuk memindahkan Sepak Bola, atau permainan Anda sendiri, ke mesin 1.40.0:</p>
+<ol>
+<li>Unduh waktu proses 1.40.0.</li>
+<li>Mengatur <code>engine.version=1.40.0</code>.</li>
+<li>Jalankan pemeriksaan dan paket lagi.</li>
+</ol>
+<p>Mengangkat <code>engine.minor</code> hingga 40 hanya jika Anda ingin menghosting API 1.40
+<a href="/id/docs/engine-features.html">fitur baru</a>.</p>
+
+{% endraw %}
