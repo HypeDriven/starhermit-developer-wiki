@@ -1,0 +1,226 @@
+---
+layout: "wiki"
+lang: "ur"
+title: "انجن کی خصوصیات: فزکس، گاڑیاں، آسمان، پانی اور رینڈرنگ"
+source_url: "/docs/engine-features.html"
+source_path: "docs/engine-features.md"
+source_hash: "181149b5b0b48ea8bb58f3a23619e41566823ace71e6c6f1e085943975deff60"
+translation: "machine"
+permalink: "/ur/docs/engine-features.html"
+---
+{% raw %}
+<h1 id="engine-features-physics-vehicles-sky-water-and-rendering">انجن کی خصوصیات: فزکس، گاڑیاں، آسمان، پانی اور رینڈرنگ</h1>
+<p>انجن 1.40.0 (میزبان API 1.40) اسکرپٹ گیمز کے لیے تخروپن اور رینڈرنگ کی خصوصیات شامل کرتا ہے: rigid-body
+طبیعیات، گاڑیاں، ایک طبعی آسمان اور موسم، ایک سمندر، طریقہ کار کی سطحیں اور گھاس، GPU ذرات،
+وقتی اینٹی ایلائزنگ اور اسکرین اسپیس اثرات، بہتر سائے، کمپریسڈ ٹیکسچر، اور نئے
+اینیمیشن اور لیول آف ڈیٹیل ٹولز۔ یہ صفحہ ہر علاقے کا ایک جائزہ دیتا ہے اور کیا توقع کرنا ہے۔
+اس سے ہر ممبر، آپشن، یونٹ اور حد آپ کے گیم میں دستاویزی ہے۔
+<code>.starhermit/starhermit.d.ts</code> (<code>starhermit types</code> اسے لکھتا ہے؛ یہ صفحہ اسے نہیں دہراتا۔</p>
+<h2 id="turning-them-on">انہیں آن کرنا</h2>
+<p>یہاں کی ہر خصوصیت صرف ان گیمز پر لاگو ہوتی ہے جو میزبان API 1.40 یا اس کے بعد کا اعلان کرتے ہیں۔ <code>starhermit.txt</code>:</p>
+<pre><code class="language-text">engine.api=1
+engine.version=1.40.0
+engine.minor=40
+</code></pre>
+<p>پر ایک کھیل <code>engine.minor=39</code> یا کم 1.39 کے رویے کو برقرار رکھتا ہے، فریم کے لیے فریم۔ یہ نیا درآمد نہیں کر سکتا
+ماڈیولز (<code>starhermit:physics</code>, <code>starhermit:vehicle</code>, <code>starhermit:sky</code>, <code>starhermit:weather</code>,
+<code>starhermit:water</code>, <code>starhermit:surfaces</code>, <code>starhermit:particles</code>): درآمد پھینک دیتا ہے a <code>TypeError</code>. نیا
+موجودہ کلاسوں کے اختیارات اس طرح کے کھیل کے نامعلوم اختیارات رہتے ہیں۔ اٹھانا <code>engine.minor</code> پوری ہے
+آپٹ ان پہلے اپنے گیم کو نئے رن ٹائم پر چیک کریں (دیکھیں۔
+<a href="/ur/docs/tutorials/starhermit-engine.html#9-move-to-a-newer-engine">ایک نئے انجن میں منتقل</a>).</p>
+<p>کچھ خصوصیات three.js r185 کی پیروی کرتی ہیں اور اس کے نام اور طرز عمل کو برقرار رکھتی ہیں۔ دوسرے ہیں۔ <strong>انجن
+ایکسٹینشنز</strong>، اعلانات میں اس طرح کے طور پر نشان زد کیا گیا ہے: ان کے پاس کوئی three.js مساوی نہیں ہے، اور استعمال کرنے والا کوڈ
+وہ three.js پر نہیں چلتے۔</p>
+<h2 id="what-to-expect-on-every-device">ہر ڈیوائس پر کیا توقع کی جائے۔</h2>
+<p><strong>ہر بصری خصوصیت میں فال بیک سیڑھی ہوتی ہے۔</strong> (مکمل → کم → کم سے کم → آف) ہر رن ٹائم پر، مقامی
+اور براؤزر. جب ڈیوائس یا پلیئر کا گرافکس لیول ٹائر نہیں چلا سکتا تو انجن لیتا ہے۔
+اگلا ایک نیچے اور اس میں ایک نوٹ شامل کرتا ہے۔ <strong>اختیارات → گرافکس</strong> یہ کہتا ہے کہ کیا کم کیا گیا تھا. آپ کا کھیل برقرار ہے۔
+کام کرنا یہ صرف آسان لگ رہا ہے. اگرچہ، آپ کو خود صلاحیتوں کا پتہ لگانے کی ضرورت نہیں ہے۔
+<code>renderer.capabilities</code> اور خصوصیات جیسے <code>ocean.tier</code> آپ کو بتائیں کہ کیا منتخب کیا گیا تھا.</p>
+<p><strong>تخروپن فیصلہ کن ہے۔</strong> طبیعیات، گاڑیاں، پانی کی لہر کا میدان (<code>heightAt</code>, <code>sampleAt</code>,
+<code>buoyancy</code>)، ہوا کی <code>velocityAt</code>، طریقہ کار کی سطحیں اور CPU ذرات تھوڑا سا ایک جیسے نتائج دیتے ہیں۔
+مقامی طور پر اور براؤزرز میں، لہذا lockstep multiplayer ان پر بھروسہ کر سکتا ہے۔ GPU ذرات اور سب کچھ
+تیار کردہ فیصلہ کن نہیں ہیں اور گیم پلے کے ذریعہ پڑھنے کے قابل نہیں ہیں۔</p>
+<p><strong>مقامی کام چلنے سے پہلے چارج کیا جاتا ہے۔</strong> نئے مقامی چارج میں کالز
+<a href="/ur/docs/tutorials/starhermit-engine.html#10-limits-and-the-licence">ایندھن</a> ان کے کام کے سامنے، تناسب میں
+وہ کتنا کریں گے. ہر ایک کی سخت حدیں بھی ہوتی ہیں، اس لیے ایک بڑی کال (ایک بہت بڑا گھاس کا پیچ، a
+پورے ٹریک کی تلاش، ایک بڑے پیمانے پر پانی کا نمونہ) فریم کو روکنے کے بجائے ایک غلطی کے ساتھ انکار کر دیا گیا ہے.
+گنتی محدود ہیں، مثال کے طور پر 64 گاڑیاں، 16 اونچائی والے میدان، 16 ٹریک اور 8 تالاب بیک وقت۔</p>
+<h2 id="physics-starhermitphysics">طبیعیات: <code>starhermit:physics</code></h2>
+<p><code>PhysicsWorld</code> ایک 3D سخت جسم کی دنیا ہے (ایک انجن کی توسیع؛ three.js میں کوئی طبیعیات نہیں ہے):</p>
+<ul>
+<li><strong>لاشیں:</strong> متحرک، جامد اور کائینیمیٹک، عین مطابق حرکیاتی اہداف کے ساتھ۔</li>
+<li><strong>ٹکرانے والے:</strong> کرہ، خانہ، کیپسول، سلنڈر، شنک، محدب ہل، مثلث میش، اونچائی کا میدان، طیارہ
+اور مثلث. میش اور ہلز سیدھے a سے بنائے جاسکتے ہیں۔ <code>BufferGeometry</code>.</li>
+<li><strong>جوڑ:</strong> مقررہ، گیند، قبضہ، سلائیڈر، فاصلہ، رسی، بہار اور شنک موڑ، حدود کے ساتھ، موٹرز
+اور توڑنا.</li>
+<li><strong>سوالات:</strong> رے کاسٹ، شکل کاسٹ، اوورلیپ اور ٹچ ایونٹس۔</li>
+<li><strong>حروف:</strong> ایک حرکیاتی <code>CharacterController</code> سلائیڈنگ، ڈھلوان کی حدود، آٹوسٹیپ اور سنیپنگ کے ساتھ
+زمین پر</li>
+</ul>
+<p>یونٹس میٹر، کلوگرام اور سیکنڈ ہیں۔ کوآرڈینیٹس کو اصل سے 1,000,000 میٹر کے اندر رہنا چاہیے۔
+دنیا کو اس سے دور کریں۔ <code>onFixedUpdate</code>، اور سے منسلک اشیاء رکھیں <code>onRender</code>:</p>
+<pre><code class="language-ts">import { onFixedUpdate, onRender } from "starhermit:engine";
+import { PhysicsWorld } from "starhermit:physics";
+
+const world = new PhysicsWorld();
+world.createCollider({ shape: { type: "trimesh", geometry: level.geometry } });
+const crate = world.createBody({ position: [0, 5, 0], object: crateMesh });
+world.createCollider({ shape: { type: "box", halfExtents: [0.5, 0.5, 0.5] } }, crate);
+onFixedUpdate((dt) =&gt; world.step(dt));
+onRender((alpha) =&gt; world.sync(alpha)); // interpolated between steps
+</code></pre>
+<h2 id="vehicles-starhermitvehicle">گاڑیاں: <code>starhermit:vehicle</code></h2>
+<p><code>Vehicle</code> ڈرائیونگ ڈائنامکس ایک سے بنایا گیا ہے۔ <code>.vehicle</code> متن یا کوئی خاص چیز۔ یہ Pacejka ٹائروں کا ماڈل بناتا ہے،
+معطلی، ایک ڈرائیو ٹرین (انجن، کلچ، گیئر باکس، تفریق، بریک)، ایروڈینامکس، اور ABS،
+کرشن اور استحکام کنٹرول. کاریں فلیٹ زمین پر چلتی ہیں، a <code>Heightfield</code> یا طبیعیات کی دنیا۔ <code>Track</code>, <code>LapTimer</code>,
+<code>Autopilot</code> اور <code>formatLapTime</code> کور سرکٹس، لیپ اور سیکٹر ٹائمنگ اور AI ڈرائیورز۔ قدم گاڑیاں
+سے <code>onFixedUpdate</code>. بصریوں کے لیے ان کے انٹرپولیٹڈ باڈی اور وہیل ٹرانسفارمز کو پڑھیں۔</p>
+<h2 id="sky-and-weather-starhermitsky-starhermitweather">آسمان اور موسم: <code>starhermit:sky</code>, <code>starhermit:weather</code></h2>
+<ul>
+<li><strong><code>SkyAtmosphere</code></strong> سورج کے ساتھ ایک جسمانی طور پر مبنی آسمان ہے، اس کے مرحلے میں چاند، ستارے اور
+آکاشگنگا، دن کے وقت، سال کے دن اور عرض بلد کے لحاظ سے رکھا گیا ہے۔ یہ چلاتا ہے a <code>DirectionalLight</code> (سورج
+دن کے وقت، چاند رات کو) اور درخواست پر، <code>scene.background</code> اور <code>scene.environment</code>. اس کا
+<strong>فضائی نقطہ نظر</strong> دور دراز زمین اور سمندر کو بغیر کسی سیون کے آسمان میں دھندلاتا ہے۔ کہرا گھل مل گیا ہے۔
+ہر ایک رینڈر پاس کی اپنی رنگین جگہ، لہذا جب منظر پوسٹ کے ذریعے کھینچا جاتا ہے تو یہ درست رہتا ہے۔
+بفرز (پیمانہ رینڈر، انکولی ریزولوشن، موشن ویکٹر)۔ سی پی یو کے سوالات (<code>sunDirection</code>,
+<code>moonDirection</code>, <code>moonPhase</code>) ہر رن ٹائم پر ایک ہی نمبر دیں۔ اس کے درجے بھرے ہوئے ہیں، کم ہیں،
+کم سے کم (پریتھم) اور آف۔</li>
+<li>three.js r185 کا پریتھم <strong><code>Sky</code></strong> ایڈون بھی دستیاب ہے، سے <code>starhermit:scene</code> اور
+<code>starhermit:sky</code>.</li>
+<li><strong><code>WindField</code></strong> وہ ہوا ہے جس کا رخ موڑتا ہے اور جس کی طاقت پھولتی اور جھونکتی ہے۔ <code>velocityAt(x, z, t)</code>
+فیصلہ کن اور گیم پلے کے لیے موزوں ہے۔ مواد کیمرے کے ارد گرد ہوا کے میدان کو پڑھ سکتا ہے۔
+ایک ہک کے ذریعے. <code>sway</code> اور <code>swayMesh</code> اس کے ساتھ گھاس اور درختوں کو موڑیں۔</li>
+<li><strong><code>WeatherEffects</code></strong> موسم کے نظارے شامل کرتا ہے۔ وہ ایک آسمانی تہہ کے طور پر حجمی بادل ہیں، بارش کہ
+چھتوں کے نیچے، گیلی سطحوں اور ڈھیروں، اور گرج چمک کے ساتھ بجلی سے باہر رہتا ہے۔ موسم آتا ہے۔
+سے <code>Weather</code> (د <code>.weather</code> متن، چھ بلٹ ان اقسام) <code>WeatherState</code> (موسم کے درمیان نرمی)
+اور <code>WeatherCycle</code> (موسم خود بدلتا ہے)۔</li>
+</ul>
+<h2 id="water-starhermitwater">پانی: <code>starhermit:water</code></h2>
+<p>ایک <strong><code>Ocean</code></strong> ایف ایف ٹی لہروں کو انعکاس، اپورتن، فوم، وائٹ کیپس اور شوالنگ کے ساتھ کھینچتا ہے
+سمندری فرش اس کے درجات ہیں۔ <code>"gpu"</code>, <code>"cpu"</code>, <code>"gerstner"</code> (سب سے کم گرافکس کی سطح) اور <code>"off"</code>.
+<code>ocean.tier</code> اور <code>tierNote</code> کہو کون سا چلتا ہے؟ گیم پلے ڈیٹرمنسٹک ویو فیلڈ کو پڑھتا ہے۔
+<code>heightAt</code>, <code>sampleAt</code> اور <code>buoyancy</code>، جو بھی درجے کھینچا گیا ہے۔ ہوا سے آتی ہے a <code>WindField</code>
+(<code>setWindField</code>) یا <code>setWind</code>. <code>Pond</code> (8 تک) ایک مستطیل پر اب بھی پانی ہے جس پر ہوا چلتی ہے۔
+<code>WaterMaterial</code> ندیوں اور بہتے پانی کے لیے ایک ہیٹ فیلڈ میش کو وہی شیڈنگ دیتا ہے۔</p>
+<h2 id="surfaces-and-grass-starhermitsurfaces">سطحیں اور گھاس: <code>starhermit:surfaces</code></h2>
+<ul>
+<li><code>generateSurface</code> 20 میں سے کسی بھی ٹائلنگ کی سطحوں کو نام اور بیج کے مطابق بناتا ہے۔ ان میں ریت، بجری،
+گھاس، چٹان، برف، سنگ مرمر اور پانچ چھال۔ ہر ایک رنگ، نارمل، محیطی رکاوٹ کے ساتھ آتا ہے،
+کھردری اور دھاتی پن کے نقشے</li>
+<li><code>createSurfaceMaterial</code> ایک سینکی ہوئی سطح کو مواد میں بدل دیتا ہے، اختیاری ہکس کے ساتھ جو چھپ جاتے ہیں۔
+ٹائل لگانا</li>
+<li><code>createTerrainMaterial</code> عمودی حصص کے ذریعہ تین سطحوں کو ملا دیتا ہے۔</li>
+<li><code>createGrass</code> a سے گھاس اگاتی ہے۔ <code>.grass</code> نسل (گھاس کا میدان، لان، خشک، لمبا، کنارے، یا آپ کا اپنا متن):
+بلیڈ، ماتمی لباس اور پھول، ہوا کے جھونکے کے لیے تیار اور <code>generateLods(…, { thin: true })</code>.</li>
+</ul>
+<p>آؤٹ پٹ مقامی طور پر اور براؤزرز میں یکساں ہے۔</p>
+<h2 id="particles">ذرات</h2>
+<p><code>ParticleEmitter</code> (میں <code>starhermit:scene</code>) فوائد:</p>
+<ul>
+<li><strong>افواج:</strong> <code>wind</code>, <code>curl</code>, <code>buoyancy</code>, <code>vortex</code> اور <code>attract</code>.</li>
+<li><strong>ٹکراؤ:</strong> a <code>floor</code> اور چار تک <code>colliders</code> (ہوائی جہاز اور اونچائی والے میدان) جو اچھالتے ہیں، کلیمپ کرتے ہیں،
+لاٹھی یا مارنا.</li>
+<li><strong>حرکت اور اسپوننگ:</strong> <code>sway</code>, <code>sizeSpread</code>, <code>velocityMode</code> <code>"planar"</code>/<code>"radial"</code>، اور <code>"ring"</code>
+اور <code>"disc"</code> شکلیں</li>
+<li><strong>گردش:</strong> <code>rotation</code>, <code>rotationSpread</code>, <code>spin</code>, <code>spinSpread</code> اور <code>rotationAxis</code>کنفیٹی کے لیے،
+پتے اور ملبہ.</li>
+<li><strong>اسپرائٹس:</strong> <code>lit</code>, <code>soft</code> اور <code>billboard</code> sprites (انجن کی توسیع)، سورج کی طرف سے روشن،
+ماحول اور روشنی.</li>
+</ul>
+<p>خارج کرنے والے تعیین پسند رہتے ہیں۔ اے <code>set()</code> رینج چیک سے انکار اب ترتیبات کو بغیر کسی تبدیلی کے چھوڑ دیتا ہے۔
+قطار میں لگانا 256 bursts پھینکنا a <code>RangeError</code>جہاں یہ انہیں خاموشی سے چھوڑتا تھا۔</p>
+<p><code>GPUParticleEmitter</code> میں <code>starhermit:particles</code> ایک انجن کی توسیع ہے. یہ تقریبا a تک نقل کرتا ہے۔
+GPU پر ملین ذرات فی ایمیٹر، گرافکس لیول کے بجٹ کے اندر، فورسز کے ساتھ،
+ٹکرانے والے اور منظر کی گہرائی کے خلاف تصادم۔ یہ سولسٹیس طرز کو بھی لوڈ کرتا ہے۔ <code>.particles</code> اثرات
+(<code>loadParticleEffect</code>)۔ یہ تعیین پسند نہیں ہے، اور گیم پلے اسے نہیں پڑھ سکتا۔ فلوٹ رینڈر کے بغیر
+ہدف ہے کہ یہ 4,096 ذرات تک کے CPU ایمیٹر پر واپس آتا ہے۔</p>
+<h2 id="rendering-and-shadows">رینڈرنگ اور سائے</h2>
+<table>
+<thead>
+<tr>
+<th>فیچر</th>
+<th>API</th>
+<th>نوٹس</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>اپ اسکیلنگ کے ساتھ وقتی اینٹی ایلائزنگ</td>
+<td><code>renderer.antialias = "taa"</code></td>
+<td>FXAA پر واپس آتا ہے (نوٹ کے ساتھ) جہاں غیر تعاون یافتہ ہے۔ <code>renderer.resetHistory()</code> ایک کٹ کے بعد</td>
+</tr>
+<tr>
+<td>موشن ویکٹر</td>
+<td><code>scene_velocity(uv)</code> پوسٹ پروگراموں میں</td>
+<td>انجن کی توسیع</td>
+</tr>
+<tr>
+<td>رینڈر پیمانہ</td>
+<td><code>setPixelRatio</code>, <code>setSize</code>, <code>getPixelRatio</code>, <code>getSize</code>، ڈرائنگ بفر سائز</td>
+<td>کھلاڑی کا رینڈر پیمانہ اور انکولی ریزولوشن اب اسکرپٹ گیمز پر لاگو ہوتا ہے۔</td>
+</tr>
+<tr>
+<td>اسکرین اسپیس کی عکاسی، عالمی روشنی</td>
+<td><code>renderer.ssr</code>, <code>renderer.ssgi</code></td>
+<td>انجن کی توسیع؛ صرف ہائی اور الٹرا پر روشنی</td>
+</tr>
+<tr>
+<td>خودکار نمائش</td>
+<td><code>renderer.exposure.auto</code>, <code>renderer.exposure.hold</code></td>
+<td>انجن کی توسیع</td>
+</tr>
+<tr>
+<td>تیز کرنا، فلمی اناج، سپیکولر اینٹی ایلائزنگ</td>
+<td><code>renderer.sharpen</code>, <code>renderer.film</code>, <code>renderer.specularAntialiasing</code></td>
+<td>انجن کی توسیع</td>
+</tr>
+<tr>
+<td>سائے سے رابطہ کریں۔</td>
+<td><code>renderer.contactShadows</code></td>
+<td>انجن کی توسیع، بطور ڈیفالٹ آف</td>
+</tr>
+<tr>
+<td>پوائنٹ ہلکے سائے</td>
+<td>three.js <code>PointLightShadow</code></td>
+<td>شیڈو سلاٹ ختم ہونے پر پہلے گرا دیا گیا۔</td>
+</tr>
+<tr>
+<td>شیڈو اپ ڈیٹ کنٹرول</td>
+<td><code>shadowMap.autoUpdate</code>/<code>needsUpdate</code>, <code>light.shadow.autoUpdate</code>/<code>needsUpdate</code></td>
+<td>جیسا کہ three.js r185: ایک نقشہ اس وقت تک رکھیں جب تک کہ دوبارہ بنانے کے لیے نہ کہا جائے۔</td>
+</tr>
+<tr>
+<td>کیشڈ جھرن</td>
+<td><code>shadow.cascades.cached</code></td>
+<td>انجن کی توسیع: جامد کاسٹر ایک بار کھینچے گئے، بہت سستے سائے</td>
+</tr>
+</tbody>
+</table>
+<p>اثر والے بجٹ کے دوران، انجن پہلے عالمی روشنی ڈالتا ہے، پھر عکاسی کرتا ہے۔ ہر ایک دکھاتا ہے۔
+اختیارات میں نوٹ کریں۔</p>
+<h2 id="textures-animation-and-levels-of-detail">بناوٹ، حرکت پذیری اور تفصیل کی سطح</h2>
+<ul>
+<li><strong>کمپریسڈ بناوٹ۔</strong> KTX2 فائلیں BC1، BC3، BC4، BC5 یا BC7 بلاکس کے ذریعے لوڈ ہوتی ہیں
+<code>KTX2Loader</code> اور <code>TextureLoader</code>. BC سپورٹ کے بغیر آلات انہیں RGBA8 پر کھول دیتے ہیں۔ ہونا
+انہوں نے آپ کے لئے لکھا ہے، سیٹ <code>engine.textures.compress=bc</code> اور <code>starhermit package</code> KTX2 فائلیں لکھتا ہے۔
+آپ کی PNG اور WebP تصاویر کے ساتھ۔ تصاویر فال بیک کے طور پر رہتی ہیں۔ بیس یونیورسل تعاون یافتہ نہیں ہے۔
+<code>Texture.preserveCoverage</code> الفا ٹیسٹ شدہ پودوں کو فاصلے پر پتلا ہونے سے روکتا ہے۔</li>
+<li><strong>مورف اہداف</strong> تین.js r185 کی طرح کام کریں، بشمول glTF سے۔</li>
+<li><strong><code>AnimationGraph</code></strong> (انجن کی توسیع) پرتوں والی ریاستی مشینیں، بلینڈ اسپیس، مطابقت پذیری فراہم کرتی ہے۔
+ٹرانزیشن، ہڈی ماسک اور اضافی تہوں.</li>
+<li><strong><code>SkeletonUtils.retarget</code>, <code>retargetClip</code> اور <code>clone</code></strong> (three.js addon) کے درمیان متحرک تصاویر لے جائیں۔
+رگ</li>
+<li><strong><code>compressClip</code></strong> حرکت پذیری کلپس کو سکڑتا ہے، اور <code>setUpdateIntervals</code> دور دراز کے حروف کو اپ ڈیٹ کرتا ہے۔
+کم کثرت سے.</li>
+<li><strong>تفصیل کی سطحیں۔</strong> three.js <code>SimplifyModifier</code>، اور انجن کا <code>generateLods</code>، جو بناتا ہے۔
+a <code>LOD</code> یا ایک <code>InstancedMesh</code>کی سطحیں جو آن اسکرین غلطی سے تبدیل ہوتی ہیں۔</li>
+</ul>
+<h2 id="where-to-read-more">جہاں مزید پڑھیں</h2>
+<ul>
+<li><code>.starhermit/starhermit.d.ts</code> آپ کے گیم میں: ہر ماڈیول، ممبر، آپشن، یونٹ اور حد۔</li>
+<li>دی <a href="/ur/docs/tutorials/starhermit-engine.html">انجن ٹیوٹوریل</a> اسکرپٹ گیم کی بنیادی باتوں کے لیے۔</li>
+<li><a href="/ur/docs/native-performance.html">مقامی کارکردگی</a> جہاں بھاری کام رہنا چاہیے۔</li>
+</ul>
+
+{% endraw %}

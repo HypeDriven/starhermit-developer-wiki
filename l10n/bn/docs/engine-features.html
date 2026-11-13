@@ -1,0 +1,226 @@
+---
+layout: "wiki"
+lang: "bn"
+title: "ইঞ্জিন বৈশিষ্ট্য: পদার্থবিদ্যা, যানবাহন, আকাশ, জল এবং রেন্ডারিং"
+source_url: "/docs/engine-features.html"
+source_path: "docs/engine-features.md"
+source_hash: "181149b5b0b48ea8bb58f3a23619e41566823ace71e6c6f1e085943975deff60"
+translation: "machine"
+permalink: "/bn/docs/engine-features.html"
+---
+{% raw %}
+<h1 id="engine-features-physics-vehicles-sky-water-and-rendering">ইঞ্জিন বৈশিষ্ট্য: পদার্থবিদ্যা, যানবাহন, আকাশ, জল এবং রেন্ডারিং</h1>
+<p>ইঞ্জিন 1.40.0 (হোস্ট API 1.40) স্ক্রিপ্ট গেমগুলির জন্য সিমুলেশন এবং রেন্ডারিং বৈশিষ্ট্য যুক্ত করে: অনমনীয়-বডি
+পদার্থবিদ্যা, যানবাহন, একটি ভৌত আকাশ এবং আবহাওয়া, একটি মহাসাগর, পদ্ধতিগত পৃষ্ঠ এবং ঘাস, GPU কণা,
+টেম্পোরাল অ্যান্টি-আলিয়াসিং এবং স্ক্রিন-স্পেস ইফেক্ট, আরও ভালো ছায়া, সংকুচিত টেক্সচার এবং নতুন
+অ্যানিমেশন এবং লেভেল-অফ-ডিটেইল টুল। এই পৃষ্ঠাটি প্রতিটি এলাকার একটি ওভারভিউ দেয় এবং কী আশা করা যায়
+এটা থেকে প্রতিটি সদস্য, বিকল্প, ইউনিট এবং সীমা আপনার গেম এর নথিভুক্ত করা হয়
+<code>.starhermit/starhermit.d.ts</code> (<code>starhermit types</code> এটা লেখেন); এই পৃষ্ঠাটি এটি পুনরাবৃত্তি করে না।</p>
+<h2 id="turning-them-on">সেগুলো চালু করা হচ্ছে</h2>
+<p>এখানে প্রতিটি বৈশিষ্ট্য শুধুমাত্র সেই গেমগুলিতে প্রযোজ্য যা হোস্ট API 1.40 বা তার পরে ঘোষণা করে৷ <code>starhermit.txt</code>:</p>
+<pre><code class="language-text">engine.api=1
+engine.version=1.40.0
+engine.minor=40
+</code></pre>
+<p>এ একটি খেলা <code>engine.minor=39</code> বা নিম্ন 1.39 এর আচরণ, ফ্রেমের জন্য ফ্রেম রাখে। এটি নতুন আমদানি করতে পারে না
+মডিউল (<code>starhermit:physics</code>, <code>starhermit:vehicle</code>, <code>starhermit:sky</code>, <code>starhermit:weather</code>,
+<code>starhermit:water</code>, <code>starhermit:surfaces</code>, <code>starhermit:particles</code>): আমদানী নিক্ষেপ ক <code>TypeError</code>. নতুন
+বিদ্যমান ক্লাসের বিকল্পগুলি এমন একটি গেমের জন্য অজানা বিকল্পগুলি থেকে যায়। উত্থাপন <code>engine.minor</code> সমগ্র হয়
+অপ্ট-ইন; নতুন রানটাইমে প্রথমে আপনার গেমটি পরীক্ষা করুন (দেখুন
+<a href="/bn/docs/tutorials/starhermit-engine.html#9-move-to-a-newer-engine">একটি নতুন ইঞ্জিনে চলে যাচ্ছে</a>).</p>
+<p>কিছু বৈশিষ্ট্য three.js r185 অনুসরণ করে এবং এর নাম এবং আচরণ রাখে। অন্যরা <strong>ইঞ্জিন
+এক্সটেনশন</strong>, ঘোষণায় যেমন চিহ্নিত করা হয়েছে: তাদের কোনো three.js সমতুল্য নেই, এবং কোড ব্যবহার করে
+এগুলি three.js এ চলে না।</p>
+<h2 id="what-to-expect-on-every-device">প্রতিটি ডিভাইসে কি আশা করা যায়</h2>
+<p><strong>প্রতিটি চাক্ষুষ বৈশিষ্ট্য একটি ফলব্যাক মই আছে</strong> (পূর্ণ → হ্রাস → সর্বনিম্ন → বন্ধ) প্রতিটি রানটাইমে, নেটিভ
+এবং ব্রাউজার। যখন ডিভাইস বা প্লেয়ারের গ্রাফিক্স স্তরটি একটি স্তর চালাতে পারে না, তখন ইঞ্জিনটি নেয়
+পরবর্তী একটি নিচে এবং একটি নোট যোগ করুন <strong>বিকল্প → গ্রাফিক্স</strong> যে বলে কি নামানো হয়েছে. আপনার খেলা রাখা
+কাজ করা এটা শুধু সহজ দেখায়. যদিও আপনার নিজের ক্ষমতা সনাক্ত করার দরকার নেই
+<code>renderer.capabilities</code> এবং যেমন বৈশিষ্ট্য <code>ocean.tier</code> আপনাকে বলুন কি নির্বাচিত হয়েছে।</p>
+<p><strong>সিমুলেশন নির্ধারক।</strong> পদার্থবিদ্যা, যানবাহন, জলের তরঙ্গ ক্ষেত্র (<code>heightAt</code>, <code>sampleAt</code>,
+<code>buoyancy</code>), বাতাসের <code>velocityAt</code>, পদ্ধতিগত পৃষ্ঠতল এবং CPU কণা বিট-অভিন্ন ফলাফল দেয়
+স্থানীয়ভাবে এবং ব্রাউজারে, তাই লকস্টেপ মাল্টিপ্লেয়ার তাদের উপর নির্ভর করতে পারে। GPU কণা এবং সবকিছু
+আঁকা নির্ধারক নয় এবং গেমপ্লে দ্বারা পাঠযোগ্য নয়।</p>
+<p><strong>দেশীয় কাজ চালানোর আগে চার্জ করা হয়.</strong> নতুন নেটিভ চার্জ মধ্যে কল
+<a href="/bn/docs/tutorials/starhermit-engine.html#10-limits-and-the-licence">জ্বালানী</a> তাদের কাজের জন্য সামনে, অনুপাতে
+তারা কতটা করবে। প্রতিটির হার্ড বাউন্ডও রয়েছে, তাই একটি একক বড় আকারের কল (একটি বিশাল ঘাস প্যাচ, ক
+পুরো ট্র্যাক অনুসন্ধান, একটি বিশাল জলের নমুনা) ফ্রেমটি আটকানোর পরিবর্তে একটি ত্রুটি সহ প্রত্যাখ্যান করা হয়েছে।
+গণনা সীমাবদ্ধ, উদাহরণস্বরূপ 64টি যানবাহন, 16টি উচ্চতাক্ষেত্র, 16টি ট্র্যাক এবং 8টি পুকুর একবারে।</p>
+<h2 id="physics-starhermitphysics">পদার্থবিদ্যা: <code>starhermit:physics</code></h2>
+<p><code>PhysicsWorld</code> একটি 3D অনমনীয়-বডি ওয়ার্ল্ড (একটি ইঞ্জিন এক্সটেনশন; three.js এর কোন পদার্থবিদ্যা নেই):</p>
+<ul>
+<li><strong>মৃতদেহ:</strong> গতিশীল, স্ট্যাটিক এবং কাইনেমেটিক, সঠিক কাইনেমেটিক টার্গেট সহ।</li>
+<li><strong>কোলাইডার:</strong> গোলক, বাক্স, ক্যাপসুল, সিলিন্ডার, শঙ্কু, উত্তল হুল, ত্রিভুজ জাল, উচ্চতাক্ষেত্র, সমতল
+এবং ত্রিভুজ। মেশ এবং হুল সরাসরি ক থেকে তৈরি করা যেতে পারে <code>BufferGeometry</code>.</li>
+<li><strong>জয়েন্টগুলি:</strong> নির্দিষ্ট, বল, কব্জা, স্লাইডার, দূরত্ব, দড়ি, বসন্ত এবং শঙ্কু-মোচড়, সীমা সহ, মোটর
+এবং ভাঙ্গা</li>
+<li><strong>প্রশ্ন:</strong> রে কাস্ট, শেপ কাস্ট, ওভারল্যাপ এবং টাচ ইভেন্ট।</li>
+<li><strong>অক্ষর:</strong> একটি গতিবিদ্যা <code>CharacterController</code> স্লাইডিং, ঢাল সীমা, অটোস্টেপ এবং স্ন্যাপিং সহ
+মাটিতে</li>
+</ul>
+<p>একক হল মিটার, কিলোগ্রাম এবং সেকেন্ড। স্থানাঙ্কগুলি অবশ্যই উৎপত্তি থেকে 1,000,000 মিটারের মধ্যে থাকতে হবে৷
+থেকে বিশ্বের ধাপ <code>onFixedUpdate</code>, এবং থেকে সংযুক্ত বস্তু রাখুন <code>onRender</code>:</p>
+<pre><code class="language-ts">import { onFixedUpdate, onRender } from "starhermit:engine";
+import { PhysicsWorld } from "starhermit:physics";
+
+const world = new PhysicsWorld();
+world.createCollider({ shape: { type: "trimesh", geometry: level.geometry } });
+const crate = world.createBody({ position: [0, 5, 0], object: crateMesh });
+world.createCollider({ shape: { type: "box", halfExtents: [0.5, 0.5, 0.5] } }, crate);
+onFixedUpdate((dt) =&gt; world.step(dt));
+onRender((alpha) =&gt; world.sync(alpha)); // interpolated between steps
+</code></pre>
+<h2 id="vehicles-starhermitvehicle">যানবাহন: <code>starhermit:vehicle</code></h2>
+<p><code>Vehicle</code> একটি থেকে নির্মিত গতিবিদ্যা ড্রাইভিং হয় <code>.vehicle</code> পাঠ্য বা একটি নির্দিষ্ট বস্তু। এটি Pacejka টায়ার মডেল,
+সাসপেনশন, একটি ড্রাইভট্রেন (ইঞ্জিন, ক্লাচ, গিয়ারবক্স, ডিফারেনশিয়াল, ব্রেক), অ্যারোডাইনামিকস এবং ABS,
+ট্র্যাকশন এবং স্থিতিশীলতা নিয়ন্ত্রণ। সমতল ভূমিতে গাড়ি চলে, ক <code>Heightfield</code> বা একটি পদার্থবিজ্ঞানের বিশ্ব। <code>Track</code>, <code>LapTimer</code>,
+<code>Autopilot</code> এবং <code>formatLapTime</code> কভার সার্কিট, ল্যাপ এবং সেক্টর টাইমিং এবং এআই ড্রাইভার। ধাপের যানবাহন
+থেকে <code>onFixedUpdate</code>. ভিজ্যুয়ালের জন্য তাদের ইন্টারপোলেটেড বডি এবং চাকার রূপান্তর পড়ুন।</p>
+<h2 id="sky-and-weather-starhermitsky-starhermitweather">আকাশ এবং আবহাওয়া: <code>starhermit:sky</code>, <code>starhermit:weather</code></h2>
+<ul>
+<li><strong><code>SkyAtmosphere</code></strong> সূর্যের সাথে একটি শারীরিকভাবে ভিত্তিক আকাশ, তার পর্যায়ে চাঁদ, তারা এবং
+মিল্কিওয়ে, দিনের সময়, বছরের দিন এবং অক্ষাংশ দ্বারা স্থাপন করা হয়। এটি চালায় a <code>DirectionalLight</code> (সূর্য
+দিনে, চাঁদ রাতে) এবং অনুরোধে, <code>scene.background</code> এবং <code>scene.environment</code>. এর
+<strong>বায়বীয় দৃষ্টিকোণ</strong> একটি seam ছাড়া আকাশে দূরবর্তী জমি এবং সমুদ্রের কুয়াশা. কুয়াশা মিশে গেছে
+প্রতিটি রেন্ডার পাসের নিজস্ব রঙের স্থান, তাই পোস্টের মাধ্যমে দৃশ্যটি আঁকা হলে এটি সঠিক থাকে
+বাফার (রেন্ডার স্কেল, অভিযোজিত রেজোলিউশন, গতি ভেক্টর)। CPU প্রশ্ন (<code>sunDirection</code>,
+<code>moonDirection</code>, <code>moonPhase</code>) প্রতি রানটাইমে একই নম্বর দিন। এর স্তরগুলি পূর্ণ, হ্রাস পেয়েছে,
+minimal (প্রীথম) এবং বন্ধ।</li>
+<li>three.js r185 এর প্রীতম <strong><code>Sky</code></strong> অ্যাডনও পাওয়া যায়, থেকে <code>starhermit:scene</code> এবং
+<code>starhermit:sky</code>.</li>
+<li><strong><code>WindField</code></strong> বায়ু যার দিক বাড়ে এবং যার শক্তি ফুলে যায় এবং দমকা হয়। <code>velocityAt(x, z, t)</code>
+নির্ধারক এবং গেমপ্লের জন্য উপযুক্ত। উপকরণ ক্যামেরার চারপাশে বাতাসের ক্ষেত্র পড়তে পারে
+একটি হুক মাধ্যমে। <code>sway</code> এবং <code>swayMesh</code> এটা দিয়ে ঘাস এবং গাছ বাঁক.</li>
+<li><strong><code>WeatherEffects</code></strong> আবহাওয়ার ভিজ্যুয়াল যোগ করে। তারা আকাশের স্তর হিসাবে ভলিউম্যাট্রিক মেঘ, বৃষ্টি যে
+ছাদের নীচে, ভেজা পৃষ্ঠ এবং পুকুর থেকে দূরে থাকে এবং বজ্রপাতের সাথে বজ্রপাত হয়। আবহাওয়া আসে
+থেকে <code>Weather</code> (the <code>.weather</code> পাঠ্য, ছয়টি অন্তর্নির্মিত ধরণের), <code>WeatherState</code> (আবহাওয়ার মধ্যে সহজ হওয়া)
+এবং <code>WeatherCycle</code> (নিজেই আবহাওয়া পরিবর্তন করা)।</li>
+</ul>
+<h2 id="water-starhermitwater">জল: <code>starhermit:water</code></h2>
+<p>আ <strong><code>Ocean</code></strong> প্রতিফলন, প্রতিসরণ, ফেনা, হোয়াইটক্যাপস এবং একটি উপর শোলিং সহ FFT তরঙ্গ আঁকে
+সমুদ্রতল এর স্তরগুলি হল <code>"gpu"</code>, <code>"cpu"</code>, <code>"gerstner"</code> (সর্বনিম্ন গ্রাফিক্স স্তর) এবং <code>"off"</code>.
+<code>ocean.tier</code> এবং <code>tierNote</code> বল কোনটি রান। গেমপ্লে ডিটারমিনিস্টিক ওয়েভ ফিল্ড রিড করে
+<code>heightAt</code>, <code>sampleAt</code> এবং <code>buoyancy</code>, যে স্তর টানা হয়. বাতাস আসে a <code>WindField</code>
+(<code>setWindField</code>) বা <code>setWind</code>. <code>Pond</code> (8 পর্যন্ত) একটি আয়তক্ষেত্রের উপরে এখনও জল রয়েছে যা বাতাসের ঢেউ খেলে যায়।
+<code>WaterMaterial</code> নদী এবং প্রবাহিত জলের জন্য একটি উচ্চতাক্ষেত্রের জালকে একই ছায়া দেয়।</p>
+<h2 id="surfaces-and-grass-starhermitsurfaces">পৃষ্ঠ এবং ঘাস: <code>starhermit:surfaces</code></h2>
+<ul>
+<li><code>generateSurface</code> নাম এবং বীজ দ্বারা 20 টাইলিং পৃষ্ঠতলের যে কোনো বেক. এর মধ্যে রয়েছে বালি, নুড়ি,
+ঘাস, শিলা, তুষার, মার্বেল এবং পাঁচটি ছাল। প্রতিটি রঙ, স্বাভাবিক, পরিবেষ্টিত অবরোধ সহ আসে,
+রুক্ষতা এবং ধাতবতা মানচিত্র।</li>
+<li><code>createSurfaceMaterial</code> একটি বেকড পৃষ্ঠকে একটি উপাদানে পরিণত করে, ঐচ্ছিক হুকগুলি লুকিয়ে রাখে
+টাইলিং</li>
+<li><code>createTerrainMaterial</code> ভার্টেক্স শেয়ার দ্বারা তিনটি পৃষ্ঠকে মিশ্রিত করে।</li>
+<li><code>createGrass</code> a থেকে ঘাস জন্মায় <code>.grass</code> ব্রিড (মেডো, লন, শুষ্ক, লম্বা, প্রান্ত, বা আপনার নিজের লেখা):
+ব্লেড, আগাছা এবং ফুল, বায়ু দোল জন্য প্রস্তুত এবং <code>generateLods(…, { thin: true })</code>.</li>
+</ul>
+<p>আউটপুট স্থানীয়ভাবে এবং ব্রাউজারে অভিন্ন।</p>
+<h2 id="particles">কণা</h2>
+<p><code>ParticleEmitter</code> (এ <code>starhermit:scene</code>) লাভ:</p>
+<ul>
+<li><strong>বাহিনী:</strong> <code>wind</code>, <code>curl</code>, <code>buoyancy</code>, <code>vortex</code> এবং <code>attract</code>.</li>
+<li><strong>সংঘর্ষ:</strong> a <code>floor</code> এবং চার পর্যন্ত <code>colliders</code> (বিমান এবং উচ্চতাক্ষেত্র) যে বাউন্স, বাতা,
+লাঠি বা হত্যা</li>
+<li><strong>গতি এবং স্পনিং:</strong> <code>sway</code>, <code>sizeSpread</code>, <code>velocityMode</code> <code>"planar"</code>/<code>"radial"</code>, এবং <code>"ring"</code>
+এবং <code>"disc"</code> আকার</li>
+<li><strong>ঘূর্ণন:</strong> <code>rotation</code>, <code>rotationSpread</code>, <code>spin</code>, <code>spinSpread</code> এবং <code>rotationAxis</code>, কনফেটি জন্য,
+পাতা এবং ধ্বংসাবশেষ।</li>
+<li><strong>স্প্রাইটস:</strong> <code>lit</code>, <code>soft</code> এবং <code>billboard</code> sprites (ইঞ্জিন এক্সটেনশন), সূর্য দ্বারা আলোকিত,
+পরিবেশ এবং আলো।</li>
+</ul>
+<p>নির্গমনকারীরা নির্ধারক থাকে। ক <code>set()</code> পরিসীমা চেক প্রত্যাখ্যান এখন সেটিংস অপরিবর্তিত রাখে।
+256 টির বেশি বিস্ফোরণ সারিবদ্ধ করা <code>RangeError</code>, যেখানে এটি তাদের নিঃশব্দে ফেলে দিত।</p>
+<p><code>GPUParticleEmitter</code> মধ্যে <code>starhermit:particles</code> একটি ইঞ্জিন এক্সটেনশন। এটি প্রায় একটি পর্যন্ত অনুকরণ করে
+গ্রাফিক্স লেভেলের বাজেটের মধ্যে, ফোর্স সহ,
+সংঘর্ষ এবং দৃশ্যের গভীরতার বিরুদ্ধে সংঘর্ষ। এটি সলস্টিস-স্টাইলও লোড করে <code>.particles</code> প্রভাব
+(<code>loadParticleEffect</code>) এটি নির্ধারক নয়, এবং গেমপ্লে এটি পড়তে পারে না। ভাসা রেন্ডার ছাড়া
+লক্ষ্যমাত্রা এটি 4,096 কণা পর্যন্ত একটি CPU ইমিটারে ফিরে আসে।</p>
+<h2 id="rendering-and-shadows">রেন্ডারিং এবং ছায়া</h2>
+<table>
+<thead>
+<tr>
+<th>বৈশিষ্ট্য</th>
+<th>API</th>
+<th>নোট</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>আপস্কেলিং সহ টেম্পোরাল অ্যান্টি-আলিয়াসিং</td>
+<td><code>renderer.antialias = "taa"</code></td>
+<td>এফএক্সএএ-তে ফিরে আসে (একটি নোট সহ) যেখানে অসমর্থিত; <code>renderer.resetHistory()</code> একটি কাটা পরে</td>
+</tr>
+<tr>
+<td>গতি ভেক্টর</td>
+<td><code>scene_velocity(uv)</code> পোস্ট প্রোগ্রামে</td>
+<td>ইঞ্জিন এক্সটেনশন</td>
+</tr>
+<tr>
+<td>রেন্ডার স্কেল</td>
+<td><code>setPixelRatio</code>, <code>setSize</code>, <code>getPixelRatio</code>, <code>getSize</code>, অঙ্কন-বাফার আকার</td>
+<td>প্লেয়ারের রেন্ডার স্কেল এবং অভিযোজিত রেজোলিউশন এখন স্ক্রিপ্ট গেমগুলিতে প্রযোজ্য</td>
+</tr>
+<tr>
+<td>স্ক্রীন-স্পেস প্রতিফলন, বিশ্বব্যাপী আলোকসজ্জা</td>
+<td><code>renderer.ssr</code>, <code>renderer.ssgi</code></td>
+<td>ইঞ্জিন এক্সটেনশন; শুধুমাত্র উচ্চ এবং আল্ট্রা উপর আলোকসজ্জা</td>
+</tr>
+<tr>
+<td>স্বয়ংক্রিয় এক্সপোজার</td>
+<td><code>renderer.exposure.auto</code>, <code>renderer.exposure.hold</code></td>
+<td>ইঞ্জিন এক্সটেনশন</td>
+</tr>
+<tr>
+<td>শার্পনিং, ফিল্ম গ্রেইন, স্পেকুলার অ্যান্টি-আলিয়াসিং</td>
+<td><code>renderer.sharpen</code>, <code>renderer.film</code>, <code>renderer.specularAntialiasing</code></td>
+<td>ইঞ্জিন এক্সটেনশন</td>
+</tr>
+<tr>
+<td>যোগাযোগ ছায়া</td>
+<td><code>renderer.contactShadows</code></td>
+<td>ইঞ্জিন এক্সটেনশন, ডিফল্টরূপে বন্ধ</td>
+</tr>
+<tr>
+<td>বিন্দু-আলো ছায়া</td>
+<td>three.js <code>PointLightShadow</code></td>
+<td>শ্যাডো স্লট ফুরিয়ে গেলে প্রথমে বাদ পড়ে</td>
+</tr>
+<tr>
+<td>ছায়া আপডেট নিয়ন্ত্রণ</td>
+<td><code>shadowMap.autoUpdate</code>/<code>needsUpdate</code>, <code>light.shadow.autoUpdate</code>/<code>needsUpdate</code></td>
+<td>three.js r185 হিসাবে: পুনরায় আঁকতে বলা না হওয়া পর্যন্ত একটি মানচিত্র রাখুন</td>
+</tr>
+<tr>
+<td>ক্যাশে ক্যাসকেড</td>
+<td><code>shadow.cascades.cached</code></td>
+<td>ইঞ্জিন এক্সটেনশন: স্ট্যাটিক casters একবার আঁকা, অনেক সস্তা ছায়া</td>
+</tr>
+</tbody>
+</table>
+<p>প্রভাব বাজেটে, ইঞ্জিনটি প্রথমে বিশ্বব্যাপী আলোকসজ্জা হ্রাস করে, তারপর প্রতিফলন। প্রতিটি দেখায় a
+বিকল্পগুলিতে নোট করুন।</p>
+<h2 id="textures-animation-and-levels-of-detail">টেক্সচার, অ্যানিমেশন এবং বিস্তারিত স্তর</h2>
+<ul>
+<li><strong>সংকুচিত অঙ্গবিন্যাস.</strong> BC1, BC3, BC4, BC5 বা BC7 ব্লক সহ KTX2 ফাইল লোড হয়
+<code>KTX2Loader</code> এবং <code>TextureLoader</code>. BC সমর্থন ছাড়া ডিভাইসগুলিকে RGBA8-এ আনপ্যাক করা হয়। আছে
+তারা আপনার জন্য লিখিত, সেট <code>engine.textures.compress=bc</code> এবং <code>starhermit package</code> KTX2 ফাইল লেখে
+আপনার PNG এবং WebP ছবির পাশে। ইমেজ একটি ফলব্যাক হিসাবে থাকে. বেসিস ইউনিভার্সাল সমর্থিত নয়।
+<code>Texture.preserveCoverage</code> আলফা-পরীক্ষিত পাতাগুলিকে দূরত্বে পাতলা হওয়া থেকে রক্ষা করে।</li>
+<li><strong>মোর্ফ টার্গেট</strong> glTF থেকে সহ three.js r185 এর মতো কাজ করুন।</li>
+<li><strong><code>AnimationGraph</code></strong> (ইঞ্জিন এক্সটেনশন) স্তরযুক্ত স্টেট মেশিন, ব্লেন্ড স্পেস, সিঙ্ক করা প্রদান করে
+রূপান্তর, হাড়ের মুখোশ এবং সংযোজন স্তর।</li>
+<li><strong><code>SkeletonUtils.retarget</code>, <code>retargetClip</code> এবং <code>clone</code></strong> (three.js addon) এর মধ্যে অ্যানিমেশন বহন করে
+রিগস</li>
+<li><strong><code>compressClip</code></strong> অ্যানিমেশন ক্লিপ সঙ্কুচিত করে, এবং <code>setUpdateIntervals</code> দূরবর্তী অক্ষর আপডেট করে
+কম প্রায়ই</li>
+<li><strong>বিস্তারিত মাত্রা.</strong> three.js এর <code>SimplifyModifier</code>, এবং ইঞ্জিনের <code>generateLods</code>, যা তৈরি করে
+ক <code>LOD</code> অথবা একটি <code>InstancedMesh</code>এর স্তরগুলি যা অন-স্ক্রীন ত্রুটি দ্বারা পরিবর্তন করে।</li>
+</ul>
+<h2 id="where-to-read-more">যেখানে আরও পড়তে হবে</h2>
+<ul>
+<li><code>.starhermit/starhermit.d.ts</code> আপনার গেমে: প্রতিটি মডিউল, সদস্য, বিকল্প, ইউনিট এবং সীমা।</li>
+<li>দ <a href="/bn/docs/tutorials/starhermit-engine.html">ইঞ্জিন টিউটোরিয়াল</a> একটি স্ক্রিপ্ট গেমের মৌলিক বিষয়গুলির জন্য।</li>
+<li><a href="/bn/docs/native-performance.html">নেটিভ পারফরম্যান্স</a> যেখানে ভারী কাজ থাকতে হবে।</li>
+</ul>
+
+{% endraw %}

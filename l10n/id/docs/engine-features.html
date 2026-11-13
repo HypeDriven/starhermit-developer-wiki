@@ -1,0 +1,226 @@
+---
+layout: "wiki"
+lang: "id"
+title: "Fitur mesin: fisika, kendaraan, langit, air, dan rendering"
+source_url: "/docs/engine-features.html"
+source_path: "docs/engine-features.md"
+source_hash: "181149b5b0b48ea8bb58f3a23619e41566823ace71e6c6f1e085943975deff60"
+translation: "machine"
+permalink: "/id/docs/engine-features.html"
+---
+{% raw %}
+<h1 id="engine-features-physics-vehicles-sky-water-and-rendering">Fitur mesin: fisika, kendaraan, langit, air, dan rendering</h1>
+<p>Engine 1.40.0 (host API 1.40) menambahkan fitur simulasi dan rendering untuk permainan skrip: rigid-body
+fisika, kendaraan, langit dan cuaca fisik, lautan, permukaan prosedural dan rumput, partikel GPU,
+anti-aliasing sementara dan efek ruang layar, bayangan yang lebih baik, tekstur terkompresi, dan yang baru
+animasi dan alat tingkat detail. Halaman ini memberikan ikhtisar setiap area dan apa yang diharapkan
+dari itu. Setiap anggota, pilihan, unit dan batas didokumentasikan dalam permainan Anda
+<code>.starhermit/starhermit.d.ts</code> (<code>starhermit types</code> menulisnya); halaman ini tidak mengulanginya.</p>
+<h2 id="turning-them-on">Menghidupkannya</h2>
+<p>Setiap fitur di sini hanya berlaku untuk game yang mendeklarasikan host API 1.40 atau lebih baru <code>starhermit.txt</code>:</p>
+<pre><code class="language-text">engine.api=1
+engine.version=1.40.0
+engine.minor=40
+</code></pre>
+<p>Sebuah permainan di <code>engine.minor=39</code> atau lebih rendah mempertahankan perilaku 1,39, frame demi frame. Itu tidak dapat mengimpor yang baru
+modul (<code>starhermit:physics</code>, <code>starhermit:vehicle</code>, <code>starhermit:sky</code>, <code>starhermit:weather</code>,
+<code>starhermit:water</code>, <code>starhermit:surfaces</code>, <code>starhermit:particles</code>): impor melempar a <code>TypeError</code>. Baru
+opsi pada kelas yang ada tetap opsi yang tidak diketahui untuk permainan semacam itu. Pemeliharaan <code>engine.minor</code> adalah keseluruhan
+ikut serta; periksa game Anda pada runtime baru terlebih dahulu (lihat
+<a href="/id/docs/tutorials/starhermit-engine.html#9-move-to-a-newer-engine">pindah ke mesin yang lebih baru</a>).</p>
+<p>Beberapa fitur mengikuti three.js r185 dan tetap mempertahankan nama dan perilakunya. Yang lainnya adalah <strong>mesin
+ekstensi</strong>, ditandai seperti itu dalam deklarasi: mereka tidak memiliki padanan three.js, dan menggunakan kode
+mereka tidak berjalan di three.js.</p>
+<h2 id="what-to-expect-on-every-device">Apa yang diharapkan di setiap perangkat</h2>
+<p><strong>Setiap fitur visual memiliki tangga cadangan</strong> (penuh → dikurangi → minimal → mati) pada setiap runtime, asli
+dan peramban. Ketika perangkat atau level grafis pemain tidak dapat menjalankan suatu tingkatan, mesin akan mengambil alih
+berikutnya turun dan menambahkan catatan <strong>Pilihan → Grafik</strong> itu mengatakan apa yang diturunkan. Permainanmu terus berlanjut
+bekerja; itu hanya terlihat lebih sederhana. Namun, Anda tidak perlu mendeteksi kemampuannya sendiri
+<code>renderer.capabilities</code> dan properti seperti <code>ocean.tier</code> memberitahu Anda apa yang dipilih.</p>
+<p><strong>Simulasi bersifat deterministik.</strong> Fisika, kendaraan, medan gelombang air (<code>heightAt</code>, <code>sampleAt</code>,
+<code>buoyancy</code>), angin <code>velocityAt</code>, permukaan prosedural dan partikel CPU memberikan hasil yang sedikit identik
+secara native dan di browser, jadi multipemain lockstep dapat mengandalkannya. Partikel GPU dan segalanya
+yang digambar tidak bersifat deterministik dan tidak dapat dibaca oleh gameplay.</p>
+<p><strong>Pekerjaan asli dikenakan biaya sebelum dijalankan.</strong> Panggilan ke penduduk asli baru dikenakan biaya
+<a href="/id/docs/tutorials/starhermit-engine.html#10-limits-and-the-licence">bahan bakar</a> untuk pekerjaan mereka di depan, secara proporsional
+seberapa banyak yang akan mereka lakukan. Masing-masing juga memiliki batas yang keras, sehingga satu panggilan berukuran besar (sebidang rumput besar, a
+pencarian seluruh jalur, sampel air dalam jumlah besar) ditolak karena kesalahan alih-alih menghentikan frame.
+Hitungannya dibatasi, misalnya 64 kendaraan, 16 ketinggian, 16 lintasan dan 8 kolam sekaligus.</p>
+<h2 id="physics-starhermitphysics">Fisika: <code>starhermit:physics</code></h2>
+<p><code>PhysicsWorld</code> adalah dunia benda tegar 3D (ekstensi mesin; three.js tidak memiliki fisika):</p>
+<ul>
+<li><strong>Badan:</strong> dinamis, statis dan kinematik, dengan target kinematik yang tepat.</li>
+<li><strong>Penumbuk:</strong> bola, kotak, kapsul, silinder, kerucut, lambung cembung, jaring segitiga, bidang ketinggian, bidang
+dan segitiga. Jerat dan lambung kapal dapat dibuat langsung dari a <code>BufferGeometry</code>.</li>
+<li><strong>Sendi:</strong> tetap, bola, engsel, penggeser, jarak, tali, pegas dan putaran kerucut, dengan batas, motor
+dan melanggar.</li>
+<li><strong>Pertanyaan:</strong> ray cast, shape cast, tumpang tindih dan peristiwa sentuhan.</li>
+<li><strong>Karakter:</strong> sebuah kinematika <code>CharacterController</code> dengan geser, batas kemiringan, autostep dan gertakan
+ke tanah.</li>
+</ul>
+<p>Satuannya adalah meter, kilogram, dan detik. Koordinat harus berada dalam jarak 1.000.000 m dari titik asal.
+Jauhi dunia <code>onFixedUpdate</code>, dan tempatkan benda-benda yang dilampirkan <code>onRender</code>:</p>
+<pre><code class="language-ts">import { onFixedUpdate, onRender } from "starhermit:engine";
+import { PhysicsWorld } from "starhermit:physics";
+
+const world = new PhysicsWorld();
+world.createCollider({ shape: { type: "trimesh", geometry: level.geometry } });
+const crate = world.createBody({ position: [0, 5, 0], object: crateMesh });
+world.createCollider({ shape: { type: "box", halfExtents: [0.5, 0.5, 0.5] } }, crate);
+onFixedUpdate((dt) =&gt; world.step(dt));
+onRender((alpha) =&gt; world.sync(alpha)); // interpolated between steps
+</code></pre>
+<h2 id="vehicles-starhermitvehicle">Kendaraan: <code>starhermit:vehicle</code></h2>
+<p><code>Vehicle</code> adalah dinamika berkendara yang dibangun dari a <code>.vehicle</code> teks atau objek spesifikasi. Ini memodelkan ban Pacejka,
+suspensi, drivetrain (mesin, kopling, girboks, diferensial, rem), aerodinamis, dan ABS,
+kontrol traksi dan stabilitas. Mobil melaju di permukaan datar, a <code>Heightfield</code> atau dunia fisika. <code>Track</code>, <code>LapTimer</code>,
+<code>Autopilot</code> Dan <code>formatLapTime</code> mencakup sirkuit, waktu putaran dan sektor, serta driver AI. Langkah kendaraan
+dari <code>onFixedUpdate</code>. Baca interpolasi transformasi bodi dan rodanya untuk melihat visualnya.</p>
+<h2 id="sky-and-weather-starhermitsky-starhermitweather">Langit dan cuaca: <code>starhermit:sky</code>, <code>starhermit:weather</code></h2>
+<ul>
+<li><strong><code>SkyAtmosphere</code></strong> adalah langit berbasis fisik dengan matahari, bulan pada fasenya, bintang-bintang dan
+Bima Sakti, ditempatkan berdasarkan waktu, hari dalam setahun, dan garis lintang. Ini mendorong a <code>DirectionalLight</code> (matahari
+di siang hari, bulan di malam hari) dan, berdasarkan permintaan, <code>scene.background</code> Dan <code>scene.environment</code>. Dia
+<strong>perspektif udara</strong> kabut jauh dari daratan dan lautan ke langit tanpa jahitan. Kabut bercampur
+setiap render melewati ruang warnanya sendiri, sehingga tetap benar saat adegan digambar melalui pos
+buffer (skala render, resolusi adaptif, vektor gerak). Permintaan CPU (<code>sunDirection</code>,
+<code>moonDirection</code>, <code>moonPhase</code>) memberikan nomor yang sama pada setiap runtime. Tingkatannya penuh, berkurang,
+minimal (Preetham) dan mati.</li>
+<li>Preetham three.js r185 <strong><code>Sky</code></strong> addon juga tersedia, dari <code>starhermit:scene</code> Dan
+<code>starhermit:sky</code>.</li>
+<li><strong><code>WindField</code></strong> adalah angin yang arahnya membelok dan yang kekuatannya membengkak dan berhembus kencang. <code>velocityAt(x, z, t)</code>
+bersifat deterministik dan cocok untuk gameplay. Materi dapat membaca medan angin di sekitar kamera
+melalui kail. <code>sway</code> Dan <code>swayMesh</code> membengkokkan rumput dan pepohonan bersamanya.</li>
+<li><strong><code>WeatherEffects</code></strong> menambahkan visual cuaca. Itu adalah awan volumetrik sebagai lapisan langit, hujan itu
+terhindar dari bawah atap, permukaan basah dan genangan air, serta petir dan guntur. Cuacanya datang
+dari <code>Weather</code> (itu <code>.weather</code> teks, enam jenis bawaan), <code>WeatherState</code> (melonggarkan di antara cuaca)
+dan <code>WeatherCycle</code> (mengubah cuaca dengan sendirinya).</li>
+</ul>
+<h2 id="water-starhermitwater">Air: <code>starhermit:water</code></h2>
+<p>Sebuah <strong><code>Ocean</code></strong> menggambar gelombang FFT dengan pantulan, refraksi, busa, whitecaps dan shoaling di atas a
+dasar laut. Tingkatannya adalah <code>"gpu"</code>, <code>"cpu"</code>, <code>"gerstner"</code> (level grafis terendah) dan <code>"off"</code>.
+<code>ocean.tier</code> Dan <code>tierNote</code> katakan yang mana yang berjalan. Gameplay membaca medan gelombang deterministik
+<code>heightAt</code>, <code>sampleAt</code> Dan <code>buoyancy</code>, tingkatan apa pun yang diambil. Angin berasal dari a <code>WindField</code>
+(<code>setWindField</code>) atau <code>setWind</code>. <code>Pond</code> (sampai 8) masih berupa air di atas persegi panjang yang beriak oleh angin.
+<code>WaterMaterial</code> memberikan naungan yang sama pada jaring dataran tinggi, untuk sungai dan air yang mengalir.</p>
+<h2 id="surfaces-and-grass-starhermitsurfaces">Permukaan dan rumput: <code>starhermit:surfaces</code></h2>
+<ul>
+<li><code>generateSurface</code> memanggang salah satu dari 20 permukaan ubin berdasarkan nama dan biji. Bahan-bahan tersebut antara lain pasir, kerikil,
+rumput, batu, salju, marmer dan lima kulit kayu. Masing-masing dilengkapi dengan warna, normal, oklusi ambien,
+peta kekasaran dan metalness.</li>
+<li><code>createSurfaceMaterial</code> mengubah permukaan yang dipanggang menjadi material, dengan kait opsional yang dapat disembunyikan
+ubin.</li>
+<li><code>createTerrainMaterial</code> memadukan tiga permukaan dengan bagian titik.</li>
+<li><code>createGrass</code> menanam rumput dari a <code>.grass</code> berkembang biak (padang rumput, halaman rumput, kering, tinggi, tepian, atau teks Anda sendiri):
+bilah rumput, rumput liar, dan bunga, siap menerima goyangan angin dan <code>generateLods(…, { thin: true })</code>.</li>
+</ul>
+<p>Outputnya identik secara asli dan di browser.</p>
+<h2 id="particles">Partikel</h2>
+<p><code>ParticleEmitter</code> (di dalam <code>starhermit:scene</code>) keuntungan:</p>
+<ul>
+<li><strong>Kekuatan:</strong> <code>wind</code>, <code>curl</code>, <code>buoyancy</code>, <code>vortex</code> Dan <code>attract</code>.</li>
+<li><strong>Tabrakan:</strong> a <code>floor</code> dan hingga empat <code>colliders</code> (pesawat dan medan ketinggian) yang memantul, menjepit,
+menempel atau membunuh.</li>
+<li><strong>Gerak dan pemijahan:</strong> <code>sway</code>, <code>sizeSpread</code>, <code>velocityMode</code> <code>"planar"</code>/<code>"radial"</code>, Dan <code>"ring"</code>
+Dan <code>"disc"</code> bentuk.</li>
+<li><strong>Rotasi:</strong> <code>rotation</code>, <code>rotationSpread</code>, <code>spin</code>, <code>spinSpread</code> Dan <code>rotationAxis</code>, untuk konfeti,
+dedaunan dan puing-puing.</li>
+<li><strong>Sprite:</strong> <code>lit</code>, <code>soft</code> Dan <code>billboard</code> sprite (ekstensi mesin), diterangi matahari, itu
+lingkungan dan lampu.</li>
+</ul>
+<p>Penghasil emisi tetap deterministik. A <code>set()</code> penolakan pemeriksaan rentang sekarang membuat pengaturan tidak berubah.
+Mengantri lebih dari 256 semburan lemparan a <code>RangeError</code>, di mana ia biasa menjatuhkannya secara diam-diam.</p>
+<p><code>GPUParticleEmitter</code> di dalam <code>starhermit:particles</code> adalah perpanjangan mesin. Ini mensimulasikan hingga sekitar a
+juta partikel per emitor pada GPU, sesuai anggaran tingkat grafis, dengan kekuatan,
+tabrakan dan tabrakan terhadap kedalaman pemandangan. Itu juga memuat gaya Solstice <code>.particles</code> efek
+(<code>loadParticleEffect</code>). Itu tidak deterministik, dan gameplay tidak bisa membacanya. Tanpa render mengambang
+menargetkannya jatuh kembali ke pemancar CPU hingga 4.096 partikel.</p>
+<h2 id="rendering-and-shadows">Rendering dan bayangan</h2>
+<table>
+<thead>
+<tr>
+<th>Fitur</th>
+<th>API</th>
+<th>Catatan</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Anti-aliasing sementara dengan peningkatan</td>
+<td><code>renderer.antialias = "taa"</code></td>
+<td>Kembali ke FXAA (dengan catatan) jika tidak didukung; <code>renderer.resetHistory()</code> setelah dipotong</td>
+</tr>
+<tr>
+<td>Vektor gerak</td>
+<td><code>scene_velocity(uv)</code> dalam program pasca</td>
+<td>Ekstensi mesin</td>
+</tr>
+<tr>
+<td>Skala render</td>
+<td><code>setPixelRatio</code>, <code>setSize</code>, <code>getPixelRatio</code>, <code>getSize</code>, ukuran buffer gambar</td>
+<td>Skala render dan resolusi adaptif pemain kini berlaku untuk permainan skrip</td>
+</tr>
+<tr>
+<td>Refleksi ruang layar, iluminasi global</td>
+<td><code>renderer.ssr</code>, <code>renderer.ssgi</code></td>
+<td>Ekstensi mesin; penerangan pada High dan Ultra saja</td>
+</tr>
+<tr>
+<td>Eksposur otomatis</td>
+<td><code>renderer.exposure.auto</code>, <code>renderer.exposure.hold</code></td>
+<td>Ekstensi mesin</td>
+</tr>
+<tr>
+<td>Penajaman, butiran film, anti-aliasing specular</td>
+<td><code>renderer.sharpen</code>, <code>renderer.film</code>, <code>renderer.specularAntialiasing</code></td>
+<td>Ekstensi mesin</td>
+</tr>
+<tr>
+<td>Hubungi bayangan</td>
+<td><code>renderer.contactShadows</code></td>
+<td>Ekstensi mesin, dinonaktifkan secara default</td>
+</tr>
+<tr>
+<td>Bayangan titik-cahaya</td>
+<td>three.js <code>PointLightShadow</code></td>
+<td>Dijatuhkan terlebih dahulu ketika slot bayangan habis</td>
+</tr>
+<tr>
+<td>Kontrol pembaruan bayangan</td>
+<td><code>shadowMap.autoUpdate</code>/<code>needsUpdate</code>, <code>light.shadow.autoUpdate</code>/<code>needsUpdate</code></td>
+<td>Sebagai three.js r185: simpan peta sampai diminta untuk menggambar ulang</td>
+</tr>
+<tr>
+<td>Kaskade cache</td>
+<td><code>shadow.cascades.cached</code></td>
+<td>Perpanjangan mesin: kastor statis ditarik satu kali, bayangan jauh lebih murah</td>
+</tr>
+</tbody>
+</table>
+<p>Melebihi anggaran efek, mesin menurunkan iluminasi global terlebih dahulu, lalu refleksi. Masing-masing menunjukkan a
+catatan di Opsi.</p>
+<h2 id="textures-animation-and-levels-of-detail">Tekstur, animasi, dan tingkat detail</h2>
+<ul>
+<li><strong>Tekstur terkompresi.</strong> File KTX2 dengan blok BC1, BC3, BC4, BC5 atau BC7 dimuat
+<code>KTX2Loader</code> Dan <code>TextureLoader</code>. Perangkat tanpa dukungan BC membongkarnya ke RGBA8. Untuk memiliki
+semuanya ditulis untukmu, siap <code>engine.textures.compress=bc</code> Dan <code>starhermit package</code> menulis file KTX2
+di samping gambar PNG dan WebP Anda. Gambar tetap sebagai cadangan. Basis Universal tidak didukung.
+<code>Texture.preserveCoverage</code> menjaga dedaunan yang telah diuji alfa agar tidak menipis di kejauhan.</li>
+<li><strong>Target morf</strong> berfungsi seperti di three.js r185, termasuk dari glTF.</li>
+<li><strong><code>AnimationGraph</code></strong> (ekstensi mesin) menyediakan mesin negara berlapis, ruang campuran, disinkronkan
+transisi, masker tulang dan lapisan aditif.</li>
+<li><strong><code>SkeletonUtils.retarget</code>, <code>retargetClip</code> Dan <code>clone</code></strong> (three.js addon) membawa animasi di antaranya
+rig.</li>
+<li><strong><code>compressClip</code></strong> mengecilkan klip animasi, dan <code>setUpdateIntervals</code> memperbarui karakter yang jauh
+lebih jarang.</li>
+<li><strong>Tingkat detail.</strong> three.js <code>SimplifyModifier</code>, dan mesinnya <code>generateLods</code>, yang membangun
+sebuah <code>LOD</code> atau sebuah <code>InstancedMesh</code>level yang beralih karena kesalahan di layar.</li>
+</ul>
+<h2 id="where-to-read-more">Di mana untuk membaca lebih lanjut</h2>
+<ul>
+<li><code>.starhermit/starhermit.d.ts</code> dalam permainan Anda: setiap modul, anggota, opsi, unit, dan batas.</li>
+<li>Itu <a href="/id/docs/tutorials/starhermit-engine.html">tutorial mesin</a> untuk dasar-dasar permainan skrip.</li>
+<li><a href="/id/docs/native-performance.html">Performa asli</a> untuk tempat dimana pekerjaan berat seharusnya dilakukan.</li>
+</ul>
+
+{% endraw %}

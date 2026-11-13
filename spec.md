@@ -73,6 +73,12 @@ patterns, not the subject of the docs.
   the integrity chain, loading the web runtime from `engine.starhermit.com`, what the platform does for a game that
   declares `engine.version` (deploy record and warning, Content-Security-Policy), and revocations. The wiki carries
   no release list or per-release notes; the API is the source.
+- `docs/engine-features.md` — an overview of host API 1.40's script-game features by area (physics,
+  vehicles, sky and weather, water, surfaces and grass, CPU and GPU particles, TAA and screen-space
+  effects, shadows, compressed textures, animation, levels of detail): the `engine.minor=40` opt-in,
+  engine extensions versus three.js API, fallback ladders with Options → Graphics notes, determinism
+  and up-front fuel. It names APIs and semantics only; `starhermit.d.ts` holds the detail. The engine
+  session supplies the feature list; unreleased engine work is not documented.
 - `docs/native-performance.md` — native performance guidance for engine games: JavaScript on the engine's
   JIT-free interpreter versus V8, WebAssembly speed and platform ahead-of-time compilation (engine 1.26.1), where heavy
   per-frame work belongs (`runtime()`, workers), GPU-bound scenes, workers' lifetime and measuring. The

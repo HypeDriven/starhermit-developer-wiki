@@ -1,0 +1,226 @@
+---
+layout: "wiki"
+lang: "zh-CN"
+title: "引擎功能：物理、车辆、天空、水和渲染"
+source_url: "/docs/engine-features.html"
+source_path: "docs/engine-features.md"
+source_hash: "181149b5b0b48ea8bb58f3a23619e41566823ace71e6c6f1e085943975deff60"
+translation: "machine"
+permalink: "/zh-CN/docs/engine-features.html"
+---
+{% raw %}
+<h1 id="engine-features-physics-vehicles-sky-water-and-rendering">引擎功能：物理、车辆、天空、水和渲染</h1>
+<p>引擎1.40.0（主机API 1.40）添加了脚本游戏的模拟和渲染功能：刚体
+物理、车辆、物理天空和天气、海洋、程序表面和草地、GPU 粒子、
+时间抗锯齿和屏幕空间效果、更好的阴影、压缩纹理和新的
+动画和细节层次工具。此页面概述了每个区域以及预期内容
+从它。每个成员、选项、单位和限制都记录在您的游戏中
+<code>.starhermit/starhermit.d.ts</code> (<code>starhermit types</code> 写道）；本页不再重复。</p>
+<h2 id="turning-them-on">打开它们</h2>
+<p>此处的每个功能仅适用于声明主机 API 1.40 或更高版本的游戏 <code>starhermit.txt</code>:</p>
+<pre><code class="language-text">engine.api=1
+engine.version=1.40.0
+engine.minor=40
+</code></pre>
+<p>一场比赛在 <code>engine.minor=39</code> 或更低，逐帧保持 1.39 的行为。无法导入新的
+模块（<code>starhermit:physics</code>, <code>starhermit:vehicle</code>, <code>starhermit:sky</code>, <code>starhermit:weather</code>,
+<code>starhermit:water</code>, <code>starhermit:surfaces</code>, <code>starhermit:particles</code>): 导入会抛出一个 <code>TypeError</code>。新
+现有类别的选项对于此类游戏来说仍然是未知的选项。提高 <code>engine.minor</code> 是整体
+选择加入；首先在新的运行时上检查您的游戏（请参阅
+<a href="/zh-CN/docs/tutorials/starhermit-engine.html#9-move-to-a-newer-engine">转向更新的引擎</a>).</p>
+<p>一些功能遵循 Three.js r185 并保留其名称和行为。其他的是 <strong>发动机
+扩展</strong>，在声明中标记为这样：它们没有等效的 Three.js，并且代码使用
+它们不在 Three.js 上运行。</p>
+<h2 id="what-to-expect-on-every-device">每台设备上的预期内容</h2>
+<p><strong>每个视觉特征都有一个后备梯子</strong> （完整→减少→最小→关闭）在每个运行时，本机
+和浏览器。当设备或玩家的图形级别无法运行某个层时，引擎会采用
+下一个并添加注释 <strong>选项 → 图形</strong> 这说明了被降低的内容。你的游戏保持
+工作；它只是看起来更简单。不过，您不需要自己检测功能
+<code>renderer.capabilities</code> 和属性，例如 <code>ocean.tier</code> 告诉你选择了什么。</p>
+<p><strong>模拟是确定性的。</strong> 物理、车辆、水波场（<code>heightAt</code>, <code>sampleAt</code>,
+<code>buoyancy</code>），风的 <code>velocityAt</code>，程序表面和 CPU 粒子给出相同的结果
+在本机和浏览器中，因此同步多人游戏可以依赖它们。 GPU 粒子和一切
+绘制的内容不是确定性的，并且无法通过游戏玩法读取。</p>
+<p><strong>本机工作在运行前收费。</strong> 召集新当地人负责
+<a href="/zh-CN/docs/tutorials/starhermit-engine.html#10-limits-and-the-licence">燃料</a> 按比例预先完成他们的工作
+他们会做多少。每个都有硬边界，因此单个超大调用（一块巨大的草地，一个
+全轨搜索（大量水样本）被错误拒绝，而不是停止帧。
+数量有上限，例如同时有 64 辆车、16 个高地、16 条跑道和 8 个池塘。</p>
+<h2 id="physics-starhermitphysics">物理： <code>starhermit:physics</code></h2>
+<p><code>PhysicsWorld</code> 是一个 3D 刚体世界（引擎扩展； Three.js 没有物理）：</p>
+<ul>
+<li><strong>机构：</strong> 动态、静态和运动，具有精确的运动目标。</li>
+<li><strong>碰撞器：</strong> 球体、盒子、胶囊、圆柱体、圆锥体、凸包、三角形网格、高度场、平面
+和三角形。网格和外壳可以直接从 <code>BufferGeometry</code>.</li>
+<li><strong>关节：</strong> 固定、球、铰链、滑块、距离、绳索、弹簧和锥扭转、带限制、电机
+和打破。</li>
+<li><strong>查询：</strong> 光线投射、形状投射、重叠和触摸事件。</li>
+<li><strong>人物：</strong> 运动学的 <code>CharacterController</code> 具有滑动、坡度限制、自动步进和捕捉功能
+到地面。</li>
+</ul>
+<p>单位为米、千克和秒。坐标必须保持在原点 1,000,000 米以内。
+迈出世界一步 <code>onFixedUpdate</code>，并放置附加对象 <code>onRender</code>:</p>
+<pre><code class="language-ts">import { onFixedUpdate, onRender } from "starhermit:engine";
+import { PhysicsWorld } from "starhermit:physics";
+
+const world = new PhysicsWorld();
+world.createCollider({ shape: { type: "trimesh", geometry: level.geometry } });
+const crate = world.createBody({ position: [0, 5, 0], object: crateMesh });
+world.createCollider({ shape: { type: "box", halfExtents: [0.5, 0.5, 0.5] } }, crate);
+onFixedUpdate((dt) =&gt; world.step(dt));
+onRender((alpha) =&gt; world.sync(alpha)); // interpolated between steps
+</code></pre>
+<h2 id="vehicles-starhermitvehicle">车辆： <code>starhermit:vehicle</code></h2>
+<p><code>Vehicle</code> 是由一个 <code>.vehicle</code> 文本或规范对象。它为 Pacejka 轮胎建模，
+悬架、传动系统（发动机、离合器、变速箱、差速器、制动器）、空气动力学和 ABS，
+牵引力和稳定性控制。汽车在平坦的地面上行驶， <code>Heightfield</code> 或物理世界。 <code>Track</code>, <code>LapTimer</code>,
+<code>Autopilot</code> 和 <code>formatLapTime</code> 涵盖赛道、圈速和扇区计时以及人工智能驱动程序。步车
+来自 <code>onFixedUpdate</code>。阅读他们插值的身体和车轮变换以获得视觉效果。</p>
+<h2 id="sky-and-weather-starhermitsky-starhermitweather">天空和天气： <code>starhermit:sky</code>, <code>starhermit:weather</code></h2>
+<ul>
+<li><strong><code>SkyAtmosphere</code></strong> 是一个基于物理的天空，包含太阳、月相、星星和
+银河系，按一天中的时间、一年中的日期和纬度排列。它驱动一个 <code>DirectionalLight</code> （太阳
+白天，晚上月亮）并且根据要求， <code>scene.background</code> 和 <code>scene.environment</code>。它是
+<strong>空中透视</strong> 将遥远的陆地和海洋雾化到天空中，没有接缝。雾霾混杂其中
+每个渲染通道都有自己的色彩空间，因此当通过后期绘制场景时它保持正确
+缓冲区（渲染比例、自适应分辨率、运动矢量）。 CPU 查询（<code>sunDirection</code>,
+<code>moonDirection</code>, <code>moonPhase</code>）在每个运行时给出相同的数字。它的层数是满的、减少的、
+最小（Preetham）并关闭。</li>
+<li>Three.js r185 的 Preetham <strong><code>Sky</code></strong> 插件也可用，来自 <code>starhermit:scene</code> 和
+<code>starhermit:sky</code>.</li>
+<li><strong><code>WindField</code></strong> 是风，方向改变，强度增强，阵风猛烈。 <code>velocityAt(x, z, t)</code>
+是确定性的并且适合游戏玩法。材料可以读取相机周围的风场
+通过一个钩子。 <code>sway</code> 和 <code>swayMesh</code> 用它弯曲草和树。</li>
+<li><strong><code>WeatherEffects</code></strong> 添加天气视觉效果。它们是天空层的体积云，雨
+远离屋顶、潮湿的表面和水坑以及闪电和雷声。天气来了
+来自 <code>Weather</code> （这 <code>.weather</code> 文本，六种内置类型）， <code>WeatherState</code> （天气之间的缓和）
+和 <code>WeatherCycle</code> （天气自行改变）。</li>
+</ul>
+<h2 id="water-starhermitwater">水： <code>starhermit:water</code></h2>
+<p>一个 <strong><code>Ocean</code></strong> 绘制带有反射、折射、泡沫、白浪和浅滩的 FFT 波
+海底。它的层级是 <code>"gpu"</code>, <code>"cpu"</code>, <code>"gerstner"</code> （最低图形级别）和 <code>"off"</code>.
+<code>ocean.tier</code> 和 <code>tierNote</code> 说出哪一个运行。游戏玩法通过读取确定性波场
+<code>heightAt</code>, <code>sampleAt</code> 和 <code>buoyancy</code>，无论抽到哪一层。风来自于一个 <code>WindField</code>
+(<code>setWindField</code>） 或者 <code>setWind</code>. <code>Pond</code> （最多8个）静止的水在风吹起的长方形上泛起涟漪。
+<code>WaterMaterial</code> 对于河流和流水，为高度场网格提供相同的阴影。</p>
+<h2 id="surfaces-and-grass-starhermitsurfaces">表面和草地： <code>starhermit:surfaces</code></h2>
+<ul>
+<li><code>generateSurface</code> 按名称和种子烘焙 20 个瓷砖表面中的任何一个。它们包括沙子、砾石、
+草、岩石、雪、大理石和五种树皮。每个都带有颜色、正常、环境光遮挡、
+粗糙度和金属度贴图。</li>
+<li><code>createSurfaceMaterial</code> 将烘烤的表面变成一种材料，并带有可选的隐藏挂钩
+平铺。</li>
+<li><code>createTerrainMaterial</code> 通过共享顶点来混合三个曲面。</li>
+<li><code>createGrass</code> 长出草来 <code>.grass</code> 品种（草地、草坪、干燥、高、边缘或您自己的文本）：
+叶片、杂草和花朵，准备好随风摇摆 <code>generateLods(…, { thin: true })</code>.</li>
+</ul>
+<p>输出在本机和浏览器中是相同的。</p>
+<h2 id="particles">颗粒</h2>
+<p><code>ParticleEmitter</code> （在 <code>starhermit:scene</code>）收益：</p>
+<ul>
+<li><strong>力量：</strong> <code>wind</code>, <code>curl</code>, <code>buoyancy</code>, <code>vortex</code> 和 <code>attract</code>.</li>
+<li><strong>碰撞：</strong> a <code>floor</code> 最多四个 <code>colliders</code> （平面和高度场）弹跳、夹紧、
+坚持或杀死。</li>
+<li><strong>运动和产卵：</strong> <code>sway</code>, <code>sizeSpread</code>, <code>velocityMode</code> <code>"planar"</code>/<code>"radial"</code>， 和 <code>"ring"</code>
+和 <code>"disc"</code> 形状。</li>
+<li><strong>旋转：</strong> <code>rotation</code>, <code>rotationSpread</code>, <code>spin</code>, <code>spinSpread</code> 和 <code>rotationAxis</code>, 对于五彩纸屑,
+树叶和碎片。</li>
+<li><strong>精灵：</strong> <code>lit</code>, <code>soft</code> 和 <code>billboard</code> 精灵（引擎扩展），被太阳照亮，
+环境和灯光。</li>
+</ul>
+<p>发射器保持确定性。一个 <code>set()</code> 范围检查拒绝现在使设置保持不变。
+排队超过 256 个突发会抛出 <code>RangeError</code>，它曾经把它们默默地扔在那里。</p>
+<p><code>GPUParticleEmitter</code> 在 <code>starhermit:particles</code> 是一个引擎扩展。它模拟了大约
+GPU 上每个发射器上百万个粒子，在图形级别的预算内，具有力，
+碰撞器和场景深度的碰撞。它还加载 Solstice 风格 <code>.particles</code> 效果
+（<code>loadParticleEffect</code>）。它不是确定性的，游戏无法读取它。没有浮动渲染
+目标是回落到最多 4,096 个粒子的 CPU 发射器。</p>
+<h2 id="rendering-and-shadows">渲染和阴影</h2>
+<table>
+<thead>
+<tr>
+<th>特征</th>
+<th>应用程序编程接口</th>
+<th>笔记</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>通过放大进行时间抗锯齿</td>
+<td><code>renderer.antialias = "taa"</code></td>
+<td>在不受支持的情况下回退到 FXAA（带注释）； <code>renderer.resetHistory()</code> 切割后</td>
+</tr>
+<tr>
+<td>运动矢量</td>
+<td><code>scene_velocity(uv)</code> 在后期节目中</td>
+<td>发动机加长</td>
+</tr>
+<tr>
+<td>渲染比例</td>
+<td><code>setPixelRatio</code>, <code>setSize</code>, <code>getPixelRatio</code>, <code>getSize</code>, 绘图缓冲区大小</td>
+<td>玩家的渲染比例和自适应分辨率现在适用于脚本游戏</td>
+</tr>
+<tr>
+<td>屏幕空间反射、全局照明</td>
+<td><code>renderer.ssr</code>, <code>renderer.ssgi</code></td>
+<td>发动机扩展；仅高和超高照明</td>
+</tr>
+<tr>
+<td>自动曝光</td>
+<td><code>renderer.exposure.auto</code>, <code>renderer.exposure.hold</code></td>
+<td>发动机加长</td>
+</tr>
+<tr>
+<td>锐化、胶片颗粒、镜面抗锯齿</td>
+<td><code>renderer.sharpen</code>, <code>renderer.film</code>, <code>renderer.specularAntialiasing</code></td>
+<td>发动机扩展</td>
+</tr>
+<tr>
+<td>接触阴影</td>
+<td><code>renderer.contactShadows</code></td>
+<td>引擎扩展，默认关闭</td>
+</tr>
+<tr>
+<td>点光源阴影</td>
+<td>three.js <code>PointLightShadow</code></td>
+<td>当影子槽耗尽时首先掉落</td>
+</tr>
+<tr>
+<td>影子更新控制</td>
+<td><code>shadowMap.autoUpdate</code>/<code>needsUpdate</code>, <code>light.shadow.autoUpdate</code>/<code>needsUpdate</code></td>
+<td>如三.js r185：保留地图直到要求重绘</td>
+</tr>
+<tr>
+<td>缓存级联</td>
+<td><code>shadow.cascades.cached</code></td>
+<td>引擎扩展：静态脚轮绘制一次，阴影更便宜</td>
+</tr>
+</tbody>
+</table>
+<p>在效果预算范围内，引擎首先降低全局照明，然后降低反射。每个显示一个
+选项中的注释。</p>
+<h2 id="textures-animation-and-levels-of-detail">纹理、动画和细节层次</h2>
+<ul>
+<li><strong>压缩纹理。</strong> 带有 BC1、BC3、BC4、BC5 或 BC7 块的 KTX2 文件通过加载
+<code>KTX2Loader</code> 和 <code>TextureLoader</code>。不支持 BC 的设备会将其解压为 RGBA8。拥有
+它们是为你写的，设置 <code>engine.textures.compress=bc</code> 和 <code>starhermit package</code> 写入 KTX2 文件
+在 PNG 和 WebP 图像旁边。这些图像保留作为后备。不支持基础通用。
+<code>Texture.preserveCoverage</code> 防止经过阿尔法测试的树叶在远处稀疏。</li>
+<li><strong>变形目标</strong> 与在 Three.js r185 中一样工作，包括来自 glTF。</li>
+<li><strong><code>AnimationGraph</code></strong> （引擎扩展）提供分层状态机、混合空间、同步
+过渡、骨骼蒙版和附加层。</li>
+<li><strong><code>SkeletonUtils.retarget</code>, <code>retargetClip</code> 和 <code>clone</code></strong> （三.js 插件）之间携带动画
+钻机。</li>
+<li><strong><code>compressClip</code></strong> 缩小动画剪辑，以及 <code>setUpdateIntervals</code> 更新远处的字符
+较少。</li>
+<li><strong>细节层次。</strong> 三.js <code>SimplifyModifier</code>，以及发动机的 <code>generateLods</code>，它构建了
+一个 <code>LOD</code> 或一个 <code>InstancedMesh</code>通过屏幕上的错误切换的级别。</li>
+</ul>
+<h2 id="where-to-read-more">哪里可以阅读更多内容</h2>
+<ul>
+<li><code>.starhermit/starhermit.d.ts</code> 在你的游戏中：每个模块、成员、选项、单位和限制。</li>
+<li>这 <a href="/zh-CN/docs/tutorials/starhermit-engine.html">引擎教程</a> 了解脚本游戏的基础知识。</li>
+<li><a href="/zh-CN/docs/native-performance.html">原生性能</a> 适合繁重工作的地方。</li>
+</ul>
+
+{% endraw %}

@@ -1,0 +1,226 @@
+---
+layout: "wiki"
+lang: "pt"
+title: "Recursos do motor: física, veículos, céu, água e renderização"
+source_url: "/docs/engine-features.html"
+source_path: "docs/engine-features.md"
+source_hash: "181149b5b0b48ea8bb58f3a23619e41566823ace71e6c6f1e085943975deff60"
+translation: "machine"
+permalink: "/pt/docs/engine-features.html"
+---
+{% raw %}
+<h1 id="engine-features-physics-vehicles-sky-water-and-rendering">Recursos do motor: física, veículos, céu, água e renderização</h1>
+<p>Engine 1.40.0 (host API 1.40) adiciona recursos de simulação e renderização para jogos de script: corpo rígido
+física, veículos, céu físico e clima, oceano, superfícies processuais e grama, partículas de GPU,
+efeitos de anti-aliasing temporal e screen-space, melhores sombras, texturas compactadas e novos
+ferramentas de animação e nível de detalhe. Esta página fornece uma visão geral de cada área e o que esperar
+disso. Cada membro, opção, unidade e limite está documentado no arquivo do seu jogo
+<code>.starhermit/starhermit.d.ts</code> (<code>starhermit types</code> escreve); esta página não a repete.</p>
+<h2 id="turning-them-on">Ativando-os</h2>
+<p>Cada recurso aqui se aplica apenas a jogos que declaram API de host 1.40 ou posterior em <code>starhermit.txt</code>:</p>
+<pre><code class="language-text">engine.api=1
+engine.version=1.40.0
+engine.minor=40
+</code></pre>
+<p>Um jogo em <code>engine.minor=39</code> ou inferior mantém o comportamento do 1.39, quadro a quadro. Não é possível importar o novo
+módulos (<code>starhermit:physics</code>, <code>starhermit:vehicle</code>, <code>starhermit:sky</code>, <code>starhermit:weather</code>,
+<code>starhermit:water</code>, <code>starhermit:surfaces</code>, <code>starhermit:particles</code>): a importação lança um <code>TypeError</code>. Novo
+as opções nas classes existentes permanecem opções desconhecidas para tal jogo. Subindo <code>engine.minor</code> é o todo
+aceitar; verifique seu jogo no novo tempo de execução primeiro (veja
+<a href="/pt/docs/tutorials/starhermit-engine.html#9-move-to-a-newer-engine">mudando para um motor mais novo</a>).</p>
+<p>Alguns recursos seguem o three.js r185 e mantêm seus nomes e comportamento. Outros são <strong>motor
+extensões</strong>, marcados como tal nas declarações: eles não têm equivalente em three.js e codificam usando
+eles não são executados em three.js.</p>
+<h2 id="what-to-expect-on-every-device">O que esperar de cada dispositivo</h2>
+<p><strong>Cada recurso visual tem uma escada alternativa</strong> (completo → reduzido → mínimo → desligado) em cada tempo de execução, nativo
+e navegador. Quando o dispositivo ou o nível gráfico do jogador não consegue executar uma camada, o mecanismo assume o
+próximo e adiciona uma nota em <strong>Opções → Gráficos</strong> isso diz o que foi abaixado. Seu jogo continua
+trabalhando; parece mais simples. Você não precisa detectar capacidades sozinho, embora
+<code>renderer.capabilities</code> e propriedades como <code>ocean.tier</code> dizer o que foi escolhido.</p>
+<p><strong>A simulação é determinística.</strong> Física, veículos, campo de ondas da água (<code>heightAt</code>, <code>sampleAt</code>,
+<code>buoyancy</code>), o vento <code>velocityAt</code>, superfícies procedurais e partículas de CPU fornecem resultados idênticos em bits
+nativamente e em navegadores, então o modo multijogador lockstep pode contar com eles. Partículas de GPU e tudo mais
+desenhados não são determinísticos e não são legíveis pelo jogo.</p>
+<p><strong>O trabalho nativo é cobrado antes de ser executado.</strong> Chamadas para os novos nativos cobram
+<a href="/pt/docs/tutorials/starhermit-engine.html#10-limits-and-the-licence">combustível</a> pelo seu trabalho inicial, na proporção
+quanto eles farão. Cada um também tem limites rígidos, então uma única chamada grande (um enorme gramado, um
+busca em toda a trilha, uma enorme amostra de água) é recusada com um erro em vez de travar o quadro.
+As contagens são limitadas, por exemplo, 64 veículos, 16 campos de altura, 16 pistas e 8 lagoas de uma só vez.</p>
+<h2 id="physics-starhermitphysics">Física: <code>starhermit:physics</code></h2>
+<p><code>PhysicsWorld</code> é um mundo 3D de corpo rígido (uma extensão do motor; three.js não tem física):</p>
+<ul>
+<li><strong>Corpos:</strong> dinâmico, estático e cinemático, com alvos cinemáticos exatos.</li>
+<li><strong>Colisores:</strong> esfera, caixa, cápsula, cilindro, cone, casco convexo, malha triangular, campo de altura, avião
+e triângulo. Malhas e cascos podem ser construídos diretamente a partir de um <code>BufferGeometry</code>.</li>
+<li><strong>Articulações:</strong> fixo, esférico, articulado, deslizante, distanciador, corda, mola e torção cônica, com limites, motores
+e quebrando.</li>
+<li><strong>Consultas:</strong> projeções de raios, projeções de formas, sobreposições e eventos de toque.</li>
+<li><strong>Personagens:</strong> uma cinemática <code>CharacterController</code> com deslizamento, limites de inclinação, autostep e snapping
+para o chão.</li>
+</ul>
+<p>As unidades são metros, quilogramas e segundos. As coordenadas devem ficar dentro de 1.000.000 m da origem.
+Afaste o mundo de <code>onFixedUpdate</code>e coloque objetos anexados de <code>onRender</code>:</p>
+<pre><code class="language-ts">import { onFixedUpdate, onRender } from "starhermit:engine";
+import { PhysicsWorld } from "starhermit:physics";
+
+const world = new PhysicsWorld();
+world.createCollider({ shape: { type: "trimesh", geometry: level.geometry } });
+const crate = world.createBody({ position: [0, 5, 0], object: crateMesh });
+world.createCollider({ shape: { type: "box", halfExtents: [0.5, 0.5, 0.5] } }, crate);
+onFixedUpdate((dt) =&gt; world.step(dt));
+onRender((alpha) =&gt; world.sync(alpha)); // interpolated between steps
+</code></pre>
+<h2 id="vehicles-starhermitvehicle">Veículos: <code>starhermit:vehicle</code></h2>
+<p><code>Vehicle</code> é a dinâmica de condução construída a partir de um <code>.vehicle</code> texto ou um objeto de especificação. Modela pneus Pacejka,
+suspensão, sistema de transmissão (motor, embreagem, caixa de câmbio, diferencial, freios), aerodinâmica e ABS,
+controle de tração e estabilidade. Os carros circulam em terreno plano, <code>Heightfield</code> ou um mundo de física. <code>Track</code>, <code>LapTimer</code>,
+<code>Autopilot</code> e <code>formatLapTime</code> cobrem circuitos, cronometragem de voltas e setores e drivers de IA. Veículos de passo
+de <code>onFixedUpdate</code>. Leia as transformações interpoladas do corpo e da roda para obter recursos visuais.</p>
+<h2 id="sky-and-weather-starhermitsky-starhermitweather">Céu e clima: <code>starhermit:sky</code>, <code>starhermit:weather</code></h2>
+<ul>
+<li><strong><code>SkyAtmosphere</code></strong> é um céu baseado fisicamente com o sol, a lua em sua fase, estrelas e o
+Via Láctea, posicionada por hora do dia, dia do ano e latitude. Ele dirige um <code>DirectionalLight</code> (o sol
+de dia, a lua à noite) e, a pedido, <code>scene.background</code> e <code>scene.environment</code>. Isso é
+<strong>perspectiva aérea</strong> embaça terras e mares distantes no céu sem costura. A névoa está misturada
+o próprio espaço de cores de cada passagem de renderização, para que permaneça correto quando a cena é desenhada através da postagem
+buffers (escala de renderização, resolução adaptativa, vetores de movimento). As consultas da CPU (<code>sunDirection</code>,
+<code>moonDirection</code>, <code>moonPhase</code>) fornecem os mesmos números em todos os tempos de execução. Suas camadas são completas, reduzidas,
+mínimo (Preetham) e desligado.</li>
+<li>Preetham de three.js r185 <strong><code>Sky</code></strong> addon também está disponível, em <code>starhermit:scene</code> e
+<code>starhermit:sky</code>.</li>
+<li><strong><code>WindField</code></strong> é o vento cuja direção muda e cuja força aumenta e sopra. <code>velocityAt(x, z, t)</code>
+é determinístico e adequado para o jogo. Os materiais podem ler o campo de vento ao redor da câmera
+através de um gancho. <code>sway</code> e <code>swayMesh</code> dobre grama e árvores com ele.</li>
+<li><strong><code>WeatherEffects</code></strong> adiciona recursos visuais do clima. São nuvens volumétricas como camada do céu, chuva que
+fica fora de telhados, superfícies molhadas e poças, e relâmpagos com trovões. O tempo chega
+de <code>Weather</code> (o <code>.weather</code> texto, seis tipos integrados), <code>WeatherState</code> (facilitando entre os climas)
+e <code>WeatherCycle</code> (mudando o clima por conta própria).</li>
+</ul>
+<h2 id="water-starhermitwater">Água: <code>starhermit:water</code></h2>
+<p>Um <strong><code>Ocean</code></strong> desenha ondas FFT com reflexos, refração, espuma, whitecaps e empurrões sobre um
+fundo do mar. Suas camadas são <code>"gpu"</code>, <code>"cpu"</code>, <code>"gerstner"</code> (os níveis gráficos mais baixos) e <code>"off"</code>.
+<code>ocean.tier</code> e <code>tierNote</code> diga qual deles funciona. A jogabilidade lê o campo de onda determinístico através
+<code>heightAt</code>, <code>sampleAt</code> e <code>buoyancy</code>, qualquer que seja o nível sorteado. O vento vem de um <code>WindField</code>
+(<code>setWindField</code>) ou <code>setWind</code>. <code>Pond</code> (até 8) ainda é água sobre um retângulo que o vento ondula.
+<code>WaterMaterial</code> dá o mesmo sombreamento a uma malha de campo alto, para rios e águas correntes.</p>
+<h2 id="surfaces-and-grass-starhermitsurfaces">Superfícies e grama: <code>starhermit:surfaces</code></h2>
+<ul>
+<li><code>generateSurface</code> assa qualquer uma das 20 superfícies de ladrilho por nome e semente. Eles incluem areia, cascalho,
+grama, pedra, neve, mármore e cinco cascas. Cada um vem com cor, oclusão normal, ambiente,
+mapas de rugosidade e metalidade.</li>
+<li><code>createSurfaceMaterial</code> transforma uma superfície cozida em um material, com ganchos opcionais que escondem
+ladrilho.</li>
+<li><code>createTerrainMaterial</code> combina três superfícies por compartilhamentos de vértices.</li>
+<li><code>createGrass</code> cresce grama de um <code>.grass</code> raça (prado, gramado, seco, alto, beira ou seu próprio texto):
+folhas, ervas daninhas e flores, prontas para balançar o vento e <code>generateLods(…, { thin: true })</code>.</li>
+</ul>
+<p>A saída é idêntica nativamente e nos navegadores.</p>
+<h2 id="particles">Partículas</h2>
+<p><code>ParticleEmitter</code> (em <code>starhermit:scene</code>) ganhos:</p>
+<ul>
+<li><strong>Forças:</strong> <code>wind</code>, <code>curl</code>, <code>buoyancy</code>, <code>vortex</code> e <code>attract</code>.</li>
+<li><strong>Colisão:</strong> a <code>floor</code> e até quatro <code>colliders</code> (planos e campos de altura) que saltam, prendem,
+furar ou matar.</li>
+<li><strong>Movimento e desova:</strong> <code>sway</code>, <code>sizeSpread</code>, <code>velocityMode</code> <code>"planar"</code>/<code>"radial"</code>, e <code>"ring"</code>
+e <code>"disc"</code> formas.</li>
+<li><strong>Rotação:</strong> <code>rotation</code>, <code>rotationSpread</code>, <code>spin</code>, <code>spinSpread</code> e <code>rotationAxis</code>, para confete,
+folhas e detritos.</li>
+<li><strong>Sprites:</strong> <code>lit</code>, <code>soft</code> e <code>billboard</code> sprites (extensões do motor), iluminados pelo sol, o
+ambiente e luzes.</li>
+</ul>
+<p>Os emissores permanecem determinísticos. UM <code>set()</code> a verificação de alcance recusa agora deixa as configurações inalteradas.
+Enfileirar mais de 256 rajadas gera um <code>RangeError</code>, onde costumava deixá-los cair silenciosamente.</p>
+<p><code>GPUParticleEmitter</code> em <code>starhermit:particles</code> é uma extensão do motor. Ele simula até cerca de um
+milhões de partículas por emissor na GPU, dentro do orçamento do nível gráfico, com forças,
+colisores e colisão contra a profundidade da cena. Ele também carrega o estilo Solstice <code>.particles</code> efeitos
+(<code>loadParticleEffect</code>). Não é determinístico e a jogabilidade não consegue lê-lo. Sem renderização flutuante
+atinge um emissor de CPU de até 4.096 partículas.</p>
+<h2 id="rendering-and-shadows">Renderização e sombras</h2>
+<table>
+<thead>
+<tr>
+<th>Recurso</th>
+<th>API</th>
+<th>Notas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Anti-aliasing temporal com upscaling</td>
+<td><code>renderer.antialias = "taa"</code></td>
+<td>Volta para FXAA (com uma nota) quando não há suporte; <code>renderer.resetHistory()</code> depois de um corte</td>
+</tr>
+<tr>
+<td>Vetores de movimento</td>
+<td><code>scene_velocity(uv)</code> em programas de pós</td>
+<td>Extensão do motor</td>
+</tr>
+<tr>
+<td>Escala de renderização</td>
+<td><code>setPixelRatio</code>, <code>setSize</code>, <code>getPixelRatio</code>, <code>getSize</code>, tamanho do buffer de desenho</td>
+<td>A escala de renderização e a resolução adaptativa do jogador agora se aplicam a jogos de script</td>
+</tr>
+<tr>
+<td>Reflexos no espaço da tela, iluminação global</td>
+<td><code>renderer.ssr</code>, <code>renderer.ssgi</code></td>
+<td>Extensões de motor; iluminação apenas em High e Ultra</td>
+</tr>
+<tr>
+<td>Exposição automática</td>
+<td><code>renderer.exposure.auto</code>, <code>renderer.exposure.hold</code></td>
+<td>Extensão do motor</td>
+</tr>
+<tr>
+<td>Nitidez, granulação de filme, anti-aliasing especular</td>
+<td><code>renderer.sharpen</code>, <code>renderer.film</code>, <code>renderer.specularAntialiasing</code></td>
+<td>Extensões de motor</td>
+</tr>
+<tr>
+<td>Sombras de contato</td>
+<td><code>renderer.contactShadows</code></td>
+<td>Extensão do mecanismo, desativada por padrão</td>
+</tr>
+<tr>
+<td>Sombras pontuais</td>
+<td>three.js <code>PointLightShadow</code></td>
+<td>Caiu primeiro quando os slots de sombra acabarem</td>
+</tr>
+<tr>
+<td>Controle de atualização de sombra</td>
+<td><code>shadowMap.autoUpdate</code>/<code>needsUpdate</code>, <code>light.shadow.autoUpdate</code>/<code>needsUpdate</code></td>
+<td>Como three.js r185: mantenha um mapa até ser solicitado a redesenhar</td>
+</tr>
+<tr>
+<td>Cascatas armazenadas em cache</td>
+<td><code>shadow.cascades.cached</code></td>
+<td>Extensão do motor: rodízios estáticos desenhados uma vez, sombras muito mais baratas</td>
+</tr>
+</tbody>
+</table>
+<p>Acima do orçamento de efeito, o mecanismo reduz primeiro a iluminação global e depois os reflexos. Cada um mostra um
+nota em Opções.</p>
+<h2 id="textures-animation-and-levels-of-detail">Texturas, animação e níveis de detalhe</h2>
+<ul>
+<li><strong>Texturas compactadas.</strong> Arquivos KTX2 com blocos BC1, BC3, BC4, BC5 ou BC7 são carregados
+<code>KTX2Loader</code> e <code>TextureLoader</code>. Dispositivos sem suporte BC são descompactados para RGBA8. Ter
+eles escritos para você, defina <code>engine.textures.compress=bc</code> e <code>starhermit package</code> grava arquivos KTX2
+ao lado de suas imagens PNG e WebP. As imagens permanecem como um substituto. Base Universal não é suportada.
+<code>Texture.preserveCoverage</code> evita que a folhagem testada alfa diminua à distância.</li>
+<li><strong>Metas de transformação</strong> funciona como em three.js r185, inclusive do glTF.</li>
+<li><strong><code>AnimationGraph</code></strong> (extensão do mecanismo) fornece máquinas de estado em camadas, espaços de mesclagem, sincronização
+transições, máscaras ósseas e camadas aditivas.</li>
+<li><strong><code>SkeletonUtils.retarget</code>, <code>retargetClip</code> e <code>clone</code></strong> (complemento three.js) carrega animações entre
+plataformas.</li>
+<li><strong><code>compressClip</code></strong> reduz clipes de animação e <code>setUpdateIntervals</code> atualiza personagens distantes
+com menos frequência.</li>
+<li><strong>Níveis de detalhe.</strong> três.js <code>SimplifyModifier</code>, e o motor <code>generateLods</code>, que constrói
+um <code>LOD</code> ou um <code>InstancedMesh</code>níveis que mudam por erro na tela.</li>
+</ul>
+<h2 id="where-to-read-more">Onde ler mais</h2>
+<ul>
+<li><code>.starhermit/starhermit.d.ts</code> no seu jogo: cada módulo, membro, opção, unidade e limite.</li>
+<li>O <a href="/pt/docs/tutorials/starhermit-engine.html">tutorial do motor</a> para o básico de um jogo de script.</li>
+<li><a href="/pt/docs/native-performance.html">Desempenho nativo</a> para onde o trabalho pesado deveria viver.</li>
+</ul>
+
+{% endraw %}

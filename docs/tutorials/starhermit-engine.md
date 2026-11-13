@@ -688,7 +688,9 @@ hold) and your game's changed files.
 
 The release's major version is the host API's: `engine.api=1` games move freely within 1.x.x. A game
 that needs host API members added in a minor version can say so with `engine.minor=N`; an older
-runtime then refuses it with a message instead of failing later.
+runtime then refuses it with a message instead of failing later. Host API 1.40's physics, vehicles,
+sky, weather, water, surfaces, GPU particles and rendering features all need `engine.minor=40`; see
+[engine features](../engine-features.md).
 
 A release found unsafe is **revoked**: the [engine API](../api/engine.md) marks it with the
 reason, the client refuses to install or start it (and tells the player why), and the packaging
