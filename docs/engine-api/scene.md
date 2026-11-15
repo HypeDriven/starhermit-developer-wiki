@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:scene`
 
-Engine **1.41.0** (host API 1.41), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:scene";
@@ -27,7 +27,7 @@ three.js parity (API\_MINOR 20; declare `engine.minor=20` for it): a game declar
 - an object hidden by its material's `visible` still draws what is under it;
 - `TextureLoader.load(url, onLoad, onProgress, onError)`.
 
-Texture coordinates keep the engine's convention at every minor (v from the image's first row, no `flipY`; three.js-built geometries and glTF files map as in three.js).
+Texture coordinates keep the engine's convention at every minor (v from the image's first row; three.js-built geometries and glTF files map as in three.js); from API\_MINOR 42 built-in maps honour a texture's `flipY` (a DataTexture's first row at v = 0).
 
 ## Math
 
@@ -1854,7 +1854,11 @@ export class Texture { … }
 
 - `colorSpace: string;`
 
-  How a color map reads it (since API\_MINOR 28, as three.js r185): `SRGBColorSpace` sRGB-decoded, `LinearSRGBColorSpace` and `NoColorSpace` (the default) as stored, for a material's `map` and `emissiveMap`, `scene.background` and an environment made from it. Older games' color maps are always sRGB. Data maps (normal, roughness, metalness, ambient occlusion) are read as stored.
+  How a color map reads it (since API\_MINOR 28, as three.js r185): `SRGBColorSpace` sRGB-decoded, `LinearSRGBColorSpace` and `NoColorSpace` (the default) as stored, for a material's `map` and `emissiveMap`, `scene.background` and an environment made from it. Older games' color maps are always sRGB. Data maps (normal, roughness, metalness, ambient occlusion) are read as stored. Since API\_MINOR 42 (`SRGB_TEXELS_MINOR`) an sRGB map is decoded texel by texel before it is filtered, as three.js r185's `SRGB8_ALPHA8` textures are (a red-green edge's midpoint is 188, not 147, red); the GPU holds an sRGB copy of the texture's texels for it while a material shows it so. Compressed textures are still filtered before they are decoded.
+
+- `flipY: boolean;`
+
+  Since API\_MINOR 42 (`TEXTURE_FLIP_Y_MINOR`; absent before): three.js r185's `flipY` for built-in materials' maps and a texture background. True (a loaded or canvas texture's default) shows the image's first row at the top (v = 1); false (a `DataTexture`'s default) at v = 0, the bottom. A `CompressedTexture`'s is false and not flipped (three.js cannot flip one). It takes effect when set (three.js: at the next upload). Code in a `ShaderMaterial` or hook samples at its own coordinates, as before. Older games have no `flipY`, and their DataTextures show their first row at the top.
 
 - `needsUpdate: boolean;`
 
@@ -1979,6 +1983,268 @@ export class KTX2Loader { … }
 - `load(path: string, onLoad?: (texture: CompressedTexture) => void, onProgress?: unknown, onError?: (error: Error) => void): void;`
 
   three.js's `load(url, onLoad, onProgress, onError)` (`onProgress` is never called).
+
+## Look assets (since API\_MINOR 42, LOOK\_ASSETS\_MINOR)
+
+three.js r185's addons for colour-grading tables and HDR images, decoded natively. Below API\_MINOR 42 none of these exist (an import of one fails to link). `load(url, onLoad, onProgress, onError)` reads the package file (`onProgress` is never called) and returns nothing usable: use `onLoad` or `loadAsync`. `setPath` prefixes the URLs.
+
+### LUTCubeResult
+
+*interface*
+
+three.js's `LUTCubeLoader` result; `texture1D` (an engine extension) for a .cube file with `LUT_1D_SIZE` and no `LUT_3D_SIZE`, which three.js refuses: `texture3D` is then null. `domainMin`/`domainMax` are read and, as three.js's `LUTPass`, not applied.
+
+```ts
+export interface LUTCubeResult { … }
+```
+
+- `title: string | null;`
+- `size: number;`
+- `domainMin: Vector3;`
+- `domainMax: Vector3;`
+- `texture3D: Data3DTexture | null;`
+- `texture1D?: DataTexture;`
+
+### LUTCubeLoader
+
+*class*
+
+three.js r185's `LUTCubeLoader`: Adobe/Resolve .cube tables (size 1–128; a 1D table up to 4,096 entries) as a `Data3DTexture` of `UnsignedByteType` (the default; values × 255 stored as a Uint8Array stores them) or `FloatType` (`setType`).
+
+```ts
+export class LUTCubeLoader { … }
+```
+
+- `constructor(manager?: unknown);`
+- `type: number;`
+- `setType(type: number): this;`
+- `setPath(path: string): this;`
+- `parse(text: string): LUTCubeResult;`
+- `load(url: string, onLoad?: (result: LUTCubeResult) => void, onProgress?: unknown, onError?: (error: unknown) => void): void;`
+- `loadAsync(url: string): Promise<LUTCubeResult>;`
+
+### LUT3dlLoader
+
+*class*
+
+three.js r185's `LUT3dlLoader`: .3dl tables (a grid line of size 1–128, then blue-fastest values scaled by the power of two at or above the largest).
+
+```ts
+export class LUT3dlLoader { … }
+```
+
+- `constructor(manager?: unknown);`
+- `type: number;`
+- `setType(type: number): this;`
+- `setPath(path: string): this;`
+- `parse(text: string): { size: number; texture3D: Data3DTexture };`
+- `load(url: string, onLoad?: (result: { size: number; texture3D: Data3DTexture }) => void, onProgress?: unknown, onError?: (error: unknown) => void): void;`
+- `loadAsync(url: string): Promise<{ size: number; texture3D: Data3DTexture }>;`
+
+### LUTImageLoader
+
+*class*
+
+three.js r185's `LUTImageLoader`: a PNG or WebP image of a table's slices side by side (size² × size) or stacked (size × size²), size 1–128, read as three.js's canvas reads it (`flip` too).
+
+```ts
+export class LUTImageLoader { … }
+```
+
+- `constructor(manager?: unknown);`
+- `flip: boolean;`
+- `setPath(path: string): this;`
+- `parse(data: ArrayLike<number>, size: number): { size: number; texture3D: Data3DTexture };`
+- `load(url: string, onLoad?: (result: { size: number; texture3D: Data3DTexture }) => void, onProgress?: unknown, onError?: (error: unknown) => void): void;`
+- `loadAsync(url: string): Promise<{ size: number; texture3D: Data3DTexture }>;`
+
+### LUTPass
+
+*class*
+
+three.js r185's `LUTPass`: the shown color (clamped to 0..1) looked up in `lut` with trilinear interpolation between its entries (0 and 1 on its first and last), mixed in by `intensity` (default 1), alpha kept. `lut` is a table's `Data3DTexture` (bytes, half floats or floats; a cube up to 128 a side) or a 1D table's `texture1D`. Assign it to `renderer.lut`. A table whose entries are exactly their own grid coordinates (an identity: bytes where 255·k/(size−1) is whole, or floats) is left out, so it changes no pixel; others run through the lookup, in half floats.
+
+```ts
+export class LUTPass { … }
+```
+
+- `constructor(options?: { lut?: Data3DTexture | DataTexture | null; intensity?: number });`
+- `lut: Data3DTexture | DataTexture | null;`
+- `intensity: number;`
+- `enabled: boolean;`
+- `needsSwap: boolean;`
+- `clear: boolean;`
+- `renderToScreen: boolean;`
+- `readonly isPass: true;`
+- `setSize(width: number, height: number): void;`
+- `render(): void;`
+- `dispose(): void;`
+
+### HDRTexData
+
+*interface*
+
+What `HDRLoader.parse` returns (three.js's `DataTextureLoader` data).
+
+```ts
+export interface HDRTexData { … }
+```
+
+- `width: number;`
+- `height: number;`
+- `data: Uint16Array | Float32Array;`
+- `header: string;`
+- `gamma: number;`
+- `exposure: number;`
+- `type: number;`
+- `colorSpace: string;`
+- `minFilter: string;`
+- `magFilter: string;`
+- `generateMipmaps: boolean;`
+- `flipY: boolean;`
+
+### HDRLoader
+
+*class*
+
+three.js r185's `HDRLoader` (r180's new name for `RGBELoader`): Radiance RGBE .hdr images (flat or run-length encoded, `-Y h +X w`) of up to 4,096 on a side as a linear `DataTexture` of `HalfFloatType` (the default; values truncated to half floats as three.js's `DataUtils.toHalfFloat`, clamped at 65504) or `FloatType` (`setDataType`), filtered linearly without mipmaps, the file's top row first (shown upright, as three.js's with `flipY`). For a sky and an environment set `mapping = EquirectangularReflectionMapping` and use it as `scene.background`, `scene.environment` or with `PMREMGenerator.fromEquirectangular`. Large files: on the web a package file over 16 MiB is not fetched.
+
+```ts
+export class HDRLoader { … }
+```
+
+- `constructor(manager?: unknown);`
+- `type: number;`
+- `setDataType(type: number): this;`
+- `setPath(path: string): this;`
+- `parse(buffer: ArrayBuffer | ArrayBufferView): HDRTexData;`
+- `load(url: string, onLoad?: (texture: DataTexture) => void, onProgress?: unknown, onError?: (error: unknown) => void): void;`
+- `loadAsync(url: string): Promise<DataTexture>;`
+
+### RGBELoader
+
+*class*
+
+three.js's deprecated name for `HDRLoader` (it warns once made).
+
+```ts
+export class RGBELoader extends HDRLoader { … }
+```
+
+### EXRLoader
+
+*class*
+
+three.js r185's `EXRLoader` for common OpenEXR files: single-part scanline images of up to 4,096 on a side, uncompressed or RLE, ZIPS or ZIP compressed, HALF or FLOAT channels (R, G, B with or without A; Y; Y, RY, BY), as a `DataTexture` of `HalfFloatType` (the default) or `FloatType` and of `outputFormat` (`RGBAFormat`, `RGFormat`, `RedFormat`). PIZ, PXR24, B44(A) and DWAA/DWAB compression, tiled, deep and multi-part files, UINT and subsampled channels are refused with an Error naming them. Rows are top first with `flipY` true, as HDRLoader's (three.js's are bottom first with `flipY` false, which shows the same); `header` holds the compression alone.
+
+```ts
+export class EXRLoader { … }
+```
+
+- `constructor(manager?: unknown);`
+- `type: number;`
+- `outputFormat: number;`
+- `setDataType(type: number): this;`
+- `setOutputFormat(format: number): this;`
+- `setPart(part: number): this;`
+- `setPath(path: string): this;`
+- `parse(buffer: ArrayBuffer | ArrayBufferView): { header: { compression: string }; width: number; height: number; data: Uint16Array | Float32Array; format: number; colorSpace: string; type: number; minFilter: string; magFilter: string; generateMipmaps: boolean; flipY: boolean };`
+- `load(url: string, onLoad?: (texture: DataTexture) => void, onProgress?: unknown, onError?: (error: unknown) => void): void;`
+- `loadAsync(url: string): Promise<DataTexture>;`
+
+## Alembic caches (since API\_MINOR 42, ALEMBIC\_MINOR)
+
+Baked simulations and animated meshes (fluid surfaces, splashes, cloth) played back; the engine's own (three.js r185 has no Alembic loader). Below API\_MINOR 42 none of these exist: a named import fails to link, and a namespace import's `ALEMBIC_MINOR` is undefined, which is how a game built for older minors detects them.
+
+### ALEMBIC\_MINOR
+
+*const*
+
+```ts
+export const ALEMBIC_MINOR: number;
+```
+
+42 from host API 1.42 (undefined before: feature-detect with `import * as scene from "starhermit:scene"` and `scene.ALEMBIC_MINOR !== undefined`).
+
+### loadAlembic
+
+*function*
+
+```ts
+export function loadAlembic(path: string): Promise<AlembicCache>;
+```
+
+Loads a package Alembic cache: a `.wabc` (tools/wabc.py bakes one from Blender or an OBJ sequence), or an `.abc` as Blender, Houdini and Maya export it (Ogawa, or classic HDF5 with superblock 0/1 and contiguous or compact datasets; converted as it loads, so a large one loads faster baked to `.wabc`). The file is read and parsed off the game's thread, at most 64 MiB, at most 1,048,576 vertices and 3,145,728 indices a sample and 65,536 samples a track; a game holds at most 32 caches and 256 MiB of them at once (`dispose()` frees one). Rejects with a `NotFoundError` for a missing file, a `SyntaxError` for an invalid or unsupported one and a `RangeError` past the limits. The cache starts at time 0, playing and looping.
+
+### AlembicNode
+
+*interface*
+
+A mesh or points node of a cache. `name` and `path` are the archive's (`/Pond/Liquid`); transform-only nodes are folded into their children's transforms.
+
+```ts
+export interface AlembicNode { … }
+```
+
+- `readonly name: string;`
+- `readonly path: string;`
+- `readonly kind: "mesh" | "points";`
+
+- `readonly object: Mesh | Points;`
+
+  An ordinary Mesh (a MeshStandardMaterial shared by the cache's meshes at first) or Points (a PointsMaterial as wide as the cache's first point width). Assign any material (ShaderMaterial, hooks such as `light`); geometry, position, quaternion and scale are the cache's and replaced as samples change (move the cache instead).
+
+### AlembicCache
+
+*class*
+
+A playing Alembic cache: a Group of its nodes' objects. Each sample replaces a node's BufferGeometry attributes whole (`position`, `normal`, `uv`, the index; topology may change every sample, as a fluid's does), uploaded as any geometry and counted against the game's mesh budget. A vertex's velocity (Alembic `.velocities`, Blender's `velocity` attribute: Mantaflow speed vectors or Geometry Nodes'), when the cache has them, is the geometry's `custom` attribute (3 numbers a vertex, units a second, in the node's space; custom materials read `Vertex.custom.xyz`). A sample without vertices keeps the last arrays and draws none of them (`drawRange` count 0). Only a node whose sample changed is touched.
+
+```ts
+export class AlembicCache extends Group { … }
+```
+
+- `readonly type: string;`
+
+  `"AlembicCache"`.
+
+- `readonly duration: number;`
+
+  Seconds from the first sample to the end of the last (one sample interval after it, as an exporter's frame range: six frames at 24 per second last 0.25 s); 0 for a static cache.
+
+- `readonly startTime: number;`
+
+  The archive time of the first sample, in seconds (the cache's time 0; 1/24 for a Blender export from frame 1).
+
+- `time: number;`
+
+  The sample shown, in seconds after the first: setting it is `setTime`.
+
+- `speed: number;`
+
+  Playback rate for `playing` (default 1; negative plays backwards).
+
+- `loop: boolean;`
+
+  Whether time wraps within 0..duration (default true); otherwise it stops at the ends.
+
+- `playing: boolean;`
+
+  Whether time advances by each update's delta × `speed` (default true), before the update callback.
+
+- `setTime(seconds: number): void;`
+
+  Shows the sample at `seconds` (wrapped when `loop`, else clamped to 0..duration). A RangeError for a non-finite time; a TypeError once disposed.
+
+- `readonly nodes: readonly AlembicNode[];`
+
+- `getNode(name: string): AlembicNode | undefined;`
+
+  The node of this name, or of this path.
+
+- `dispose(): void;`
+
+  Frees the cache's samples and its nodes' geometries; it stops playing (call it when done: a cache is kept until then).
 
 ### CanvasTexture
 
@@ -4040,6 +4306,10 @@ export interface MaterialParameters { … }
 
   Since API\_MINOR 35: see `Material.colorWrite`.
 
+- `forceSinglePass?: boolean;`
+
+  Since API\_MINOR 42: see `Material.forceSinglePass`.
+
 - `depthFunc?: DepthModes;`
 
   The depth test's comparison (three.js `depthFunc`; a `DepthModes` constant such as `LessDepth`). Default: `LessEqualDepth` from API\_MINOR 20 (three.js's, so of two coplanar surfaces the later drawn shows), `LessDepth` before it (the earlier drawn shows). A value set is honoured at every minor: `LessDepth` keeps minor 19's coplanar result for a model whose faces were baked over each other. Shadow maps keep the nearer test. Another value is a TypeError at the frame's sync. Since engine 1.20.2 (any minor).
@@ -4115,6 +4385,10 @@ export abstract class Material { … }
 - `colorWrite: boolean;`
 
   Since API\_MINOR 35 (`COLOR_WRITE_MINOR`; absent before): three.js r185's `colorWrite` (default true). False draws no color: the material's draws still test and write depth as `depthTest` and `depthWrite` say (a depth-only occluder or mask, a depth prime); shadow maps and `renderer.sceneDepth` take it as before. Every backend masks the color target's writes in the draw's pipeline.
+
+- `forceSinglePass: boolean;`
+
+  Since API\_MINOR 42 (`DOUBLE_SIDE_PASSES_MINOR`; absent before): three.js r185's `forceSinglePass` (default false). A transparent `DoubleSide` material draws each object twice, its back faces and then its front faces, so its far side shows through its near side as three.js draws it; true draws it once with both sides, as older games' do. Shadow maps draw it once either way.
 
 - `depthFunc: DepthModes;`
 
@@ -5054,6 +5328,10 @@ export class Object3D { … }
 
   Leaves the object and its descendants out of `renderer.ao` (default false; since API\_MINOR 4): they cast no ambient occlusion, and where they are drawn the occlusion of what lies behind them applies (sky domes, light cones, nets). Sprites and points never take part.
 
+- `movable: boolean | null;`
+
+  \*Engine extension\*\* (host API 1.42, `engine.minor=42`; UE's Mobility, ThreeRT's `Object3D.movable`; three.js has none): whether the object, and what is under it, moves. `null` (the default) leaves the renderer to its own heuristics, as before 1.42. `false` marks it static: the renderer keeps it in shadow maps' cached layers from its first frame (`shadow.cascades.cached` takes it at once instead of after 30 still frames; a directional or spot light's map drawn every frame keeps its static casters while its view holds, once they draw at least 8 million indices, below which drawing them is cheaper than the copy), custom materials' vertex code included, which a static object promises gives the same output every frame. `true` marks it movable: never cached, so a mover that pauses does not make the cache draw again when it stops and starts. A movable object makes everything under it movable; a static one under an unset parent is static. Pixels are the same either way: a static object that moves (placing a new object is not a move) is promoted to movable at its first move, with what is under it, the cached shadows drawn again once, and a console line names it (by its `name` when `movable` was set, else its `id`; one line a frame, counting any others promoted with it). Edits (geometry, material) and removal redraw the cache once. Anything other than `true`, `false`, `null` or `undefined` throws a TypeError. `copy` and `clone` take it. Older games' objects have no such property.
+
 - `readonly parent: Object3D | null;`
 - `readonly children: readonly Object3D[];`
 
@@ -5732,6 +6010,20 @@ export interface AnimationUpdateInterval { … }
 - `distance: number;`
 - `interval: number;`
 
+### AnimationGraphCondition
+
+*interface*
+
+A condition of a transition (since host API 1.42): a number parameter compared by `op` with `value` (`==` and `!=` within 1e-6); a boolean one `==` (the default) or `!=` `value` (true by default); a trigger holds while raised (no `op` or `value`), and the transition taking it lowers it.
+
+```ts
+export interface AnimationGraphCondition { … }
+```
+
+- `parameter: string;`
+- `op?: "<" | ">" | "<=" | ">=" | "==" | "!=";`
+- `value?: number | boolean;`
+
 ### AnimationGraphState
 
 *interface*
@@ -5740,20 +6032,29 @@ export interface AnimationUpdateInterval { … }
 export interface AnimationGraphState { … }
 ```
 
-- `clip?: string;`
+- `clip?: string | AnimationClip;`
 
-  A clip it plays; or a blend by one parameter (`blend1d`) or two (`blend2d`, inverse-distance-squared weights). A blend's clips share one phase, and all loop or all hold their ends.
+  A clip it plays (a name in the definition's `clips`; from host API 1.42 also an AnimationClip, or a name in the root's `animations` without `clips`); or a blend space by one number parameter (`blend1d`: each clip at a threshold, the two either side of the value sharing by distance, clamped at the ends) or two (`blend2d`). A blend's clips share one phase.
 
-- `blend1d?: { parameter: string; points: [number, string][] };`
-- `blend2d?: { parameters: [string, string]; points: [number, number, string][] };`
+- `blend1d?: { parameter: string; points: [number, string | AnimationClip][] };`
+
+- `blend2d?: { parameters: [string, string]; points: [number, number, string | AnimationClip][] };`
+
+  Host API 1.40: inverse-distance-squared weights; from 1.42 gradient band interpolation (each clip 1 at its own place and 0 at every other's).
 
 - `sync?: string;`
 
-  States of one sync group keep one normalised phase across their fades (looping states without a group keep theirs too).
+  States of one sync group keep one normalised phase across their fades; a looping state entered from a looping state of its group (or of none from none) starts at its phase.
 
 - `speed?: number;`
 
-  How fast its cycle runs (1).
+  How fast its cycle runs (1); from host API 1.42 times the number parameter `speedParameter` when given.
+
+- `speedParameter?: string;`
+
+- `loop?: boolean;`
+
+  Since host API 1.42: wraps round (true) or plays once and holds its end. By default it loops unless its clips are `clips` entries with `loop: false`.
 
 ### AnimationGraphTransition
 
@@ -5765,16 +6066,28 @@ export interface AnimationGraphTransition { … }
 
 - `from: string;`
 
-  A state, or "\*" for any.
+  A state, or "\*" for any (but never into the state the layer is in).
 
 - `to: string;`
-- `parameter: string;`
-- `op: "<" | ">" | "<=" | ">=" | "==" | "!=";`
-- `value: number;`
+
+- `parameter?: string;`
+
+  One test: a condition on `parameter` (host API 1.40's form; from 1.42 taken before `conditions`).
+
+- `op?: "<" | ">" | "<=" | ">=" | "==" | "!=";`
+- `value?: number | boolean;`
+
+- `conditions?: AnimationGraphCondition[];`
+
+  Since host API 1.42: all must hold. A transition needs a test, conditions, an `exitTime` or some of them.
+
+- `exitTime?: number;`
+
+  Since host API 1.42: the state's normalised time (cycles played) the transition waits for: below 1 on a looping state, that point of each cycle on (until the cycle ends); 1 or more, once that many cycles have played.
 
 - `fade?: number;`
 
-  Seconds the fade takes (0: a cut).
+  Seconds the fade takes (0: a cut). A transition mid-fade fades on from the pose (from 1.42 the weights) as it stands.
 
 ### AnimationGraphLayerDefinition
 
@@ -5786,8 +6099,14 @@ export interface AnimationGraphLayerDefinition { … }
 
 - `name?: string;`
 - `states: Record<string, AnimationGraphState>;`
-- `start: string;`
+
+- `start?: string;`
+
+  The state it begins in (from host API 1.42 the first by default).
+
 - `transitions?: AnimationGraphTransition[];`
+
+  Checked in order; the first that holds is taken.
 
 - `mask?: string[];`
 
@@ -5795,9 +6114,11 @@ export interface AnimationGraphLayerDefinition { … }
 
 - `blend?: "override" | "additive";`
 
-  Over the layers before it by `weight` ("override", the default) or added to them ("additive": its change from its state's pose at phase 0). The first layer is the base.
+  Over the layers before it by `weight` ("override", the default) or added to them ("additive": its change from its state's pose at phase 0; from 1.42 its clips made additive by AnimationUtils.makeClipAdditive, from their first frame). The first layer is the base.
 
 - `weight?: number;`
+
+  From host API 1.42 clamped to 0..1 (1).
 
 ### AnimationGraphDefinition
 
@@ -5807,48 +6128,75 @@ export interface AnimationGraphLayerDefinition { … }
 export interface AnimationGraphDefinition { … }
 ```
 
-- `clips: Record<string, AnimationClip | { clip: AnimationClip; loop?: boolean }>;`
+- `clips?: Record<string, AnimationClip | { clip: AnimationClip; loop?: boolean }> | AnimationClip[];`
 
-  Clips by the graph's names; a looping one (the default) wraps, `loop: false` holds its end.
+  Clips by the graph's names; a looping one (the default) wraps, `loop: false` holds its end. From host API 1.42 also an array (by `clip.name`), or left out for the root's `animations`.
 
-- `parameters?: Record<string, number>;`
+- `parameters?: Record<string, number | boolean | "trigger">;`
 
-- `notifies?: { clip: string; time: number; name: string }[];`
+  Each parameter's first value: a number; from host API 1.42 also a boolean, or "trigger".
+
+- `notifies?: { clip: string | AnimationClip; time: number; name: string }[];`
 
   `notify` events as a layer's dominant clip crosses `time` (seconds into it), each wrap of a long step too.
 
 - `layers: AnimationGraphLayerDefinition[];`
 
+  From host API 1.42 at most 16 (256 states and 1024 transitions each; 16 conditions a transition, 64 blend points, 1024 notifies).
+
 - `fixedStep?: number;`
 
-  Seconds a step (0: one step an update). With it, transitions and notifies fall alike at any frame rate (and alike natively and in browsers), the pose between steps looked ahead to.
+  Seconds a step (0: one step an update). With it, transitions and notifies fall alike at any frame rate (and alike natively and in browsers).
 
 ### AnimationGraph
 
 *class*
 
-The engine's extension (since host API 1.40), after Solstice's animation graphs: a state machine of clips over an object's tree, each layer's states playing a clip or blending clips by parameters, its transitions fading when a parameter's test holds (a change mid-fade fading on from the pose as it stood), sync groups, notifies from the dominant clip, and layers over the base masked by bone branches, overriding or additive. It samples and blends the clips itself and sets the bound properties (Object3D positions, quaternions, scales, `morphTargetInfluences`, material numbers) as the mixer would; it uses no AnimationMixer. Events: `notify` (\{ name, clip, state, layer \}).
+The engine's extension (since host API 1.40), after Solstice's animation graphs: a state machine of clips over an object's tree, each layer's states playing a clip or blending clips by parameters, its transitions fading when their tests hold, sync groups, notifies from the dominant clip, and layers over the base masked by bone branches, overriding or additive. Events: `notify` (\{ name, clip, state, layer \}); from host API 1.42 also `transition` (\{ layer, from, to \}, the layer by index), after the update that took it.
+
+Host API 1.40 and 1.41: it samples and blends the clips itself and sets the bound properties as the mixer would; it uses no AnimationMixer, and the pose between fixed steps is looked ahead to.
+
+From host API 1.42 (`ANIMATION_GRAPH_MIXER_MINOR`) it drives an AnimationMixer's actions: the one given, or its own on the root given. It sets only their `weight`, `timeScale` and start times and updates the mixer, which samples and blends as three.js's does: a state of one clip at speed 1 plays exactly as `mixer.clipAction(clip).play()`, and other actions of the mixer blend with it. Parameters may be booleans and triggers, transitions may have several conditions and exit times, and a masked or additive layer plays clips of the tracks it reaches while the layers below give way there by its weight. Inverse kinematics solvers run after `update`, over its pose. It reads no clock and no random numbers: the same updates and parameters give the same pose.
 
 ```ts
 export class AnimationGraph extends EventDispatcher { … }
 ```
 
-- `constructor(root: Object3D, definition: AnimationGraphDefinition);`
+- `constructor(root: Object3D | AnimationMixer, definition: AnimationGraphDefinition);`
+
+  From host API 1.42 also `new AnimationGraph(mixer, definition)`.
+
 - `readonly root: Object3D;`
+
+- `readonly mixer: AnimationMixer;`
+
+  Since host API 1.42: the mixer it drives.
 
 - `fixedStep: number;`
 
-  Seconds a step (see `AnimationGraphDefinition.fixedStep`).
+  Seconds a step (see `AnimationGraphDefinition.fixedStep`); from host API 1.42 the seconds of mixer time between transition checks, the pose moving on every update.
 
 - `static parse(text: string, clips: AnimationClip[] | Record<string, AnimationClip>): AnimationGraphDefinition;`
 
   Solstice's `.anim` text as a definition, its clips by source name from `clips`: `clip NAME SOURCE [loop|once]`, `notify CLIP TIME NAME`, `param NAME VALUE`, `state NAME clip CLIP`, `state NAME blend1d PARAM AT CLIP ...`, `state NAME blend2d X Y AT_X AT_Y CLIP ...`, `start STATE`, `transition FROM|* TO PARAM OP VALUE fade SECONDS`; the engine's `layer NAME [override|additive] [weight W] [mask BONE ...]` (the lines after it are that layer's), `sync STATE GROUP`, `speed STATE N` and `step SECONDS`. `source` and `roles` lines are skipped; `#` starts a comment. A mistake throws a SyntaxError naming its line.
 
-- `getParameter(name: string): number;`
+- `readonly layers: string[];`
 
-- `setParameter(name: string, value: number): boolean;`
+  Since host API 1.42: the layers' names (a layer without one is named by its index).
 
-  False for a parameter the graph lacks or a value that is not finite.
+- `getParameter<T extends number | boolean = number>(name: string): T;`
+
+  A parameter's value (a boolean or trigger's as a boolean, since 1.42); 0 for one the graph lacks. Typed as a number by default so 1.40 code keeps compiling; read a boolean or trigger with `getParameter<boolean>(name)`.
+
+- `setParameter(name: string, value: number | boolean): boolean;`
+
+  False for a parameter the graph lacks or a value of the wrong kind (a number parameter takes a finite number, a boolean or trigger one a boolean).
+
+- `trigger(name: string): this;`
+
+  Since host API 1.42: raises or lowers a trigger (throws for a name that is not one).
+
+- `resetTrigger(name: string): this;`
 
 - `readonly state: string;`
 
@@ -5860,7 +6208,21 @@ export class AnimationGraph extends EventDispatcher { … }
 
   How far through its cycle a layer's state is, 0 to 1.
 
+- `isTransitioning(layer?: number | string): boolean;`
+
+  Since host API 1.42.
+
+- `weightOf(state: string, layer?: number | string): number;`
+
+  Since host API 1.42: a state's weight in its layer now, 0 to 1.
+
+- `getLayerWeight(layer: number | string): number;`
+
+  Since host API 1.42.
+
 - `setLayerWeight(layer: number | string, weight: number): this;`
+
+  From host API 1.42 clamped to 0..1.
 
 - `goTo(state: string, fade?: number, layer?: number | string): boolean;`
 
@@ -5868,7 +6230,7 @@ export class AnimationGraph extends EventDispatcher { … }
 
 - `update(delta: number): string[];`
 
-  Moves the clock on by `delta` seconds (in fixed steps when `fixedStep` is set) and sets the pose; gives the notifies fired, in order.
+  Moves the clock on by `delta` seconds (transitions checked every `fixedStep` when set) and sets the pose (from host API 1.42 by `mixer.update(delta)`); gives the notifies fired, in order.
 
 - `evaluate(): this;`
 
@@ -5876,11 +6238,15 @@ export class AnimationGraph extends EventDispatcher { … }
 
 - `setUpdateIntervals(levels: AnimationUpdateInterval[] | null, camera?: Object3D): this;`
 
-  The pose set at most every `interval` seconds of the root's distance level from the camera (the renderer's, or `camera`); the clock and notifies keep every step. Null: every update.
+  The pose set at most every `interval` seconds of the root's distance level from the camera (the renderer's, or `camera`); the clock and notifies keep every step. Null: every update. From host API 1.42 the mixer's own (`AnimationMixer.setUpdateIntervals`).
 
 - `stop(): this;`
 
-  The bound properties back at the values they had when the graph was made.
+  The bound properties back at the values they had when the graph was made. From host API 1.42 its actions stop, and the next update starts each layer's state again.
+
+- `reset(): this;`
+
+  Since host API 1.42: each layer back at its start state, the parameters at their first values, its actions stopped.
 
 ### parseRoles
 
@@ -5958,6 +6324,213 @@ export const SkeletonUtils: {
 ```
 
 three.js r185's SkeletonUtils addon (since host API 1.40), carried across as Solstice's role files do (the `roles` option) or by bone names.
+
+### CCDIKLink
+
+*interface*
+
+A bone of a CCDIKSolver chain (three.js's `CCDIKSolver~BoneLink`). Since host API 1.42.
+
+```ts
+export interface CCDIKLink { … }
+```
+
+- `index: number;`
+
+  Its index in the skeleton's `bones`.
+
+- `limitation?: Vector3;`
+
+  The one axis (bone-local, unit) it turns about: a hinge such as a knee.
+
+- `rotationMin?: Vector3;`
+
+  The least Euler angles (x, y, z, radians) it turns to.
+
+- `rotationMax?: Vector3;`
+
+  The most Euler angles it turns to.
+
+- `enabled?: boolean;`
+
+  False: this link and those after it are left as they are (true).
+
+### CCDIK
+
+*interface*
+
+An IK chain (three.js's `CCDIKSolver~IK`). Since host API 1.42.
+
+```ts
+export interface CCDIK { … }
+```
+
+- `target: number;`
+
+  The index of the bone the effector reaches for.
+
+- `effector: number;`
+
+  The index of the bone that reaches (the chain's tip).
+
+- `links: CCDIKLink[];`
+
+  The chain from the effector's parent up, at most 64.
+
+- `iteration?: number;`
+
+  Passes over the chain an update (1; at most 256 are made).
+
+- `minAngle?: number;`
+
+  The least and most a link turns in one step, radians.
+
+- `maxAngle?: number;`
+
+- `blendFactor?: number;`
+
+  How much of the solved pose the chain takes (0..1), over `update`'s.
+
+### CCDIKSolver
+
+*class*
+
+three.js r185's CCDIKSolver addon (examples/jsm/animation/CCDIKSolver.js; since host API 1.42): turns each chain's links (cyclic coordinate descent) so its effector bone reaches its target bone, as three.js does. Call `update()` after the mixer's `update(delta)`, so it layers over the clips. As three.js's, each update turns the links on from where they are: with no clip setting them, the turns carry over to the next update. At most 256 chains, 64 links a chain and 256 iterations a chain an update; a bad bone index throws a RangeError. (Its `createHelper` and `CCDIKHelper` are not offered.)
+
+```ts
+export class CCDIKSolver { … }
+```
+
+- `constructor(mesh: SkinnedMesh, iks?: CCDIK[]);`
+- `mesh: SkinnedMesh;`
+- `iks: CCDIK[];`
+
+- `update(globalBlendFactor?: number): this;`
+
+  Solves every chain; `globalBlendFactor` (1) for those with no `blendFactor`.
+
+- `updateOne(ik: CCDIK, overrideBlend?: number): this;`
+
+  Solves one chain; `overrideBlend` (1) when it has no `blendFactor`.
+
+### IKTarget
+
+*type*
+
+```ts
+export type IKTarget = Object3D | Vector3;
+```
+
+Where a solver reaches or looks: an object (its world position, and its world rotation for `rotationWeight`) or a world position. Since host API 1.42.
+
+### TwoBoneIKOptions
+
+*interface*
+
+```ts
+export interface TwoBoneIKOptions { … }
+```
+
+- `root: Object3D;`
+
+  The upper bone (a thigh, an upper arm).
+
+- `mid: Object3D;`
+
+  The middle joint (a knee, an elbow), under `root`.
+
+- `end: Object3D;`
+
+  The end (an ankle, a wrist), under `mid`: it reaches `target`.
+
+- `target: IKTarget;`
+
+- `pole?: IKTarget | null;`
+
+  Where the middle joint bends toward (none: the limb keeps its bend's side).
+
+- `weight?: number;`
+
+  0..1 (1): how much of the solved pose the bones take, slerped from the animated one.
+
+- `rotationWeight?: number;`
+
+  0..1 (0): how much `end` takes `target`'s world rotation (an Object3D target).
+
+### TwoBoneIKSolver
+
+*class*
+
+The engine's analytic two-bone IK (since host API 1.42): a foot on uneven ground, a hand reaching. Turns `root` and `mid` so `end` reaches the target exactly (or as far toward it as the limb is long), the limb's bend toward `pole`. Call `update()` each frame after the mixer's: it starts from the pose the animation set, and when nothing changed its bones since its last update (a mixer updating less often, or not animating them) from the pose before that update, so its turns never pile up. Deterministic, at a fixed small cost.
+
+```ts
+export class TwoBoneIKSolver { … }
+```
+
+- `constructor(options: TwoBoneIKOptions);`
+- `readonly isTwoBoneIKSolver: true;`
+- `readonly root: Object3D;`
+- `readonly mid: Object3D;`
+- `readonly end: Object3D;`
+- `target: IKTarget;`
+- `pole: IKTarget | null;`
+
+- `weight: number;`
+
+  0..1: blends the solver in and out.
+
+- `rotationWeight: number;`
+- `update(): this;`
+
+- `reset(): this;`
+
+  The bones back as the animation left them (when nothing else turned them since the last update).
+
+### LookAtIKOptions
+
+*interface*
+
+```ts
+export interface LookAtIKOptions { … }
+```
+
+- `bone: Object3D;`
+- `target: IKTarget;`
+
+- `forward?: Vector3;`
+
+  The bone's local direction that looks ((0, 0, 1)).
+
+- `maxAngle?: number;`
+
+  The most it turns from where the animation pointed it, radians (π: no limit).
+
+- `weight?: number;`
+
+  0..1 (1): how much of the turn it takes.
+
+### LookAtIKSolver
+
+*class*
+
+The engine's look-at constraint (since host API 1.42): turns a head, a neck or an eye so its `forward` points at the target, by the shortest turn, at most `maxAngle` from the animated direction, by `weight`. For a head and eyes make one for the neck (a part weight), the head and each eye, and update them in that order after the mixer. Like TwoBoneIKSolver it starts from the animated pose each update, so its turns never pile up.
+
+```ts
+export class LookAtIKSolver { … }
+```
+
+- `constructor(options: LookAtIKOptions);`
+- `readonly isLookAtIKSolver: true;`
+- `readonly bone: Object3D;`
+- `readonly forward: Vector3;`
+- `target: IKTarget;`
+- `maxAngle: number;`
+- `weight: number;`
+- `update(): this;`
+
+- `reset(): this;`
+
+  The bone back as the animation left it (when nothing else turned it since the last update).
 
 ### PropertyBinding
 
@@ -6539,7 +7112,7 @@ export interface ParticleBurstOptions { … }
 
 ## Audio in the scene (three.js r185's audio objects, host API 1.37)
 
-starhermit:audio's graph placed by the scene: an `AudioListener` (on a camera, usually) moves `context.listener`, and each `PositionalAudio` its PannerNode, once a frame after the scene's sync, ramping to where their objects are over the frame's delta as three.js does (a PositionalAudio only while it plays). They need starhermit:audio imported and `SPATIAL_AUDIO_MINOR` (37): a TypeError otherwise. Buffers are starhermit:audio's `AudioBuffer`s (`context.decodeAudioData`, `createBuffer`); sounds of clips placed in 3D are `play(clip, { position })`, which follow the same listener.
+starhermit:audio's graph placed by the scene: an `AudioListener` (on a camera, usually) moves `context.listener`, and each `PositionalAudio` its PannerNode, once a frame after the scene's sync, ramping to where their objects are over the frame's delta as three.js does (a PositionalAudio only while it plays; since API\_MINOR 42, `AUDIO_FOLLOW_SUSPENDED_MINOR`, while the context is suspended they set their parameters at its time instead of ramping, so a held mixer clock never fills the automation queue). They need starhermit:audio imported and `SPATIAL_AUDIO_MINOR` (37): a TypeError otherwise. Buffers are starhermit:audio's `AudioBuffer`s (`context.decodeAudioData`, `createBuffer`); sounds of clips placed in 3D are `play(clip, { position })`, which follow the same listener.
 
 ### AudioListener
 
@@ -7733,7 +8306,7 @@ export type AntialiasMode = "off" | "fxaa" | "smaa" | "msaa" | "taa";
 
 Anti-aliasing: none, three.js's `FXAAShader` or `SMAAPass` (SMAA 1x) after the output, or 4× multisampling resolved before the other effects. Assigning `antialias` (any value, including "off") renders through the linear path: the scene in linear half-float color, fog and translucent or additive blending mixed in linear light before the output, so they look the same at every setting and the mode changes edges alone (since engine 1.36.2, at every API\_MINOR; "off" drew straight to the window before). A game that never sets it keeps three.js's canvas look: drawn straight to the window, fog and blending in encoded color. A device without half-float color draws an assigned "off" straight too (its 8-bit post buffers draw every mode that way).
 
-"taa" (since API\_MINOR 40; a TypeError before) is the engine's temporal anti-aliasing with upscaling: the scene drawn with its projection jittered by a sub-pixel Halton(2, 3) offset over eight frames, each object's and skin's motion drawn into a velocity image, and every frame resolved with the last one's result reprojected by the nearest of its 3×3 pixels' motion, clipped to the neighbourhood's colours (no ghosting where something uncovers or changes), with less history under transparent objects and particles (the reactive mask), into the window's size: a scene at a render scale below 1 (`setPixelRatio`, `setSize`, the player's render scale and adaptive resolution) is upscaled by it. It runs before bloom and the output. three.js's `TAARenderPass` is different: it accumulates a still camera's jittered frames and starts again whenever anything moves. The history is dropped on a cut: a new `camera`, or `renderer.resetHistory()`. It needs half-float color and a depth format the device samples: without them FXAA stands in, with a note in Options.
+"taa" (since API\_MINOR 40; a TypeError before) is the engine's temporal anti-aliasing with upscaling: the scene drawn with its projection jittered by a sub-pixel Halton(2, 3) offset over eight frames, each object's and skin's motion drawn into a velocity image, and every frame resolved with the last one's result reprojected by the nearest of its 3×3 pixels' motion, clipped to the neighbourhood's colours, with less history under transparent objects and particles (the reactive mask), and (since API\_MINOR 42) dropped where a pixel's own motion (what the camera's motion does not explain) differs from the one kept where it was: a disocclusion, so a moving object leaves no trail even over a busy background such as a checkered floor, whose colours the clip alone let the object's through (games below 42 keep the clip alone); resolved into the window's size: a scene at a render scale below 1 (`setPixelRatio`, `setSize`, the player's render scale and adaptive resolution) is upscaled by it. It runs before bloom and the output. three.js's `TAARenderPass` is different: it accumulates a still camera's jittered frames and starts again whenever anything moves. The history is dropped on a cut: a new `camera`, or `renderer.resetHistory()`. It needs half-float color and a depth format the device samples: without them FXAA stands in, with a note in Options.
 
 ### Renderer
 
@@ -7887,6 +8460,10 @@ Render targets (since API\_MINOR 8). The scene draws itself every frame; `render
 - `film: { intensity?: number; grayscale?: boolean } | null;`
 
   Since API\_MINOR 40 (`SCREEN_EFFECTS_MINOR`; undefined before): three.js `FilmPass`'s grain over the shown image (`intensity` 0..1, default 0.5; `grayscale` default false), or null (the default).
+
+- `lut?: LUTPass | null;`
+
+  Since API\_MINOR 42 (`LOOK_ASSETS_MINOR`; an engine extension where three.js adds the pass to its `EffectComposer` after `OutputPass`): a `LUTPass` whose table colour-grades the shown image, or null (the default). It runs in the composite after the output (tone mapping, exposure, sRGB) and any display-space grade, before FXAA/SMAA and the finish, in window frames; it brings the post buffers along (8-bit ones too). The pass's `lut`, `intensity` and `enabled` are read each frame; its table is read again after `needsUpdate`.
 
 - `specularAntialiasing: boolean | { variance?: number; limit?: number };`
 

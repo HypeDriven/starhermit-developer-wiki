@@ -7,7 +7,7 @@ english_only: true
 
 # Engine API reference
 
-Engine **1.41.0** (host API 1.41), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game.
+Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game.
 
 This is the complete host API of the StarHermit engine for script games: every module a game imports
 by name, every member, unit, limit and error. It follows the latest release only; a game pinned to an
@@ -37,6 +37,10 @@ guided start see the [engine tutorial](../tutorials/starhermit-engine.md) and th
 | [`starhermit:vehicle`](vehicle.md) | Vehicle dynamics, tracks, lap timing and autopilots (host API 1.40). |
 | [`starhermit:water`](water.md) | FFT oceans, ponds and water shading, with a deterministic wave field for gameplay (host API 1.40). |
 | [`starhermit:surfaces`](surfaces.md) | Procedural tiling surfaces, terrain blending and grass (host API 1.40). |
+| [`starhermit:controls`](controls.md) | Player controllers and camera rigs (since API\_MINOR 42, `CONTROLS_MINOR`; for a game declaring an older `engine.minor` the import throws a TypeError as the module evaluates). |
+| [`starhermit:nav`](nav.md) | Navigation for game agents (since API\_MINOR 42, `NAV_MINOR`; for a game declaring an older `engine.minor` the import throws a TypeError as the module evaluates). |
+| [`starhermit:voxel`](voxel.md) | Destructible voxel levels (since API\_MINOR 42, `VOXEL_MINOR`; for a game declaring an older `engine.minor` the import throws a TypeError as the module evaluates). |
+| [`starhermit:postprocessing`](postprocessing.md) |  |
 | [Globals](globals.md) | `console`, timers and the other built-ins available without an import. |
 
 ## Conventions for every module

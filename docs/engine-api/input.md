@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:input`
 
-Engine **1.41.0** (host API 1.41), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:input";
@@ -62,10 +62,10 @@ export function wasReleased(action: string, slot?: number): boolean;
 *type*
 
 ```ts
-export type InputSource = "keyboard" | "pointer" | "gamepad" | "touch";
+export type InputSource = "keyboard" | "pointer" | "gamepad" | "touch" | "motion";
 ```
 
-What produced an input: keys, a mouse or pen, a gamepad, a finger (on-screen touch controls included).
+`"motion"` (since API\_MINOR 42): an action bound to tilt (`engine.motion.<action>=`); never the player's press.
 
 ### ActionEvent
 
@@ -642,6 +642,10 @@ export interface GamepadState { … }
 - `readonly buttons: readonly { readonly pressed: boolean; readonly value: number }[];`
 - `readonly axes: readonly number[];`
 
+- `readonly motion?: { readonly gyro: readonly [number, number, number]; readonly accel: readonly [number, number, number] } | null;`
+
+  Since API\_MINOR 42: the pad's motion sensors where it has them and the platform reads them (`gyro` °/s about x, y, z; `accel` m/s² including gravity), else null. Absent before API\_MINOR 42.
+
 ### gamepads
 
 *function*
@@ -669,4 +673,140 @@ export function vibrate(durationMs: number): void;
 ```
 
 Vibrates the device itself (a phone), as `navigator.vibrate`, at most 5,000 ms, unless the player turned vibration off; does nothing where the device cannot, and (as browsers' user activation) until the player has pressed something since the game started.
+
+## Device motion (since API\_MINOR 42)
+
+The device's motion sensors (a phone's or tablet's accelerometer, gyroscope and orientation), as the W3C DeviceMotionEvent and DeviceOrientationEvent report them, read once a frame. Needs `engine.capabilities=motion`. Where the browser asks the player first (iOS) `requestMotion()` shows the runtime's own prompt, and only when the player allows it there the browser's (in the player's press, or behind a button of the page's own): a refusal holds for the session (or for good, if the player chose), so asking again resolves "denied" without a prompt. Elsewhere in browsers the sensors are the game's without a prompt, as gamepads are. Desktops (natively, and browsers without sensors) report "unavailable". The readings stop while the runtime's interface is open or the window has no focus.
+
+Readings are frame data: a play script's `motion` steps stand in for the sensors, and tilt and the actions bound to it are a function of the frames' readings alone, so a recorded run replays exactly. Undefined before API\_MINOR 42.
+
+### MotionStatus
+
+*type*
+
+```ts
+export type MotionStatus = "granted" | "denied" | "prompt" | "unavailable";
+```
+
+### MotionReading
+
+*interface*
+
+One reading in the device's frame: x to the right of the screen in its natural orientation, y up it, z out of it. A part is null where the device does not report it.
+
+```ts
+export interface MotionReading { … }
+```
+
+- `readonly acceleration: readonly [number, number, number] | null;`
+
+  Linear acceleration without gravity, m/s² \[x, y, z\].
+
+- `readonly accelerationIncludingGravity: readonly [number, number, number] | null;`
+
+  Acceleration including gravity, m/s² (face up on a table: about \[0, 0, 9.81\]).
+
+- `readonly rotationRate: { readonly alpha: number; readonly beta: number; readonly gamma: number } | null;`
+
+  °/s: alpha about z, beta about x, gamma about y.
+
+- `readonly orientation: { readonly alpha: number; readonly beta: number; readonly gamma: number } | null;`
+
+  Degrees: alpha 0..360 about z, beta −180..180 about x, gamma −90..90 about y (intrinsic Z-X'-Y''). alpha reads 0 where the device gives none.
+
+- `readonly absolute: boolean;`
+
+  Whether alpha is a compass heading rather than relative.
+
+- `readonly quaternion: readonly [number, number, number, number] | null;`
+
+  The orientation as \[x, y, z, w\], screen-corrected: the quaternion of a camera looking out of the back of the device, its image upright on the screen as turned (`camera.quaternion.fromArray(q)` keeps the scene still as the player turns the device). Y up; null without an orientation.
+
+- `readonly interval: number;`
+
+  Milliseconds between the sensor's readings.
+
+- `readonly screenAngle: number;`
+
+  How far the screen's content is turned from the device's natural orientation, degrees counter-clockwise: 0, 90, 180 or 270.
+
+### motionStatus
+
+*const*
+
+```ts
+export const motionStatus: (() => MotionStatus) | undefined;
+```
+
+The `motion` permission (`engine.permission("motion")`).
+
+### requestMotion
+
+*const*
+
+```ts
+export const requestMotion: (() => Promise<MotionStatus>) | undefined;
+```
+
+Asks for the sensors and starts reading them: resolves with the status once answered ("unavailable" at once without sensors). Games that bind actions to tilt read them without asking wherever no prompt is needed. Rejects with NotAllowedError without the capability.
+
+### motion
+
+*const*
+
+```ts
+export const motion: (() => MotionReading | null) | undefined;
+```
+
+This frame's reading (frozen; the same object all frame), or null.
+
+### tilt
+
+*const*
+
+```ts
+export const tilt: (() => { readonly x: number; readonly y: number }) | undefined;
+```
+
+Tilt: how far the device leans from its rest pose, through the dead zone and smoothing, each −1..1: x positive with the screen's right side down (steering right), y positive with its top edge away from the player (a stick pushed forward). The first reading, and the first after `recentreMotion()`, is the rest pose. Actions bind to it with `engine.motion.<action>=TiltLeft+TiltRight+TiltForward+TiltBack` in starhermit.txt (pressed at 0.5, released below 0.4; `value()` reads the lean 0–1).
+
+### recentreMotion
+
+*const*
+
+```ts
+export const recentreMotion: (() => void) | undefined;
+```
+
+The next reading becomes the rest pose (calibration).
+
+### TiltOptions
+
+*interface*
+
+```ts
+export interface TiltOptions { … }
+```
+
+- `range?: number;`
+
+  Degrees of lean for full deflection, 5–90 (default 30).
+
+- `deadZone?: number;`
+
+  A share of the range that reads 0, 0–0.5 (default 0.05).
+
+- `smoothing?: number;`
+
+  Each frame keeps this share of the last value, 0–0.95 (default 0.5).
+
+### setTiltOptions
+
+*const*
+
+```ts
+export const setTiltOptions: ((options: TiltOptions) => void) | undefined;
+```
+
+Sets tilt's options from the next frame (RangeError outside them).
 {% endraw %}

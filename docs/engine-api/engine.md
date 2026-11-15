@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:engine`
 
-Engine **1.41.0** (host API 1.41), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:engine";
@@ -351,10 +351,10 @@ The ten graphics levels (since API\_MINOR 14), lowest first, about 1.64 times ap
 *type*
 
 ```ts
-export type GraphicsSetting = "auto" | GraphicsLevel;
+export type GraphicsSetting = "auto" | GraphicsLevel | "raytraced";
 ```
 
-The player's Graphics choice (since API\_MINOR 14): Auto, the default, or a level.
+The player's Graphics choice (since API\_MINOR 14): Auto, the default, or a level; since API\_MINOR 42 also `"raytraced"`, the infinite level with the scene's shadows traced by the GPU's ray-tracing hardware (offered where the device has it and the game's `engine.ray_tracing` is not `off`; older games hear it as `"infinite"`).
 
 ### levels
 
@@ -581,6 +581,10 @@ export interface FrameStats { … }
 - `readonly resolutionScale?: number;`
 
   The fraction of the drawing buffer's size (`renderer.setSize` × `setPixelRatio`) the scene renders at this frame, temporal anti-aliasing or resampling bringing it back to full size (since API\_MINOR 41; absent before): the player's render scale times the engine's dynamic resolution, which follows the frame budget (always under the Auto graphics preset, under a chosen level with the player's adaptive resolution; 0.5 of the player's scale at least, in steps of 1/32). 1 at full size, and for games that draw at the window's size. Engine-internal: `renderer.getPixelRatio()` and the drawing buffer's size never include it, as in three.js.
+
+- `readonly rayTraced?: boolean;`
+
+  Whether this frame's shadows are traced by the GPU's ray-tracing hardware rather than mapped (since API\_MINOR 42; absent before): the ray-traced graphics tier in use, chosen by the player or climbed to by Auto within the frame budget. The scene looks the same either way up to the shadows' edges; a game may use it to drop its own faked contact shadows.
 
 ### GpuStats
 
@@ -875,6 +879,39 @@ export function openLink(id: string): Promise<LinkOutcome>;
 ```
 
 Opens an external link the manifest declares, by its id (`engine.link.<id>=<https URL>` in starhermit.txt; since API\_MINOR 24, and undefined for games declaring an older `engine.minor`; at most 16 links, 256 from API\_MINOR 33, each approved for its exact URL). The game never passes a URL: the runtime opens only the manifest's, once a StarHermit moderator approved it for the game (asked at each open, which needs `engine.capabilities=platform`) and the player pressed Open in the runtime's own confirmation, which shows the link's host and URL and which the game cannot draw over, style or dismiss; the game hears no input while it shows. Call it while handling the player's press (an action, key, pointer or gamepad press), one link a press and one at a time; otherwise it resolves "unavailable" with a warning on the console. It never rejects for the link's sake (only a non-string id is a TypeError). A development run (`--dev` natively, a loopback development page in browsers) without a launch token opens declared links unreviewed, the confirmation saying so.
+
+## Video recordings
+
+### RecordOutcome
+
+*type*
+
+```ts
+export type RecordOutcome = "started" | "saved" | "declined" | "unavailable";
+```
+
+How a \{@link recording\} request went: the player pressed Record (the recording runs) or Save clip (the kept seconds are being saved), or Not now; or it could not be asked now (no press, a recording or a question already there, the player keeps no last seconds for `saveClip`, or this device cannot record).
+
+### recording
+
+*const*
+
+```ts
+export const recording: {
+    /** Asks the player to record a video of the game, for at most
+     * `seconds` (a whole number, 1 to 600; no limit by default: the player
+     * stops it). Resolves once the player answered. */
+    request(options?: { seconds?: number }): Promise<RecordOutcome>;
+    /** Asks the player to save the last 30 seconds as a clip, when they
+     * keep them (the Options menu's "Keep the last 30 seconds"). */
+    saveClip(): Promise<RecordOutcome>;
+    /** Ends the recording the player accepted for the game (it is saved).
+     * A recording the player started themselves is theirs to stop. */
+    stop(): void;
+  } | undefined;
+```
+
+Video recordings of the game the player takes (since API\_MINOR 42, `RECORDING_MINOR`; undefined for games declaring an older `engine.minor`). The player always controls recording: Ctrl+Shift+F1 starts and stops one, the Options menu (F1) has Record video and "Keep the last 30 seconds" with Save clip, for every game. A game may only \*ask\*: each request shows the runtime's own dialog, which the game cannot draw over, style or answer, and nothing records until the player accepts. While a recording runs the runtime shows a REC mark with its time (a REPLAY mark while the last seconds are kept); the marks, menus and dialogs are never in the clip, which holds the game's frame and overlay (at most 30 frames a second) and its sound. Clips are saved on the player's device only, never uploaded: natively as WebM (VP8, Opus) in the player's videos folder (`StarHermit` in `~/Videos`, `~/Movies` on macOS), in browsers as a download (WebM, or MP4 where the browser records only that). Call `request` and `saveClip` while handling the player's press (an action, key, pointer or gamepad press), one at a time; otherwise they resolve "unavailable" with a warning on the console.
 
 ## Seeded random generators
 
@@ -1442,10 +1479,10 @@ export const files: PackageFiles;
 *type*
 
 ```ts
-export type PermissionKind = "microphone" | "clipboard-read";
+export type PermissionKind = "microphone" | "clipboard-read" | "motion";
 ```
 
-`microphone` needs the `voice` capability, `clipboard-read` the `clipboard` capability; without it the permission is `unavailable`.
+`motion` (since API\_MINOR 42) needs the `motion` capability; see `starhermit:input`'s `requestMotion`.
 
 ### PermissionState
 

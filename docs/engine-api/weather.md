@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:weather`
 
-Engine **1.41.0** (host API 1.41), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:weather";
@@ -417,7 +417,7 @@ export type RainTier = "full" | "reduced" | "minimal" | "off";
 
 *class*
 
-Volumetric clouds (Schneider 2015, Hillaire 2016): the sky layer `weather_clouds`, marched through Perlin-Worley (128³) and Worley (32³) noise the CPU bakes a few rows a frame (`noiseRows`; the "dome" tier until then) over a weather map whose coverage is ranked through its own CDF; a two-lobe phase, multiple-scattering octaves, diffusion through deep cloud, skylight and the ground's bounce; their shadow on the ground (WeatherEffects' light hook) and a panorama the sky's environment and aerial passes read (overcast dims the skylight). Its tier is lowered to the device and graphics level with a note in Options → Graphics.
+Volumetric clouds (Schneider 2015, Hillaire 2016): the sky layer `weather_clouds`, marched through Perlin-Worley (128³) and Worley (32³) noise the CPU bakes a few rows a frame (`noiseRows`; the "dome" tier until then) over a weather map whose coverage is ranked through its own CDF; a two-lobe phase, multiple-scattering octaves, diffusion through deep cloud, skylight and the ground's bounce; their shadow on the ground (WeatherEffects' light hook) and a panorama the sky's environment and aerial passes read (overcast dims the skylight), as does, from host API 1.42 (`REFLECTED_CLOUDS_MINOR`), its dome seen through a camera other than the one the weather follows (a planar reflection's mirror camera, a cube camera): the on-screen clouds are that camera's alone (before 1.42 every pass's dome reads them at its own pixels). Its tier is lowered to the device and graphics level with a note in Options → Graphics.
 
 ```ts
 export class VolumetricClouds { … }
