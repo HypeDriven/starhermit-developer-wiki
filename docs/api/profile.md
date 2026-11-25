@@ -219,12 +219,21 @@ The list includes revoked rows as an audit trail:
     "fingerprint": "4d9f3c...",
     "createdAt": "2026-07-01T12:00:00Z",
     "lastUsedAt": "2026-07-30T09:00:00Z",
+    "lastUsedIp": "203.0.113.4",
+    "lastUsedUserAgent": "python-requests/2.32.3",
+    "lastUsedLocation": "Germany",
     "isRevoked": false,
     "revokedAt": null,
     "metadata": null
   }
 ]
 ```
+
+`lastUsedIp`, `lastUsedUserAgent` and `lastUsedLocation` describe the key's most recent sign-in
+(`POST /auth/public-key/complete`) and change together. The location is a coarse place from the
+address: `"City, Country"`, a country alone, `"Tor network"`, or `null` when it is not known. All
+three are `null` for a key that has not signed in since they began to be recorded. The StarHermit
+client shows them in **Options → Account**.
 
 ### `POST /api/v1/me/public-keys`
 
