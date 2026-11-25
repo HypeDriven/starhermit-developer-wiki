@@ -37,17 +37,18 @@ uploads or opens an upload socket. Have the account owner review and [accept the
 interactively, then rerun the job. This can recur when terms change; do not automatically accept
 terms from CI.
 
-## Create the key in the StarHermit client
+## Create the key in the dashboard or the StarHermit client
 
-The StarHermit client (Windows, macOS, Linux, Android and the web dashboard) can do the one-time
-setup for you: it generates the key pair, adds the public half to your account and shows the
-private half once. Use it instead of steps 1 and 2 below.
+The web dashboard ([dashboard.starhermit.com](https://dashboard.starhermit.com)) and the StarHermit
+client (Windows, macOS, Linux, Android) can do the one-time setup for you: either generates the key
+pair, adds the public half to your account and shows the private half once. Use it instead of steps
+1 and 2 below.
 
-1. Sign in to the client with Google or GitHub. A session that signed in with a device key cannot
-   add keys, so the client asks you to sign in with a provider first.
+1. Sign in to the dashboard or the client with Google or GitHub. A session that signed in with a
+   device key cannot add keys, so you are asked to sign in with a provider first.
 2. Open **Options → Account**.
-3. Under **New key**, type a name for what will use the key (for example `orbit-league-ci` or
-   `publish-agent`) and press **Create key**.
+3. Under **New key for CI/CD or an agent**, type a name for what will use the key (for example
+   `orbit-league-ci` or `publish-agent`) and press **Create key**.
 4. Press **Copy**. The clipboard holds three lines:
 
    ```text
@@ -62,8 +63,9 @@ private half once. Use it instead of steps 1 and 2 below.
 From a terminal, `starhermit-client keys create orbit-league-ci` prints the same three lines.
 
 The **Sign-in keys on your account** list on the same page shows every key: when it was added,
-when it last signed in and from which address and client, and whether it is revoked. Select a key
-and press **Revoke selected key** to cut it off. Revoking ends its sessions too, so a running job or
+when it last signed in and from which place, address and client, and whether it is revoked. Press
+**Revoke** beside a key in the dashboard, or select it and press **Revoke selected key** in the
+client, to cut it off. Revoking ends its sessions too, so a running job or
 agent loses access on its next request. `starhermit-client keys` and
 `starhermit-client keys revoke <id>` do the same from a terminal.
 
@@ -348,9 +350,9 @@ smoke test before promoting the release.
 ## Rotation and incident response
 
 1. Sign in through OAuth and accept the current StarHermit terms.
-2. Add a newly generated, distinctly labelled key (in the client: **Options → Account → Create key**).
+2. Add a newly generated, distinctly labelled key (in the dashboard or the client: **Options → Account → Create key**).
 3. Replace the CI secret and variable, then run a deployment.
-4. Revoke the old key (**Revoke selected key** in the client, or
+4. Revoke the old key (**Revoke** in the dashboard or **Revoke selected key** in the client, or
    `DELETE /api/v1/me/public-keys/{keyId}`).
 
 For a suspected broad compromise, `DELETE /api/v1/me/public-keys/all` revokes every active key.
