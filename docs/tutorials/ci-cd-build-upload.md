@@ -37,7 +37,65 @@ uploads or opens an upload socket. Have the account owner review and [accept the
 interactively, then rerun the job. This can recur when terms change; do not automatically accept
 terms from CI.
 
-## One-time setup
+## Create the key in the StarHermit client
+
+The StarHermit client (Windows, macOS, Linux, Android and the web dashboard) can do the one-time
+setup for you: it generates the key pair, adds the public half to your account and shows the
+private half once. Use it instead of steps 1 and 2 below.
+
+1. Sign in to the client with Google or GitHub. A session that signed in with a device key cannot
+   add keys, so the client asks you to sign in with a provider first.
+2. Open **Options → Account**.
+3. Under **New key**, type a name for what will use the key (for example `orbit-league-ci` or
+   `publish-agent`) and press **Create key**.
+4. Press **Copy**. The clipboard holds three lines:
+
+   ```text
+   STARHERMIT_KEY_TYPE=Ed25519
+   STARHERMIT_PUBLIC_KEY=<Base64 raw public key>
+   STARHERMIT_PRIVATE_KEY=<Base64 32-byte private seed>
+   ```
+
+5. Put them in your CI secret store or your agent's environment (step 3 below), then press **Done**.
+   The private key is never shown again; if you lose it, create another key and revoke this one.
+
+From a terminal, `starhermit-client keys create orbit-league-ci` prints the same three lines.
+
+The **Sign-in keys on your account** list on the same page shows every key: when it was added,
+when it last signed in and from which address and client, and whether it is revoked. Select a key
+and press **Revoke selected key** to cut it off. Revoking ends its sessions too, so a running job or
+agent loses access on its next request. `starhermit-client keys` and
+`starhermit-client keys revoke <id>` do the same from a terminal.
+
+## Let an AI agent publish your games
+
+An AI coding agent (Claude Code, Codex, Cursor and others) that builds your game can publish it
+too, with a key of its own:
+
+1. Create a key for the agent as above, named after the agent and the project, for example
+   `claude-orbit-league`. Give each agent and each project its own key, so you can tell them apart
+   in the key list and revoke one without breaking the others.
+2. Give the agent the three lines, plus `STARHERMIT_GAME_ID` (your game's ID), as environment
+   variables, from your agent tool's secret or environment settings, or a `.env` file that is
+   listed in `.gitignore`. Never paste the private
+   key into the chat or commit it.
+3. Add the [authentication/upload helper](#add-the-authenticationupload-helper) to the project and
+   tell the agent how to publish. For example:
+
+   ```text
+   When a build is ready to publish, run
+   python ci/starhermit_upload.py dist/game.zip
+   with STARHERMIT_PUBLIC_KEY, STARHERMIT_PRIVATE_KEY and STARHERMIT_GAME_ID from the environment.
+   Never print, log or commit STARHERMIT_PRIVATE_KEY. If the upload answers
+   403 terms_acceptance_required, stop and ask me to accept the terms.
+   ```
+
+The agent's key acts as you, but only for what your account can do: it can update games you own.
+It cannot add keys, revoke your other keys, change your email or remove a sign-in provider. Check
+**Options → Account** now and then: the key's last use, address and client show what the agent has
+been doing. Revoke the key when the project ends or if anything looks wrong.
+
+## One-time setup by hand
 
 ### 1. Generate a deployment key locally
 
@@ -290,9 +348,10 @@ smoke test before promoting the release.
 ## Rotation and incident response
 
 1. Sign in through OAuth and accept the current StarHermit terms.
-2. Add a newly generated, distinctly labelled key.
+2. Add a newly generated, distinctly labelled key (in the client: **Options → Account → Create key**).
 3. Replace the CI secret and variable, then run a deployment.
-4. Revoke the old key with `DELETE /api/v1/me/public-keys/{keyId}`.
+4. Revoke the old key (**Revoke selected key** in the client, or
+   `DELETE /api/v1/me/public-keys/{keyId}`).
 
 For a suspected broad compromise, `DELETE /api/v1/me/public-keys/all` revokes every active key.
 Both delete operations require an OAuth-authenticated session. A pipeline authenticated by its own

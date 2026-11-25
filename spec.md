@@ -178,7 +178,9 @@ patterns, not the subject of the docs.
   24-hour throttles, the exact challenge bytes to sign, polling sign-in until the emailed link is
   opened, refresh, terms and nickname, second devices, emailed revoke-all, and the OAuth-only limits;
   its `js` blocks concatenate into one tested module), `ci-cd-build-upload`
-  (enrol a labelled machine key from an OAuth session, authenticate a pipeline by signed challenge
+  (create a labelled machine key in the StarHermit client's Options → Account or `starhermit-client keys
+  create`, or enrol one from an OAuth session by hand; give one to an AI agent so it publishes your
+  games; list keys with their last use, address and client, and revoke them; authenticate a pipeline by signed challenge
   with the server’s exact JSON escaping (including Base64 nonce plus signs),
   and upload client or container builds over HTTP/WebSocket), `kart-racer` (a multiplayer racing game
   on realtime rooms: host-routed binary netcode with host migration, plus a server-authoritative

@@ -4,7 +4,7 @@ lang: "fr"
 title: "Télécharger des builds à partir de CI/CD avec une clé publique inscrite par OAuth"
 source_url: "/docs/tutorials/ci-cd-build-upload.html"
 source_path: "docs/tutorials/ci-cd-build-upload.md"
-source_hash: "0f3e9f3e48bf88125b2110acdd92ab62aeb0840f0bbc758e7c52b911a434e718"
+source_hash: "a06ecd5fc22459f69ad29f4d4955fcb19ad144a2d85a1b48179aab06802561ab"
 translation: "machine"
 permalink: "/fr/docs/tutorials/ci-cd-build-upload.html"
 ---
@@ -42,7 +42,71 @@ jeu mais n’en crée pas.</li>
 télécharge ou ouvre un socket de téléchargement. Demandez au propriétaire du compte d'examiner et <a href="/fr/docs/api/profile.html#terms-acceptance">accepter les conditions actuelles</a>
 de manière interactive, puis réexécutez le travail. Cela peut se reproduire lorsque les conditions changent&#160;; n'accepte pas automatiquement
 termes de CI.</p>
-<h2 id="one-time-setup">Configuration unique</h2>
+<h2 id="create-the-key-in-the-starhermit-client">Créez la clé dans le client StarHermit</h2>
+<p>Le client StarHermit (Windows, macOS, Linux, Android et le tableau de bord Web) peut effectuer cette opération unique
+configuration pour vous&#160;: il génère la paire de clés, ajoute la moitié publique à votre compte et affiche la
+moitié privée une fois. Utilisez-le à la place des étapes 1 et 2 ci-dessous.</p>
+<ol>
+<li>
+<p>Connectez-vous au client avec Google ou GitHub. Une session qui s'est connectée avec une clé d'appareil ne peut pas
+ajoutez des clés, de sorte que le client vous demande d'abord de vous connecter auprès d'un fournisseur.</p>
+</li>
+<li>
+<p>Ouvrir <strong>Options → Compte</strong>.</p>
+</li>
+<li>
+<p>Sous <strong>Nouvelle clé</strong>, saisissez un nom pour ce qui utilisera la clé (par exemple <code>orbit-league-ci</code> ou
+<code>publish-agent</code>) et appuyez sur <strong>Créer une clé</strong>.</p>
+</li>
+<li>
+<p>Presse <strong>Copie</strong>. Le presse-papiers contient trois lignes&#160;:</p>
+<pre><code class="language-text">STARHERMIT_KEY_TYPE=Ed25519
+STARHERMIT_PUBLIC_KEY=&lt;Base64 raw public key&gt;
+STARHERMIT_PRIVATE_KEY=&lt;Base64 32-byte private seed&gt;
+</code></pre>
+</li>
+<li>
+<p>Placez-les dans votre magasin secret CI ou dans l'environnement de votre agent (étape 3 ci-dessous), puis appuyez sur <strong>Fait</strong>.
+La clé privée n'est plus jamais affichée&#160;; si vous la perdez, créez une autre clé et révoquez celle-ci.</p>
+</li>
+</ol>
+<p>Depuis un terminal, <code>starhermit-client keys create orbit-league-ci</code> imprime les trois mêmes lignes.</p>
+<p>Le <strong>Clés de connexion sur votre compte</strong> la liste sur la même page montre chaque clé&#160;: lorsqu'elle a été ajoutée,
+quand il s'est connecté pour la dernière fois, à partir de quelle adresse et de quel client, et s'il a été révoqué. Sélectionnez une clé
+et appuyez sur <strong>Révoquer la clé sélectionnée</strong> pour le couper. La révocation met également fin à ses sessions, donc un travail en cours d'exécution ou
+l'agent perd l'accès à sa prochaine demande. <code>starhermit-client keys</code> et
+<code>starhermit-client keys revoke &lt;id&gt;</code> faites la même chose depuis un terminal.</p>
+<h2 id="let-an-ai-agent-publish-your-games">Laissez un agent IA publier vos jeux</h2>
+<p>Un agent de codage IA (Claude Code, Codex, Cursor et autres) qui construit votre jeu peut le publier
+aussi, avec sa propre clé&#160;:</p>
+<ol>
+<li>
+<p>Créez une clé pour l'agent comme ci-dessus, nommée d'après l'agent et le projet, par exemple
+<code>claude-orbit-league</code>. Donnez à chaque agent et à chaque projet sa propre clé pour pouvoir les distinguer
+dans la liste des clés et en révoquer une sans casser les autres.</p>
+</li>
+<li>
+<p>Donnez à l'agent les trois lignes, plus <code>STARHERMIT_GAME_ID</code> (l'identifiant de votre jeu), comme environnement
+variables, à partir des paramètres secrets ou d'environnement de votre outil d'agent, ou d'un <code>.env</code> fichier qui est
+répertorié dans <code>.gitignore</code>. Ne collez jamais le privé
+entrez dans le chat ou validez-le.</p>
+</li>
+<li>
+<p>Ajoutez le <a href="#add-the-authenticationupload-helper">assistant d'authentification/téléchargement</a> au projet et
+dites à l'agent comment publier. Par exemple:</p>
+<pre><code class="language-text">When a build is ready to publish, run
+python ci/starhermit_upload.py dist/game.zip
+with STARHERMIT_PUBLIC_KEY, STARHERMIT_PRIVATE_KEY and STARHERMIT_GAME_ID from the environment.
+Never print, log or commit STARHERMIT_PRIVATE_KEY. If the upload answers
+403 terms_acceptance_required, stop and ask me to accept the terms.
+</code></pre>
+</li>
+</ol>
+<p>La clé de l'agent agit comme vous, mais uniquement pour ce que votre compte peut faire : elle peut mettre à jour les jeux que vous possédez.
+Il ne peut pas ajouter de clés, révoquer vos autres clés, modifier votre adresse e-mail ou supprimer un fournisseur de connexion. Vérifier
+<strong>Options → Compte</strong> de temps en temps&#160;: la dernière utilisation de la clé, l'adresse et le client indiquent ce que possède l'agent
+fait. Révoquez la clé lorsque le projet se termine ou si quelque chose ne va pas.</p>
+<h2 id="one-time-setup-by-hand">Configuration unique à la main</h2>
 <h3 id="1-generate-a-deployment-key-locally">1. Générez une clé de déploiement localement</h3>
 <p>L'exemple utilise Ed25519. Exécutez ceci sur un poste de travail approuvé, pas dans le travail CI&#160;:</p>
 <pre><code class="language-bash">python -m pip install cryptography
@@ -265,9 +329,10 @@ test de fumée avant de promouvoir la sortie.</p>
 <h2 id="rotation-and-incident-response">Rotation et réponse aux incidents</h2>
 <ol>
 <li>Connectez-vous via OAuth et acceptez les conditions actuelles de StarHermit.</li>
-<li>Ajoutez une clé nouvellement générée et étiquetée distinctement.</li>
+<li>Ajoutez une clé nouvellement générée et étiquetée distinctement (dans le client&#160;: <strong>Options → Compte → Créer une clé</strong>).</li>
 <li>Remplacez le secret et la variable CI, puis exécutez un déploiement.</li>
-<li>Révoquer l'ancienne clé avec <code>DELETE /api/v1/me/public-keys/{keyId}</code>.</li>
+<li>Révoquer l'ancienne clé (<strong>Révoquer la clé sélectionnée</strong> chez le client, ou
+<code>DELETE /api/v1/me/public-keys/{keyId}</code>).</li>
 </ol>
 <p>Pour un large compromis présumé, <code>DELETE /api/v1/me/public-keys/all</code> révoque chaque clé active.
 Les deux opérations de suppression nécessitent une session authentifiée par OAuth. Un pipeline authentifié par ses propres moyens

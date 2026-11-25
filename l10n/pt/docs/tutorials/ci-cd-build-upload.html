@@ -4,7 +4,7 @@ lang: "pt"
 title: "Carregar compilações de CI/CD com uma chave pública registrada em OAuth"
 source_url: "/docs/tutorials/ci-cd-build-upload.html"
 source_path: "docs/tutorials/ci-cd-build-upload.md"
-source_hash: "0f3e9f3e48bf88125b2110acdd92ab62aeb0840f0bbc758e7c52b911a434e718"
+source_hash: "a06ecd5fc22459f69ad29f4d4955fcb19ad144a2d85a1b48179aab06802561ab"
 translation: "machine"
 permalink: "/pt/docs/tutorials/ci-cd-build-upload.html"
 ---
@@ -42,7 +42,71 @@ jogo, mas não cria um.</li>
 carrega ou abre um soquete de upload. Peça ao proprietário da conta que analise e <a href="/pt/docs/api/profile.html#terms-acceptance">aceitar os termos atuais</a>
 interativamente e, em seguida, execute novamente o trabalho. Isto pode ocorrer quando os termos mudam; não aceite automaticamente
 termos do CI.</p>
-<h2 id="one-time-setup">Configuração única</h2>
+<h2 id="create-the-key-in-the-starhermit-client">Crie a chave no cliente StarHermit</h2>
+<p>O cliente StarHermit (Windows, macOS, Linux, Android e painel da web) pode fazer o único
+configurado para você: gera o par de chaves, adiciona a metade pública à sua conta e mostra o
+metade privada uma vez. Use-o em vez das etapas 1 e 2 abaixo.</p>
+<ol>
+<li>
+<p>Faça login no cliente com Google ou GitHub. Uma sessão iniciada com uma chave de dispositivo não pode
+adicione chaves, para que o cliente solicite que você primeiro faça login em um provedor.</p>
+</li>
+<li>
+<p>Abrir <strong>Opções → Conta</strong>.</p>
+</li>
+<li>
+<p>Sob <strong>Nova chave</strong>, digite um nome para o que usará a chave (por exemplo <code>orbit-league-ci</code> ou
+<code>publish-agent</code>) e pressione <strong>Criar chave</strong>.</p>
+</li>
+<li>
+<p>Imprensa <strong>Cópia</strong>. A área de transferência contém três linhas:</p>
+<pre><code class="language-text">STARHERMIT_KEY_TYPE=Ed25519
+STARHERMIT_PUBLIC_KEY=&lt;Base64 raw public key&gt;
+STARHERMIT_PRIVATE_KEY=&lt;Base64 32-byte private seed&gt;
+</code></pre>
+</li>
+<li>
+<p>Coloque-os em seu armazenamento secreto de CI ou no ambiente do seu agente (etapa 3 abaixo) e pressione <strong>Feito</strong>.
+A chave privada nunca mais é mostrada; se você perdê-la, crie outra chave e revogue esta.</p>
+</li>
+</ol>
+<p>De um terminal, <code>starhermit-client keys create orbit-league-ci</code> imprime as mesmas três linhas.</p>
+<p>O <strong>Chaves de login na sua conta</strong> lista na mesma página mostra todas as chaves: quando foi adicionada,
+quando fez login pela última vez e de qual endereço e cliente, e se foi revogado. Selecione uma chave
+e pressione <strong>Revogar chave selecionada</strong> para cortá-lo. A revogação também encerra suas sessões, portanto, um trabalho em execução ou
+o agente perde o acesso em sua próxima solicitação. <code>starhermit-client keys</code> e
+<code>starhermit-client keys revoke &lt;id&gt;</code> faça o mesmo em um terminal.</p>
+<h2 id="let-an-ai-agent-publish-your-games">Deixe um agente de IA publicar seus jogos</h2>
+<p>Um agente de codificação de IA (Claude Code, Codex, Cursor e outros) que constrói seu jogo pode publicá-lo
+também, com uma chave própria:</p>
+<ol>
+<li>
+<p>Crie uma chave para o agente conforme acima, com o nome do agente e do projeto, por exemplo
+<code>claude-orbit-league</code>. Dê a cada agente e a cada projeto sua própria chave, para que você possa diferenciá-los
+na lista de chaves e revogar uma sem quebrar as outras.</p>
+</li>
+<li>
+<p>Dê ao agente as três linhas, mais <code>STARHERMIT_GAME_ID</code> (ID do seu jogo), como ambiente
+variáveis, das configurações secretas ou de ambiente da sua ferramenta de agente ou de um <code>.env</code> arquivo que é
+listado em <code>.gitignore</code>. Nunca cole o privado
+digite o chat ou confirme-o.</p>
+</li>
+<li>
+<p>Adicione o <a href="#add-the-authenticationupload-helper">auxiliar de autenticação/upload</a> ao projeto e
+diga ao agente como publicar. Por exemplo:</p>
+<pre><code class="language-text">When a build is ready to publish, run
+python ci/starhermit_upload.py dist/game.zip
+with STARHERMIT_PUBLIC_KEY, STARHERMIT_PRIVATE_KEY and STARHERMIT_GAME_ID from the environment.
+Never print, log or commit STARHERMIT_PRIVATE_KEY. If the upload answers
+403 terms_acceptance_required, stop and ask me to accept the terms.
+</code></pre>
+</li>
+</ol>
+<p>A chave do agente atua como você, mas apenas para o que sua conta pode fazer: pode atualizar os jogos que você possui.
+Ele não pode adicionar chaves, revogar outras chaves, alterar seu e-mail ou remover um provedor de login. Verificar
+<strong>Opções → Conta</strong> de vez em quando: último uso da chave, endereço e cliente mostram o que o agente possui
+tenho feito. Revogue a chave quando o projeto terminar ou se algo parecer errado.</p>
+<h2 id="one-time-setup-by-hand">Configuração única manualmente</h2>
 <h3 id="1-generate-a-deployment-key-locally">1. Gere uma chave de implantação localmente</h3>
 <p>O exemplo usa Ed25519. Execute isto em uma estação de trabalho confiável, não no trabalho de CI:</p>
 <pre><code class="language-bash">python -m pip install cryptography
@@ -265,9 +329,10 @@ teste de fumaça antes de promover o lançamento.</p>
 <h2 id="rotation-and-incident-response">Rotação e resposta a incidentes</h2>
 <ol>
 <li>Faça login através do OAuth e aceite os termos atuais do StarHermit.</li>
-<li>Adicione uma chave recém-gerada e rotulada distintamente.</li>
+<li>Adicione uma chave recém-gerada e rotulada distintamente (no cliente: <strong>Opções → Conta → Criar chave</strong>).</li>
 <li>Substitua o segredo e a variável do CI e execute uma implantação.</li>
-<li>Revogue a chave antiga com <code>DELETE /api/v1/me/public-keys/{keyId}</code>.</li>
+<li>Revogar a chave antiga (<strong>Revogar chave selecionada</strong> no cliente ou
+<code>DELETE /api/v1/me/public-keys/{keyId}</code>).</li>
 </ol>
 <p>Para um suposto compromisso amplo, <code>DELETE /api/v1/me/public-keys/all</code> revoga todas as chaves ativas.
 Ambas as operações de exclusão requerem uma sessão autenticada por OAuth. Um pipeline autenticado por conta própria

@@ -4,7 +4,7 @@ lang: "zh-CN"
 title: "使用 OAuth 注册的公钥从 CI/CD 上传构建"
 source_url: "/docs/tutorials/ci-cd-build-upload.html"
 source_path: "docs/tutorials/ci-cd-build-upload.md"
-source_hash: "0f3e9f3e48bf88125b2110acdd92ab62aeb0840f0bbc758e7c52b911a434e718"
+source_hash: "a06ecd5fc22459f69ad29f4d4955fcb19ad144a2d85a1b48179aab06802561ab"
 translation: "machine"
 permalink: "/zh-CN/docs/tutorials/ci-cd-build-upload.html"
 ---
@@ -42,7 +42,71 @@ permalink: "/zh-CN/docs/tutorials/ci-cd-build-upload.html"
 上传或打开上传套接字。让帐户所有者审核并 <a href="/zh-CN/docs/api/profile.html#terms-acceptance">接受当前条款</a>
 交互地，然后重新运行作业。当条款发生变化时，这种情况可能会再次发生；不自动接受
 来自 CI 的术语。</p>
-<h2 id="one-time-setup">一次性设置</h2>
+<h2 id="create-the-key-in-the-starhermit-client">在 StarHermit 客户端中创建密钥</h2>
+<p>StarHermit 客户端（Windows、macOS、Linux、Android 和 Web 仪表板）可以一次性执行此操作
+为您设置：它生成密钥对，将公共部分添加到您的帐户并显示
+私人一半一次。使用它代替下面的步骤 1 和 2。</p>
+<ol>
+<li>
+<p>使用 Google 或 GitHub 登录客户端。使用设备密钥登录的会话无法
+添加密钥，以便客户端要求您首先通过提供商登录。</p>
+</li>
+<li>
+<p>打开 <strong>选项 → 帐户</strong>.</p>
+</li>
+<li>
+<p>在下面 <strong>新钥匙</strong>，输入将使用该密钥的名称（例如 <code>orbit-league-ci</code> 或者
+<code>publish-agent</code>）并按 <strong>创建密钥</strong>.</p>
+</li>
+<li>
+<p>按 <strong>复制</strong>。剪贴板包含三行：</p>
+<pre><code class="language-text">STARHERMIT_KEY_TYPE=Ed25519
+STARHERMIT_PUBLIC_KEY=&lt;Base64 raw public key&gt;
+STARHERMIT_PRIVATE_KEY=&lt;Base64 32-byte private seed&gt;
+</code></pre>
+</li>
+<li>
+<p>将它们放入您的 CI 秘密存储或代理的环境中（下面的步骤 3），然后按 <strong>完毕</strong>。
+私钥不再显示；如果您丢失了它，请创建另一个密钥并撤销该密钥。</p>
+</li>
+</ol>
+<p>从终端， <code>starhermit-client keys create orbit-league-ci</code> 打印相同的三行。</p>
+<p>这 <strong>您帐户上的登录密钥</strong> 同一页面上的列表显示每个键：添加时，
+上次登录的时间、地址和客户端以及是否被撤销。选择一个键
+并按 <strong>撤销选定的密钥</strong> 把它剪掉。撤销也会结束其会话，因此正在运行的作业或
+代理在下一个请求时将失去访问权限。 <code>starhermit-client keys</code> 和
+<code>starhermit-client keys revoke &lt;id&gt;</code> 从终端执行相同的操作。</p>
+<h2 id="let-an-ai-agent-publish-your-games">让 AI 代理发布您的游戏</h2>
+<p>构建您的游戏的 AI 编码代理（Claude Code、Codex、Cursor 等）可以发布它
+也有自己的密钥：</p>
+<ol>
+<li>
+<p>如上为agent创建一个key，以agent和项目命名，例如
+<code>claude-orbit-league</code>。为每个代理和每个项目提供自己的密钥，以便您可以区分它们
+并在不破坏其他项的情况下撤销其中一项。</p>
+</li>
+<li>
+<p>给代理三行，再加上 <code>STARHERMIT_GAME_ID</code> （你的游戏 ID），作为环境
+变量，来自代理工具的秘密或环境设置，或者 <code>.env</code> 文件是
+列于 <code>.gitignore</code>。切勿粘贴私人内容
+键入聊天或提交。</p>
+</li>
+<li>
+<p>添加 <a href="#add-the-authenticationupload-helper">身份验证/上传助手</a> 到项目和
+告诉代理如何发布。例如：</p>
+<pre><code class="language-text">When a build is ready to publish, run
+python ci/starhermit_upload.py dist/game.zip
+with STARHERMIT_PUBLIC_KEY, STARHERMIT_PRIVATE_KEY and STARHERMIT_GAME_ID from the environment.
+Never print, log or commit STARHERMIT_PRIVATE_KEY. If the upload answers
+403 terms_acceptance_required, stop and ask me to accept the terms.
+</code></pre>
+</li>
+</ol>
+<p>代理的密钥充当您的角色，但仅限于您的帐户可以执行的操作：它可以更新您拥有的游戏。
+它无法添加密钥、撤销您的其他密钥、更改您的电子邮件或删除登录提供商。查看
+<strong>选项 → 帐户</strong> 时不时地：钥匙的最后一次使用、地址和客户显示代理拥有什么
+一直在做。当项目结束或出现任何问题时，撤销密钥。</p>
+<h2 id="one-time-setup-by-hand">手动一次性设置</h2>
 <h3 id="1-generate-a-deployment-key-locally">1.本地生成部署密钥</h3>
 <p>该示例使用 Ed25519。在受信任的工作站上运行此命令，而不是在 CI 作业中：</p>
 <pre><code class="language-bash">python -m pip install cryptography
@@ -265,9 +329,10 @@ tar -C bundle -czf game-bundle.tar.gz .
 <h2 id="rotation-and-incident-response">轮换和事件响应</h2>
 <ol>
 <li>通过 OAuth 登录并接受当前的 StarHermit 条款。</li>
-<li>添加新生成的、带有明显标签的密钥。</li>
+<li>添加新生成的、带有明显标签的密钥（在客户端中： <strong>选项 → 帐户 → 创建密钥</strong>).</li>
 <li>替换 CI 密钥和变量，然后运行部署。</li>
-<li>撤销旧密钥 <code>DELETE /api/v1/me/public-keys/{keyId}</code>.</li>
+<li>撤销旧密钥（<strong>撤销选定的密钥</strong> 在客户端中，或者
+<code>DELETE /api/v1/me/public-keys/{keyId}</code>).</li>
 </ol>
 <p>对于可疑的广泛妥协， <code>DELETE /api/v1/me/public-keys/all</code> 撤销每个活动密钥。
 两个删除操作都需要经过 OAuth 身份验证的会话。由自己验证的管道

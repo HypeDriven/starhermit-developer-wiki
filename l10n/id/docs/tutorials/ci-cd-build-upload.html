@@ -4,7 +4,7 @@ lang: "id"
 title: "Upload Build dari CI/CD dengan Kunci Publik yang terdaftar di OAuth"
 source_url: "/docs/tutorials/ci-cd-build-upload.html"
 source_path: "docs/tutorials/ci-cd-build-upload.md"
-source_hash: "0f3e9f3e48bf88125b2110acdd92ab62aeb0840f0bbc758e7c52b911a434e718"
+source_hash: "a06ecd5fc22459f69ad29f4d4955fcb19ad144a2d85a1b48179aab06802561ab"
 translation: "machine"
 permalink: "/id/docs/tutorials/ci-cd-build-upload.html"
 ---
@@ -42,7 +42,71 @@ permainan tetapi tidak membuatnya.</li>
 mengunggah atau membuka soket unggah. Mintalah pemilik akun meninjau dan <a href="/id/docs/api/profile.html#terms-acceptance">menerima persyaratan saat ini</a>
 secara interaktif, lalu jalankan kembali pekerjaan tersebut. Hal ini dapat terulang kembali ketika ketentuan berubah; tidak secara otomatis menerima
 ketentuan dari CI.</p>
-<h2 id="one-time-setup">Pengaturan satu kali</h2>
+<h2 id="create-the-key-in-the-starhermit-client">Buat kunci di klien StarHermit</h2>
+<p>Klien StarHermit (Windows, macOS, Linux, Android, dan dasbor web) dapat melakukan satu kali saja
+pengaturan untuk Anda: ini menghasilkan pasangan kunci, menambahkan separuh publik ke akun Anda dan menampilkan
+setengah pribadi satu kali. Gunakan ini sebagai pengganti langkah 1 dan 2 di bawah.</p>
+<ol>
+<li>
+<p>Masuk ke klien dengan Google atau GitHub. Sesi yang masuk dengan kunci perangkat tidak bisa
+tambahkan kunci, sehingga klien meminta Anda masuk dengan penyedia terlebih dahulu.</p>
+</li>
+<li>
+<p>Membuka <strong>Pilihan → Akun</strong>.</p>
+</li>
+<li>
+<p>Di bawah <strong>Kunci baru</strong>, ketikkan nama untuk apa yang akan menggunakan kunci tersebut (misalnya <code>orbit-league-ci</code> atau
+<code>publish-agent</code>) dan tekan <strong>Buat kunci</strong>.</p>
+</li>
+<li>
+<p>Tekan <strong>Menyalin</strong>. Papan klip menampung tiga baris:</p>
+<pre><code class="language-text">STARHERMIT_KEY_TYPE=Ed25519
+STARHERMIT_PUBLIC_KEY=&lt;Base64 raw public key&gt;
+STARHERMIT_PRIVATE_KEY=&lt;Base64 32-byte private seed&gt;
+</code></pre>
+</li>
+<li>
+<p>Letakkan di penyimpanan rahasia CI Anda atau lingkungan agen Anda (langkah 3 di bawah), lalu tekan <strong>Selesai</strong>.
+Kunci pribadi tidak pernah ditampilkan lagi; jika Anda kehilangannya, buat kunci lain dan cabut kunci ini.</p>
+</li>
+</ol>
+<p>Dari terminal, <code>starhermit-client keys create orbit-league-ci</code> mencetak tiga baris yang sama.</p>
+<p>Itu <strong>Kunci masuk di akun Anda</strong> daftar di halaman yang sama menunjukkan setiap kunci: ketika ditambahkan,
+kapan terakhir kali masuk dan dari alamat serta klien mana, dan apakah dicabut. Pilih kunci
+dan tekan <strong>Cabut kunci yang dipilih</strong> untuk memotongnya. Mencabut mengakhiri sesinya juga, jadi pekerjaan berjalan atau
+agen kehilangan akses pada permintaan berikutnya. <code>starhermit-client keys</code> Dan
+<code>starhermit-client keys revoke &lt;id&gt;</code> lakukan hal yang sama dari terminal.</p>
+<h2 id="let-an-ai-agent-publish-your-games">Biarkan agen AI mempublikasikan game Anda</h2>
+<p>Agen pengkodean AI (Claude Code, Codex, Cursor, dan lainnya) yang membuat game Anda dapat mempublikasikannya
+juga, dengan kuncinya sendiri:</p>
+<ol>
+<li>
+<p>Buat kunci untuk agen seperti di atas, dinamai menurut nama agen dan proyek, misalnya
+<code>claude-orbit-league</code>. Berikan kuncinya masing-masing pada setiap agen dan proyek, sehingga Anda dapat membedakannya
+dalam daftar kunci dan mencabut salah satu tanpa merusak yang lain.</p>
+</li>
+<li>
+<p>Berikan agen tiga baris, plus <code>STARHERMIT_GAME_ID</code> (ID game Anda), sebagai lingkungan
+variabel, dari pengaturan rahasia atau lingkungan alat agen Anda, atau a <code>.env</code> berkas itu
+terdaftar di <code>.gitignore</code>. Jangan pernah menempelkan yang pribadi
+kunci ke dalam obrolan atau lakukan.</p>
+</li>
+<li>
+<p>Tambahkan <a href="#add-the-authenticationupload-helper">pembantu autentikasi/unggah</a> untuk proyek dan
+beri tahu agen cara mempublikasikan. Misalnya:</p>
+<pre><code class="language-text">When a build is ready to publish, run
+python ci/starhermit_upload.py dist/game.zip
+with STARHERMIT_PUBLIC_KEY, STARHERMIT_PRIVATE_KEY and STARHERMIT_GAME_ID from the environment.
+Never print, log or commit STARHERMIT_PRIVATE_KEY. If the upload answers
+403 terms_acceptance_required, stop and ask me to accept the terms.
+</code></pre>
+</li>
+</ol>
+<p>Kunci agen bertindak sebagai Anda, tetapi hanya untuk apa yang dapat dilakukan akun Anda: dapat memperbarui game yang Anda miliki.
+Itu tidak dapat menambahkan kunci, mencabut kunci Anda yang lain, mengubah email Anda atau menghapus penyedia masuk. Memeriksa
+<strong>Pilihan → Akun</strong> sesekali: penggunaan terakhir kunci, alamat dan klien menunjukkan apa yang dimiliki agen
+telah melakukan. Cabut kunci ketika proyek berakhir atau jika ada yang salah.</p>
+<h2 id="one-time-setup-by-hand">Pengaturan satu kali dengan tangan</h2>
 <h3 id="1-generate-a-deployment-key-locally">1. Hasilkan kunci penerapan secara lokal</h3>
 <p>Contohnya menggunakan Ed25519. Jalankan ini di stasiun kerja tepercaya, bukan di pekerjaan CI:</p>
 <pre><code class="language-bash">python -m pip install cryptography
@@ -265,9 +329,10 @@ tes asap sebelum mempromosikan rilis.</p>
 <h2 id="rotation-and-incident-response">Rotasi dan respons insiden</h2>
 <ol>
 <li>Masuk melalui OAuth dan terima persyaratan StarHermit saat ini.</li>
-<li>Tambahkan kunci yang baru dibuat dan diberi label jelas.</li>
+<li>Tambahkan kunci yang baru dibuat dan diberi label jelas (di klien: <strong>Pilihan → Akun → Buat kunci</strong>).</li>
 <li>Ganti rahasia dan variabel CI, lalu jalankan penerapan.</li>
-<li>Cabut kunci lama dengan <code>DELETE /api/v1/me/public-keys/{keyId}</code>.</li>
+<li>Cabut kunci lama (<strong>Cabut kunci yang dipilih</strong> di klien, atau
+<code>DELETE /api/v1/me/public-keys/{keyId}</code>).</li>
 </ol>
 <p>Untuk dugaan kompromi luas, <code>DELETE /api/v1/me/public-keys/all</code> mencabut setiap kunci aktif.
 Kedua operasi penghapusan memerlukan sesi yang diautentikasi OAuth. Sebuah pipeline diautentikasi dengan miliknya sendiri

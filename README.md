@@ -58,8 +58,9 @@ not the subject of the docs.
   and sign in to a StarHermit account with a key the game generates on the player's device and one
   emailed confirmation: key formats, the exact bytes to sign, waiting for confirmation, sessions,
   second devices and lost keys, and what a key-only account cannot do.
-- **[Tutorial: upload builds from CI/CD](docs/tutorials/ci-cd-build-upload.md)** — enroll a dedicated
-  deployment public key from an OAuth session, authenticate non-interactively, and publish client or
+- **[Tutorial: upload builds from CI/CD](docs/tutorials/ci-cd-build-upload.md)** — create a
+  deployment key in the StarHermit client (or enroll one from an OAuth session), let an AI agent or a
+  pipeline publish your games with it, authenticate non-interactively, and publish client or
   container builds from GitHub Actions (including large uploads over WebSockets).
 - **[Tutorial: build a multiplayer kart racer](docs/tutorials/kart-racer.md)** — an eight-kart
   racer on realtime rooms: lobbies, quick-join, CPU drivers, host-routed binary netcode within the

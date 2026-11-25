@@ -4,7 +4,7 @@ lang: "es"
 title: "Cargue compilaciones desde CI/CD con una clave pública inscrita en OAuth"
 source_url: "/docs/tutorials/ci-cd-build-upload.html"
 source_path: "docs/tutorials/ci-cd-build-upload.md"
-source_hash: "0f3e9f3e48bf88125b2110acdd92ab62aeb0840f0bbc758e7c52b911a434e718"
+source_hash: "a06ecd5fc22459f69ad29f4d4955fcb19ad144a2d85a1b48179aab06802561ab"
 translation: "machine"
 permalink: "/es/docs/tutorials/ci-cd-build-upload.html"
 ---
@@ -42,7 +42,71 @@ juego pero no crea uno.</li>
 carga o abre un socket de carga. Haga que el propietario de la cuenta revise y <a href="/es/docs/api/profile.html#terms-acceptance">aceptar los términos actuales</a>
 interactivamente y luego vuelva a ejecutar el trabajo. Esto puede repetirse cuando cambian los términos; no aceptar automáticamente
 términos de CI.</p>
-<h2 id="one-time-setup">Configuración única</h2>
+<h2 id="create-the-key-in-the-starhermit-client">Cree la clave en el cliente StarHermit</h2>
+<p>El cliente StarHermit (Windows, macOS, Linux, Android y el panel web) puede realizar esta operación por única vez.
+configuración para usted: genera el par de claves, agrega la mitad pública a su cuenta y muestra el
+privado la mitad una vez. Úselo en lugar de los pasos 1 y 2 a continuación.</p>
+<ol>
+<li>
+<p>Inicie sesión en el cliente con Google o GitHub. Una sesión que inició sesión con una clave de dispositivo no puede
+agregue claves, de modo que el cliente le solicite que inicie sesión con un proveedor primero.</p>
+</li>
+<li>
+<p>Abierto <strong>Opciones → Cuenta</strong>.</p>
+</li>
+<li>
+<p>Bajo <strong>Nueva clave</strong>, escriba un nombre para lo que utilizará la clave (por ejemplo <code>orbit-league-ci</code> o
+<code>publish-agent</code>) y presione <strong>Crear clave</strong>.</p>
+</li>
+<li>
+<p>Prensa <strong>Copiar</strong>. El portapapeles contiene tres líneas:</p>
+<pre><code class="language-text">STARHERMIT_KEY_TYPE=Ed25519
+STARHERMIT_PUBLIC_KEY=&lt;Base64 raw public key&gt;
+STARHERMIT_PRIVATE_KEY=&lt;Base64 32-byte private seed&gt;
+</code></pre>
+</li>
+<li>
+<p>Colóquelos en su almacén secreto de CI o en el entorno de su agente (paso 3 a continuación), luego presione <strong>Hecho</strong>.
+La clave privada nunca se vuelve a mostrar; si la pierde, cree otra clave y revoque ésta.</p>
+</li>
+</ol>
+<p>Desde una terminal, <code>starhermit-client keys create orbit-league-ci</code> imprime las mismas tres líneas.</p>
+<p>El <strong>Claves de inicio de sesión en su cuenta</strong> La lista en la misma página muestra cada clave: cuando se agregó,
+cuándo inició sesión por última vez y desde qué dirección y cliente, y si está revocado. Seleccione una clave
+y presione <strong>Revocar clave seleccionada</strong> para cortarlo. La revocación también finaliza sus sesiones, por lo que un trabajo en ejecución o
+El agente pierde el acceso en su siguiente solicitud. <code>starhermit-client keys</code> y
+<code>starhermit-client keys revoke &lt;id&gt;</code> haz lo mismo desde una terminal.</p>
+<h2 id="let-an-ai-agent-publish-your-games">Deja que un agente de IA publique tus juegos</h2>
+<p>Un agente de codificación de IA (Claude Code, Codex, Cursor y otros) que crea tu juego puede publicarlo.
+además, con una clave propia:</p>
+<ol>
+<li>
+<p>Cree una clave para el agente como se indica arriba, con el nombre del agente y el proyecto, por ejemplo.
+<code>claude-orbit-league</code>. Dale a cada agente y a cada proyecto su propia clave, para que puedas diferenciarlos
+en la lista de claves y revocar una sin romper las demás.</p>
+</li>
+<li>
+<p>Dale al agente las tres líneas, más <code>STARHERMIT_GAME_ID</code> (el ID de tu juego), como entorno
+variables, desde la configuración secreta o del entorno de su herramienta de agente, o un <code>.env</code> archivo que es
+listado en <code>.gitignore</code>. Nunca pegues el privado.
+Ingrese al chat o confírmelo.</p>
+</li>
+<li>
+<p>Añade el <a href="#add-the-authenticationupload-helper">ayudante de autenticación/carga</a> al proyecto y
+Dígale al agente cómo publicar. Por ejemplo:</p>
+<pre><code class="language-text">When a build is ready to publish, run
+python ci/starhermit_upload.py dist/game.zip
+with STARHERMIT_PUBLIC_KEY, STARHERMIT_PRIVATE_KEY and STARHERMIT_GAME_ID from the environment.
+Never print, log or commit STARHERMIT_PRIVATE_KEY. If the upload answers
+403 terms_acceptance_required, stop and ask me to accept the terms.
+</code></pre>
+</li>
+</ol>
+<p>La clave del agente actúa como usted, pero sólo para lo que su cuenta puede hacer: puede actualizar los juegos que posee.
+No puede agregar claves, revocar otras claves, cambiar su correo electrónico ni eliminar un proveedor de inicio de sesión. Controlar
+<strong>Opciones → Cuenta</strong> De vez en cuando: el último uso de la clave, la dirección y el cliente muestran lo que tiene el agente.
+estado haciendo. Revoque la clave cuando finalice el proyecto o si algo parece mal.</p>
+<h2 id="one-time-setup-by-hand">Configuración manual única</h2>
 <h3 id="1-generate-a-deployment-key-locally">1. Genere una clave de implementación localmente</h3>
 <p>El ejemplo utiliza Ed25519. Ejecute esto en una estación de trabajo confiable, no en el trabajo de CI:</p>
 <pre><code class="language-bash">python -m pip install cryptography
@@ -265,9 +329,10 @@ prueba de humo antes de promover el lanzamiento.</p>
 <h2 id="rotation-and-incident-response">Rotación y respuesta a incidentes.</h2>
 <ol>
 <li>Inicie sesión a través de OAuth y acepte los términos actuales de StarHermit.</li>
-<li>Agregue una clave recién generada y claramente etiquetada.</li>
+<li>Agregue una clave recién generada y claramente etiquetada (en el cliente: <strong>Opciones → Cuenta → Crear clave</strong>).</li>
 <li>Reemplace la variable y el secreto de CI y luego ejecute una implementación.</li>
-<li>Revocar la antigua clave con <code>DELETE /api/v1/me/public-keys/{keyId}</code>.</li>
+<li>Revocar la clave anterior (<strong>Revocar clave seleccionada</strong> en el cliente, o
+<code>DELETE /api/v1/me/public-keys/{keyId}</code>).</li>
 </ol>
 <p>Para un supuesto compromiso amplio, <code>DELETE /api/v1/me/public-keys/all</code> revoca cada clave activa.
 Ambas operaciones de eliminación requieren una sesión autenticada por OAuth. Un oleoducto autenticado por su propia

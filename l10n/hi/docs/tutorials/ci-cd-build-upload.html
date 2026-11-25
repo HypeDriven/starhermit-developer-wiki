@@ -4,7 +4,7 @@ lang: "hi"
 title: "OAuth-नामांकित सार्वजनिक कुंजी के साथ CI/CD से बिल्ड अपलोड करें"
 source_url: "/docs/tutorials/ci-cd-build-upload.html"
 source_path: "docs/tutorials/ci-cd-build-upload.md"
-source_hash: "0f3e9f3e48bf88125b2110acdd92ab62aeb0840f0bbc758e7c52b911a434e718"
+source_hash: "a06ecd5fc22459f69ad29f4d4955fcb19ad144a2d85a1b48179aab06802561ab"
 translation: "machine"
 permalink: "/hi/docs/tutorials/ci-cd-build-upload.html"
 ---
@@ -42,7 +42,71 @@ permalink: "/hi/docs/tutorials/ci-cd-build-upload.html"
 अपलोड सॉकेट अपलोड या खोलता है। खाता स्वामी की समीक्षा करवाएं और <a href="/hi/docs/api/profile.html#terms-acceptance">वर्तमान शर्तों को स्वीकार करें</a>
 अंतःक्रियात्मक रूप से, फिर कार्य को पुनः चलाएँ। शर्तें बदलने पर इसकी पुनरावृत्ति हो सकती है; स्वचालित रूप से स्वीकार न करें
 सीआई से शर्तें.</p>
-<h2 id="one-time-setup">एक बार का सेटअप</h2>
+<h2 id="create-the-key-in-the-starhermit-client">StarHermit क्लाइंट में कुंजी बनाएं</h2>
+<p>StarHermit क्लाइंट (Windows, macOS, Linux, Android और वेब डैशबोर्ड) एक बार ऐसा कर सकता है
+आपके लिए सेटअप: यह कुंजी जोड़ी उत्पन्न करता है, सार्वजनिक भाग को आपके खाते में जोड़ता है और दिखाता है
+निजी आधा एक बार. नीचे चरण 1 और 2 के बजाय इसका उपयोग करें।</p>
+<ol>
+<li>
+<p>Google या GitHub से क्लाइंट में साइन इन करें। एक सत्र जो डिवाइस कुंजी के साथ साइन इन नहीं कर सकता
+कुंजियाँ जोड़ें, ताकि क्लाइंट आपसे पहले प्रदाता के साथ साइन इन करने के लिए कहे।</p>
+</li>
+<li>
+<p>खुला <strong>विकल्प → खाता</strong>.</p>
+</li>
+<li>
+<p>अंतर्गत <strong>नई कुंजी</strong>, कुंजी का उपयोग किस चीज़ के लिए किया जाएगा उसके लिए एक नाम टाइप करें (उदाहरण के लिए <code>orbit-league-ci</code> या
+<code>publish-agent</code>) और दबाएँ <strong>कुंजी बनाएं</strong>.</p>
+</li>
+<li>
+<p>प्रेस <strong>प्रतिलिपि</strong>. क्लिपबोर्ड में तीन पंक्तियाँ हैं:</p>
+<pre><code class="language-text">STARHERMIT_KEY_TYPE=Ed25519
+STARHERMIT_PUBLIC_KEY=&lt;Base64 raw public key&gt;
+STARHERMIT_PRIVATE_KEY=&lt;Base64 32-byte private seed&gt;
+</code></pre>
+</li>
+<li>
+<p>उन्हें अपने सीआई गुप्त स्टोर या अपने एजेंट के वातावरण में रखें (नीचे चरण 3), फिर दबाएँ <strong>हो गया</strong>.
+निजी कुंजी दोबारा कभी नहीं दिखाई जाती; यदि आप इसे खो देते हैं, तो दूसरी कुंजी बनाएं और इसे रद्द कर दें।</p>
+</li>
+</ol>
+<p>एक टर्मिनल से, <code>starhermit-client keys create orbit-league-ci</code> वही तीन पंक्तियाँ प्रिंट करता है।</p>
+<p> <strong>आपके खाते पर साइन-इन कुंजियाँ</strong> एक ही पृष्ठ पर सूची प्रत्येक कुंजी दिखाती है: इसे कब जोड़ा गया था,
+इसने आखिरी बार कब और किस पते और ग्राहक से साइन इन किया था, और क्या इसे निरस्त कर दिया गया है। एक कुंजी चुनें
+और दबाएँ <strong>चयनित कुंजी निरस्त करें</strong> इसे काटने के लिए. निरस्त करने से उसके सत्र भी समाप्त हो जाते हैं, इसलिए एक चालू कार्य या
+एजेंट अपने अगले अनुरोध पर पहुंच खो देता है। <code>starhermit-client keys</code> और
+<code>starhermit-client keys revoke &lt;id&gt;</code> टर्मिनल से भी ऐसा ही करें.</p>
+<h2 id="let-an-ai-agent-publish-your-games">किसी AI एजेंट को आपके गेम प्रकाशित करने दें</h2>
+<p>एक एआई कोडिंग एजेंट (क्लाउड कोड, कोडेक्स, कर्सर और अन्य) जो आपका गेम बनाता है वह इसे प्रकाशित कर सकता है
+वह भी, अपनी स्वयं की एक कुंजी के साथ:</p>
+<ol>
+<li>
+<p>उदाहरण के लिए, ऊपर बताए अनुसार एजेंट के लिए एक कुंजी बनाएं, जिसका नाम एजेंट और प्रोजेक्ट के नाम पर रखा जाए
+<code>claude-orbit-league</code>. प्रत्येक एजेंट और प्रत्येक प्रोजेक्ट को अपनी कुंजी दें, ताकि आप उन्हें अलग बता सकें
+कुंजी सूची में और अन्य को तोड़े बिना एक को रद्द करें।</p>
+</li>
+<li>
+<p>एजेंट को तीन पंक्तियाँ, प्लस दें <code>STARHERMIT_GAME_ID</code> (आपके गेम की आईडी), पर्यावरण के रूप में
+चर, आपके एजेंट टूल की गुप्त या पर्यावरण सेटिंग्स से, या ए <code>.env</code> फ़ाइल वह है
+में सूचीबद्ध <code>.gitignore</code>. कभी भी प्राइवेट पेस्ट न करें
+चैट में कुंजी डालें या इसे प्रतिबद्ध करें।</p>
+</li>
+<li>
+<p>जोड़ें <a href="#add-the-authenticationupload-helper">प्रमाणीकरण/अपलोड सहायक</a> परियोजना के लिए और
+एजेंट को बताएं कि कैसे प्रकाशित करना है। उदाहरण के लिए:</p>
+<pre><code class="language-text">When a build is ready to publish, run
+python ci/starhermit_upload.py dist/game.zip
+with STARHERMIT_PUBLIC_KEY, STARHERMIT_PRIVATE_KEY and STARHERMIT_GAME_ID from the environment.
+Never print, log or commit STARHERMIT_PRIVATE_KEY. If the upload answers
+403 terms_acceptance_required, stop and ask me to accept the terms.
+</code></pre>
+</li>
+</ol>
+<p>एजेंट की कुंजी आपकी तरह काम करती है, लेकिन केवल उसी के लिए जो आपका खाता कर सकता है: यह आपके स्वामित्व वाले गेम को अपडेट कर सकता है।
+यह कुंजियाँ नहीं जोड़ सकता, आपकी अन्य कुंजियाँ रद्द नहीं कर सकता, आपका ईमेल नहीं बदल सकता या साइन-इन प्रदाता को नहीं हटा सकता। जाँच करना
+<strong>विकल्प → खाता</strong> कभी-कभी: कुंजी का अंतिम उपयोग, पता और क्लाइंट दिखाता है कि एजेंट के पास क्या है
+कर रहा हूँ. प्रोजेक्ट समाप्त होने पर या कुछ भी गलत लगने पर कुंजी को रद्द करें।</p>
+<h2 id="one-time-setup-by-hand">हाथ से एक बार का सेटअप</h2>
 <h3 id="1-generate-a-deployment-key-locally">1. स्थानीय रूप से एक परिनियोजन कुंजी उत्पन्न करें</h3>
 <p>उदाहरण Ed25519 का उपयोग करता है। इसे किसी विश्वसनीय वर्कस्टेशन पर चलाएँ, CI कार्य में नहीं:</p>
 <pre><code class="language-bash">python -m pip install cryptography
@@ -265,9 +329,10 @@ tar -C bundle -czf game-bundle.tar.gz .
 <h2 id="rotation-and-incident-response">घूर्णन और घटना प्रतिक्रिया</h2>
 <ol>
 <li>OAuth के माध्यम से साइन इन करें और वर्तमान StarHermit शर्तों को स्वीकार करें।</li>
-<li>एक नई जेनरेट की गई, स्पष्ट रूप से लेबल की गई कुंजी जोड़ें।</li>
+<li>एक नई जेनरेट की गई, स्पष्ट रूप से लेबल की गई कुंजी जोड़ें (क्लाइंट में: <strong>विकल्प → खाता → कुंजी बनाएँ</strong>).</li>
 <li>सीआई सीक्रेट और वेरिएबल को बदलें, फिर परिनियोजन चलाएँ।</li>
-<li>पुरानी कुंजी को निरस्त करें <code>DELETE /api/v1/me/public-keys/{keyId}</code>.</li>
+<li>पुरानी कुंजी निरस्त करें (<strong>चयनित कुंजी निरस्त करें</strong> क्लाइंट में, या
+<code>DELETE /api/v1/me/public-keys/{keyId}</code>).</li>
 </ol>
 <p>एक संदिग्ध व्यापक समझौते के लिए, <code>DELETE /api/v1/me/public-keys/all</code> प्रत्येक सक्रिय कुंजी को निरस्त कर देता है।
 दोनों डिलीट ऑपरेशन के लिए OAuth-प्रमाणीकृत सत्र की आवश्यकता होती है। स्वयं द्वारा प्रमाणित एक पाइपलाइन
