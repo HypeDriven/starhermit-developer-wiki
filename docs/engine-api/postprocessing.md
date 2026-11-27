@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:postprocessing`
 
-Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.52.0** (host API 1.52), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:postprocessing";

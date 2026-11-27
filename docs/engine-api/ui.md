@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:ui`
 
-Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.52.0** (host API 1.52), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:ui";
@@ -654,6 +654,81 @@ export function focused(): string | null;
 ```
 
 The focused widget's label as the last frame ended (null when nothing had focus); the same all through a frame (since API\_MINOR 12: before, it was null once the frame's first widget was built).
+
+## Questions about the last frame laid out (since API\_MINOR 45)
+
+UI\_QUERIES\_MINOR: undefined for games declaring an older engine.minor (their natives throw a TypeError). Each answers for the last frame the UI laid out, whether its game built it or `retain` replayed it (the same calls lay out the same elements, so the answers are the same); during a frame's build that is the frame before. They read what the UI already keeps of a frame: no build code runs, and a call costs about one instruction (`hitTest` one more an element it returns). Only elements built with an `id(…)` are known to them: an element without one is never in `hitTest`'s list, and its id is no `focusedId`. Coordinates and rectangles are window pixels, as `lastRect()` and the pointer give them.
+
+```text
+// Each frame: the smallest element under the pointer with a tooltip,
+// and whether a click there is the UI's.
+const p = input.pointer();
+const hits = p ? ui.hitTest(p.x, p.y) : [];
+const tip = hits.find((h) => h.tooltip);   // innermost first
+const clickable = hits.some((h) => h.interactive && !h.disabled);
+const box = ui.rectOf("inventory");          // { x, y, width, height } | null
+if (ui.focusedId() === "chat") showChatHints();
+```
+
+### rectOf
+
+*function*
+
+```ts
+export function rectOf(id: string): Rect | null;
+```
+
+The rectangle (window pixels, as the call returned it and `lastRect()` gave it after the call: a container's once its children were built) of the first widget or container the last frame laid out with `id(id)`; null when it built none, or placed none (a `target`, which has no layout, is not placed). Unclipped: a widget scrolled out of view keeps its rectangle (`hitTest` respects clips).
+
+### UiHit
+
+*interface*
+
+One element `hitTest` found under a point.
+
+```ts
+export interface UiHit extends Rect { … }
+```
+
+- `readonly id: string;`
+
+  Its `id(…)`.
+
+- `readonly interactive: boolean;`
+
+  It takes clicks: a button, checkbox, toggle, slider, select, cycle, text field, tab or key capture, or a custom `widget` of such a kind or a region; not a label, heading, paragraph, image, meter, progress bar or container, and never a `target` (which takes nothing). True for a disabled control too (see `disabled`), which still covers what is under it.
+
+- `readonly disabled: boolean;`
+
+  Built disabled (`disabled: true`, or inside a disabled container): it never activates.
+
+- `readonly secondary: boolean;`
+
+  It reports the secondary button and the context-menu key: a custom `widget` (its result's `secondary`). The built-in controls ignore the secondary button, and the UI has no context menus of its own.
+
+- `readonly tooltip: boolean;`
+
+  It has a tooltip (`tooltip(…)`, a text or a builder).
+
+### hitTest
+
+*function*
+
+```ts
+export function hitTest(x: number, y: number): readonly UiHit[];
+```
+
+The elements built with an id that the last frame laid out under the point (`x`, `y` window pixels) and showing there, innermost first: the deepest in containers first and, of those as deep, the one drawn last (over the others) first. What is clipped away there (scrolled out of a scroll area, outside a clipped container or an `area`) is not under it. Elements without an id are left out (their containers still come, if they have one). A new frozen array of frozen objects each call.
+
+### focusedId
+
+*function*
+
+```ts
+export function focusedId(): string | null;
+```
+
+The `id(…)` of the widget focused as the last frame ended, beside `focused()`'s label; null when nothing had focus or the focused widget was built without an id.
 
 ### target
 

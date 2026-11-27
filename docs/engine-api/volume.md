@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:volume`
 
-Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.52.0** (host API 1.52), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:volume";
@@ -34,8 +34,20 @@ export type VolumePresetName = "smoke" | "explosion" | "dust" | "fire" | "cloud"
 *type*
 
 ```ts
-export type VolumeMultipleScattering = "off" | "diffusion" | "two-sided" | "octaves" | "neural";
+export type VolumeMultipleScattering = "off" | "diffusion" | "two-sided" | "octaves" | "neural" | "multi-scale";
 ```
+
+`"multi-scale"` since API\_MINOR 48 (`VOLUME_OPENVDB_48_MINOR`): with frame lighting, the scattered light of the sun from the world grid's mips toward it (points and spots: the diffusion approximation; since API\_MINOR 49, `VOLUME_49_MINOR`, theirs too, toward each light as far as it, for grey media) (Kallweit et al. 2017, "Deep Scattering", 4.2), the direct light still the shadow march; elsewhere the diffusion approximation. From 48 `"neural"` too is frame lighting's alone (its inputs from the world grid's mips); 'volume' lighting gives both the diffusion approximation.
+
+### VolumeMipmapFilter
+
+*type*
+
+```ts
+export type VolumeMipmapFilter = "box" | "gaussian";
+```
+
+Since API\_MINOR 48: how distant mip levels are filtered.
 
 ### VolumePhase
 
@@ -86,6 +98,11 @@ export interface VolumeAdvancedOptions { … }
   Bitmask from volumeLights (default all).
 
 - `neuralStrength?: number;`
+
+- `multiScaleLevels?: number;`
+
+  Since API\_MINOR 48: mip levels `"multi-scale"` reads toward a light, 1..6 (default 6).
+
 - `scatteringOctaves?: number;`
 - `scatteringOctaveExtinction?: number;`
 - `scatteringOctaveContribution?: number;`
@@ -147,6 +164,10 @@ export interface VolumeAdvancedOptions { … }
 - `mipmaps?: boolean;`
 
   CPU mipmaps for distant grids; undefined follows Graphics.
+
+- `mipmapFilter?: VolumeMipmapFilter;`
+
+  Since API\_MINOR 48: `"box"` (default, the 2 x 2 x 2 mean) or `"gaussian"` (sigma 2^i voxels at level i: less shimmer far away), the Gaussian levels made on the GPU a level a frame (at most three; box levels until each is made, and past them).
 
 ### VolumeEffectOptions
 
@@ -241,6 +262,57 @@ export const volumePresets: Readonly<Record<VolumePresetName, Readonly<Required<
 
 The presets, frozen: `{ ...volumePresets.smoke, density: 3 }`.
 
+### VolumeMediumName
+
+*type*
+
+```ts
+export type VolumeMediumName = "cloud" | "fog" | "ice" | "soot" | "white-smoke" | "dark-smoke" | "haze" | "dust";
+```
+
+Since API\_MINOR 48: measured media (mjurczyk/openvdb's frameMediumPresets: Pope & Fry, OPAC, Baran, Bond & Bergstrom, Dubovik et al., Kim et al.).
+
+### VolumeMedium
+
+*interface*
+
+```ts
+export interface VolumeMedium { … }
+```
+
+- `readonly albedo: readonly [number, number, number];`
+
+  Linear albedo at 650, 550 and 450 nm.
+
+- `readonly angstromExponent: number;`
+- `readonly phase: VolumePhase;`
+
+- `readonly phaseG: number;`
+
+  g at 550 nm, and the exponent of g at 450 and 650 nm.
+
+- `readonly phaseGExponent: number;`
+
+### volumeMediumPresets
+
+*const*
+
+```ts
+export const volumeMediumPresets: Readonly<Record<VolumeMediumName, VolumeMedium>>;
+```
+
+Since API\_MINOR 48. Extinction depends on the scene's scale, so it is not here.
+
+### volumeMediumOptions
+
+*function*
+
+```ts
+export function volumeMediumOptions(name: VolumeMediumName): VolumeEffectOptions | null;
+```
+
+Since API\_MINOR 48: a medium as effect options (albedo, extinctionScale \[1, 1, 1\], angstromExponent, phase, anisotropy, phaseGExponent, spectral: true) to spread into an effect's options; null for an unknown name.
+
 ### VolumeKernel
 
 *interface*
@@ -275,6 +347,36 @@ export interface VolumeKernel { … }
 - `vdb_error(): number;`
 - `vdb_error_len(): number;`
 
+- `vdb_grid_channels?(file: number, grid: number): number;`
+
+  Since API\_MINOR 49, in starhermit\_volume\_kernel.wasm from engine 1.49: a `.vdb`'s vector grids (`vec3s`, `vec3d`, half-stored `vec3s`; a `staggered` grid's components read on their faces). 1 for a scalar grid, 3 for a vector grid, 0 otherwise.
+
+- `vdb_pick_color?(file: number): number;`
+
+  The colour grid (`Cd`, `color`, `colour`, `albedo`, `basecolor`, else the first vector grid that is not a velocity) and the velocity grid (`vel`, `v`, `velocity`, else the first staggered grid); -1 for none.
+
+- `vdb_pick_velocity?(file: number): number;`
+
+- `vdb_color_brick?(file: number, grid: number, density: number, heat: number, width: number, height: number, depth: number): number;`
+
+  A vector grid (an index, -1 the colour grid) as RGBA8 base-color texels (clamped to 0..1) sampled at `width × height × depth` texels on the box `vdb_brick(file, density, heat, ...)` covers; `brick_info` as `vdb_brick`'s (format 3).
+
+- `vdb_vectors?(file: number, grid: number, density: number, heat: number, width: number, height: number, depth: number): number;`
+
+  A vector grid (an index, -1 the colour grid, -2 the velocity grid) on that box as a vector field.
+
+- `wvdb_vectors?(file: number, grid: number, lod: number): number;`
+
+  A three-channel WebVDB grid (an index, -1 the first) at a LOD (-1 the finest) as a vector field over its box.
+
+- `vectors_info?(vectors: number): number;`
+
+  A vector field: `vectors_info` 20 f64 (width, height, depth, the largest magnitude, the column-major unit box to world matrix), `vectors_values` f32 x, y, z a texel, `vectors_half` half-float x, y, z, 1 (an RGBA16F Data3DTexture); texel `i` at `(i + 0.5) / n` of the box, x fastest.
+
+- `vectors_values?(vectors: number): number;`
+- `vectors_half?(vectors: number): number;`
+- `vectors_destroy?(vectors: number): void;`
+
 ### VolumeGrid
 
 *class*
@@ -304,6 +406,10 @@ export class VolumeGrid { … }
 - `instance(): VolumeGrid;`
 
   Shares the exact texture with this grid; disposing the instance does not dispose the source.
+
+- `gaussianMipLevels(): readonly VolumeGrid[];`
+
+  Since API\_MINOR 48: the mip levels filtered with a Gaussian (sigma 2^i voxels at level i), finest first, made on the GPU a level a call (at most three; box levels until each is made, and past them; box levels too when the game's render targets are full).
 
 - `readonly texture: Data3DTexture;`
 - `readonly width: number;`
@@ -344,6 +450,11 @@ export class VolumeColorGrid { … }
 
 - `constructor(data: Uint8Array, width: number, height: number, depth: number, voxelSize?: readonly [number, number, number]);`
 - `static fromWvdb(kernel: VolumeKernel, bytes: Uint8Array, grid?: number, lod?: number): VolumeColorGrid;`
+
+- `static fromVdb(kernel: VolumeKernel, bytes: Uint8Array, maxSide?: number, grid?: number): VolumeColorGrid;`
+
+  Since API\_MINOR 49: a `.vdb`'s vector grid (`grid`: an index, or -1 its colour grid, `Cd` by name) as base colour (clamped to 0..1) on the box and at the size `VolumeGrid.fromVdb(kernel, bytes, maxSide)` gives its density (`maxSide` default 128), so the two line up: `{ shape: "grid", grid, baseColorGrid }` colours the fog by `Cd`. Needs starhermit\_volume\_kernel.wasm from engine 1.49 (an older kernel is a TypeError naming the rebuild); an Error with the kernel's message for a file without one.
+
 - `instance(): VolumeColorGrid;`
 - `readonly texture: Data3DTexture;`
 - `readonly width: number;`
@@ -577,6 +688,15 @@ export class VolumeEffect extends Mesh { … }
 - `seed: number;`
 - `multipleScattering: VolumeMultipleScattering | null;`
 - `neuralStrength: number | null;`
+
+- `multiScaleLevels: number | null;`
+
+  Since API\_MINOR 48 (null: 6).
+
+- `mipmapFilter: VolumeMipmapFilter;`
+
+  Since API\_MINOR 48.
+
 - `scatteringOctaves: number | null;`
 - `scatteringOctaveExtinction: number | null;`
 - `scatteringOctaveContribution: number | null;`
@@ -745,6 +865,10 @@ export interface VolumeFrameSettings { … }
 
   Follows Graphics unless followGraphics is false.
 
+- `multiScaleLevels: number;`
+
+  Since API\_MINOR 48: mip levels `"multi-scale"` reads toward a light (1..6, default 6; an effect's `multiScaleLevels` wins).
+
 ### VolumeShadowMapState
 
 *interface*
@@ -795,6 +919,14 @@ export class VolumeFrameRenderer extends Mesh { … }
 - `readonly shadowMaps: VolumeShadowMapState;`
 - `readonly emissionGrid: VolumeEmissionGridState;`
 - `readonly depth: number;`
+
+- `readonly froxelRange: Vector2;`
+
+  Since API\_MINOR 48: the froxel slices' view depths this frame (the visible part of the volumes, within near and far).
+
+- `readonly gridSlicesLast: number;`
+
+  Since API\_MINOR 48: world-grid slices stamped by the last render (0 when nothing it holds changed).
 
 - `followGraphics: boolean;`
 
@@ -873,5 +1005,328 @@ export class VolumeEffects extends Group { … }
   A temporal layer following this group's overrides and Options → Graphics, or null when disabled.
 
 - `update(dt: number): void;`
+- `dispose(): void;`
+
+## Level sets and points as geometry (since API\_MINOR 48, `VOLUME_GEOMETRY_48_MINOR`; absent before)
+
+A level set grid's surface as a mesh (LevelSetMesh) or ray-traced in its box (LevelSetSurface), and point grids as round points (VolumePoints), from `.vdb` files (level set grids; point data grids, positions `P` and colors `Cd` in the `null`, `trnc`, `fxpt8/16` and `ufxpt8/16` codecs) and WebVDB files (level set grids; version 2's points grids). They need starhermit\_volume\_kernel.wasm built from engine 1.48 or later (an older kernel is a TypeError naming the rebuild). starhermit-volume's `vdb_brick bake` writes WebVDB version 2 from a `.vdb`.
+
+### VolumeGeometryKernel
+
+*interface*
+
+The kernel exports the geometry calls (starhermit-volume-kernel from engine 1.48; a superset of VolumeKernel's).
+
+```ts
+export interface VolumeGeometryKernel { … }
+```
+
+- `readonly memory: { readonly buffer: ArrayBuffer };`
+- `vdb_input(len: number): number;`
+- `vdb_open(len: number): number;`
+- `vdb_close(file: number): void;`
+- `wvdb_open(len: number): number;`
+- `wvdb_open_lods(len: number, lods: number): number;`
+- `wvdb_close(file: number): void;`
+- `wvdb_lod_count(file: number): number;`
+- `wvdb_total_lod_count(file: number): number;`
+- `wvdb_lod_start(file: number, lod: number): number;`
+- `wvdb_lod_end(file: number, lod: number): number;`
+- `wvdb_grid_count(file: number): number;`
+- `wvdb_grid_name(file: number, grid: number): number;`
+- `wvdb_grid_name_len(file: number, grid: number): number;`
+
+- `wvdb_grid_class(file: number, grid: number): number;`
+
+  0 fog volume, 1 level set, 2 unknown.
+
+- `wvdb_level_set(file: number, grid: number, lod: number): number;`
+- `wvdb_points_count(file: number): number;`
+- `wvdb_points_name(file: number, grid: number): number;`
+- `wvdb_points_name_len(file: number, grid: number): number;`
+- `wvdb_points(file: number, grid: number, lod: number): number;`
+- `vdb_level_set(file: number, grid: number, resolution: number): number;`
+- `vdb_points(file: number, grid: number, maxPoints: number): number;`
+- `field_create(width: number, height: number, depth: number, minX: number, minY: number, minZ: number, sizeX: number, sizeY: number, sizeZ: number, background: number): number;`
+- `field_info(field: number): number;`
+- `field_values(field: number): number;`
+- `field_half(field: number): number;`
+- `field_destroy(field: number): void;`
+- `field_mesh(field: number, iso: number): number;`
+- `mesh_vertex_count(mesh: number): number;`
+- `mesh_index_count(mesh: number): number;`
+- `mesh_positions(mesh: number): number;`
+- `mesh_normals(mesh: number): number;`
+- `mesh_indices(mesh: number): number;`
+- `mesh_destroy(mesh: number): void;`
+- `points_count(points: number): number;`
+- `points_positions(points: number): number;`
+- `points_colors(points: number): number;`
+- `points_spacing(points: number): number;`
+- `points_source_count(points: number): number;`
+- `points_destroy(points: number): void;`
+- `vdb_error(): number;`
+- `vdb_error_len(): number;`
+
+### VolumeLevelSet
+
+*class*
+
+A level set's signed distance (world units, negative inside, ±`background` past its narrow band) on `width × height × depth` texels over the box `min`..`min + size` (texel centres at `min + (i + 0.5) / n × size`, WebVDB's placement). Since API\_MINOR 48.
+
+```ts
+export class VolumeLevelSet { … }
+```
+
+- `constructor(distances: Float32Array, width: number, height: number, depth: number, min: Vector3, size: Vector3, background: number, half?: Uint16Array | null);`
+- `readonly distances: Float32Array;`
+- `readonly width: number;`
+- `readonly height: number;`
+- `readonly depth: number;`
+- `readonly min: Vector3;`
+- `readonly size: Vector3;`
+
+- `readonly background: number;`
+
+  The narrow band's half width.
+
+- `static fromWvdb(kernel: VolumeGeometryKernel, bytes: Uint8Array, grid?: number | string, lod?: number): VolumeLevelSet;`
+
+  A WebVDB level set grid (index, name, or -1 the first) at a LOD (-1 the finest the bytes hold; a prefix of the file holding the first LODs is enough).
+
+- `static fromVdb(kernel: VolumeGeometryKernel, bytes: Uint8Array, grid?: number, resolution?: number): VolumeLevelSet;`
+
+  A `.vdb` level set grid (index, or -1 the first) sampled with `resolution` texels (2 to 2048, default 200) on its box's longest side; where the band is thinner than a texel, texels the surface crosses take the mean of 4³ samples, so the surface has no steps.
+
+- `readonly texture: Data3DTexture;`
+
+  The distances as a linear R16F Data3DTexture, made once (`dispose` frees it).
+
+- `toGeometry(kernel: VolumeGeometryKernel, iso?: number): BufferGeometry;`
+
+  The `iso` surface (default 0) as an indexed geometry with outward normals, closed where the box cuts it (surface nets; at most 1,048,576 vertices, an Error past them: sample coarser).
+
+- `dispose(): void;`
+
+### LevelSetMesh
+
+*class*
+
+A level set's surface as a mesh with any material (a grey MeshStandardMaterial by default): lit, shadowed and casting shadows as meshes are. Since API\_MINOR 48.
+
+```ts
+export class LevelSetMesh extends Mesh { … }
+```
+
+- `constructor(kernel: VolumeGeometryKernel, levelSet: VolumeLevelSet, material?: Material, iso?: number);`
+- `readonly kernel: VolumeGeometryKernel;`
+- `iso: number;`
+- `levelSet: VolumeLevelSet;`
+
+- `setLevelSet(levelSet: VolumeLevelSet): void;`
+
+  Builds the mesh again from another level set (a finer LOD).
+
+- `dispose(): void;`
+
+### LevelSetSurfaceOptions
+
+*interface*
+
+```ts
+export interface LevelSetSurfaceOptions { … }
+```
+
+- `color?: ColorInput;`
+
+  Base color (default #cccccc).
+
+- `roughness?: number;`
+
+  0..1 (default 0.6).
+
+- `metalness?: number;`
+
+  0..1 (default 0).
+
+- `ambient?: ColorInput;`
+
+  Light from every side, linear. Before API\_MINOR 49 (default #404040) the surface had the scene's main and punctual lights and their shadows alone, not its ambient, hemisphere or environment light; from 49 (`VOLUME_49_MINOR`) it is lit as a MeshStandardMaterial and this light is added to the scene's (default none).
+
+- `emissive?: ColorInput;`
+
+- `steps?: number;`
+
+  Sphere-tracing steps, 1 to 512 (default 160).
+
+### LevelSetSurface
+
+*class*
+
+A level set's surface sphere-traced on the GPU inside its box (experimental): its R16F distance texture is the whole cost, a finer LOD swaps in with `setLevelSet`. It writes the depth and fog of the point it shows (its ShaderMaterial's `world` output, `FRAGMENT_DEPTH_MINOR`), so it occludes and is occluded where the surface is and volumes' marches (frame lighting included) end at it; drawn from the box's back faces, the camera may be inside the box. Since API\_MINOR 48, when it casts no shadow (`castShadow` is false: the box would cast; LevelSetMesh does) and is lit by the main and punctual lights and `ambient` alone.
+
+From API\_MINOR 49 (`VOLUME_49_MINOR`) `surfaceMaterial` is a MeshStandardMaterial whose hooks trace the surface (`shSurfaceDepth`, `FRAGMENT_DEPTH_PASSES_MINOR`): lit as that material is (every light and its shadows, ambient, hemisphere, light probes and the environment's image-based light), it casts its traced shadow (traced from the light to where the light leaves the solid, as three.js's maps draw a front-sided mesh's back faces: its lit side never shades itself; `castShadow` and `receiveShadow` true), draws its traced normals and depth in the normal prepass (ambient occlusion, screen-space reflections) and takes the camera's motion at its depth in motion vectors (a moving or deforming surface shows the camera's motion alone: no history rejection of its own). Each pass traces once a pixel of the box's faces, the shadow maps included.
+
+```ts
+export class LevelSetSurface extends Mesh { … }
+```
+
+- `constructor(levelSet: VolumeLevelSet, options?: LevelSetSurfaceOptions);`
+- `levelSet: VolumeLevelSet;`
+
+- `readonly surfaceMaterial: ShaderMaterial | MeshStandardMaterial;`
+
+  A ShaderMaterial before API\_MINOR 49, a MeshStandardMaterial from 49.
+
+- `readonly color: Color;`
+- `roughness: number;`
+- `metalness: number;`
+- `readonly ambient: Color;`
+- `readonly emissive: Color;`
+
+- `setLevelSet(levelSet: VolumeLevelSet): void;`
+
+  Shows another level set (its texture is not disposed with the old one's).
+
+- `dispose(): void;`
+
+### VolumePointData
+
+*class*
+
+Points in world space (3 numbers each) with optional colors (0..1). Since API\_MINOR 48.
+
+```ts
+export class VolumePointData { … }
+```
+
+- `constructor(positions: Float32Array, colors?: Float32Array | null, spacing?: number, sourceCount?: number);`
+- `readonly positions: Float32Array;`
+- `readonly colors: Float32Array | null;`
+
+- `readonly spacing: number;`
+
+  The mean distance between these points (0 unknown).
+
+- `readonly sourceCount: number;`
+
+  The source grid's points (more than `count` when thinned).
+
+- `readonly count: number;`
+
+- `static fromWvdb(kernel: VolumeGeometryKernel, bytes: Uint8Array, grid?: number | string, lod?: number): VolumePointData;`
+
+  A WebVDB version 2 points grid (index, name, or -1 the first): the points of LODs 0 to `lod` (-1 all the bytes hold); each LOD adds about 8 times the points before it.
+
+- `static fromVdb(kernel: VolumeGeometryKernel, bytes: Uint8Array, grid?: number, maxPoints?: number): VolumePointData;`
+
+  A `.vdb` point data grid (index, or -1 the first), every n-th point past `maxPoints` (1 to 16,000,000, default 1,000,000).
+
+### VolumePointsOptions
+
+*interface*
+
+```ts
+export interface VolumePointsOptions { … }
+```
+
+- `size?: number;`
+
+  World diameter of a point (default the points' spacing; 0.01 when unknown).
+
+- `minPixels?: number;`
+
+  The smallest diameter in pixels (default 1).
+
+- `color?: ColorInput;`
+
+  Multiplies the points' colors (default white).
+
+### VolumePoints
+
+*class*
+
+Points as round discs facing the view (unlit, as three.js points; no shadows), in meshes of at most 262,144 points each (three vertices a point). Since API\_MINOR 48.
+
+```ts
+export class VolumePoints extends Group { … }
+```
+
+- `constructor(points: VolumePointData, options?: VolumePointsOptions);`
+- `readonly pointsMaterial: ShaderMaterial;`
+- `points: VolumePointData;`
+- `size: number;`
+- `minPixels: number;`
+- `readonly color: Color;`
+
+- `setPoints(points: VolumePointData, keepSize?: boolean): void;`
+
+  Shows other points (a finer LOD); with `keepSize` false the size becomes their spacing.
+
+- `dispose(): void;`
+
+### VolumeWvdbGeometryOptions
+
+*interface*
+
+```ts
+export interface VolumeWvdbGeometryOptions { … }
+```
+
+- `levelSets?: "surface" | "mesh" | "fog";`
+
+  Level set grids as "surface" (LevelSetSurface, default), "mesh" (LevelSetMesh) or "fog" (none here: load them as density with VolumeWvdbLoader). In "surface" and "mesh" no fog is made for them.
+
+- `points?: "points" | "none";`
+
+  Points grids as "points" (default) or "none".
+
+- `material?: Material;`
+- `surface?: LevelSetSurfaceOptions;`
+- `pointOptions?: VolumePointsOptions;`
+
+- `maxLod?: number;`
+
+  The finest LOD loaded (-1, the default, every LOD).
+
+### VolumeWvdbGeometryProgress
+
+*interface*
+
+```ts
+export interface VolumeWvdbGeometryProgress { … }
+```
+
+- `lod: number;`
+- `lods: number;`
+- `done: boolean;`
+- `bytesLoaded: number;`
+- `bytesTotal: number`
+
+### VolumeWvdbGeometryLoader
+
+*class*
+
+A WebVDB file's level sets and points streamed coarse to fine into `group` (reading only the bytes each LOD needs): the coarse LOD shows first and each finer one replaces it. Fog grids are VolumeWvdbLoader's. Since API\_MINOR 48.
+
+```ts
+export class VolumeWvdbGeometryLoader { … }
+```
+
+- `constructor(kernel: VolumeGeometryKernel, options?: VolumeWvdbGeometryOptions);`
+- `readonly group: Group;`
+
+- `readonly levelSets: ReadonlyMap<string, LevelSetMesh | LevelSetSurface>;`
+
+  By grid name.
+
+- `readonly points: ReadonlyMap<string, VolumePoints>;`
+- `readonly done: boolean;`
+
+- `load(path: string, onProgress?: (progress: VolumeWvdbGeometryProgress) => void): Promise<this>;`
+
+  Rejects with an AbortError after `cancel()`.
+
+- `cancel(): void;`
 - `dispose(): void;`
 {% endraw %}

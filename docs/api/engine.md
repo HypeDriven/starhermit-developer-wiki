@@ -13,17 +13,17 @@ Base URL: `https://api.starhermit.com`. All routes are under `/api/v1/...`.
 
 ```json
 {"releases": [{
-  "version": "1.42.0", "api": {"major": 1, "minor": 42}, "revoked": false, "date": "2026-11-15T22:31:19Z",
-  "web": {"base": "https://wiki.starhermit.com/engine/1.42.0/", "manifestIntegrity": "sha384-<SRI hash>"},
+  "version": "1.52.0", "api": {"major": 1, "minor": 52}, "revoked": false, "date": "2026-11-26T22:20:54Z",
+  "web": {"base": "https://engine.starhermit.com/engine/1.52.0/", "manifestIntegrity": "sha384-<SRI hash>"},
   "native": {"linux-x86_64": {
-    "manifestUrl": "https://wiki.starhermit.com/engine/1.42.0/native/linux-x86_64/native.json",
+    "manifestUrl": "https://engine.starhermit.com/engine/1.52.0/native/linux-x86_64/native.json",
     "manifestSha256": "<SHA-256 of native.json>"}}
 }]}
 ```
 
 `GET /api/v1/engine/releases/{version}` answers one such object without the `releases` wrapper.
-URLs point at `wiki.starhermit.com` for recent releases and at `engine.starhermit.com` for older ones;
-use them as given.
+URLs point at `engine.starhermit.com`, the engine store (releases before 1.43 were also published on
+`wiki.starhermit.com`, which keeps them but gets no new ones); use them as given.
 
 - `api` is the host API the release offers. Its major is the release's major and the `engine.api` a
   game declares; its minor grows as members are added (a game can require one with `engine.minor`).
@@ -32,7 +32,7 @@ use them as given.
 - `web` is `null` for a release without a web runtime. `manifestIntegrity` is the SRI hash of the web
   runtime's `manifest.json`, the value a loader page pins.
 - `native` has one entry per platform (`windows-x86_64`, `linux-x86_64`, `macos-x86_64`,
-  `macos-aarch64`), or is `{}`. `manifestSha256` is the hex SHA-256 of that platform's `native.json`;
+  `macos-aarch64`, and from 1.42.0 `android-aarch64` and `android-x86_64`), or is `{}`. `manifestSha256` is the hex SHA-256 of that platform's `native.json`;
   check it before trusting the file list inside.
 
 Both routes send `Cache-Control: public, max-age=60` with an `ETag` and answer `304` to a matching
@@ -51,7 +51,7 @@ nothing: the StarHermit client and a game's page fetch the release the game pins
 1. Ask the API for the release, the newest or the one your game pins:
 
    ```sh
-   curl -s https://api.starhermit.com/api/v1/engine/releases/1.42.0
+   curl -s https://api.starhermit.com/api/v1/engine/releases/1.52.0
    ```
 
 2. Take your platform's `native.<platform>.manifestUrl`, fetch that `native.json` and check its
@@ -63,7 +63,7 @@ nothing: the StarHermit client and a game's page fetch the release the game pins
 The same steps as one script (needs `curl`, `jq` and `sha256sum`; on macOS use `shasum -a 256`):
 
 ```sh
-version=1.42.0 platform=linux-x86_64   # or windows-x86_64, macos-x86_64, macos-aarch64, android-aarch64, android-x86_64
+version=1.52.0 platform=linux-x86_64   # or windows-x86_64, macos-x86_64, macos-aarch64, android-aarch64, android-x86_64
 release=$(curl -fsS "https://api.starhermit.com/api/v1/engine/releases/$version")
 manifest_url=$(jq -r --arg p "$platform" '.native[$p].manifestUrl' <<<"$release")
 manifest_sha=$(jq -r --arg p "$platform" '.native[$p].manifestSha256' <<<"$release")
@@ -82,7 +82,7 @@ In PowerShell, `Invoke-RestMethod` reads the release and `Get-FileHash -Algorith
 hash to compare. The [tutorial](../tutorials/starhermit-engine.md#2-get-the-engine) covers unpacking
 and the first run.
 
-The [standalone developer tools](../../engine/tools/README.md) (automated publishing and a
+The [standalone developer tools](../developer-tools.md) (automated publishing and a
 development MCP server) are released separately from the runtime.
 
 ## Integrity
@@ -101,9 +101,8 @@ hashes, and the runtime checks every other file it loads against the manifest.
 
 A game's loader page (`index.html`, written by `starhermit package --web`) loads `starhermit.js` and
 `manifest.json` from `https://engine.starhermit.com/engine/X.Y.Z/`, with the same SRI hashes as the
-URLs under `web.base`. Use `engine.starhermit.com` in any loader page you write yourself: it keeps
-every release, while the URLs under `web.base` hold only recent ones and an old release disappears
-from them. Tools from 1.26.0 write `engine.starhermit.com` by default (`--loader-base URL` or
+URLs under `web.base`, which name the same store for every release. Use `engine.starhermit.com` in
+any loader page you write yourself: it keeps every release. Tools from 1.26.0 write `engine.starhermit.com` by default (`--loader-base URL` or
 `STARHERMIT_WEB_LOADER_BASE` overrides it). For a hosted game packaged by older tools, the platform
 rewrites the two engine URLs when the release is no longer under `web.base`; repackage games hosted
 elsewhere. A revoked release is not served from either origin.

@@ -3,6 +3,11 @@ title: StarHermit engine area
 ---
 # StarHermit engine area
 
+From release 1.43.0, engine releases and developer tools are published only to
+the engine store, `https://engine.starhermit.com/engine/` (release list:
+`GET https://api.starhermit.com/api/v1/engine/releases`). This area holds
+releases up to 1.42.0 and gets no new ones.
+
 The StarHermit web runtime is the engine that runs StarHermit script games in
 browsers. Each directory here is one release,
 `https://wiki.starhermit.com/engine/X.Y.Z/`, and it never changes once

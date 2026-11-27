@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:sky`
 
-Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.52.0** (host API 1.52), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:sky";
@@ -285,6 +285,10 @@ export interface SkyAtmosphereOptions { … }
 
 - `nightBrightness?: number;`
 
+- `twinkle?: number;`
+
+  Since API\_MINOR 48 (`PROCEDURAL_STARS_MINOR`; not read before): how much the stars twinkle, most low down (default 1, 0 to 2; 0 holds them still). From 1.48 the stars are points found per pixel, one to two pixels wide at any resolution, steady under temporal anti-aliasing, easing into a smooth glow where the resolution is too coarse for them.
+
 - `sunDisc?: boolean;`
 
   Default true each.
@@ -302,7 +306,7 @@ export interface SkyAtmosphereOptions { … }
 
 - `background?: boolean;`
 
-  Draw into `scene.background` instead of as the dome (default false; `backgroundSize` 1024, 64 to 2048).
+  Draw into `scene.background` instead of as the dome (default false; `backgroundSize` 1024, 64 to 2048). Since API\_MINOR 48 (`PROCEDURAL_STARS_MINOR`) the dome still draws the view over it, so the sun, moon and stars stay crisp; the map, as coarse as its size, serves what reads `scene.background`.
 
 - `backgroundSize?: number;`
 
@@ -357,6 +361,11 @@ export class SkyAtmosphere extends Mesh { … }
 - `moonlight: number;`
 - `starBrightness: number;`
 - `nightBrightness: number;`
+
+- `twinkle: number;`
+
+  Since API\_MINOR 48 (`PROCEDURAL_STARS_MINOR`): the stars' twinkle (0 to 2); undefined before.
+
 - `sunDisc: boolean;`
 - `moon: boolean;`
 - `readonly milkyWay: boolean;`

@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:storage`
 
-Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.52.0** (host API 1.52), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:storage";
@@ -132,6 +132,106 @@ export interface GameSettings { … }
 export const settings: GameSettings;
 ```
 
+### GameOptionInfo
+
+*interface*
+
+One of the game's options as starhermit.txt declares it (since API\_MINOR 49, `GAME_OPTIONS_MINOR`), frozen.
+
+```ts
+export interface GameOptionInfo { … }
+```
+
+- `readonly id: string;`
+
+  Its id: the key of its value in \{@link settings\}.
+
+- `readonly kind: "toggle" | "choice" | "multi" | "slider" | "integer" | "text";`
+- `readonly label: string;`
+- `readonly default: JsonValue;`
+
+- `readonly category: string;`
+
+  The menu tab it shows on (`Game` unless declared).
+
+- `readonly advanced: boolean;`
+
+  Only the menu's Advanced view shows it.
+
+- `readonly restart: boolean;`
+
+  A change applies once the game restarts (the menu says so).
+
+- `readonly tip?: string;`
+
+- `readonly choices?: readonly { readonly value: string; readonly label: string }[];`
+
+  `choice` and `multi`: each value and its label, in order.
+
+- `readonly min?: number;`
+
+  `slider` and `integer`.
+
+- `readonly max?: number;`
+- `readonly suggestions?: readonly number[];`
+
+- `readonly maxLength?: number;`
+
+  `text`: bytes at most.
+
+### GameOptions
+
+*interface*
+
+The game's own settings in the runtime's Options menu (since API\_MINOR 49, `GAME_OPTIONS_MINOR`; older games' module has no such export), declared in starhermit.txt so the menu shows them from the game's start (even while it loads) and `starhermit check` and `starhermit package` refuse a bad one. Each needs `engine.capabilities=storage`:
+
+```text
+engine.option.<id>=<kind> | <label>       # toggle, choice, multi, slider, integer, text
+engine.option.<id>.choice.<value>=<label> # choice, multi: 2 (1) to 32, in order
+engine.option.<id>.range=<min>..<max>     # slider, integer (required)
+engine.option.<id>.suggestions=<n>,<n>    # slider, integer: a dropdown of these, at most 16
+engine.option.<id>.max_length=<bytes>     # text: 1 to 256 (64)
+engine.option.<id>.default=<value>        # on/off, a choice, choices a,b, a number, text
+engine.option.<id>.tip=<text>             # its tooltip, up to 300 characters
+engine.option.<id>.category=<tab>         # Game by default; never an engine tab
+engine.option.<id>.advanced=true          # the Advanced view's alone
+engine.option.<id>.restart=true           # applies after a restart
+```
+
+At most 64 options in 4 tabs; ids are 1–32 ASCII letters, digits and `_` (a letter first), labels up to 64 characters. A slider's value shows as a percentage (0.5 is 50 %), as the engine's sliders of fractions do. The values are the game's \{@link settings\} under the options' ids, so they persist and follow the player's account as every setting does; `settings.set` of an option's id throws a RangeError for a value its declaration refuses. The player's edits in the menu arrive as settings from elsewhere do: `settings.onChange` and \{@link GameOptions.onChange\} hear them.
+
+```ts
+export interface GameOptions { … }
+```
+
+- `declared(): readonly GameOptionInfo[];`
+
+  The declarations, in starhermit.txt's order.
+
+- `get(id: string): JsonValue;`
+
+  The option's value: the game's setting where the option takes it, else its default. A TypeError for an undeclared id.
+
+- `set(id: string, value: JsonValue): void;`
+
+  Sets it (the menu shows it): a RangeError for a value the option does not take, a TypeError for an undeclared id.
+
+- `reset(id: string): void;`
+
+  Sets it to its default.
+
+- `onChange(listener: (id: string, value: JsonValue) => void): Unsubscribe;`
+
+  The player changed an option in the menu (or the account's value arrived): its id and value, as `get` reads it. Not called for the game's own `set`.
+
+### options
+
+*const*
+
+```ts
+export const options: GameOptions;
+```
+
 ### SaveStatus
 
 *type*
@@ -173,15 +273,54 @@ export interface Save { … }
   The game's own schema version (`save(data, { schema })`).
 
 - `readonly savedAt: number;`
-- `readonly data: JsonValue;`
+
+- `readonly data: JsonValue | Uint8Array;`
+
+  The data saved. Since API\_MINOR 51 (`SAVE_BYTES_MINOR`) a `Uint8Array` for a save of bytes; a game declaring an older minor (or an older runtime) reads such a save's data as its tag, `{ $starhermit: "save-body", type, compress, file, size }`, never the bytes.
+
+- `readonly byteSize?: number;`
+
+  Since API\_MINOR 51 (`SAVE_RESOLVE_MINOR`): the bytes this save counts towards its 10 MiB, its JSON text's or, for bytes and gzip saves, the stored (compressed) data's. Undefined for older games.
+
+### SaveInfo
+
+*type*
+
+```ts
+export type SaveInfo = Save;
+```
+
+Saves are the same either side of a conflict.
 
 ### Resolution
 
 *type*
 
 ```ts
-export type Resolution = "keep-local" | "take-remote" | { readonly merged: JsonValue };
+export type Resolution =
+  | "keep-local"
+  | "take-remote"
+  | {
+      readonly merged: JsonValue | Uint8Array;
+      readonly schema?: number;
+      readonly compress?: "gzip" | "none";
+    };
 ```
+
+A conflict's answer: `{ merged }` is the save to keep (since API\_MINOR 51 its data may be bytes, with `compress` as `save`'s and `schema`, else the remote save's schema).
+
+### SaveConflict
+
+*interface*
+
+`saves.conflict()` (since API\_MINOR 51): this device's save (null when it had none) and the account's.
+
+```ts
+export interface SaveConflict { … }
+```
+
+- `readonly local: SaveInfo | null;`
+- `readonly remote: SaveInfo;`
 
 ### ForeignSave
 
@@ -205,7 +344,7 @@ export interface ForeignSave { … }
 
 *interface*
 
-The game's save: one per game and player, kept on the device and, when signed in, synced to the account (the platform's cloud save slot of the game: read once signed in, then uploads conditional on the version they were based on, debounced 2 s, at most every 30 s, queued while offline; a failed read blocks uploads, local play goes on). At most 10 MiB of JSON (RangeError). The previous save is kept as a recovery checkpoint. The account's save replacing the device's (another device saved last) shows in `load()`; `onStatus` hears the change.
+The game's save: one per game and player, kept on the device and, when signed in, synced to the account (the platform's cloud save slot of the game: read once signed in, then uploads conditional on the version they were based on, debounced 2 s, at most every 30 s, queued while offline; a failed read blocks uploads, local play goes on). At most 10 MiB of JSON (RangeError); before API\_MINOR 51 the runtime keeps only 2 MiB of JSON text and 100,000 values (a console warning says when a save is past them), from 51 the 10 MiB and 1,000,000 values. The previous save is kept as a recovery checkpoint. The account's save replacing the device's (another device saved last) shows in `load()`; `onStatus` hears the change.
 
 ```ts
 export interface CloudSave { … }
@@ -223,6 +362,15 @@ export interface CloudSave { … }
 
   Replaces the save; it is written to the device at once. `replaceForeign` (since API\_MINOR 8): this save also replaces the account's foreign save the game was shown (`foreign()`), uploaded at once and only if the slot still holds that version; otherwise (or without one) it is an ordinary save.
 
+- ```ts
+  save(
+      data: JsonValue | Uint8Array | ArrayBuffer,
+      options?: { schema?: number; replaceForeign?: boolean; compress?: "gzip" | "none" },
+    ): void;
+  ```
+
+  Since API\_MINOR 51 (`SAVE_BYTES_MINOR`): `data` may be bytes (a `Uint8Array` or `ArrayBuffer`, read back as a `Uint8Array`), and `compress: "gzip"` gzips the data (bytes, or JSON's text) before it is kept. Either way the data is one file of the save's archive beside a tag (no base64, no JSON parse limits). Limits: at most 10 MiB less 64 KiB stored (the save's 10 MiB, its envelope aside), and with gzip at most 16 MiB before compression (RangeError). A game declaring an older minor, or an older runtime, reads such a save's data as its tag: bump `schema` when you start saving bytes so older builds of the game know the save is not theirs.
+
 - `foreign(): ForeignSave | null;`
 
   The account's slot holds a save the engine did not write (since API\_MINOR 8): it is never adopted or overwritten by itself. While it is there `state()` is `"foreign"` and `status()` `"pending"`: saves stay on the device and none is uploaded until the game migrates it and saves with `replaceForeign`. Null when there is none, signed out, offline, or until the slot was read (`onStatus` hears `"foreign"` once this has it). If the old build saves again before the replacement lands, the newer one is shown here instead (the replacement stays on the device); if another device replaced it first, `onConflict` hears both engine saves. The slot is read again each session, never kept on the device.
@@ -239,6 +387,14 @@ export interface CloudSave { … }
   The account holds a different save than this device: resolve it (until then the account's copy is not overwritten). The first listener that answers resolves; `local` is null when this device had none.
 
 - `onStatus(listener: (status: SaveStatus, state: SyncState) => void): Unsubscribe;`
+
+- `conflict(): SaveConflict | null;`
+
+  Since API\_MINOR 51 (`SAVE_RESOLVE_MINOR`): the conflict waiting for the game's answer, on any frame (the same object until it changes), or null when none waits (state() is not `"conflict"`, or the game answered). Each side's `schema`, `savedAt`, `byteSize` and `data` are the game's own; nothing of the account's is shown. From 1.51 `state()` is `"conflict"` as soon as the game hears of one (its listeners included), and a listener returning nothing (undefined or null, as a WebAssembly game's callback does) is no answer: the conflict waits for another listener or `resolve`.
+
+- `resolve(answer: Resolution): void;`
+
+  Since API\_MINOR 51 (`SAVE_RESOLVE_MINOR`): answers the waiting conflict as a listener's answer does (the same checks; the account still takes only an upload based on its save). A TypeError when none waits (state() is not `"conflict"`, or it was answered) or for an answer that is none of `Resolution`'s.
 
 ### saves
 

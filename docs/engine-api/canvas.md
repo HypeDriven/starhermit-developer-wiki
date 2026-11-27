@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:canvas`
 
-Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.52.0** (host API 1.52), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:canvas";
@@ -92,7 +92,7 @@ export class ImageBitmap { … }
 export function createImageBitmap(source: string | Uint8Array | ArrayBuffer | ImageData | OffscreenCanvas): Promise<ImageBitmap>;
 ```
 
-Decodes a package image or image bytes, PNG or WebP (an animated WebP's first frame; rejects with an Error named `EncodingError` for data it cannot decode, a RangeError past 4,096 pixels on a side). Images decode off the game's thread, two at a time, and settle as a frame begins; at most 128 wait at once, an image's bytes are at most 16 MiB and those waiting at most 64 MiB together (RangeError, before they are copied). A package image is read without waiting for it (see `PackageFiles`). ImageData and canvases are copied at once.
+Decodes a package image or image bytes, PNG or WebP (an animated WebP's first frame), and JPEG since API\_MINOR 43 (`JPEG_IMAGES_MINOR`; its Exif orientation applied, so `drawImage` draws it as a browser does; rejects with an Error named `EncodingError` for data it cannot decode, a RangeError past 4,096 pixels on a side). Images decode off the game's thread, two at a time, and settle as a frame begins; at most 128 wait at once, an image's bytes are at most 16 MiB and those waiting at most 64 MiB together (RangeError, before they are copied). A package image is read without waiting for it (see `PackageFiles`). ImageData and canvases are copied at once.
 
 ### ImageData
 

@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:water`
 
-Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.52.0** (host API 1.52), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:water";
@@ -385,11 +385,27 @@ export interface WaterMaterialOptions extends WaterOpticsOptions { … }
 
   Foam from the vertex colors' red (a simulation's), default false.
 
+- `refraction?: number;`
+
+  Since API\_MINOR 47 (`WATER_REFRACTION_MINOR`; ignored before): how strongly the wind's capillary ripples bend what is seen through the water, the `refraction` uniform (default 1: as the wind raises them; 0 none; negative is 0). They are ripples of 9.5 to 28 cm, too fine for the reflection's trains, with Cox and Munk's mean square slope for the wind (0.00512 per m/s), seen only through the refraction, each held to a slope that warps the bed below smoothly (never folding it into fringes; past 1 the knob can): the eye's ray refracted with and without their slope down to the depth `renderer.sceneDepth` gives, the window into `renderer.sceneColor` moved by the difference, so a deeper bed moves more. Each train fades out where a wave spans under six pixels (a far surface shows none); `ripples: false` or no wind leaves the surface flat. Before 47 the ripples' slope (a few thousandths) moved the scene behind by under a pixel.
+
+- `refractTransparents?: boolean;`
+
+  Since API\_MINOR 48 (`WATER_TRANSPARENTS_MINOR`; default true): the material's `refractTransparents`.
+
+- `ior?: number;`
+
+  Since API\_MINOR 48 (`WATER_PHYSICAL_REFRACTION_MINOR`; default 1.333, clamped to 1..3; ignored before): the water's index of refraction, the `ior` uniform. The eye's ray is refracted by Snell's law about the surface's normal (the waves and, with `refraction`, the capillary ripples' slope) and followed to what lies beyond the surface by a depth-based planar approximation (from the depth `renderer.sceneDepth` gives straight behind, three fixed-point steps: the ray carried that far beyond the surface's plane, projected, the depth read there; the same on every graphics level), so calm water shows the bed and fish shallower than they are (about depth / 1.33 straight down, more at grazing angles) and the far bed drawn toward the waterline; absorption and scattering act along the refracted path. Only what lies beyond the surface there is taken (a lily pad on the surface, a bank above it, never bends into the water); where the refracted point leaves the screen the window fades to the straight sample over the screen's outer 8 %. From API\_MINOR 49 (`WATER_REFRACTION_EDGES_MINOR`) a step whose point the scene's depth shows hidden behind something nearer (a fish or a stalk in front of where the ray goes on) is not taken, and with no step in sight the ray is followed back to where it went out of sight (three halvings): the bed beside the fish shows there. At 48 such a step was taken, and a band beside a fish or stalk near the camera showed the fish's or stalk's edge stretched over the bed (dark crescents several pixels wide). Seen from below (`renderer.underwater`), Snell's window and total internal reflection at the index, and what stands over the surface seen along the refracted ray.
+
+- `physicalRefraction?: boolean;`
+
+  Since API\_MINOR 48 (`WATER_PHYSICAL_REFRACTION_MINOR`; default true): false keeps 1.47's refraction (the scene behind moved by the ripples' slope alone; the `ior` uniform 0).
+
 ### WaterMaterial
 
 *class*
 
-The ocean's water shading for a mesh whose geometry (with normals) is the water's surface: a flowing-water heightfield, a pool.
+The ocean's water shading for a mesh whose geometry (with normals) is the water's surface: a flowing-water heightfield, a pool. It reads `renderer.sceneColor` and `renderer.sceneDepth` itself through its `sceneColor` and `sceneDepth` uniforms (set when made; a game need not set them).
 
 ```ts
 export class WaterMaterial extends ShaderMaterial { … }
@@ -397,6 +413,10 @@ export class WaterMaterial extends ShaderMaterial { … }
 
 - `constructor(options?: WaterMaterialOptions);`
 - `readonly isWaterMaterial: true;`
+
+- `refractTransparents: boolean;`
+
+  Since API\_MINOR 48 (`WATER_TRANSPARENTS_MINOR`; default true; undefined before): the transparent meshes, sprites, points and particles across the surface from the eye (their bounds' centre below the surface's level seen from above, above it seen from below, within its bounds across) draw before the water, into the `sceneColor` it reads, so they are bent by its ripples and dimmed by its absorption as the bed behind them is (the absorption is the bed's depth's: the scene depth holds the opaque scene alone); the water draws next and the other transparent objects after it, each part in the usual order (render order, then farthest first). An object across the surface is placed by its centre; one writing depth keeps its part out of the water sharp, as the water does not draw over it there. Materials with `depthTest` false draw after the water. Before 48 the scene colour held the opaque scene alone, so transparent objects under the water were not seen bent.
 
 - `update(dt: number): void;`
 

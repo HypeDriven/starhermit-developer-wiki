@@ -110,7 +110,7 @@ WebSockets under `ws/v1/...`, JWT bearer auth
 |---|---|---|
 | Shared conventions | [conventions.md](docs/api/conventions.md) | Base URLs, body/error parsing, timestamps, paging, updates, retries and concurrency |
 | Machine-readable contracts | [contracts.md](docs/api/contracts.md) | Public REST operations and models, WebSocket frame schemas, and binary layouts |
-| Developer tools | [Standalone tools](engine/tools/README.md) | macOS, Linux and Windows binaries for packaging, automated publishing and development MCP; no private repositories or Rust required |
+| Developer tools | [Standalone tools](docs/developer-tools.md) | macOS, Linux and Windows binaries for packaging, automated publishing and development MCP; no private repositories or Rust required |
 | Engine API (script games) | [engine-api](docs/engine-api/index.md) | Every `starhermit:*` module of the engine's host API — engine, input, storage, scene, sky, weather, water, surfaces, physics, vehicle, particles, volume, canvas, draw, ui, audio, platform, world, script — generated from the latest release's `starhermit.d.ts` (English only) |
 | Engine | [engine.md](docs/api/engine.md) | `GET /api/v1/engine/releases`: every engine release and its revocations, downloading and checking a native runtime, integrity, the web runtime's loader origin, and script games' Content-Security-Policy |
 | Content moderation | [moderation.md](docs/api/moderation.md) | Exact hashes, scoped checks/discovery, screened flags, owner review, approval validity and withdrawal recovery; current service availability |

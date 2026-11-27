@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:audio`
 
-Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.52.0** (host API 1.52), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:audio";
@@ -127,6 +127,25 @@ export interface PlayOptions { … }
 
   The panner's attributes, as `PannerNode`'s (Web Audio's defaults: inverse distance, refDistance 1, maxDistance 10,000, rolloffFactor 1, no cone); RangeError or `InvalidStateError` as there.
 
+- `filters?: readonly AudioNode[];`
+
+  Since API\_MINOR 45 (`AUDIO_CLIP_FILTERS_MINOR`; ignored before): nodes of `context` (biquad, IIR, gain, stereo panner, panner, delay: any that takes an input) the sound passes through, in order, on its way to its bus, where the player's volumes and mute and the game's mute (`setMuted`) still apply after them. The nodes stay the game's and stay live: set or automate their parameters while it plays. `play` connects them to one another in order and the last to the bus (ordinary connections, which stay when the sound ends, so a chain shared by several sounds is one chain that sums them, and a node also connected elsewhere fans out as in Web Audio); the sound's own way into the first goes when it ends. An empty list plays through the graph straight to the bus, so `setFilters` can add some later. A node of an `OfflineAudioContext` is an `InvalidAccessError`; anything else that is not such a node (a source, a released node, one listed twice, more than 64) a TypeError (RangeError past 64), and a chain closing a cycle without a delay `NotSupportedError`, all before the sound plays. Each filtered sound takes one node of the graph's node bound while it plays (render cost 5), and starts on the mixer's next render quantum (at most 128 frames, 2.7 ms at 48 kHz, later than an unfiltered one; a `when` keeps its exact frame). Example:
+
+  ```text
+  const muffle = context.createBiquadFilter();
+  muffle.type = "lowpass";
+  muffle.frequency.value = 20000;
+  const music = stream("music/theme.ogg", { loop: true, filters: [muffle] });
+  // On pause, and back on resume: a 50 ms glide, no restart.
+  const setPaused = (paused: boolean) =>
+    muffle.frequency.setTargetAtTime(paused ? 900 : 20000, context.currentTime, 0.05);
+  const radio = context.createBiquadFilter();
+  radio.type = "bandpass";
+  radio.frequency.value = 1800;
+  radio.Q.value = 2;
+  play(voiceLine, { bus: "effects", filters: [radio] });
+  ```
+
 ### PannerAttributes
 
 *interface*
@@ -206,6 +225,10 @@ export class Sound { … }
   Since API\_MINOR 37: turns it (for its cone).
 
 - `setOrientation(orientation: { readonly x: number; readonly y: number; readonly z: number }): void;`
+
+- `setFilters(filters: readonly AudioNode[] | null): void;`
+
+  Since API\_MINOR 45 (`AUDIO_CLIP_FILTERS_MINOR`; absent before): the chain it plays through from now on, as `filters` takes it (`null` or `[]`: straight to its bus). The change takes effect on one render quantum, without a gap; the old chain's nodes keep their connections and ring out their tails. Only for one played with `filters` (`[]` for none yet): another is a TypeError. Nothing once it ended.
 
 ### play
 
@@ -636,6 +659,10 @@ export interface StreamOptions { … }
 
   Wait for `play()` (default false: it plays as soon as it can).
 
+- `filters?: readonly AudioNode[];`
+
+  Since API\_MINOR 45 (`AUDIO_CLIP_FILTERS_MINOR`; ignored before): as `PlayOptions.filters` (see the example there): the stream's sound passes through these nodes, in order, to its bus. Its way into them lasts until `stop()`.
+
 ### AudioStream
 
 *class*
@@ -691,6 +718,10 @@ export class AudioStream { … }
 
 - `setPan(pan: number | null): void;`
 
+- `setFilters(filters: readonly AudioNode[] | null): void;`
+
+  Since API\_MINOR 45: as `Sound.setFilters`, for a stream opened with `filters`; nothing once stopped.
+
 - `onStateChange(listener: (state: StreamState) => void): Unsubscribe;`
 
   Each change of `state`, heard as a frame begins.
@@ -707,7 +738,7 @@ Streams a package or remote file (a `NotFoundError` for one the package does not
 
 ## The synthesis graph (Web Audio subset)
 
-Names and semantics follow Web Audio for the supported subset. Times are seconds of `context.currentTime` (the mixer's clock, rendered in 128-frame quanta); times before now act now; negative times throw a RangeError, non-finite values a TypeError. Bounds: min(`voices`, 256) nodes, 1,024 connections, 1,024 automation events per parameter and 16,384 in all, curves of at most 65,536 values, 32 MiB of buffers (4,096 at most) and 32 MiB of delay lines, 256 periodic waves, and an estimated render cost of 20,000 units at 48 kHz (less above): a node costs gain 5, constant source 4, stereo panner 5, oscillator 20, buffer source 40, biquad 28, delay 25 (since API\_MINOR 37 panner 12 and the listener 2), and from its first ramp, target, curve or parameter connection on 20, 14, 75, 210, 42, 280 and 42 (40 and 20); each connection 2: past one a RangeError. An automation event counts until the clock passes it, except that a setValue or setTarget (`value =` included) supersedes a setValue or setTarget right before it at the same time, which could no longer affect any value: so `setTargetAtTime(v, currentTime, tc)` once a frame holds one event while the clock stands still (a browser's audio before the page's first press), but events at different future times still fill the budget meanwhile. Not supported: channel count settings (buffers are mono or stereo), wave shapers, convolvers, compressors, analysers, 3D panners and listeners before API\_MINOR 37 (`PannerNode`, `context.listener`; HRTF renders as equal-power), IIR filters, channel splitters and mergers, worklets and media nodes; offline contexts before API\_MINOR 37 (`OfflineAudioContext`); `AudioParam.value` reads the last value set, not the automation's progress.
+Names and semantics follow Web Audio for the supported subset. Times are seconds of `context.currentTime` (the mixer's clock, rendered in 128-frame quanta); times before now act now; negative times throw a RangeError, non-finite values a TypeError. Bounds: min(`voices`, 256) nodes, 1,024 connections, 1,024 automation events per parameter and 16,384 in all, curves of at most 65,536 values, 32 MiB of buffers (4,096 at most) and 32 MiB of delay lines, 256 periodic waves, and an estimated render cost of 20,000 units at 48 kHz (less above): a node costs gain 5, constant source 4, stereo panner 5, oscillator 20, buffer source 40, biquad 28, delay 25 (since API\_MINOR 37 panner 12 and the listener 2), and from its first ramp, target, curve or parameter connection on 20, 14, 75, 210, 42, 280 and 42 (40 and 20); each connection 2: past one a RangeError. An automation event counts until the clock passes it, except that a setValue or setTarget (`value =` included) supersedes a setValue or setTarget right before it at the same time, which could no longer affect any value: so `setTargetAtTime(v, currentTime, tc)` once a frame holds one event while the clock stands still (a browser's audio before the page's first press), but events at different future times still fill the budget meanwhile. Not supported: channel count settings (buffers are mono or stereo), wave shapers before API\_MINOR 45 (`WaveShaperNode`), convolvers, compressors, analysers, 3D panners and listeners before API\_MINOR 37 (`PannerNode`, `context.listener`; HRTF renders as equal-power), IIR filters, channel splitters and mergers, worklets and media nodes; offline contexts before API\_MINOR 37 (`OfflineAudioContext`); `AudioParam.value` reads the last value set, not the automation's progress.
 
 ### AutomationRate
 
@@ -924,6 +955,33 @@ export abstract class IIRFilterNode extends AudioNode { … }
 - `getFrequencyResponse(frequencyHz: Float32Array, magResponse: Float32Array, phaseResponse: Float32Array): void;`
 
   Equal lengths, else `InvalidAccessError`; NaN outside 0..Nyquist.
+
+### WaveShaperNode
+
+*class*
+
+Since API\_MINOR 45 (`WAVE_SHAPER_MINOR`; contexts have no `createWaveShaper` before): Web Audio's WaveShaperNode, a distortion mapping each sample x through `curve`: x in −1..1 spread across the curve's N points (v = (N − 1)(x + 1)/2), linearly between the two around v, the first or last value beyond the ends. Without a curve (null, the default) its input passes unchanged. A radio's crunch:
+
+```text
+const crunch = context.createWaveShaper();
+crunch.curve = Float32Array.from({ length: 1025 }, (_, i) => Math.tanh(4 * (i / 512 - 1)));
+crunch.oversample = "2x";
+play(voiceLine, { filters: [radioBand, crunch] });
+```
+
+Charged a biquad's rendering cost less a little (12) until it first oversamples, then 1,200 for good (four times oversampled, its worst).
+
+```ts
+export abstract class WaveShaperNode extends AudioNode { … }
+```
+
+- `curve: Float32Array | null;`
+
+  A copy of the curve set (the array given is copied: changing it later changes nothing), or null. 2 to 65,536 values (`InvalidStateError` below, RangeError above), finite (TypeError); a curve can be set again at any time (as Chromium; the written Web Audio specification allows one). Its values count toward the context's 32 MiB of buffers while it is the curve.
+
+- `oversample: "none" | "2x" | "4x";`
+
+  `"none"` (default), `"2x"` or `"4x"`: the curve applied at twice or four times the rate, so its harmonics above the rate's Nyquist do not fold back as aliases. Each 2x stage upsamples (each sample doubled, then a zero) and downsamples (every other output) through a 63-tap halfband lowpass (a windowed sinc, 64-point Blackman window: flat to 0.2% below 0.2 of the doubled rate, −79 dB from 0.3 on), the same binary64 sums natively, offline and in browsers; it delays the sound by 31 samples of the doubled rate a stage. Another value is ignored, as Web Audio ignores an enumeration's unknown values.
 
 ### StereoPannerNode
 
@@ -1145,6 +1203,10 @@ export class AudioContext { … }
 
   Since API\_MINOR 41 (see `IIRFilterNode`).
 
+- `createWaveShaper(): WaveShaperNode;`
+
+  Since API\_MINOR 45 (see `WaveShaperNode`).
+
 - `createStereoPanner(): StereoPannerNode;`
 
 - `createPanner(): PannerNode;`
@@ -1250,6 +1312,10 @@ export class OfflineAudioContext { … }
 - `createIIRFilter(feedforward: Iterable<number>, feedback: Iterable<number>): IIRFilterNode;`
 
   Since API\_MINOR 41 (see `IIRFilterNode`).
+
+- `createWaveShaper(): WaveShaperNode;`
+
+  Since API\_MINOR 45 (see `WaveShaperNode`).
 
 - `createStereoPanner(): StereoPannerNode;`
 

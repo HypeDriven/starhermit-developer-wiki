@@ -76,12 +76,17 @@ patterns, not the subject of the docs.
   no release list or per-release notes; the API is the source.
 - `docs/engine-api/` — the engine API reference: one page per `starhermit:*` module plus globals and an
   index with the conventions for every module, **generated** by `scripts/build-engine-reference.mjs`
-  (`npm run engine-reference`, TypeScript's parser) from `engine/<latest>/starhermit.d.ts`, the newest
-  unrevoked release in `engine/versions.json`. It covers the **latest release only**; older releases'
+  (`npm run engine-reference`, TypeScript's parser) from `scripts/engine-store/starhermit.d.ts`, the
+  committed snapshot of the engine store's newest unrevoked release (`scripts/engine-store/latest-release.json`,
+  taken from `https://engine.starhermit.com/engine/versions.json`; the wiki's own `engine/versions.json`
+  stopped at 1.42.0). It covers the **latest release only**; older releases'
   games use their own `.starhermit/starhermit.d.ts`. Pages carry `english_only: true`: they are left out
   of localization (the layout hides the language picker and alternates there, and localized pages link
   to the English reference). Never edit them by hand; `npm test` fails when they are not current with
-  the latest release, so after every engine release run `npm run engine-reference` and commit.
+  the snapshot. After every engine release run `npm run engine-release` (`scripts/engine-release.mjs`):
+  it checks the store's newest release and tools by hash, refreshes the snapshot, the tools page and its
+  `latest.json`, moves the engine tutorial, the Football walkthrough and `docs/api/engine.md` to the new
+  version, regenerates this reference and the translations, and runs `npm test`; then review and commit.
 - `docs/tutorials/football.md` — the engine example: a step-by-step breakdown of how the public game
   [starhermit-football](https://github.com/HypeDriven/starhermit-football) uses the engine (manifest,
   lifecycle, scene, `starhermit:world` tables and kernels, input and touch, `server.js` shared through
@@ -100,14 +105,26 @@ patterns, not the subject of the docs.
   JIT-free interpreter versus V8, WebAssembly speed and platform ahead-of-time compilation (engine 1.26.1), where heavy
   per-frame work belongs (`runtime()`, workers), GPU-bound scenes, workers' lifetime and measuring. The
   engine session keeps its figures current.
-- `engine/tools/README.md` — standalone developer-tool downloads and guide for macOS
+- `docs/developer-tools.md` — standalone developer-tool downloads and guide for macOS
   (Apple Silicon and Intel), Linux and Windows: package validation, web/native packaging,
   automated publishing with the developer’s own credentials, and stdio development MCP.
-  Immutable archives and checksums live under `engine/tools/<version>/`; `latest.json`
-  lists reviewed downloads. These releases are independent of pinned game runtimes.
-  Native runtimes, macOS included from engine 1.26.2, come from engine releases rather than the
-  tools, and MCP never publishes.
-- `engine/` — the engine area, written only by the engine's `cargo starhermit release` (never by hand):
+  From 1.43 the archives and their `.sha256` checksums are on the engine store,
+  `https://engine.starhermit.com/engine/tools/<version>/`, and the store's
+  `https://engine.starhermit.com/engine/tools/latest.json` is the always-current list; the page's
+  Downloads table links them there (written by `npm run engine-release`). These releases are
+  independent of pinned game runtimes. Native runtimes, macOS included from engine 1.26.2, come from
+  engine releases rather than the tools, and MCP never publishes.
+- `engine/tools/README.md` — the tools' old download address (`/engine/tools/README.html`), kept as a
+  short page with the same Downloads table (store links) pointing at `docs/developer-tools.md`;
+  `engine/tools/latest.json` beside it is a copy of the store's, for anything still reading the old
+  address. Both are written by `npm run engine-release`; `engine/tools/<version>/` up to 1.42.0 stays.
+- **No page links into the wiki's `engine/` copy** (engine paths on `wiki.starhermit.com` or a relative
+  `engine/` path): engine files are linked on `engine.starhermit.com/engine/<version>/...`, tools on
+  `engine.starhermit.com/engine/tools/...` and the release list at
+  `https://api.starhermit.com/api/v1/engine/releases`. `tests/engine-reference.test.mjs` enforces it.
+- `engine/` — the engine area up to release 1.42.0, written only by the engine's `cargo starhermit release`
+  (never by hand). From 1.43 releases go only to the engine store at `engine.starhermit.com`; this area is
+  kept as it is (nothing is deleted) and gets no new releases:
   `versions.json`, one immutable directory per release (`<version>/native/windows-x86_64/native.json`
   and the developer download `starhermit-<version>-windows-x86_64.zip`; a web runtime's files in a
   release that has one), the shared content-addressed `chunks/` (and `patches/`), and a README that

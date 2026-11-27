@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:platform`
 
-Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.52.0** (host API 1.52), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:platform";
@@ -106,6 +106,42 @@ The signed-in player, or null for a local guest.
 export function onPlayerChange(listener: (player: Player | null) => void): Unsubscribe;
 ```
 
+### Guest
+
+*interface*
+
+A guest as the StarHermit client names them (since API\_MINOR 46).
+
+```ts
+export interface Guest { … }
+```
+
+- `readonly nickname: string;`
+
+  1 to 32 characters, trimmed, in Unicode NFC, without control, bidirectional formatting or line separator characters.
+
+### guest
+
+*function*
+
+```ts
+export function guest(): Guest | null;
+```
+
+Since API\_MINOR 46 (`GUEST_NICKNAME_MINOR`; undefined before): the nickname the StarHermit client gave a signed-out player, as `{ nickname }` (frozen; the same object while it stays the same), or null: while a player is signed in (`player()` answers instead), for a guest the client named none (older clients, a run without the client, browsers, `--guest`), and without the `platform` capability. The runtime's own UI shows it too ("Guest: SwiftComet42" in Options). `player()` stays null for every guest.
+
+The client makes the nickname up and keeps it only on the player's machine: no account stands behind it, nothing verifies it, and other players may use the same one. Show it, but never use it as an identity: not to key saves or progress, not on leaderboards or in results (which are server-authoritative and take the signed-in player only), and not for authorization of any kind.
+
+### GUEST\_NICKNAME\_MINOR
+
+*const*
+
+```ts
+export const GUEST_NICKNAME_MINOR: number;
+```
+
+Since API\_MINOR 46: as `starhermit:engine`'s.
+
 ### LaunchContext
 
 *interface*
@@ -125,6 +161,10 @@ export interface LaunchContext { … }
   Since API\_MINOR 33, for a game that declares launch parameters (`engine.param.<key>=` in starhermit.txt, at most 8, keys of 1 to 32 of `a`–`z`, `0`–`9` and `-`): the declared parameters the player's launch link brought, such as `{ species: "oak" }` (often none: `{}`), frozen. Each value is 1 to 64 of `A`–`Z`, `a`–`z`, `0`–`9`, `.`, `_`, `~` and `-`; an undeclared key, a malformed key or value, every copy of a key given twice and anything past 8 are dropped silently.
 
   Parameters are untrusted input: whoever wrote the link the player clicked chose them. They carry no sign-in, purchase, invite or join meaning and prove nothing (use join codes or the sessions API for that); look a value up in the game's own table rather than build a URL, path or markup from it. The runtime never logs their values. In browsers they come from the page's fragment, `#p.<key>=<value>` (percent-decoded once, taken out of the page's address before the game starts; never the query string); from the StarHermit client from its hello's `params` (a `starhermit://play/<slug>?key=value` link); in development from `starhermit <game> --param key=value`.
+
+- `readonly allyRoomId?: string;`
+
+  Since API\_MINOR 51, for a game that declares `engine.drop_in=allies` (with the `platform` capability) and a signed-in player: the room the launch joins as an ally (a guild mate's game the player chose to drop into). Join it with `allies.join()`; the platform's one-use join ticket stays with the runtime and never reaches the game. In browsers it comes from the page's `#ally_room=` beside `#ally_ticket=` and `#game_token=` (taken out of the address before the game starts), from the StarHermit client from its hello's `allyJoin`.
 
 ### launchContext
 
@@ -378,6 +418,10 @@ export interface Room { … }
 
 - `readonly metadata: JsonValue;`
 
+- `readonly alliesMayJoin?: boolean;`
+
+  Since API\_MINOR 51: allies may drop in (the platform's presence shows the room to the host's guild as one to join); false when the platform does not say. Undefined for older games.
+
 ### NewRoom
 
 *interface*
@@ -397,6 +441,11 @@ export interface NewRoom { … }
 - `name?: string;`
 - `isVisible?: boolean;`
 - `joinInProgress?: boolean;`
+
+- `alliesMayJoin?: boolean;`
+
+  Since API\_MINOR 51: allies may drop in (a guild mate of the host, with the platform's join ticket), running or not. Defaults to the manifest's `engine.drop_in` (true for `allies`); a TypeError when not a boolean. Older games' rooms send none.
+
 - `aiPlayers?: number;`
 - `backfillAfterSeconds?: number;`
 
@@ -489,6 +538,136 @@ export interface RoomSocketEvents { … }
 - `result: (result: JsonValue) => void;`
 - `presence: (userId: string, online: boolean) => void;`
 
+- `allyJoined: (ally: Ally) => void;`
+
+  Since API\_MINOR 51: an ally dropped into the room (after the roster that seats them). The platform says so, for the join ticket it issued; no client can claim it (a guest's `control` frames never are this event). Put `ally.participantId` on the side of `ally.alliedWithUserId` and spawn them in progress.
+
+- `allyLeft: (ally: Ally) => void;`
+
+  Since API\_MINOR 51: an ally left the room.
+
+- `crewJoined: (crew: CrewMember) => void;`
+
+  Since API\_MINOR 52: an AI crew member took a seat in the room (after the roster that seats it), anyone's: the platform marks the seat (`isCrew`, `crewOwnerId`), never a client. Put it on its owner's side.
+
+- `crewLeft: (crew: CrewMember) => void;`
+
+  Since API\_MINOR 52: an AI crew member left (its owner left, the owner's runner took it out, or the owner's game dismissed it).
+
+### CrewMember
+
+*interface*
+
+An AI crew member's seat in a room, as the platform marks it (since API\_MINOR 52).
+
+```ts
+export interface CrewMember { … }
+```
+
+- `readonly participantId: string;`
+
+  The seat: its `participants` entry's `id`.
+
+- `readonly userId: string;`
+
+  The crew member's own user (a shadow user that never signs in).
+
+- `readonly crewOwnerId: string;`
+
+  The player whose crew it is.
+
+- `readonly nickname: string;`
+
+  The name to show ("Name (crew of Owner)").
+
+### AgentSeat
+
+*interface*
+
+One of this player's crew seats (since API\_MINOR 52): a `CrewMember` whose `crewOwnerId` is the player.
+
+```ts
+export interface AgentSeat extends CrewMember { … }
+```
+
+### AgentTool
+
+*interface*
+
+An action a crew seat may take: a name, what it does (for the model), and its arguments' JSON Schema.
+
+```ts
+export interface AgentTool { … }
+```
+
+- `name: string;`
+
+  1 to 64 of a-z, 0-9 and `_`, a letter first; unique in the list.
+
+- `description?: string;`
+
+  At most 1,024 characters.
+
+- `parameters?: { type: "object"; [keyword: string]: JsonValue };`
+
+  An object schema (`type: "object"`, at most 4 KiB of JSON). The runtime checks `type`, `properties`, `required`, `additionalProperties`, `enum`, `minimum` / `maximum`, `minLength` / `maxLength`, `items` and `minItems` / `maxItems` before the game hears an action; the rest is the game's to check.
+
+- `perSecond?: number;`
+
+  The tool's own pace (actions a second, above 0, at most 4): lower than the runtime's 4 a second for the seat.
+
+### AgentAction
+
+*interface*
+
+A crew seat's action, checked against its tool and paced.
+
+```ts
+export interface AgentAction { … }
+```
+
+- `readonly participantId: string;`
+- `readonly tool: string;`
+- `readonly args: { readonly [name: string]: JsonValue };`
+
+- `readonly call: string;`
+
+  The runner's id for this action's answer.
+
+### AgentAnswer
+
+*type*
+
+```ts
+export type AgentAnswer = undefined | boolean | string | { ok: boolean; message?: string };
+```
+
+What an action listener returns (or resolves to): `undefined` or `true` accepts, a string accepts with that message, `false` refuses, `{ ok, message }` says both. Throwing refuses with the error's message.
+
+### Ally
+
+*interface*
+
+An ally in a room, as the platform names them (since API\_MINOR 51).
+
+```ts
+export interface Ally { … }
+```
+
+- `readonly participantId: string;`
+
+  The ally's seat: their `participants` entry's `id`.
+
+- `readonly userId: string;`
+
+- `readonly alliedWithUserId: string;`
+
+  The member whose game the ally joined (the guild mate they are allied with).
+
+- `readonly guildId: string | null;`
+
+  The guild, when the platform names one.
+
 ### RoomSocket
 
 *class*
@@ -555,7 +734,9 @@ export const rooms: {
      * `server_starting`, as `joinByCode` does. */
     quickJoin(options?: { teamCount?: number; seatsPerTeam?: number; metadata?: JsonValue; includeInProgress?: boolean }): Promise<Room | null>;
     /** Compare-and-set on `expectedRevision` (`conflict` when stale). */
-    update(roomId: string, changes: Partial<Pick<NewRoom, "name" | "isVisible" | "joinInProgress" | "metadata">>, expectedRevision: number): Promise<Room>;
+    /** `alliesMayJoin` among the changes since API_MINOR 51 (the host
+     * opens or closes the room to allies). */
+    update(roomId: string, changes: Partial<Pick<NewRoom, "name" | "isVisible" | "joinInProgress" | "alliesMayJoin" | "metadata">>, expectedRevision: number): Promise<Room>;
     /** Host only. */
     open(roomId: string): Promise<Room>;
     /** Host only; idempotent; while the game server wakes it rejects
@@ -580,6 +761,99 @@ export const rooms: {
     connect(roomId: string, options?: { targeted?: boolean }): RoomSocket;
   };
 ```
+
+### ALLY\_DROP\_IN\_MINOR
+
+*const*
+
+```ts
+export const ALLY_DROP_IN_MINOR: number;
+```
+
+Since API\_MINOR 51: as `starhermit:engine`'s.
+
+### allies
+
+*const*
+
+```ts
+export const allies: {
+    /** The room this run was launched to join as an ally
+     * (`launchContext().allyRoomId`), or null. */
+    launchRoom(): string | null;
+    /** Joins the launch's room as an ally with the ticket the launch
+     * brought (the runtime sends it; the game never sees it), once: the
+     * room (frozen) and the ally the player now is in it. Then connect to
+     * the room (`rooms.connect`) as any member. Rejects `not-found` (code
+     * `no_ally_launch`) without an ally launch or after a join, and with
+     * the platform's refusal otherwise (`forbidden`: code
+     * `ally_ticket_invalid` or `allies_not_allowed`; `conflict`:
+     * `room_full`, `active-room-elsewhere`): the ticket is spent either
+     * way, so play on alone or go back to the StarHermit client. A
+     * `NotAllowedError` without `engine.drop_in=allies`. */
+    join(): Promise<{ readonly room: Room; readonly ally: Ally }>;
+  };
+```
+
+Allied drop-in (since API\_MINOR 51; undefined before): a guild mate of a room's host drops into the game as an ally, when the game declares `engine.drop_in=allies` and the room `alliesMayJoin`. Who is an ally is the platform's word (for the one-use join ticket the guild service issued), never a client's: the join's answer and the room's `allyJoined` / `allyLeft` events carry it.
+
+### AGENTS\_MINOR
+
+*const*
+
+```ts
+export const AGENTS_MINOR: number;
+```
+
+Since API\_MINOR 52: as `starhermit:engine`'s.
+
+### agents
+
+*const*
+
+```ts
+export const agents: {
+    /** `engine.agents.max` (1 to 3); 0 without `engine.agents=allies`. */
+    readonly maxPerPlayer: number;
+    /** Takes the player's crew into a room the player sits in: the
+     * platform seats each on the player's team where it has room (running
+     * or not), and `seats()` and the room socket's `crewJoined` follow.
+     * A crew member offered later joins too, until `dismissCrew` or the
+     * player leaves the room. Another room than the last (or one after
+     * `dismissCrew`) at most once a second (burst 2): past it the call
+     * fails; the same room again is free. */
+    seatCrew(roomId: string): Promise<void>;
+    /** The player's crew leave the room. */
+    dismissCrew(): Promise<void>;
+    /** The player's crew seats now (frozen). */
+    seats(): readonly AgentSeat[];
+    /** The seats changed. */
+    onSeats(listener: (seats: readonly AgentSeat[]) => void): Unsubscribe;
+    /** The actions every seat may take, or one seat's own (at most 32
+     * tools, 32 KiB of JSON): the runner gets them as the model's tools.
+     * At most 2 a second (burst 4): false when it does not go, or for a
+     * `participantId` that is not one of the player's seats. */
+    setTools(tools: readonly AgentTool[], participantId?: string): boolean;
+    /** What a seat sees now: `state` (at most 16 KiB of JSON) for the
+     * runner and `summary` (at most 2,000 characters) for its model. At
+     * most 4 a second a seat (burst 8): false when it does not go, or for
+     * a seat that is not one of the player's. */
+    observe(participantId: string, observation: { state?: JsonValue; summary: string }): boolean;
+    /** A seat's action, after the runtime checked its tool, its arguments
+     * against the tool's schema, its pace (4 a second a seat, burst 8,
+     * and the tool's `perSecond`) and at most 16 waiting for an answer.
+     * The first listener that answers settles it; none answering accepts.
+     * The game validates it by its own rules, as any player's input. */
+    onAction(listener: (action: AgentAction) => AgentAnswer | Promise<AgentAnswer>): Unsubscribe;
+    /** Answers a waiting action now, as a listener's return value would
+     * (for a listener that cannot return one, such as a WebAssembly
+     * game's callback): false when it is not waiting (answered already,
+     * or its seat is gone). */
+    answer(action: { readonly participantId: string; readonly call: string }, ok: boolean, message?: string): boolean;
+  };
+```
+
+The agent interface for AI crew (since API\_MINOR 52; undefined before). A player owns AI crew members that join the player's rooms as allies; a game declaring `engine.agents=allies` lets up to `engine.agents.max` of them sit beside the player, and drives them through named tools as it would players' inputs. The crew runs elsewhere (the StarHermit client's local model, or the platform's hosted runner) and reaches the game only through this interface: the game simulates as always, publishes what each seat sees, and checks each action. Who is crew is the platform's word (its seats' marks). Without the manifest's key every method but `seats` throws (or rejects) `NotAllowedError`.
 
 ## Sessions, matchmaking and the game socket
 
@@ -1141,6 +1415,14 @@ export interface VoiceParticipant { … }
   0–2, this player's own setting for them.
 
 - `readonly locallyMuted: boolean;`
+
+- `readonly ai?: boolean;`
+
+  Host API 1.52 (`CREW_VOICE_MINOR`; absent for older games): a synthetic talker, an AI crew member, whose `userId` is `"<ownerUserId>/crew/<crew id>"`. Show it as AI. Its `muted` and `serverMuted` are its owner's (it speaks through their connection).
+
+- `readonly ownerUserId?: string | null;`
+
+  Host API 1.52: the player whose connection carries this crew talker; null for a player.
 
 ### VoiceStatus
 

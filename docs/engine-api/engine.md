@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:engine`
 
-Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.52.0** (host API 1.52), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:engine";
@@ -32,6 +32,1198 @@ export const API_MINOR: number;
 ```
 
 The runtime's minor version of the host API (members it added).
+
+## Host API 1.43's minors (since API\_MINOR 43)
+
+Each is 43 for games declaring engine.minor=43 or later and undefined for older games (a named import fails to link): feature-detect with `import * as engine from "starhermit:engine"` and, say, `engine.HOOK_ACCESS_MINOR !== undefined`. Every host-API minor constant of 1.43 is here; some are also in the module of their feature (`starhermit:scene`'s COLOR\_LUT\_MINOR, DECALS\_MINOR, DISTORTION\_MINOR, LIGHT\_PROBE\_MINOR, POST\_ACCESS\_MINOR and SCENE\_DEPTH\_PRECISION\_MINOR).
+
+### ARRAY\_MIPMAPS\_MINOR
+
+*const*
+
+```ts
+export const ARRAY_MIPMAPS_MINOR: number;
+```
+
+Mipmapped `DataArrayTexture`s.
+
+### BC5\_NORMALS\_MINOR
+
+*const*
+
+```ts
+export const BC5_NORMALS_MINOR: number;
+```
+
+Two-channel (BC5) normal maps' z rebuilt; BC5 packaging of normals.
+
+### CLUSTERED\_LIGHTS\_MINOR
+
+*const*
+
+```ts
+export const CLUSTERED_LIGHTS_MINOR: number;
+```
+
+Clustered point and spot lights (up to 64 a frame).
+
+### COLOR\_LUT\_MINOR
+
+*const*
+
+```ts
+export const COLOR_LUT_MINOR: number;
+```
+
+`renderer.colorLut`.
+
+### COMPRESSED\_ARRAYS\_MINOR
+
+*const*
+
+```ts
+export const COMPRESSED_ARRAYS_MINOR: number;
+```
+
+`CompressedArrayTexture` and KTX2 texture arrays.
+
+### DECALS\_MINOR
+
+*const*
+
+```ts
+export const DECALS_MINOR: number;
+```
+
+Projected decals and materials' `receiveDecals`.
+
+### DISTORTION\_MINOR
+
+*const*
+
+```ts
+export const DISTORTION_MINOR: number;
+```
+
+The distortion material.
+
+### GLTF\_COMPRESSED\_MINOR
+
+*const*
+
+```ts
+export const GLTF_COMPRESSED_MINOR: number;
+```
+
+`GLTFLoader`'s block-compressed (`KHR_texture_basisu`) images.
+
+### HOOK\_ACCESS\_MINOR
+
+*const*
+
+```ts
+export const HOOK_ACCESS_MINOR: number;
+```
+
+Lights in material hooks, and texture uniforms' color spaces (sRGB textures sampled as linear).
+
+### INSTANCED\_SKINNING\_MINOR
+
+*const*
+
+```ts
+export const INSTANCED_SKINNING_MINOR: number;
+```
+
+`bakeSkinnedAnimations` and `InstancedSkinnedMesh`.
+
+### INTERFACE\_ROOM\_MINOR
+
+*const*
+
+```ts
+export const INTERFACE_ROOM_MINOR: number;
+```
+
+sRGB views leave the runtime's interface room (opening the menu never changes how the game's frames draw).
+
+### JPEG\_IMAGES\_MINOR
+
+*const*
+
+```ts
+export const JPEG_IMAGES_MINOR: number;
+```
+
+JPEG images.
+
+### LIGHT\_PROBE\_MINOR
+
+*const*
+
+```ts
+export const LIGHT_PROBE_MINOR: number;
+```
+
+`SphericalHarmonics3` and `LightProbe`.
+
+### PARTICLE\_FLIPBOOK\_MINOR
+
+*const*
+
+```ts
+export const PARTICLE_FLIPBOOK_MINOR: number;
+```
+
+Particle flipbooks' frames and queued bursts.
+
+### POST\_ACCESS\_MINOR
+
+*const*
+
+```ts
+export const POST_ACCESS_MINOR: number;
+```
+
+`main_light_shadow` and `renderer.post.texture` in post programs.
+
+### SCENE\_DEPTH\_PRECISION\_MINOR
+
+*const*
+
+```ts
+export const SCENE_DEPTH_PRECISION_MINOR: number;
+```
+
+`renderer.sceneDepth` at full precision (`renderer.sceneDepthPrecision`).
+
+### SKIN\_ATTRIBUTES\_MINOR
+
+*const*
+
+```ts
+export const SKIN_ATTRIBUTES_MINOR: number;
+```
+
+Vertex hooks' `skin_index` and `skin_weight`.
+
+### SPOT\_SHADOW\_ATLAS\_MINOR
+
+*const*
+
+```ts
+export const SPOT_SHADOW_ATLAS_MINOR: number;
+```
+
+The spot shadow atlas.
+
+### WASM\_ENTRY\_MINOR
+
+*const*
+
+```ts
+export const WASM_ENTRY_MINOR: number;
+```
+
+WebAssembly games' entry module.
+
+## Host API 1.44's minors (since API\_MINOR 44)
+
+Each is 44 for games declaring engine.minor=44 or later and undefined for older games, feature-detected as 1.43's are.
+
+Migrating to 1.44 (raising engine.minor from 43 to 44):
+
+- Hooks on glTF meshes see glTF's UVs as written (PHYSICAL\_MATERIAL\_MINOR: GLTFLoader no longer turns v into 1 - v, and its textures have flipY false, as in three.js r185). A material hook or ShaderMaterial that samples its own texture (TextureLoader, canvas, DataTexture) at s.uv on such a mesh reads it upside down. Sample at vec2f(uv.x, 1.0 - uv.y), or set flipY false and let a built-in map read it. This covers every s.uv sample on a glTF mesh (the file's own maps passed as uniforms too) and anything derived from uv.y: dpdx/dpdy tangent frames, v scrolling, gradients over v. The file's built-in maps and the engine's own geometries are unaffected.
+- InstancedSkinnedMesh.setAnimationAt writes custom slot 3's w as 2 + the instance index (1.43 wrote 1); a hook expecting 1 needs updating.
+- renderer.toneMappingExposure applies before renderer.colorLut's lookup (LUT\_EXPOSURE\_MINOR, unless toneMapping is NoToneMapping): take any exposure baked into the table out of it, or set the exposure to 1.
+- Unchanged: an untagged (NoColorSpace) texture uniform reads as stored at every minor; a hook's own srgb\_to\_linear decodes it once.
+- Web: engines 1.44 to 1.48 draw in browsers with WebGPU alone, at every minor (no WebGL 2 fallback); without WebGPU the game shows its cannot-draw page. The 1.49 runtime falls back to WebGL 2 again at every minor (nothing changes where WebGPU works). Native builds are unchanged.
+
+### BINDINGS\_MINOR
+
+*const*
+
+```ts
+export const BINDINGS_MINOR: number;
+```
+
+Actions sharing a key, and actions with no default key (`starhermit:input`'s Actions).
+
+### LENS\_EFFECTS\_MINOR
+
+*const*
+
+```ts
+export const LENS_EFFECTS_MINOR: number;
+```
+
+`starhermit:scene`'s lens: `renderer.bokeh`, `renderer.lens` and `renderer.sensorNoise`.
+
+### LUT\_EXPOSURE\_MINOR
+
+*const*
+
+```ts
+export const LUT_EXPOSURE_MINOR: number;
+```
+
+`renderer.toneMappingExposure` applied before `renderer.colorLut`'s lookup (unless `toneMapping` is `NoToneMapping`).
+
+### PHYSICAL\_MATERIAL\_MINOR
+
+*const*
+
+```ts
+export const PHYSICAL_MATERIAL_MINOR: number;
+```
+
+`starhermit:scene`'s physical materials (iridescence, transmission, sheen, specular, anisotropy, image environments as r185's cube UV, GLTFLoader's KHR\_materials\_\* extensions).
+
+### RENDER\_TARGET\_BUDGET\_MINOR
+
+*const*
+
+```ts
+export const RENDER_TARGET_BUDGET_MINOR: number;
+```
+
+`usage().renderTargets` and `budgets().renderTargets`, and engine modules that run on without the render targets they are refused during their frame steps (a GPU emitter on the CPU; see `Usage.renderTargets`) where older games' frame steps threw.
+
+### UNDERWATER\_MINOR
+
+*const*
+
+```ts
+export const UNDERWATER_MINOR: number;
+```
+
+`starhermit:scene`'s `renderer.underwater`, and starhermit:water's surfaces seen from below.
+
+### UNIFORM\_ARRAYS\_MINOR
+
+*const*
+
+```ts
+export const UNIFORM_ARRAYS_MINOR: number;
+```
+
+Material programs' array uniforms (Float32Array, arrays of numbers, vectors and colours) and starhermit.h's `uniform_set` of any length.
+
+### HOOK\_ACCESS\_FIXES\_MINOR
+
+*const*
+
+```ts
+export const HOOK_ACCESS_FIXES_MINOR: number;
+```
+
+Material hooks' access as 1.44 fixes it: a LightProbe's slots give `punctual_light` no light (older games read them as a point light). (An sRGB-tagged texture uniform reading decoded where the renderer has no room for its sRGB view is a runtime 1.44.0 fix for every minor from 43, not gated by this.)
+
+### WASM\_ENTRY\_CALLS\_MINOR
+
+*const*
+
+```ts
+export const WASM_ENTRY_CALLS_MINOR: number;
+```
+
+WebAssembly games' module\_call and module\_call\_async follow dotted names ("recording.request"), called on the object holding them.
+
+### INSTANCED\_BONE\_OVERRIDES\_MINOR
+
+*const*
+
+```ts
+export const INSTANCED_BONE_OVERRIDES_MINOR: number;
+```
+
+`starhermit:scene`'s InstancedSkinnedMesh bone overrides (`setBoneOverrideJoints`, `setBoneOverrides`, `setBoneOverrideAt`, `clearBoneOverrides`).
+
+### LARGE\_KTX2\_MINOR
+
+*const*
+
+```ts
+export const LARGE_KTX2_MINOR: number;
+```
+
+KTX2 files of up to 22.3 MiB (a 4096² BC7 image with its full mip chain): `TextureLoader`'s packaged `<image>.ktx2`, `KTX2Loader`'s files and `.layers` arrays. Older games' KTX2 files hold 16 MiB, as every package file read; past the limit a packaged one is left for its image, with a console warning naming its size and the limit.
+
+### IMAGE\_USAGE\_MINOR
+
+*const*
+
+```ts
+export const IMAGE_USAGE_MINOR: number;
+```
+
+`imageUsage()`: the images the image budget counts, one by one; and render checks print the largest held at the peak.
+
+## Host API 1.46's minors (since API\_MINOR 46)
+
+Each is 46 for games declaring engine.minor=46 or later and undefined for older games. Raising engine.minor from 45 to 46 changes nothing a game does not ask for.
+
+### VIDEO\_TEXTURE\_MINOR
+
+*const*
+
+```ts
+export const VIDEO_TEXTURE_MINOR: number;
+```
+
+`starhermit:scene`'s `VideoTexture`: WebM VP8 video (Opus or Vorbis sound) played onto a texture.
+
+## Host API 1.45's minors (since API\_MINOR 45)
+
+Each is 45 for games declaring engine.minor=45 or later and undefined for older games, feature-detected as 1.44's are. Raising engine.minor from 44 to 45 changes nothing a game does not ask for, except what passes write into HalfFloatType render targets (HALF\_FLOAT\_UNCLAMPED\_MINOR: unclamped, as three.js).
+
+### LOD\_BUDGET\_MINOR
+
+*const*
+
+```ts
+export const LOD_BUDGET_MINOR: number;
+```
+
+`starhermit:scene`'s `LodBudget` and `renderer.lodBudget`: a scene-wide triangle budget over LODs and InstancedMesh levels.
+
+### AUDIO\_CLIP\_FILTERS\_MINOR
+
+*const*
+
+```ts
+export const AUDIO_CLIP_FILTERS_MINOR: number;
+```
+
+`starhermit:audio`'s `filters` on `play` and `stream` and `setFilters` on sounds and streams: clips through the audio context's nodes on their way to their bus.
+
+### WAVE\_SHAPER\_MINOR
+
+*const*
+
+```ts
+export const WAVE_SHAPER_MINOR: number;
+```
+
+`starhermit:audio`'s `createWaveShaper()` and `WaveShaperNode` (a curve, 2x and 4x oversampling) on the context and offline contexts.
+
+### BLOOM\_PREFILTER\_MINOR
+
+*const*
+
+```ts
+export const BLOOM_PREFILTER_MINOR: number;
+```
+
+`renderer.bloom`'s `prefilter: "urp"` and `knee` (Unity URP's soft-knee prefilter; the default stays three.js's high pass).
+
+### IMAGE\_LABELS\_MINOR
+
+*const*
+
+```ts
+export const IMAGE_LABELS_MINOR: number;
+```
+
+`imageUsage()` entries' `label` (where an image the game made was made: its class or the engine's maker) and names from a texture's `name`.
+
+### BAKED\_MATRIX\_TABLES\_MINOR
+
+*const*
+
+```ts
+export const BAKED_MATRIX_TABLES_MINOR: number;
+```
+
+`starhermit:scene`'s `BakedSkinnedAnimations.fromMatrices`: baked animations from bone matrix tables the game holds.
+
+### BAKED\_TEXTURE\_UPDATE\_MINOR
+
+*const*
+
+```ts
+export const BAKED_TEXTURE_UPDATE_MINOR: number;
+```
+
+An InstancedSkinnedMesh uploads its baked animations' texture when the game changed its data and set `needsUpdate` (before, the bake's first upload stayed).
+
+### HOOK\_BIND\_POSITION\_MINOR
+
+*const*
+
+```ts
+export const HOOK_BIND_POSITION_MINOR: number;
+```
+
+Vertex hooks' `Vertex.bind_position`: the position before skinning.
+
+### INSTANCED\_ROOT\_OFFSETS\_MINOR
+
+*const*
+
+```ts
+export const INSTANCED_ROOT_OFFSETS_MINOR: number;
+```
+
+InstancedSkinnedMesh's per-instance root translation offsets (`setRootOffsets`, `setRootOffsetAt`) beside its bone overrides.
+
+### HOOKED\_RAY\_TRACING\_MINOR
+
+*const*
+
+```ts
+export const HOOKED_RAY_TRACING_MINOR: number;
+```
+
+The ray-traced tier traces materials with `hooks` (see `GraphicsSetting`): their lighting reads the traced shadows, and those whose vertex hook (if any) leaves positions alone and without `discard` are traced casters. Only frames on the tier change.
+
+### HALF\_FLOAT\_UNCLAMPED\_MINOR
+
+*const*
+
+```ts
+export const HALF_FLOAT_UNCLAMPED_MINOR: number;
+```
+
+`HalfFloatType` render targets are written unclamped (negative values, values past 1 and a custom material's alpha as written), as three.js's and as `FloatType` targets are since API\_MINOR 34. Frames drawing such values into them change at 45.
+
+### STATIC\_INSTANCES\_MINOR
+
+*const*
+
+```ts
+export const STATIC_INSTANCES_MINOR: number;
+```
+
+A static (`movable = false`) InstancedMesh stays static when its instances change (`setMatrixAt`, `setColorAt`): only its own transform moving promotes it.
+
+### UI\_QUERIES\_MINOR
+
+*const*
+
+```ts
+export const UI_QUERIES_MINOR: number;
+```
+
+`starhermit:ui`'s `rectOf`, `hitTest` and `focusedId`: questions about the last frame laid out, answered on replayed (`ui.retain`) frames too.
+
+### CONTACT\_SHADOW\_FIX\_MINOR
+
+*const*
+
+```ts
+export const CONTACT_SHADOW_FIX_MINOR: number;
+```
+
+`renderer.contactShadows` no longer shadow the surface they march from: lit rounded surfaces keep their light (no hard straight-edged dark patches), surfaces facing away from the light are left alone, and real contacts still darken. Only frames with contact shadows change.
+
+### UPSCALERS\_MINOR
+
+*const*
+
+```ts
+export const UPSCALERS_MINOR: number;
+```
+
+Vendor upscalers (Windows' native runtime; Linux's, AMD FSR 3.1 and NVIDIA DLSS/DLAA on Vulkan, from 1.47) in place of the temporal anti-aliasing resolve; `stats().upscaler` and `upscalerMode`.
+
+### FRAME\_GENERATION\_MINOR
+
+*const*
+
+```ts
+export const FRAME_GENERATION_MINOR: number;
+```
+
+Frame generation through the upscaler's vendor (Windows' native runtime on Direct3D 12; Linux's on Vulkan from 1.47): Options › Graphics › Frame generation, and `stats().frameGeneration`, `generatedFrames` and `realFrames`.
+
+### ALEMBIC\_INSTANCES\_MINOR
+
+*const*
+
+```ts
+export const ALEMBIC_INSTANCES_MINOR: number;
+```
+
+`starhermit:scene`'s shared Alembic playback: `AlembicCache.clone()`, `timeOffset`, `alembicUsage()`, a path loaded twice shared, and 256 caches (32 before).
+
+## Host API 1.46's minors (since API\_MINOR 46)
+
+Each is 46 for games declaring engine.minor=46 or later and undefined for older games: feature-detect through a namespace import.
+
+### MOTION\_BLUR\_MINOR
+
+*const*
+
+```ts
+export const MOTION_BLUR_MINOR: number;
+```
+
+`renderer.motionBlur` (starhermit:scene): per-object, velocity-based motion blur, and Options › Graphics › Motion blur (`sh.presentation.motionBlur`).
+
+### RENDER\_EXTENT\_MINOR
+
+*const*
+
+```ts
+export const RENDER_EXTENT_MINOR: number;
+```
+
+Dynamic resolution keeps the scene's buffers at the largest render scale's size and draws each frame into their top left; a post program reads the scene through `scene_color`, `scene_depth` and `scene_velocity` (its bindings are larger than the scene there).
+
+### PIPELINES\_ASYNC\_MINOR
+
+*const*
+
+```ts
+export const PIPELINES_ASYNC_MINOR: number;
+```
+
+`engine.pipelines=async` in starhermit.txt: in browsers a batch whose pipeline is still being made is left out of its frames until it is ready, rather than the page waiting (native runtimes draw as before).
+
+### COMPILE\_ASYNC\_MINOR
+
+*const*
+
+```ts
+export const COMPILE_ASYNC_MINOR: number;
+```
+
+`renderer.compileAsync(scene, camera, target?)`: a promise that settles once the pipelines a pass into a render target would draw with are made (Vulkan on a background thread, WebGPU asynchronously), drawing nothing.
+
+### URP\_BLOOM\_GAMMA\_MINOR
+
+*const*
+
+```ts
+export const URP_BLOOM_GAMMA_MINOR: number;
+```
+
+`renderer.bloom`'s `prefilter: "urp"` takes URP's threshold as a URP volume sets it (gamma, converted as Unity's `Mathf.GammaToLinearSpace`) and URP's knee, half the converted threshold.
+
+### URP\_BLOOM\_MODEL\_MINOR
+
+*const*
+
+```ts
+export const URP_BLOOM_MODEL_MINOR: number;
+```
+
+`renderer.bloom`'s `model: "urp"`: Unity URP's whole bloom (its prefilter, mip pyramid, scatter upsampling and uber composite) with its Bloom volume's settings.
+
+### ENGINE\_IMAGE\_LABELS\_MINOR
+
+*const*
+
+```ts
+export const ENGINE_IMAGE_LABELS_MINOR: number;
+```
+
+`imageUsage()` labels the images the engine makes for the game's drawing (`ImageBitmap` with its file, `OffscreenCanvas`, `ui skin`, `lookup table`, `VideoTexture`, `ui style image`).
+
+### CONTACT\_SHADOW\_FACETS\_MINOR
+
+*const*
+
+```ts
+export const CONTACT_SHADOW_FACETS_MINOR: number;
+```
+
+`renderer.contactShadows` leave a smooth but coarsely tessellated surface (a heightfield) alone under a low sun: no whole triangles darkened beside lit ones; what stands on a surface still casts them. Only frames with contact shadows change.
+
+### GUEST\_NICKNAME\_MINOR
+
+*const*
+
+```ts
+export const GUEST_NICKNAME_MINOR: number;
+```
+
+`starhermit:platform`'s `guest()`: the client-local nickname the StarHermit client gave a signed-out player (unverified, not unique; never an identity).
+
+### WASM\_STATS\_MINOR
+
+*const*
+
+```ts
+export const WASM_STATS_MINOR: number;
+```
+
+`engine.stats().wasm`: each WebAssembly module the game instantiated, `"native"` (ahead-of-time compiled) or `"interpreted"`.
+
+## Host API 1.47's minors (since API\_MINOR 47)
+
+Each is 47 for games declaring engine.minor=47 or later and undefined for older games: feature-detect through a namespace import. Raising engine.minor from 46 to 47 changes what WaterMaterial's ripples show.
+
+### WATER\_REFRACTION\_MINOR
+
+*const*
+
+```ts
+export const WATER_REFRACTION_MINOR: number;
+```
+
+`starhermit:water`'s `WaterMaterial` (and `Pond`) bends what is seen through the water with the wind's capillary ripples (its `refraction` option): the bed and what swims over it move as the ripples run. Before, the ripples' slope moved them by under a pixel.
+
+## Host API 1.48's minors (since API\_MINOR 48)
+
+Each is 48 for games declaring engine.minor=48 or later and undefined for older games: feature-detect through a namespace import. Raising engine.minor from 47 to 48 changes nothing a game does not ask for.
+
+### SUBSURFACE\_MINOR
+
+*const*
+
+```ts
+export const SUBSURFACE_MINOR: number;
+```
+
+`MeshPhysicalMaterial`'s subsurface scattering (an engine extension: `subsurface`, `subsurfaceColor`, `subsurfaceRadius`, `subsurfaceRadiusScale`, `subsurfacePostScatter`, `subsurfaceTransmission`, `subsurfaceMethod`) and `renderer.subsurface`.
+
+### RAY\_TRACED\_SKIN\_MINOR
+
+*const*
+
+```ts
+export const RAY_TRACED_SKIN_MINOR: number;
+```
+
+The ray-traced graphics level traces skinned meshes (their traced shadows, and the subsurface thickness's rays see them) and lets the thickness rays see subsurface materials with transmission that cast no shadow; before it skinned meshes cast through the shadow maps there.
+
+### DEVICE\_RESETS\_MINOR
+
+*const*
+
+```ts
+export const DEVICE_RESETS_MINOR: number;
+```
+
+`stats().deviceResets`: the times the graphics backend was made again, each giving render targets back cleared.
+
+### CLOUD\_DOME\_LIGHT\_MINOR
+
+*const*
+
+```ts
+export const CLOUD_DOME_LIGHT_MINOR: number;
+```
+
+`starhermit:weather`'s 2D cloud dome lit as the volumetric march lights the clouds (no brightness jump as the march takes over).
+
+### LOD\_OPEN\_BORDERS\_MINOR
+
+*const*
+
+```ts
+export const LOD_OPEN_BORDERS_MINOR: number;
+```
+
+`generateLods`' `lockBorders: false`.
+
+### LOD\_IMPOSTOR\_MINOR
+
+*const*
+
+```ts
+export const LOD_IMPOSTOR_MINOR: number;
+```
+
+`generateLods`' `impostor`.
+
+### GPU\_APPROX\_MINOR
+
+*const*
+
+```ts
+export const GPU_APPROX_MINOR: number;
+```
+
+`stats().gpu` without GPU timestamps, and `gpu.approximate`.
+
+### WATER\_TRANSPARENTS\_MINOR
+
+*const*
+
+```ts
+export const WATER_TRANSPARENTS_MINOR: number;
+```
+
+`starhermit:water`'s `WaterMaterial.refractTransparents`: the transparent objects beyond the water's surface (below it seen from above) draw before the water, which refracts and absorbs them as it does the bed.
+
+### WATER\_SCREEN\_COVER\_MINOR
+
+*const*
+
+```ts
+export const WATER_SCREEN_COVER_MINOR: number;
+```
+
+Screen-space reflections, illumination and ambient occlusion leave out the pixels a water surface covers (`WaterMaterial`, or a blended or depth-write-free `distortion` ShaderMaterial): the bed's reflections of what stands over it no longer lie over the water as a second, sharp copy.
+
+### WATER\_PHYSICAL\_REFRACTION\_MINOR
+
+*const*
+
+```ts
+export const WATER_PHYSICAL_REFRACTION_MINOR: number;
+```
+
+`starhermit:water`'s `WaterMaterial.ior` and `physicalRefraction`: the eye's ray refracted by Snell's law about the surface's normal and followed to what lies beyond, absorbed along that path.
+
+### SHADOW\_CASTER\_PARTS\_MINOR
+
+*const*
+
+```ts
+export const SHADOW_CASTER_PARTS_MINOR: number;
+```
+
+Cached shadow cascades (`shadow.cascades.cached`) tell one node's several casters apart (a material array's parts, an `InstancedMesh`'s levels of detail), so such a node standing still keeps the cached layer (older games' cascades fit and draw again every frame).
+
+### VOLUME\_OPENVDB\_48\_MINOR
+
+*const*
+
+```ts
+export const VOLUME_OPENVDB_48_MINOR: number;
+```
+
+`starhermit:volume` follows mjurczyk/openvdb 0.29's render side: frame lighting's froxel slices fit the visible volumes, its temporal history is reprojected between slices, its world grid has mips (neural scattering's inputs read in the network's order, `"multi-scale"` scattering), points and spots scatter more than once; `mipmapFilter`, `volumeMediumPresets`/`volumeMediumOptions`; and a game at 48 gets the dual-lobe phase, spectral media, no jitter and 8³ emission probes as Graphics defaults.
+
+### DXC\_PROGRAMS\_MINOR
+
+*const*
+
+```ts
+export const DXC_PROGRAMS_MINOR: number;
+```
+
+Direct3D 12 compiles the game's programs (custom materials', the prelude's, post programs) with DXC as shader model 6.0 rather than with fxc: a cold start compiles them in seconds instead of minutes; a few hash-based patterns round as Vulkan's drivers do more often.
+
+### FRAGMENT\_DEPTH\_MINOR
+
+*const*
+
+```ts
+export const FRAGMENT_DEPTH_MINOR: number;
+```
+
+A `ShaderMaterial` fragment returning a struct of outputs may add a member `world: vec3f` (no attribute): the world point it shows, whose depth (the depth buffer, the depth prepass, `renderer.sceneDepth`) and fog the fragment then has, e.g. a surface ray-traced inside a box.
+
+### VOLUME\_GEOMETRY\_48\_MINOR
+
+*const*
+
+```ts
+export const VOLUME_GEOMETRY_48_MINOR: number;
+```
+
+`starhermit:volume`'s `LevelSetMesh`, `LevelSetSurface`, `VolumePoints` and `VolumeWvdbGeometryLoader`: level sets and point grids (`.vdb` and WebVDB version 2) as geometry.
+
+### METAL\_TARGET\_CLEAR\_MINOR
+
+*const*
+
+```ts
+export const METAL_TARGET_CLEAR_MINOR: number;
+```
+
+Metal (macOS) clears a half-float render target to the colour the pass gives, as every other backend does: an `unclamped` target cleared to 0.5 holds 0.5 (older games' Metal clears stay sRGB-decoded, 0.214).
+
+### DISPOSE\_AFTER\_PASSES\_MINOR
+
+*const*
+
+```ts
+export const DISPOSE_AFTER_PASSES_MINOR: number;
+```
+
+A render target (or 3D texture) disposed in the frame that drew into it keeps that frame's passes, slice copies and updates, so a pass later in the frame that samples it reads what was drawn, as in three.js (older games' passes went with the target).
+
+### PROCEDURAL\_STARS\_MINOR
+
+*const*
+
+```ts
+export const PROCEDURAL_STARS_MINOR: number;
+```
+
+`starhermit:sky`'s stars as crisp points found per pixel at the pixel's footprint (steady under temporal anti-aliasing, a smooth glow where the resolution is too coarse), the dome drawn over a `background: true` sky's map too, and `SkyAtmosphereOptions.twinkle`.
+
+## Host API 1.49's minors (since API\_MINOR 49)
+
+Each is 49 for games declaring engine.minor=49 or later and undefined for older games: feature-detect through a namespace import. Raising engine.minor from 48 to 49 changes nothing a game does not ask for.
+
+### WATER\_REFRACTION\_EDGES\_MINOR
+
+*const*
+
+```ts
+export const WATER_REFRACTION_EDGES_MINOR: number;
+```
+
+`starhermit:water`'s physical refraction keeps what stands in front of the refracted ray out of it: a point of the ray hidden behind something nearer (a fish, a stalk) is not taken as what the ray finds, and where none of the steps is in sight the ray is followed back to where it went out of sight, so the bed beside a fish shows there, not the fish's edge stretched over it (1.48's dark crescents).
+
+### VOLUME\_49\_MINOR
+
+*const*
+
+```ts
+export const VOLUME_49_MINOR: number;
+```
+
+`starhermit:volume` closes host API 1.48's gaps: `LevelSetSurface` casts shadows, takes the environment's light and gives the normal prepass its traced normals; `.vdb` vec3 grids are read and baked; "multi-scale" multiple scattering lights point and spot lights too.
+
+### FRAGMENT\_DEPTH\_PASSES\_MINOR
+
+*const*
+
+```ts
+export const FRAGMENT_DEPTH_PASSES_MINOR: number;
+```
+
+A hooked material whose `defines` hold `shSurfaceDepth: true` draws the point its surface hook gives (`Surface.world` and `normal`: a surface traced inside its mesh) with that point's depth in every pass: lit as its material is, in the depth prepass, the shadow maps and the normal prepass; hooks have `fn pass_eye() -> vec4f`, the point (w 1) or direction (w 0) the pass looks from, the light's in a shadow pass. Such a material's motion, and a `ShaderMaterial` `world` output's (`FRAGMENT_DEPTH_MINOR`), is the camera's at its depth.
+
+### HOOK\_TIME\_MINOR
+
+*const*
+
+```ts
+export const HOOK_TIME_MINOR: number;
+```
+
+Material hooks read the game's clock: `fn frame_time() -> f32`, the seconds of game time since the first frame (`frame().time` in the frame drawn, not wrapped), and `fn frame_delta() -> f32` (`frame().delta`), in every hook (a `ShaderMaterial`'s too), both stages and every pass (lit, shadow maps, depth and normal prepasses); see `starhermit:scene`'s hooks.
+
+### GEOMETRY\_ONCE\_MINOR
+
+*const*
+
+```ts
+export const GEOMETRY_ONCE_MINOR: number;
+```
+
+A scene's sync reads a geometry that several objects share once a sync, as it reads a shared material or texture: the first object to use it in the walk gives its mesh to the others. Script that runs during the walk (a getter, an `onUpload` callback) and changes a geometry an object already used is seen at the next sync, not by the objects after it in that walk.
+
+### STATIC\_SYNC\_MINOR
+
+*const*
+
+```ts
+export const STATIC_SYNC_MINOR: number;
+```
+
+A scene's sync reads a still object's (`movable = false`) transform only once the game says it moved: `matrixWorldNeedsUpdate = true`, `updateMatrix()`, `updateMatrixWorld()`, being added to a parent (see `starhermit:scene`'s `Object3D.movable`).
+
+### GAME\_OPTIONS\_MINOR
+
+*const*
+
+```ts
+export const GAME_OPTIONS_MINOR: number;
+```
+
+A game declares its own settings for the runtime's Options menu in starhermit.txt (`engine.option.*`), shown beside the engine's as a Rust game's own are; `starhermit:storage`'s \{@link options\} reads them (see there).
+
+### FRAME\_CAP\_MINOR
+
+*const*
+
+```ts
+export const FRAME_CAP_MINOR: number;
+```
+
+A game caps its own frame rate: \{@link setTargetFps\} (a phone level holding a steady 30 rather than frames straddling 33 and 50 ms).
+
+### CONTACT\_SHADOW\_FACE\_ANGLE\_MINOR
+
+*const*
+
+```ts
+export const CONTACT_SHADOW_FACE_ANGLE_MINOR: number;
+```
+
+`renderer.contactShadows.faceAngle: [min, max]` (degrees; \[20, 30\] by default, as at 46): how far a surface in the march's way must turn from the pixel's before it starts (`min`) and fully (`max`) casts.
+
+### SKIN\_PREBLEND\_GLES\_METAL\_MINOR
+
+*const*
+
+```ts
+export const SKIN_PREBLEND_GLES_METAL_MINOR: number;
+```
+
+OpenGL ES and Metal blend a baked skin's joints once a pass, as Vulkan and Direct3D 12 do; older games keep 1.48's vertex stages there, blending per vertex.
+
+## Host API 1.50's minors (since API\_MINOR 50)
+
+Each is 50 for games declaring engine.minor=50 or later and undefined for older games: feature-detect through a namespace import.
+
+### VELOCITY\_VOLUME\_SKIP\_MINOR
+
+*const*
+
+```ts
+export const VELOCITY_VOLUME_SKIP_MINOR: number;
+```
+
+A custom program's mesh whose sixth texture on is a 3D texture (a `VolumeEffects` grid) draws no motion vectors of its own under temporal anti-aliasing, motion blur or an upscaler: the camera's motion stands in, on every backend (OpenGL ES and browsers did so already; Vulkan, Direct3D 12 and Metal read the 3D texture as 2D).
+
+### MOTION\_VECTORS\_MINOR
+
+*const*
+
+```ts
+export const MOTION_VECTORS_MINOR: number;
+```
+
+`starhermit:scene`'s `Object3D.motionVectors` ("object", "camera" or null to inherit): an object moving with the camera alone in the motion vectors (Unity's `MotionVectorGenerationMode.Camera`).
+
+### MOTION\_SCALE\_MINOR
+
+*const*
+
+```ts
+export const MOTION_SCALE_MINOR: number;
+```
+
+`Object3D.motionScale` and `InstancedMesh.setMotionScaleAt`: the share of its own motion an object's (or an instance's) motion vectors take.
+
+### MOTION\_BLUR\_CAMERA\_MINOR
+
+*const*
+
+```ts
+export const MOTION_BLUR_CAMERA_MINOR: number;
+```
+
+`renderer.motionBlur`'s `camera` (false: the camera's motion does not blur; HDRP's `cameraMotionBlur`).
+
+### MOTION\_BLUR\_ACTIVE\_MINOR
+
+*const*
+
+```ts
+export const MOTION_BLUR_ACTIVE_MINOR: number;
+```
+
+`renderer.motionBlurActive` and `preferences().motionBlur`: the game is told when its motion blur draws.
+
+## Host API 1.51's minors (since API\_MINOR 51)
+
+Each is 51 for games declaring engine.minor=51 or later and undefined for older games: feature-detect through a namespace import.
+
+### FLING\_MOMENTUM\_MINOR
+
+*const*
+
+```ts
+export const FLING_MOMENTUM_MINOR: number;
+```
+
+A finger's swipe in `ui.scrollArea` flings the content on with momentum until it runs out (it slows as exp(-2t), stopping below 20 px/s or at an end; a press, the wheel or `scrollTo` stops it, and a finger catching it clicks nothing). Before it a release glides 0.3 s of the drag's speed further.
+
+### MOVEMENT\_ACTIONS\_MINOR
+
+*const*
+
+```ts
+export const MOVEMENT_ACTIONS_MINOR: number;
+```
+
+`engine.movement=walk`, `fly` or action names in starhermit.txt add the engine's movement actions (`move_forward`, `move_back`, `move_left`, `move_right`, `move_up`, `move_down`, `move_fast`) after the game's, under a "Movement" group, bound to WASD and the arrow keys, Space/E up, C/Q/Ctrl down and Shift fast (the left stick, the right and left triggers and the left stick's press on a gamepad) and rebound by the player in Options › Controls; `starhermit:controls`' `MOVEMENT_ACTIONS`, `WALK_ACTIONS` and `readMovement`.
+
+### FRAME\_PERCENTILES\_MINOR
+
+*const*
+
+```ts
+export const FRAME_PERCENTILES_MINOR: number;
+```
+
+`stats()`' `frameP50Ms`, `frameP95Ms`, `frameP99Ms`, `framesOver33Ms`, `framesOver50Ms` and `frameWindow`.
+
+### OPTION\_STRINGS\_MINOR
+
+*const*
+
+```ts
+export const OPTION_STRINGS_MINOR: number;
+```
+
+The game's Options-menu settings (`engine.option.*`) take their words from its string tables: `engine.strings=<file>` names the JSON files the game loads with `strings.load`, and `.label.key=`, `.choice.<value>.key=`, `.tip.key=` and `.category.key=` name messages in them, shown in the player's language through the same fallback chain as `strings`, the manifest's words last.
+
+### MENU\_TAB\_MINOR
+
+*const*
+
+```ts
+export const MENU_TAB_MINOR: number;
+```
+
+`openMenu({ tab })` opens the Options menu at that tab.
+
+### SAVE\_RESOLVE\_MINOR
+
+*const*
+
+```ts
+export const SAVE_RESOLVE_MINOR: number;
+```
+
+`starhermit:storage`'s `saves.conflict()` and `saves.resolve(answer)`: a save conflict read on any frame and answered without a listener (a WebAssembly game's callbacks return nothing to the engine), and `byteSize` on every save.
+
+### SAVE\_BYTES\_MINOR
+
+*const*
+
+```ts
+export const SAVE_BYTES_MINOR: number;
+```
+
+`saves.save` takes bytes (a `Uint8Array`) and `compress: "gzip"`, kept as a file of the save's archive.
+
+### STATS\_BACKEND\_MINOR
+
+*const*
+
+```ts
+export const STATS_BACKEND_MINOR: number;
+```
+
+`stats().backend`: the graphics API drawing the game's frames.
+
+### LENS\_LIFT\_MINOR
+
+*const*
+
+```ts
+export const LENS_LIFT_MINOR: number;
+```
+
+`starhermit:scene`'s `renderer.lens.lift` (`LensSettings.lift`): the shown image's shadow floor raised toward a colour after the output.
+
+### AUTOFOCUS\_HINT\_MINOR
+
+*const*
+
+```ts
+export const AUTOFOCUS_HINT_MINOR: number;
+```
+
+`renderer.bokeh.autofocus`'s `distance` and `target`: the game's subject in place of the depth probe, with the autofocus's smoothing.
+
+### SUBSURFACE\_WATER\_COVER\_MINOR
+
+*const*
+
+```ts
+export const SUBSURFACE_WATER_COVER_MINOR: number;
+```
+
+Subsurface scattering's screen-space pass leaves out the pixels a water surface covers (a `WaterMaterial`, a `distortion` ShaderMaterial), as screen-space reflections do since API\_MINOR 48: a material under the water no longer has its scattered light laid over the water's refracted image.
+
+### MATERIAL\_UNDERWATER\_MINOR
+
+*const*
+
+```ts
+export const MATERIAL_UNDERWATER_MINOR: number;
+```
+
+`starhermit:scene`'s `MeshStandardMaterial.underwater` (and `MeshPhysicalMaterial`'s): the in-water light of `renderer.underwater`'s water on a material seen from above the surface or below it.
+
+### TISSUE\_FALLBACK\_MINOR
+
+*const*
+
+```ts
+export const TISSUE_FALLBACK_MINOR: number;
+```
+
+`starhermit:scene`'s `MeshPhysicalMaterial.tissueFallback`: thin tissue (translucency, subsurface) drawn through the engine's cheap fallback at the phone graphics levels.
+
+### ALLY\_DROP\_IN\_MINOR
+
+*const*
+
+```ts
+export const ALLY_DROP_IN_MINOR: number;
+```
+
+Allied drop-in: `engine.drop_in=allies` in starhermit.txt (with `engine.capabilities=platform`), `starhermit:platform`'s `allies` (`launchRoom()`, `join()`), rooms' `alliesMayJoin` and their sockets' `allyJoined` / `allyLeft` events.
+
+### PARTICLE\_RESET\_MINOR
+
+*const*
+
+```ts
+export const PARTICLE_RESET_MINOR: number;
+```
+
+A `GPUParticleEmitter` comes back from a new graphics backend (`stats().deviceResets`: a recovered device loss, the Ray traced tier moving to another graphics API) with the particles it had, continuous (`rate`) and burst emitters alike, as an uninterrupted run shows them; older games' emitters lose them (see `deviceResets`).
+
+## Host API 1.52's minors (since API\_MINOR 52)
+
+Each is 52 for games declaring engine.minor=52 or later and undefined for older games: feature-detect through a namespace import.
+
+### MOUSE\_CHORDS\_MINOR
+
+*const*
+
+```ts
+export const MOUSE_CHORDS_MINOR: number;
+```
+
+In browsers a mouse button pressed or released while another is held (a chord: right pressed while left is down) reaches the game as its own press or release, as native windows report it; older games hear the first press and the last release of a chord only.
+
+### CREW\_VOICE\_MINOR
+
+*const*
+
+```ts
+export const CREW_VOICE_MINOR: number;
+```
+
+Voice chat carries AI crew talkers (synthetic players' allies that speak through their owner's connection): `voice.status()`'s participants list them as talkers of their own with `ai: true` and `ownerUserId`, and every participant has both fields. Mute and volume work on them as on anyone.
+
+### AGENTS\_MINOR
+
+*const*
+
+```ts
+export const AGENTS_MINOR: number;
+```
+
+The agent interface for AI crew (`engine.agents=allies`, which needs `engine.drop_in=allies`): `starhermit:platform`'s `agents` (the player's crew seats, their tools and observations, their checked actions) and a room socket's `crewJoined` / `crewLeft`.
+
+### UNDERWATER\_HALF\_MINOR
+
+*const*
+
+```ts
+export const UNDERWATER_HALF_MINOR: number;
+```
+
+`renderer.underwater.resolution` (`"auto"`, `"full"` or `"half"`): the march at half resolution, brought back by a depth-aware upsampling so near edges keep their own fog (`"auto"`, the default: half below the galactic level).
+
+### UNDERWATER\_HORIZON\_MINOR
+
+*const*
+
+```ts
+export const UNDERWATER_HORIZON_MINOR: number;
+```
+
+Under water, a ray leaving through the surface sees, as far as the surface reflects it (all of it beyond the critical angle), the light the water scatters along the reflected ray with `renderer.underwater`'s own sky, sun, phase and shafts, in place of WaterMaterial's deep colour: the band above the horizon meets the marched light below it.
+
+### UNDERWATER\_SHAFTS\_MINOR
+
+*const*
+
+```ts
+export const UNDERWATER_SHAFTS_MINOR: number;
+```
+
+The light the surface's focusing gathers into its columns or takes from them (zero on average) also scatters toward the eye with at least the isotropic phase: light shafts read in side views under a high sun, no light is added on average, and toward the sun nothing changes.
 
 ### Unsubscribe
 
@@ -223,6 +1415,26 @@ Fixed steps per second, 1–240 (60 until set); RangeError otherwise. A change t
 export function fixedRate(): number;
 ```
 
+### setTargetFps
+
+*function*
+
+```ts
+export function setTargetFps(fps: number | null): void;
+```
+
+Since API\_MINOR 49 (`FRAME_CAP_MINOR`; undefined before): caps the game's frame rate at `fps` frames a second (a whole 1 to 1000), or removes the cap (null or 0, the default). The cap is the game's own: the frames come at the lowest of it, the player's frame limit (Options › Frame rate limit) and the engine's ceiling, so the player's limit is never exceeded, and nothing the player chose is changed. It also lowers what Auto holds the graphics level to (`levelSettings(). targetFps` is the level's own; Auto measures against the lower of the two). Natively, with VSync on and a cap within 3% of the display's rate divided by a whole number (30 on a 60 Hz or 120 Hz display), each frame is shown for that many refreshes by the backend (the swap interval on GLES and Direct3D 12, a minimum duration on Metal, `VK_GOOGLE_display_timing`'s present times on Vulkan where the device has it, as Android's do), so a frame that takes 20 to 33 ms shows for 33 ms every time; elsewhere (VSync off, another rate, a device without them) the runtime paces the frames to the cap. In browsers the page skips animation frames down to the cap. Not persisted: a restarted game starts without one. A RangeError for other values. Phone levels opt in from the game's code; the engine never caps on its own.
+
+### targetFps
+
+*function*
+
+```ts
+export function targetFps(): number;
+```
+
+Since API\_MINOR 49: the cap \{@link setTargetFps\} set, 0 for none.
+
 ### fuelLeft
 
 *function*
@@ -355,6 +1567,8 @@ export type GraphicsSetting = "auto" | GraphicsLevel | "raytraced";
 ```
 
 The player's Graphics choice (since API\_MINOR 14): Auto, the default, or a level; since API\_MINOR 42 also `"raytraced"`, the infinite level with the scene's shadows traced by the GPU's ray-tracing hardware (offered where the device has it and the game's `engine.ray_tracing` is not `off`; older games hear it as `"infinite"`).
+
+What the tier traces (`engine.ray_tracing`): opaque casters drawn with the built-in materials, and since API\_MINOR 45 (`HOOKED_RAY_TRACING_MINOR`) materials with `hooks` too: their lighting reads the traced shadows, and they are traced casters unless their `vertex` hook may move positions or their WGSL contains `discard` (the shadow maps run the surface hook, so its discards cut holes rays cannot see). The engine's shader compiler decides the first from the hook's returned `Vertex`: a hook that only passes attributes through (`o.v0 = v.custom`) or changes normals keeps `position` as it is and is traced; any write to `position` (even conditional, or from a helper function's result) counts as moving it. Casters a vertex hook may move, discarding, skinned, alpha-tested and transparent casters, and `ShaderMaterial`s, keep casting through the shadow maps, which the traced shadows multiply in; before API\_MINOR 45 any hooked material in view sent every caster back into the maps.
 
 ### levels
 
@@ -576,7 +1790,7 @@ export interface FrameStats { … }
 
 - `readonly gpu?: GpuStats | null;`
 
-  Each kind of pass's GPU time, for benchmarking (since API\_MINOR 34; absent before). Null where the device times nothing: OpenGL ES without GL\_EXT\_disjoint\_timer\_query, WebGPU without `timestamp-query`, WebGL2 without `EXT_disjoint_timer_query_webgl2` (browsers often leave it out). The first read starts the runtime's timer where passes are not timed already (OpenGL ES and browsers; Vulkan, Direct3D 12 and Metal always time them), so a game that never reads it adds no GPU work; it reads null, then `frames: 0`, until the first results arrive a few frames later. Results always lag a few frames behind the frame drawn. One frozen object a frame.
+  Each kind of pass's GPU time, for benchmarking (since API\_MINOR 34; absent before). Null where the device times nothing: OpenGL ES without GL\_EXT\_disjoint\_timer\_query, WebGPU without `timestamp-query` (browsers often leave it out; since API\_MINOR 48 those are timed approximately instead, `gpu.approximate`). The first read starts the runtime's timer where passes are not timed already (OpenGL ES and browsers; Vulkan, Direct3D 12 and Metal always time them), so a game that never reads it adds no GPU work; it reads null, then `frames: 0`, until the first results arrive a few frames later. Results always lag a few frames behind the frame drawn. One frozen object a frame.
 
 - `readonly resolutionScale?: number;`
 
@@ -585,6 +1799,56 @@ export interface FrameStats { … }
 - `readonly rayTraced?: boolean;`
 
   Whether this frame's shadows are traced by the GPU's ray-tracing hardware rather than mapped (since API\_MINOR 42; absent before): the ray-traced graphics tier in use, chosen by the player or climbed to by Auto within the frame budget. The scene looks the same either way up to the shadows' edges; a game may use it to drop its own faked contact shadows.
+
+- `readonly upscaler?: "fsr" | "dlss" | "xess" | null;`
+
+  The vendor upscaler the last frame ran in place of the engine's temporal anti-aliasing resolve (since API\_MINOR 45): `"fsr"` (AMD FSR), `"dlss"` (NVIDIA DLSS, or DLAA in the `"native"` mode, on NVIDIA RTX GPUs), `"xess"` (Intel XeSS), or null under the engine's own resolve. Only Windows' native runtime runs one, for a game drawing with `renderer.antialias = "taa"`, when the player's Options › Graphics › Upscaler allows it and the vendor's DLL ships beside the runtime. The scene then renders at the mode's share of the window (`resolutionScale`), and the player's render scale does not apply.
+
+- ```ts
+  readonly upscalerMode?:
+    | "native"
+    | "quality"
+    | "balanced"
+    | "performance"
+    | "ultraPerformance"
+    | null;
+  ```
+
+  The upscaler's mode (since API\_MINOR 45; null without one): `"native"` (anti-aliasing at the window's size; DLAA under DLSS), `"quality"` (1.5× per axis), `"balanced"` (1.7×; DLSS's 1.72×), `"performance"` (2×) or `"ultraPerformance"` (3×), as FSR names them (XeSS's own: quality 1.7×, balanced 2×, performance 2.3×).
+
+- `readonly frameGeneration?: "fsr" | "dlss" | null;`
+
+  The vendor generating frames between the rendered ones (since API\_MINOR 45; null without): `"fsr"` (AMD FSR frame generation, any GPU) or `"dlss"` (NVIDIA DLSS Frame Generation, GeForce RTX 40 and later), always the upscaler's own vendor. Only Windows' native runtime on Direct3D 12 runs it, when the player turns on Options › Graphics › Frame generation (or `STARHERMIT_FRAME_GENERATION=1`) and the vendor's frame-generation DLLs ship beside the runtime. The game's overlay is kept out of the generated frames (the generator gets the scene without it). With `"dlss"`, NVIDIA's generator interpolates the overlay too, apart from the scene (Streamline's user-interface recomposition), so overlay text that changes between two rendered frames (a frame counter) shows both values blended on the generated frame between them; AMD's FSR shows the newer overlay as it is. The game's own frame rate and `dt` are the rendered frames'; the display shows about twice as many.
+
+- `readonly generatedFrames?: number;`
+
+  Frames the generator presented since it started on this device (since API\_MINOR 45; 0 without frame generation).
+
+- `readonly realFrames?: number;`
+
+  The engine's rendered frames presented through frame generation (since API\_MINOR 45; 0 without), so `generatedFrames / realFrames` is the frames generated per rendered one (about 1).
+
+- `readonly deviceResets?: number;`
+
+  Times the graphics backend was made again since the game started (since API\_MINOR 48, `DEVICE_RESETS_MINOR`; 0 until it happens): the GPU device lost and recovered (a driver reset or crash, a removed external GPU, a browser's new WebGPU device), or the Ray traced tier moving the game to another graphics API. Textures, meshes and programs carry over, but render targets come back cleared, as three.js's do after a lost context: when it grows, draw again what you drew into a target once (a baked map, a lookup table, a simulation's state). The engine's own modules (`starhermit:sky`, `starhermit:volume`, `starhermit:weather`, `starhermit:water`) do so themselves at every minor. `starhermit:particles`' GPU emitters do since API\_MINOR 51 (`PARTICLE_RESET_MINOR`: each runs its kept passes again, so continuous and burst emitters show what an uninterrupted run shows); before 51 an emitter's state comes back empty: every live particle is gone, a continuous (`rate`) emitter refilling over its particles' lives and burst particles staying gone until the game bursts again.
+
+- `readonly frameP50Ms?: number;`
+
+  The rolling frame times (since API\_MINOR 51, `FRAME_PERCENTILES_MINOR`; absent before): over the latest `frameWindow` frames (up to 600, ten seconds at 60 frames a second; the first frame has none), the nearest-rank 50th, 95th and 99th percentiles of the time between frames in milliseconds (each frame's `frame().delta`, the `dt` `onUpdate` hears; 0 before a frame), and how many of those frames took over 33 ms (under 30 frames a second) and over 50 ms. Worked out when read from a fixed ring of times, the same natively and in browsers.
+
+- `readonly frameP95Ms?: number;`
+- `readonly frameP99Ms?: number;`
+- `readonly framesOver33Ms?: number;`
+- `readonly framesOver50Ms?: number;`
+- `readonly frameWindow?: number;`
+
+- `readonly backend?: "vulkan" | "gles" | "d3d12" | "metal" | "webgpu" | "webgl2" | null;`
+
+  The graphics API drawing the frames (since API\_MINOR 51, `STATS_BACKEND_MINOR`; null until the runtime knows): natively `"vulkan"`, `"gles"` (OpenGL ES), `"d3d12"` or `"metal"`; in browsers `"webgpu"`, or `"webgl2"` on the WebGL 2 fallback (the 1.49 runtime's, where the browser has no WebGPU), which draws the same effects at a higher cost on most phones: a game may choose lighter settings there (fewer post effects, no motion blur, a lower render scale). It can change while the game runs (the Ray traced tier moving to another API, a browser's renderer made again).
+
+- `readonly wasm?: Readonly<Record<string, "native" | "interpreted">>;`
+
+  Each WebAssembly module the game's script instantiated so far, by its package path (`"wasm/sim.wasm"`; `"module:<hash>"` for bytes no package file holds), and how its latest instance runs: `"native"` on the platform's ahead-of-time compiled code, `"interpreted"` on the runtime's interpreter (no artefact for this platform yet, still arriving, or refused; the runtime's log says why). Workers' modules are not listed. Since API\_MINOR 46 (`WASM_STATS_MINOR`); absent before, and in browsers, which run WebAssembly themselves.
 
 ### GpuStats
 
@@ -610,10 +1874,18 @@ export interface GpuStats { … }
       /** The composite (bloom added, the grade, the output) and the
        * game's post programs. */
       readonly post: number;
+      /** FXAA, SMAA or temporal anti-aliasing's resolve; before API_MINOR
+       * 45 also the velocity step (`velocity`). */
       readonly antiAliasing: number;
       /** 2D batches: the game's overlay and the runtime's interface. */
       readonly overlay: number;
       readonly present: number;
+      /** Since API_MINOR 45 (`VELOCITY_PASS_MINOR`; absent before, when it
+       * is counted in `antiAliasing`): the velocity step, which draws the
+       * scene's objects again for motion vectors and the reactive mask
+       * wherever `antialias: "taa"`, `ssr`, `ssgi` or
+       * `renderer.sceneVelocity` take them. */
+      readonly velocity?: number;
     };
   ```
 
@@ -622,6 +1894,10 @@ export interface GpuStats { … }
   Every pass's time together.
 
 - `readonly frames: number;`
+
+- `readonly approximate?: boolean;`
+
+  Since API\_MINOR 48 (`GPU_APPROX_MINOR`; absent before): true where the device has no GPU timestamps (browsers without WebGPU's `timestamp-query`) and the times were measured on the page's clock instead: every fourth frame its work is submitted in groups (the work before the scene, its shadow passes, the rest of the scene's passes, the overlay and the copy to the canvas: `uploads`, `shadows`, `scene` and `overlay`; the other kinds read 0), each timed from its submission to the queue's report that it is done. Upper bounds, about a millisecond coarse: compare them with each other, not with timestamps. Before 48 such devices read `gpu` null.
 
 ### stats
 
@@ -772,7 +2048,7 @@ export interface Usage { … }
 
 - `readonly lights: number;`
 
-  The lights the latest frame drawn asked for besides ambient light and its first directional light (which always draw): past `budgets().lights` they are left out (`stats().skippedObjects` counts them).
+  The lights the latest frame drawn asked for besides ambient light and its first directional light (which always draw): past `budgets().lights` they are left out (`stats().skippedObjects` counts them). Since API\_MINOR 43 the clustered point and spot lights count too.
 
 - `readonly waitingUploads: number;`
 
@@ -780,11 +2056,21 @@ export interface Usage { … }
 
 - `readonly waitingUploadBytes: number;`
 
+- `readonly renderTargets?: number;`
+
+  Since API\_MINOR 44 (`RENDER_TARGET_BUDGET_MINOR`; absent before): the render targets the game holds, the engine modules' among them, each texture of a target of several (`count`) counting one; making one past `budgets().renderTargets` throws a RangeError. The engine modules hold: `SkyAtmosphere` up to 8 (its three tables at the full and reduced tiers, the aerial table, the background, the environment, the Milky Way and the moon), `WeatherEffects` up to 6 (the clouds' shadow map, panorama and two screen targets; rain's cover map and rain map), a `WindField` 1, a `VolumeEffects` group 1 (the shared 3D noise; frame lighting 10 more, and up to 3 cascades), a `VolumeLayer` 5 or 6, an `Ocean` 8 on its GPU tier (two pairs of two-texture targets) and 1 each for its seabed, planar reflection and waterline maps, and each `GPUParticleEmitter` 4 (two states of two textures). Water materials, surfaces and the EffectComposer hold none. A frame whose transmissive `MeshPhysicalMaterial` reads the scene (`PHYSICAL_MATERIAL_MINOR`) holds 1 for the renderer's transmission target, and its bytes (about 140 MB at 1080p: half floats at 4 samples with depth and mips) count against the image budget. GPU emitters give way to it (it counts as reserved while wanted and not held); the game's own targets and images come first, and where it then does not fit it falls back to 1 sample, then a half, quarter and eighth of the scene's size, then to none (transmissive materials read `renderer.sceneColor` unblurred), with one console warning, and never throws. A module that is refused its targets during its frame step (the game's or the image budget full) lets go of what it made, warns once on the console and runs as on a device without them: a GPU emitter on the CPU (`tier` "cpu"), the sky analytic (or off), the clouds off, rain without its cover map, the wind field minimal, an ocean's waves on the CPU, volumes lit per box. Older games' modules threw from the frame step instead.
+
+  Priority (since API\_MINOR 44): the engine's modules come before GPU particle emitters. A `SkyAtmosphere` (8), `WeatherEffects` (4 for the clouds with a sky, 2 for rain), a `WindField` (1) and an `Ocean` (11, 12 with `planarReflection`) reserve the most they may hold from when they are made until disposed (`renderTargetsReserved`: what of that they do not hold yet). A `GPUParticleEmitter` takes its 4 only where they fit beside those reservations, else runs on the CPU; one on the GPU lets its targets go and runs on the CPU from then (the newest first, its live particles gone) when an engine object made later, or volumes' frame lighting, needs the room. The game's own render targets are not held back by reservations: they are refused only past `budgets().renderTargets`.
+
+- `readonly renderTargetsReserved?: number;`
+
+  Since API\_MINOR 44 (absent before): the engine modules' reservations not yet held (see `renderTargets`); a GPU emitter may take `budgets().renderTargets - renderTargets - renderTargetsReserved`.
+
 ### Budgets
 
 *interface*
 
-The budgets: the manifest's limits within the engine's (1,024 clips and 64 MiB of clip data in the mixer) less what the runtime keeps for its interface. `textures` is the image count, the same natively and in browsers: 120, or what `engine.limits.images=` sets (at most 1,024, since API\_MINOR 21; declare `engine.minor=21` with it). Each texture, render target and environment counts one while it lives, and so does each OffscreenCanvas or ImageBitmap the overlay draws (`draw.image`) or a CanvasTexture shows: the image the GPU samples. A canvas only drawn onto other canvases (`drawImage`, patterns) holds no image and counts nothing. An overlay-only canvas's image goes with the canvas (since API\_MINOR 21 natively and in browsers alike; before, it stayed until the game ended), and when the count or `textureBytes` is full the overlay lets go of the images of canvases it did not draw this frame and makes each again when drawn (an upload; the console says so once), so only one frame's canvases must fit. Past the budget, making an image throws a RangeError that names it (`draw.image` of more canvases in one frame than the count too); catch it, or draw static layers into one canvas once and draw that, and pack sprites into sheets drawn by `source`. `meshes` is the mesh count: 1,008, or what `engine.limits.meshes=` sets (at most 4,096, since API\_MINOR 14). `meshBytes` is the mesh budget: 124 MiB, or what `engine.limits.mesh_mib=` sets (at most 1,536 MiB, since API\_MINOR 14), within `engine.limits.gpu_mib`; a mesh counts 32 bytes a vertex (48 with vertex colors, 64 with the custom attribute) and 4 an index, or 2 below 65,536 vertices (in whole 4 bytes; since API\_MINOR 14, as the GPU holds them). `textureBytes` is the image budget: 56 MiB (256 MiB since API\_MINOR 35), or what `engine.limits.image_mib=` sets (at most 512 MiB, since API\_MINOR 9), within `engine.limits.gpu_mib`. The scene's limits (since API\_MINOR 10; the same natively and in browsers): 131,072 nodes, 65,536 objects, 262,144 instances, 1,024 InstancedMeshes (or what `engine.limits.instanced_meshes=` sets, at most 4,096, since API\_MINOR 14), 16,384 sprites, 4,096 materials, 256 programs and 16 lights a frame.
+The budgets: the manifest's limits within the engine's (1,024 clips and 64 MiB of clip data in the mixer) less what the runtime keeps for its interface. `textures` is the image count, the same natively and in browsers: 120, or what `engine.limits.images=` sets (at most 1,024, since API\_MINOR 21; declare `engine.minor=21` with it). Each texture, render target and environment counts one while it lives, and so does each OffscreenCanvas or ImageBitmap the overlay draws (`draw.image`) or a CanvasTexture shows: the image the GPU samples. A canvas only drawn onto other canvases (`drawImage`, patterns) holds no image and counts nothing. An overlay-only canvas's image goes with the canvas (since API\_MINOR 21 natively and in browsers alike; before, it stayed until the game ended), and when the count or `textureBytes` is full the overlay lets go of the images of canvases it did not draw this frame and makes each again when drawn (an upload; the console says so once), so only one frame's canvases must fit. Past the budget, making an image throws a RangeError that names it (`draw.image` of more canvases in one frame than the count too); catch it, or draw static layers into one canvas once and draw that, and pack sprites into sheets drawn by `source`. `meshes` is the mesh count: 1,008, or what `engine.limits.meshes=` sets (at most 4,096, since API\_MINOR 14). `meshBytes` is the mesh budget: 124 MiB, or what `engine.limits.mesh_mib=` sets (at most 1,536 MiB, since API\_MINOR 14), within `engine.limits.gpu_mib`; a mesh counts 32 bytes a vertex (48 with vertex colors, 64 with the custom attribute) and 4 an index, or 2 below 65,536 vertices (in whole 4 bytes; since API\_MINOR 14, as the GPU holds them). `textureBytes` is the image budget: 56 MiB (256 MiB since API\_MINOR 35), or what `engine.limits.image_mib=` sets (at most 512 MiB, since API\_MINOR 9), within `engine.limits.gpu_mib`. The scene's limits (since API\_MINOR 10; the same natively and in browsers): 131,072 nodes, 65,536 objects, 262,144 instances, 1,024 InstancedMeshes (or what `engine.limits.instanced_meshes=` sets, at most 4,096, since API\_MINOR 14), 16,384 sprites, 4,096 materials, 256 programs and 16 lights a frame (80 since API\_MINOR 43: 16 and 64 clustered point and spot lights; see Lights in starhermit:scene).
 
 ```ts
 export interface Budgets { … }
@@ -812,6 +2098,10 @@ export interface Budgets { … }
 - `readonly programs: number;`
 - `readonly lights: number;`
 
+- `readonly renderTargets?: number;`
+
+  Since API\_MINOR 44: the render targets a game holds at most (32; 16 before API\_MINOR 35). See `Usage.renderTargets`.
+
 ### usage
 
 *function*
@@ -828,15 +2118,92 @@ export function usage(): Usage;
 export function budgets(): Budgets;
 ```
 
+### ImageUsageEntry
+
+*interface*
+
+One image `imageUsage()` lists.
+
+```ts
+export interface ImageUsageEntry { … }
+```
+
+- `readonly name: string;`
+
+  Its source file, else its kind and id ("render target #12", "transmission target").
+
+- `readonly source: string | null;`
+
+  The package file it was loaded from (`TextureLoader`, `KTX2Loader`, `GLTFLoader`, ...), or null for an image the game made.
+
+- `readonly label?: string | null;`
+
+  Since API\_MINOR 45 (IMAGE\_LABELS\_MINOR; not there before): where an image the game made was made: its texture's class (`DataTexture`, `DataArrayTexture`, `Data3DTexture`, `CanvasTexture`, a subclass's own name) or the engine's maker (`bakeSkinnedAnimations`, `BakedSkinnedAnimations.fromMatrices`, `skin attributes`); null for loaded images, render targets and the engine's own. From 45 `name` is, without a source, the texture's `name` where the game gave one (a render target's texture's too), else the label and the id ("DataTexture #12"). Since API\_MINOR 46 (ENGINE\_IMAGE\_LABELS\_MINOR) the images the engine makes for the game's drawing are labelled too: `ImageBitmap` (a bitmap drawn by `starhermit:draw` or the UI; its source the file `createImageBitmap` read, where it read one), `OffscreenCanvas` (a canvas the overlay draws), `ui skin` (the UI's baked shadows, glows and gradient text), `lookup table` (a look's table) and `VideoTexture` (a video's frames) and `ui style image` (its file the source).
+
+- `readonly kind: "texture" | "renderTarget" | "environment" | "engine";`
+
+  `texture` (an image the game made or loaded, canvases' and bitmaps' among them), `renderTarget` (a texture of a render target, the game's or an engine module's: the sky, weather, water, volumes, GPU particle emitters), `environment` (a prefiltered environment) or `engine` (the renderer's own transmission target).
+
+- `readonly width: number;`
+- `readonly height: number;`
+
+- `readonly depth: number;`
+
+  A 3D texture's slices, else 1.
+
+- `readonly format: string;`
+
+  As held: "RGBA8", "RGBA16F", "R32F", ..., or a compressed image's block format ("BC7", "BC5", ...; "RGBA8" where the device unpacked it).
+
+- `readonly bytes: number;`
+
+  What it counts against the image budget, its mips included.
+
+### ImageUsage
+
+*interface*
+
+```ts
+export interface ImageUsage { … }
+```
+
+- `readonly bytes: number;`
+
+  What the images hold now (`usage().textureBytes`): the entries' sum.
+
+- `readonly budget: number;`
+
+  The image budget (`budgets().textureBytes`).
+
+- `readonly peakBytes: number;`
+
+  The most they have held (or were about to hold as a budget check let them), the peak a render check reports.
+
+- `readonly images: readonly ImageUsageEntry[];`
+
+  Every image counted, largest first.
+
+### imageUsage
+
+*function*
+
+```ts
+export function imageUsage(): ImageUsage;
+```
+
+Since API\_MINOR 44 (`IMAGE_USAGE_MINOR`; absent before): which images count against the image budget (`engine.limits.image_mib`), largest first, for a game or its developer to see what fills it. It costs fuel for each image listed, so call it when looking, not every frame; `usage().textureBytes` is the cheap total. `--render-check` prints the largest images held when they held the most.
+
 ### openMenu
 
 *function*
 
 ```ts
-export function openMenu(): void;
+export function openMenu(options?: { readonly tab?: string }): void;
 ```
 
 Opens the runtime's Options menu (the player can always press F1).
+
+Since API\_MINOR 51 (`MENU_TAB_MINOR`) `{ tab }` opens it at that tab, by its name without case, `-` or `_` standing for a space: `"graphics"`, `"audio"`, `"input"`, `"accessibility"`, `"language"`, `"content-and-ai"`, …, or the game's own options' tab (`"game"`, or its `.category=`), so a game's Language or Audio button opens the menu where the player expects. A tab the menu does not have (or does not show on this device) opens it as `openMenu()` does; a tab the Basic view hides opens the nearest it shows. A TypeError for a tab that is not a string. Older games' `openMenu` takes nothing.
 
 ### quit
 
@@ -1566,6 +2933,10 @@ export interface Preferences { … }
 
   Options → Graphics volume settings, applied by `starhermit:volume` (since API\_MINOR 39, `VOLUME_OPENVDB_MINOR`; older games' preferences have only the four fields above, and hear no change of these).
 
+- `readonly motionBlur?: boolean;`
+
+  Since API\_MINOR 47 (`MOTION_BLUR_ACTIVE_MINOR`; absent before): the player lets games blur motion: Options › Graphics › Motion blur on and Reduce motion off (a check's `--no-motion-blur` turns it off). A change is a `preferences` event. `starhermit:scene`'s `renderer.motionBlurActive` says whether the game's blur draws.
+
 ### VolumeGraphicsPreferences
 
 *interface*
@@ -1575,7 +2946,11 @@ export interface VolumeGraphicsPreferences { … }
 ```
 
 - `readonly lighting: "volume" | "frame";`
-- `readonly multipleScattering: "off" | "diffusion" | "two-sided" | "octaves" | "neural";`
+
+- `readonly multipleScattering: "off" | "diffusion" | "two-sided" | "octaves" | "neural" | "multi-scale";`
+
+  `"multi-scale"` since API\_MINOR 48 (`VOLUME_OPENVDB_48_MINOR`).
+
 - `readonly quality: number;`
 - `readonly shadowQuality: number;`
 - `readonly froxelWidth: number;`

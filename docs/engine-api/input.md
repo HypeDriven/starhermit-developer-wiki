@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:input`
 
-Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.52.0** (host API 1.52), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:input";
@@ -17,7 +17,15 @@ import { … } from "starhermit:input";
 
 The manifest's `control.<action>=` lines declare actions (at most 128) with default keys; `engine.gamepad.<action>=` adds gamepad controls, and `engine.group.<action>=Heading` (since API\_MINOR 6) begins a group of actions (up to the next group) that the Options menu shows under that heading (1 to 64 characters). The player rebinds them in the Options menu, so games read actions, not keys, for gameplay. The platform's controls API keeps the first 32 actions' keys with the player's account; the runtime keeps the rest in the player's settings (synchronized as settings are). Up to 8 player slots share the keyboard (slot 0) and gamepads.
 
-An action's name (`control.<action>=KEYS | Label`) is 1 to 32 characters of lower-case ASCII letters, digits and `_` (`jump`, `move_left`, `slot2`; no capitals, `-`, `.` or spaces), unique in the manifest; its label (after `|`, the name when there is none) is 1 to 128 bytes without `|` or control characters. Anything else refuses the package: `starhermit.txt control.Jump: invalid input action 'Jump'`. Games name actions exactly so (`isDown("move_left")`).
+An action's name (`control.<action>=KEYS | Label`) is 1 to 32 characters of lower-case ASCII letters, digits and `_` (`jump`, `move_left`, `slot2`; no capitals, `-`, `.` or spaces), unique in the manifest; its label (after `|`, the name when there is none) is 1 to 128 bytes without `|` or control characters. Anything else refuses the package, naming the line: `starhermit.txt line 9: action `Jump`: invalid input action 'Jump'`. Games name actions exactly so (`isDown("move_left")`).
+
+Its keys are one to four distinct `KeyboardEvent.code` names joined by `+`. F1 is never one, on any minor: it opens the runtime's Options menu (`starhermit.txt line 12: action `help` uses F1, which opens the runtime's Options menu and cannot be bound`), and the Options menu refuses it too. Before API\_MINOR 44 a key serves one action and every action has a key (`line 12: action `repair` uses KeyR, which `next\_robot` (line 11) already uses ...`). Since API\_MINOR 44 (BINDINGS\_MINOR) two or more actions may share a key, and an action may have none (`control.map= | Map`, rebind-only):
+
+- a shared key presses (and releases) every action bound to it in the active context, each with its own `onAction` edge carrying the key's `code`; the game decides by its own state which one acts;
+- an action with no key is pressed by nothing until the player binds it (gamepad, mouse and touch bindings still press it); `bindingLabel` is `""` and `bindings` has no keyboard entry;
+- the Options menu's controls list shows a shared key on each of its actions and an action with no key as "Unbound"; binding a key that other actions have is taken with a note naming them (rather than refused), and an action's last key may be removed.
+
+Gamepad controls and mouse inputs still serve one action each.
 
 ### isDown
 

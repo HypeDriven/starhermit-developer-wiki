@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:controls`
 
-Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.52.0** (host API 1.52), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:controls";
@@ -757,4 +757,74 @@ export class PlayerController extends EventDispatcher { … }
 - `dispose(): void;`
 
   Removes its body from the world.
+
+## The engine's movement actions (since API\_MINOR 51,
+
+`MOVEMENT_ACTIONS_MINOR`; undefined for older games) ---------------- `engine.movement=` in starhermit.txt adds them to the game's actions: `walk` (forward, back, left, right, fast), `fly` (those, up and down) or their names (`engine.movement=move_up,move_down`), comma-separated. They follow the game's own `control.*` actions, the first beginning a "Movement" group (unless `engine.group.<action>=` names another), and show and rebind in Options › Controls as the game's do. Defaults: forward KeyW+ArrowUp (left stick up), back KeyS+ArrowDown (stick down), left KeyA+ArrowLeft (stick left), right KeyD+ArrowRight (stick right), up Space+KeyE (right trigger), down KeyC+KeyQ+ControlLeft (left trigger), fast ShiftLeft+ShiftRight (left stick press). A name the game declares itself (`control.move_up=KeyR | Rise`) stays the game's; the game's `engine.gamepad.<action>=` lines apply to the added actions too, and a default gamepad control another of its actions has is left out.
+
+### MOVEMENT\_ACTIONS
+
+*const*
+
+```ts
+export const MOVEMENT_ACTIONS: {
+    readonly forward: "move_forward";
+    readonly back: "move_back";
+    readonly left: "move_left";
+    readonly right: "move_right";
+    readonly up: "move_up";
+    readonly down: "move_down";
+    readonly fast: "move_fast";
+  };
+```
+
+The movement actions' names.
+
+### WALK\_ACTIONS
+
+*const*
+
+```ts
+export const WALK_ACTIONS: {
+    readonly forward: "move_forward";
+    readonly backward: "move_back";
+    readonly left: "move_left";
+    readonly right: "move_right";
+    readonly run: "move_fast";
+  };
+```
+
+`PlayerController.readActions`' names for `engine.movement=walk` (`run` is `move_fast`).
+
+### Movement
+
+*interface*
+
+```ts
+export interface Movement { … }
+```
+
+- `right: number;`
+
+  \-1..1: right minus left and forward minus back, held to the unit circle together (a diagonal on keys is 0.7071 each).
+
+- `forward: number;`
+
+- `up: number;`
+
+  \-1..1: up minus down.
+
+- `fast: boolean;`
+
+  `move_fast` held.
+
+### readMovement
+
+*function*
+
+```ts
+export function readMovement(slot?: number, target?: Movement): Movement;
+```
+
+The movement actions for player `slot` (default 0) this frame, written into `target` when given (no allocation) or a new object: a gamepad's stick and triggers give fractions, keys whole steps. An action the manifest does not declare reads 0 (`walk`'s up and down).
 {% endraw %}

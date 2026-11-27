@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:scene`
 
-Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.52.0** (host API 1.52), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:scene";
@@ -1150,7 +1150,7 @@ Earlier output's color times one minus the material's, its alpha kept (three.js 
 export const CustomBlending: "custom";
 ```
 
-The material's `blendEquation`, `blendSrc` and `blendDst` (and their alpha ones) as three.js's `CustomBlending` (since API\_MINOR 10): the fragment's color and alpha straight (not premultiplied), combined with what the target or window holds as `equation(source × src, destination × dst)`. Min and max take no factors. The same on every backend (Vulkan, Direct3D 12, OpenGL ES, WebGL2, WebGPU). Before API\_MINOR 20 a custom blended material is drawn with the transparent ones (sorted, no depth written unless `depthWrite` says so); from it, as in three.js, only with `transparent` (otherwise with the opaque ones, writing depth unless `depthWrite` is false). An equation or factor not listed here is a TypeError at the frame's sync.
+The material's `blendEquation`, `blendSrc` and `blendDst` (and their alpha ones) as three.js's `CustomBlending` (since API\_MINOR 10): the fragment's color and alpha straight (not premultiplied), combined with what the target or window holds as `equation(source × src, destination × dst)`. Min and max take no factors. The same on every backend (Vulkan, Direct3D 12, Metal, OpenGL ES, WebGPU). Before API\_MINOR 20 a custom blended material is drawn with the transparent ones (sorted, no depth written unless `depthWrite` says so); from it, as in three.js, only with `transparent` (otherwise with the opaque ones, writing depth unless `depthWrite` is false). An equation or factor not listed here is a TypeError at the frame's sync.
 
 ### AddEquation
 
@@ -1854,11 +1854,11 @@ export class Texture { … }
 
 - `colorSpace: string;`
 
-  How a color map reads it (since API\_MINOR 28, as three.js r185): `SRGBColorSpace` sRGB-decoded, `LinearSRGBColorSpace` and `NoColorSpace` (the default) as stored, for a material's `map` and `emissiveMap`, `scene.background` and an environment made from it. Older games' color maps are always sRGB. Data maps (normal, roughness, metalness, ambient occlusion) are read as stored. Since API\_MINOR 42 (`SRGB_TEXELS_MINOR`) an sRGB map is decoded texel by texel before it is filtered, as three.js r185's `SRGB8_ALPHA8` textures are (a red-green edge's midpoint is 188, not 147, red); the GPU holds an sRGB copy of the texture's texels for it while a material shows it so. Compressed textures are still filtered before they are decoded.
+  How a color map reads it (since API\_MINOR 28, as three.js r185): `SRGBColorSpace` sRGB-decoded, `LinearSRGBColorSpace` and `NoColorSpace` (the default) as stored, for a material's `map` and `emissiveMap`, `scene.background` and an environment made from it. Older games' color maps are always sRGB. Data maps (normal, roughness, metalness, ambient occlusion) are read as stored. Since API\_MINOR 42 (`SRGB_TEXELS_MINOR`) an sRGB map is decoded texel by texel before it is filtered, as three.js r185's `SRGB8_ALPHA8` textures are (a red-green edge's midpoint is 188, not 147, red); the GPU holds an sRGB copy of the texture's texels for it while a material shows it so. Compressed textures are still filtered before they are decoded. It is read at every sync, as texture uniforms' (`HOOK_ACCESS_MINOR`) are: set after a load resolved, or after the texture was drawn, it applies from the next frame (three.js r185 takes a change at the next upload, after `needsUpdate`; here `needsUpdate` is not needed for it).
 
 - `flipY: boolean;`
 
-  Since API\_MINOR 42 (`TEXTURE_FLIP_Y_MINOR`; absent before): three.js r185's `flipY` for built-in materials' maps and a texture background. True (a loaded or canvas texture's default) shows the image's first row at the top (v = 1); false (a `DataTexture`'s default) at v = 0, the bottom. A `CompressedTexture`'s is false and not flipped (three.js cannot flip one). It takes effect when set (three.js: at the next upload). Code in a `ShaderMaterial` or hook samples at its own coordinates, as before. Older games have no `flipY`, and their DataTextures show their first row at the top.
+  Since API\_MINOR 42 (`TEXTURE_FLIP_Y_MINOR`; absent before): three.js r185's `flipY` for built-in materials' maps and a texture background. True (a loaded or canvas texture's default) shows the image's first row at the top (v = 1); false (a `DataTexture`'s default) at v = 0, the bottom. A `CompressedTexture`'s is false and not flipped (three.js cannot flip one). It takes effect when set (three.js: at the next upload). Code in a `ShaderMaterial` or hook samples at its own coordinates, as before. Older games have no `flipY`, and their DataTextures show their first row at the top. Since API\_MINOR 44 (`PHYSICAL_MATERIAL_MINOR`) it also turns a latitude-longitude environment (`scene.environment`, `envMap`, `PMREMGenerator.fromEquirectangular`) and background: false shows the first row straight down, as three.js r185 uploads it (before 1.44 a DataTexture's first row was straight up whatever its `flipY`). HDRLoader's and EXRLoader's textures are top first with `flipY` true, so they show the same at every minor.
 
 - `needsUpdate: boolean;`
 
@@ -1903,13 +1903,45 @@ export class CompressedTexture extends Texture { … }
 
 - `readonly format: number;`
 
-  `RGBA_S3TC_DXT1_Format` (BC1), `RGBA_S3TC_DXT5_Format` (BC3), `RED_RGTC1_Format` (BC4), `RED_GREEN_RGTC2_Format` (BC5) or `RGBA_BPTC_Format` (BC7).
+  `RGBA_S3TC_DXT1_Format` (BC1), `RGBA_S3TC_DXT5_Format` (BC3), `RED_RGTC1_Format` (BC4), `RED_GREEN_RGTC2_Format` (BC5) or `RGBA_BPTC_Format` (BC7). A BC5 texture as a material's `normalMap` has its z rebuilt from x and y since API\_MINOR 43.
 
 - `readonly isCompressedTexture: true;`
 
 - `readonly isNative: boolean;`
 
   Engine extension: whether the device holds its blocks (false: unpacked to RGBA8).
+
+### CompressedArrayTexture
+
+*class*
+
+three.js r185's `CompressedArrayTexture` (since API\_MINOR 43; the constructor throws a TypeError before): `depth` layers of `width × height` BC1, BC3, BC4, BC5 or BC7 blocks. `mipmaps` are its levels (`{ data, width, height }`, level 0 first, each level's data every layer's blocks one after another, layer 0 first, as three.js and KTX2 hold them). `KTX2Loader` makes one of a KTX2 array (`layerCount` past 1) or of a `.layers` file. A `ShaderMaterial`'s WGSL (or a material's `hooks`, its uniform) samples it as a `texture_2d_array<f32>`: `textureSample(t, t_sampler, uv, layer)`, `textureSampleLevel`, `textureSampleBias` and `textureSampleGrad` (a mipmap `minFilter` samples the layer's own levels, never another layer's; u and v wrap within the layer as `wrapS` and `wrapT` say), `textureLoad` (level 0), `textureDimensions` and `textureNumLayers`. The engine holds the layers as the cells of one image: as their blocks where `renderer.capabilities.compressedFormats` names the format (`isNative`; past 4,096 a side where the device holds it, so ten 2,048² layers keep their size), each layer keeping the levels that stay whole 4×4 blocks (2,048 to 4 for a 2,048² layer; the last levels sample as the 4×4 one); else unpacked to RGBA8 within 4,096 (from the first level whose layers fit). The image budget counts what it holds, its levels included. The game's blocks upload when a material first uses it, and again, all of them, after `needsUpdate`. Differences from a real array texture: no anisotropic filtering, and filtering stops at a layer's edge where u or v repeats.
+
+```ts
+export class CompressedArrayTexture extends CompressedTexture { … }
+```
+
+- `constructor(mipmaps?: { data: ArrayBufferView; width: number; height: number }[], width?: number, height?: number, depth?: number, format?: number, type?: number);`
+- `readonly isCompressedArrayTexture: true;`
+- `mipmaps: { data: ArrayBufferView; width: number; height: number }[];`
+- `type: number;`
+
+- `wrapR: string;`
+
+  three.js's; layers are never filtered across.
+
+- `readonly depth: number;`
+
+- `readonly image: { width: number; height: number; depth: number };`
+
+  A layer's width and height, and the layers.
+
+- `readonly layerUpdates: Set<number>;`
+
+  Layers `addLayerUpdate` marked (three.js; the engine uploads every layer after `needsUpdate`).
+
+- `addLayerUpdate(layerIndex: number): void;`
+- `clearLayerUpdates(): void;`
 
 ### RGBA\_S3TC\_DXT1\_Format
 
@@ -1957,7 +1989,7 @@ export const RGBA_BPTC_Format: 36492;
 
 *class*
 
-three.js's `KTX2Loader` addon (since API\_MINOR 40; the constructor throws a TypeError before) for KTX2 files of BC1, BC3, BC4, BC5 and BC7 blocks, sRGB or linear, of one level or a full mip chain, without supercompression. three.js's transcodes Basis Universal (ETC1S and UASTC) payloads; this engine does not, and refuses such a file with an `EncodingError` that says so (package BC payloads instead: `engine.textures.compress=bc` makes them from PNG and WebP images at package time). Zstandard and ZLIB supercompression are refused the same way. The texture is held as its blocks where the device samples the format (Vulkan with `textureCompressionBC`, Direct3D 12, Metal on GPUs that sample BC, OpenGL ES and WebGL2 with the S3TC, RGTC and BPTC extensions, WebGPU with `texture-compression-bc`), else unpacked to RGBA8 as it loads, so a game never fails for want of a format. Its image is the file's first level within 4,096 texels (files up to 16,384 a side load from their smaller levels), its mips the file's levels; a level 0 whose sides are not whole 4×4 blocks unpacks. A file whose data format descriptor says sRGB gives an `SRGBColorSpace` texture, as three.js's does. Errors are those of `TextureLoader`.
+three.js's `KTX2Loader` addon (since API\_MINOR 40; the constructor throws a TypeError before) for KTX2 files of BC1, BC3, BC4, BC5 and BC7 blocks, sRGB or linear, of one level or a full mip chain, without supercompression. three.js's transcodes Basis Universal (ETC1S and UASTC) payloads; this engine does not, and refuses such a file with an `EncodingError` that says so (package BC payloads instead: `engine.textures.compress=bc` makes them from PNG and WebP images at package time). Zstandard and ZLIB supercompression are refused the same way. The texture is held as its blocks where the device samples the format (Vulkan with `textureCompressionBC`, Direct3D 12, Metal on GPUs that sample BC, OpenGL ES with the S3TC, RGTC and BPTC extensions, WebGPU with `texture-compression-bc`), else unpacked to RGBA8 as it loads, so a game never fails for want of a format. Its image is the file's first level within 4,096 texels (files up to 16,384 a side load from their smaller levels), its mips the file's levels; a level 0 whose sides are not whole 4×4 blocks unpacks. A file whose data format descriptor says sRGB gives an `SRGBColorSpace` texture, as three.js's does. Errors are those of `TextureLoader`. Since API\_MINOR 43 a KTX2 texture array (`layerCount` past 1) loads as a `CompressedArrayTexture`, as three.js's does (3D KTX2 files are refused, as three.js r185 has no compressed 3D texture), and so does a `.layers` file (engine extension: the KTX2 array `engine.textures.compress=bc` made of its layer images, or where there is none, before packaging or for an `engine.textures.exact` one, its images themselves held unpacked: `format` `RGBAFormat`, `isNative` false).
 
 ```ts
 export class KTX2Loader { … }
@@ -2152,6 +2184,679 @@ export class EXRLoader { … }
 - `load(url: string, onLoad?: (texture: DataTexture) => void, onProgress?: unknown, onError?: (error: unknown) => void): void;`
 - `loadAsync(url: string): Promise<DataTexture>;`
 
+## Colour grading in place of tone mapping (since API\_MINOR 43)
+
+### COLOR\_LUT\_MINOR
+
+*const*
+
+```ts
+export const COLOR_LUT_MINOR: number;
+```
+
+43 from host API 1.43 (undefined before: feature-detect with `import * as scene from "starhermit:scene"` and `scene.COLOR_LUT_MINOR !== undefined`).
+
+### ColorLut
+
+*interface*
+
+`renderer.colorLut`'s value (since API\_MINOR 43, `COLOR_LUT_MINOR`).
+
+```ts
+export interface ColorLut { … }
+```
+
+- `texture: Data3DTexture;`
+
+  The table: a cube (width, height and depth alike, 1..128; 32 is typical) of RGBA texels as bytes (`UnsignedByteType`, read as value / 255), half floats (`HalfFloatType`, a Uint16Array) or floats (stored as half floats), red along x, green along y, blue along z (three.js's `Data3DTexture` layout, as `LUTCubeLoader` gives). Its entries are linear light. Read again after `needsUpdate`; a disposed texture draws without the table.
+
+- `input: "logc" | "logc-precise" | "linear01";`
+
+  How linear scene light becomes the table's coordinates, each then clamped to 0..1 (0 the first entry, 1 the last, interpolated trilinearly between entries, as Unity's `ApplyLut3D` with its half-texel scale and offset samples it):
+
+  - `"logc"`: Unity URP's `LinearToLogC` as URP compiles it (`USE_PRECISE_LOGC` 0; ARRI LogC EI 1000): `0.244161 · log10(max(5.555556 · x + 0.047996, 0)) + 0.386036` for every x. This is how URP's HDR grading mode reads its internal table, so a table baked by URP's `LutBuilderHdr` (grid coordinates to linear with its `LogCToLinear`) matches URP's frames.
+  - `"logc-precise"`: the same curve above `cut` 0.011361 and `5.301883 · x + 0.092819` at or below it (`LinearToLogC_Precise`).
+  - `"linear01"`: the light clamped to 0..1 as it is.
+
+- `amount?: number;`
+
+  How much of the table's result is mixed over the untoned linear light (0..1, default 1): 0 shows the (vignetted) light as `NoToneMapping` would.
+
+- `vignette?: ColorLutVignette | null;`
+
+  Unity URP's vignette on the linear light just before the lookup (URP's order), or null (the default: none). With uv 0..1 over the viewport from its bottom left (Unity's convention) and the aspect width / height of the drawing buffer: `d = abs(uv - center) · intensity · 3`, `d.x ·= aspect` when `rounded`, `f = saturate(1 − d·d) ^ (smoothness · 5)`, `light ·= mix(color, 1, f)`.
+
+### ColorLutVignette
+
+*interface*
+
+`ColorLut.vignette` (URP's `Vignette` override's fields).
+
+```ts
+export interface ColorLutVignette { … }
+```
+
+- `center?: [number, number];`
+
+  The centre, 0..1 from the viewport's bottom left (default \[0.5, 0.5\]).
+
+- `intensity: number;`
+
+  0..1 (URP's intensity; 0 changes nothing).
+
+- `smoothness: number;`
+
+  0.01..1 (URP's smoothness).
+
+- `rounded?: boolean;`
+
+  Round on any aspect (default false: stretched with the viewport).
+
+- `color?: Color | [number, number, number];`
+
+  The color at the edge (default black), its components used as given (URP's shader takes its Color's values unconverted).
+
+## The lens and the underwater light (since API\_MINOR 44)
+
+### LENS\_EFFECTS\_MINOR
+
+*const*
+
+```ts
+export const LENS_EFFECTS_MINOR: number;
+```
+
+44 from host API 1.44 (undefined before: feature-detect with `import * as scene from "starhermit:scene"` and `scene.LENS_EFFECTS_MINOR !== undefined`): `renderer.bokeh`, `renderer.lens` and `renderer.sensorNoise`.
+
+### UNDERWATER\_MINOR
+
+*const*
+
+```ts
+export const UNDERWATER_MINOR: number;
+```
+
+44 from host API 1.44 (undefined before): `renderer.underwater`.
+
+## Host API 1.46's scene minors (undefined before 46)
+
+### VIDEO\_TEXTURE\_MINOR
+
+*const*
+
+```ts
+export const VIDEO_TEXTURE_MINOR: number;
+```
+
+`VideoTexture`.
+
+## Host API 1.45's scene minors (undefined before 45)
+
+### BLOOM\_PREFILTER\_MINOR
+
+*const*
+
+```ts
+export const BLOOM_PREFILTER_MINOR: number;
+```
+
+`BloomSettings.prefilter` and `knee`.
+
+### IMAGE\_LABELS\_MINOR
+
+*const*
+
+```ts
+export const IMAGE_LABELS_MINOR: number;
+```
+
+`imageUsage()`'s labels and texture names.
+
+### BAKED\_MATRIX\_TABLES\_MINOR
+
+*const*
+
+```ts
+export const BAKED_MATRIX_TABLES_MINOR: number;
+```
+
+`BakedSkinnedAnimations.fromMatrices` and `matrixTable`.
+
+### INSTANCED\_ROOT\_OFFSETS\_MINOR
+
+*const*
+
+```ts
+export const INSTANCED_ROOT_OFFSETS_MINOR: number;
+```
+
+InstancedSkinnedMesh's root offsets.
+
+## Host API 1.46's scene minors (undefined before 46)
+
+### MOTION\_BLUR\_MINOR
+
+*const*
+
+```ts
+export const MOTION_BLUR_MINOR: number;
+```
+
+`renderer.motionBlur`.
+
+### COMPILE\_ASYNC\_MINOR
+
+*const*
+
+```ts
+export const COMPILE_ASYNC_MINOR: number;
+```
+
+`renderer.compileAsync`.
+
+## Host API 1.47's scene minors (undefined before 47)
+
+### MOTION\_VECTORS\_MINOR
+
+*const*
+
+```ts
+export const MOTION_VECTORS_MINOR: number;
+```
+
+`Object3D.motionVectors`.
+
+### MOTION\_SCALE\_MINOR
+
+*const*
+
+```ts
+export const MOTION_SCALE_MINOR: number;
+```
+
+`Object3D.motionScale`, `InstancedMesh.setMotionScaleAt`.
+
+### MOTION\_BLUR\_CAMERA\_MINOR
+
+*const*
+
+```ts
+export const MOTION_BLUR_CAMERA_MINOR: number;
+```
+
+`renderer.motionBlur`'s `camera`.
+
+### MOTION\_BLUR\_ACTIVE\_MINOR
+
+*const*
+
+```ts
+export const MOTION_BLUR_ACTIVE_MINOR: number;
+```
+
+`renderer.motionBlurActive`.
+
+## Host API 1.48's scene minors (undefined before 48)
+
+### SUBSURFACE\_MINOR
+
+*const*
+
+```ts
+export const SUBSURFACE_MINOR: number;
+```
+
+`MeshPhysicalMaterial`'s subsurface settings and `renderer.subsurface`.
+
+### SubsurfaceMethod
+
+*type*
+
+```ts
+export type SubsurfaceMethod = "auto" | "screen" | "preintegrated";
+```
+
+`MeshPhysicalMaterial.subsurfaceMethod`'s values (since API\_MINOR 48).
+
+## Host API 1.51's materials (engine extensions; absent before 51)
+
+### MaterialUnderwater
+
+*interface*
+
+`MeshStandardMaterial.underwater`'s value (since API\_MINOR 51, `MATERIAL_UNDERWATER_MINOR`): `true` for the defaults, or these.
+
+```ts
+export interface MaterialUnderwater { … }
+```
+
+- `view?: number | null;`
+
+  The share of the view's path through the water (from where the view enters it down to the surface) the material dims its light along and adds the water's scattered light over, seen from above the water (0..1). Default: 1 for a `transparent` material and when `renderer.underwater` has no starhermit:water `water`; 0 for an opaque material under such a body, whose surface already dims what it refracts along that path.
+
+- `sun?: number | null;`
+
+  Seen from above the water, the share of the light's way down through it (the sun's beam and the sky's light; 0..1) the material dims by, with the same default as `view`: a starhermit:water surface already dims an opaque material it refracts by its own estimate of that way, so such a material takes none of it there (one dimming, not two), its caustics kept. From under the water it takes all of it.
+
+- `caustics?: number;`
+
+  The caustics' strength times `renderer.underwater`'s (0..16, default 1; 0 the sun's light even).
+
+### TissueFallback
+
+*type*
+
+```ts
+export type TissueFallback = "auto" | "always" | "never";
+```
+
+`MeshPhysicalMaterial.tissueFallback`'s values (since API\_MINOR 51, `TISSUE_FALLBACK_MINOR`).
+
+### SubsurfaceSettings
+
+*interface*
+
+`renderer.subsurface`'s value (since API\_MINOR 48, `SUBSURFACE_MINOR`; an engine extension): subsurface scattering's screen-space pass. By default (null) materials of the "auto" method take it on the High and Ultra graphics levels (16 and 32 samples) and the pre-integrated profile on Low and Balanced; "screen" materials take it at every level.
+
+```ts
+export interface SubsurfaceSettings { … }
+```
+
+- `enabled?: boolean;`
+
+  false turns the pass off: every material takes the pre-integrated profile (default true). Anything but a boolean is a TypeError.
+
+- `samples?: number;`
+
+  The gather's taps per pixel, a whole number 4..48 (default the level's). More is smoother and slower; under temporal anti-aliasing (or an upscaler) the taps turn each frame, so fewer settle as well.
+
+### MotionBlurSettings
+
+*interface*
+
+`renderer.motionBlur`'s value (since API\_MINOR 46, `MOTION_BLUR_MINOR`; an engine extension): per-object, velocity-based motion blur. Each pixel is blurred along its motion: the motion its object drew in the velocity step (meshes, skins and instances that moved since the last frame), or the camera's where nothing drew (the background). The blur is the motion over the shutter, centred on where the pixel is now, in the window's pixels.
+
+It is a reconstruction filter (McGuire et al., "A Reconstruction Filter for Plausible Motion Blur", I3D 2012): the largest blur in each tile and its neighbours bounds the search, and a depth-aware gather lets a moving object smear over what is behind it, but not what is in front of it over the object. It runs on the linear light after temporal anti-aliasing (or the render scale's resampling), the post passes before the output and the depth of field, before automatic exposure, bloom and tone mapping, in window frames only; the game's 2D overlay (its HUD: `starhermit:draw`, `starhermit:ui`) is drawn after it and is never blurred. Under the reactive mask (transparent surfaces and particles) the blur fades by their coverage. A still scene is left exactly as it was. A camera cut (a new `renderer.camera`, or `renderer.resetHistory()`) blurs nothing that frame.
+
+It brings the velocity step along whatever `renderer.antialias` is, and needs half-float post buffers (a device without them leaves it out, with a note). Over the effect budget it is left out after bloom. The player's Options › Graphics › Motion blur (on by default) and Reduce motion turn it off, as a check's `--no-motion-blur` does; since API\_MINOR 47 `renderer.motionBlurActive` tells the game (before, it was not told).
+
+What blurs follows the motion vectors: since API\_MINOR 47 an object's `motionVectors` ("camera": it moves with the camera alone) and `motionScale` (a share of its own motion), and the blur's `camera` (false: the camera's motion does not blur).
+
+GPU time: `stats().gpu.passes.post`.
+
+```ts
+export interface MotionBlurSettings { … }
+```
+
+- `intensity?: number;`
+
+  The shutter, as a share of a frame, 0..1 (default 0.5: half a frame's motion, a 180° shutter); 0 turns the blur off.
+
+- `samples?: number;`
+
+  The gather's samples per pixel, a whole number 1..32 (default 8). More is smoother and slower.
+
+- `maxPixels?: number;`
+
+  The longest blur in the window's pixels, 1..128 (default 32); longer motion is shortened to it.
+
+- `targetFps?: number;`
+
+  0 (the default): the shutter is this frame's, so at a higher frame rate a moving object blurs over a shorter distance (a real camera's shutter angle, as Unity URP's motion blur). 1..1000: the shutter is a frame at this rate instead, the motion scaled by `1 / (targetFps × frame().delta)` (within 1/8..8), so the blur keeps its length at any frame rate.
+
+- `camera?: boolean;`
+
+  Since API\_MINOR 47 (`MOTION_BLUR_CAMERA_MINOR`; ignored before): whether the camera's motion blurs (default true). false takes it out of each pixel's motion, as HDRP's `cameraMotionBlur` off does: the camera's pans, turns and shakes leave the frame sharp (the background and what stands still never blur) and what moves of itself blurs by its own motion alone, as seen from the moving camera. Unity URP's motion blur has no such mode (its modes are the camera's motion alone, or the camera's and the objects'). Anything but true, false or undefined is a TypeError.
+
+### BokehSettings
+
+*interface*
+
+`renderer.bokeh`'s value (since API\_MINOR 44, `LENS_EFFECTS_MINOR`): three.js r185 `BokehPass`'s `focus`, `aperture` and `maxblur`, as engine disc bokeh. A pixel's circle of confusion has a radius of `0.4 × width × min(c, maxblur)` pixels (as `BokehShader` spreads its taps across the image), `c` being three.js's `aperture × |focus − depth|` or, with `thinLens`, `aperture × |1 − focus / depth|` (the circle a thin lens draws, `aperture` the circle far beyond the focus), depth the view depth. Each pixel gathers `samples` taps on a golden-angle spiral out to the largest circle, a tap counting where its own circle reaches the pixel (a sharp surface in front keeps its edge), weighted by its circle's area with a slightly brighter rim.
+
+```ts
+export interface BokehSettings { … }
+```
+
+- `focus?: number;`
+
+  The view depth in focus (above 0, default 1, three.js's); with autofocus, where it looks when its probe finds nothing.
+
+- `aperture?: number;`
+
+  default 0.025 (three.js's), 0..65504.
+
+- `maxblur?: number;`
+
+  default 1 (three.js's), 0..1: the largest circle, as a share of 0.4 × the width.
+
+- `samples?: number;`
+
+  Gather taps, 1..64 (default 32).
+
+- `thinLens?: boolean;`
+
+  default false: three.js's circle of confusion.
+
+- `autofocus?: boolean | { x?: number; y?: number; radius?: number; smoothing?: number; near?: number; far?: number; distance?: number; target?: Vector3 | { x: number; y: number; z: number } | null };`
+
+  Autofocus (an engine extension): true, its settings, or false (the default). The focus eases toward the nearest view depth among 13 taps of the scene's depth in a disc of `radius` (0..0.5 of the image's height, default 0.02) around `x`, `y` (0..1 from the image's top left, default the centre), clamped to `near`..`far` (default 0.1..1000), in log space with a time constant of `smoothing` seconds (0..60, default 1/3; 0 jumps), as a lens motor does. Assigning `renderer.bokeh` a new object starts it afresh (it jumps). The focus is kept on the GPU.
+
+  Since API\_MINOR 51 (`AUTOFOCUS_HINT_MINOR`; ignored before) the game may name its subject: `distance` (a view depth, as `focus`; above 0) or `target` (a world point, a Vector3 or \{x, y, z\}, its view depth taken each frame, so a moving fish stays in focus), not both (a TypeError). The focus then eases toward it with the same smoothing, clamped to `near`..`far`, in place of the probe's nearest depth; a target behind the camera, or no hint, leaves it to the probe.
+
+### LensSettings
+
+*interface*
+
+`renderer.lens`'s value (since API\_MINOR 44, `LENS_EFFECTS_MINOR`). With `r` a point's distance from the image's centre in units of its height (x scaled by the aspect), the point shows the image at `(1 + distortion · r²)` of its offset, scaled so the corners stay in frame (the centre is magnified); red is read `(1 − chromaticAberration · r² / 2)` nearer the centre and blue `(1 + chromaticAberration · r²)` farther, so fringes grow toward the corners.
+
+```ts
+export interface LensSettings { … }
+```
+
+- `distortion?: number;`
+
+  Barrel distortion, 0..1 (default 0).
+
+- `chromaticAberration?: number;`
+
+  Chromatic aberration, 0..1 (default 0).
+
+- `lift?: { color: Color | [number, number, number]; amount?: number } | null;`
+
+  Since API\_MINOR 51 (`LENS_LIFT_MINOR`; ignored before): the shadow floor raised toward `color` (an array of 3 numbers or a Color, each 0..1; required), each shown value `c` becoming `c + color · (1 − c) · amount` (`amount` 0..1, default 1), as an underwater or veiled lens lifts its blacks. It runs in the lens's step on the shown (encoded) image, after the distortion and chromatic aberration and before sensor noise, and needs no other lens setting; null, an amount of 0 or a black colour draw nothing for it (no step, no cost). Read each frame.
+
+### SensorNoiseSettings
+
+*interface*
+
+`renderer.sensorNoise`'s value (since API\_MINOR 44, `LENS_EFFECTS_MINOR`): noise added to the shown image, mostly luminance, `intensity × (0.25 + 0.75 × (1 − smoothstep(0.02, 0.55, luma)))` strong (so strongest in the dark), never below 0.
+
+```ts
+export interface SensorNoiseSettings { … }
+```
+
+- `intensity?: number;`
+
+  0..1 (default 0.02).
+
+- `color?: number;`
+
+  The colour share, 0..1 (default 1; 0 grey noise).
+
+- `animated?: boolean;`
+
+  Fresh each frame (default true); false keeps one pattern.
+
+### UnderwaterSettings
+
+*interface*
+
+`renderer.underwater`'s value (since API\_MINOR 44, `UNDERWATER_MINOR`). The surface: `level`, or `heightfield` (with starhermit:water's ripples on top); `water` fills every unset field from a starhermit:water `Ocean` (its level, and the heights of the waves around the camera), `Pond` (its level and rectangle, its optics and ripples) or `WaterMaterial` (its optics and ripples; give the level or a heightfield). Fields set here win over the water's.
+
+```ts
+export interface UnderwaterSettings { … }
+```
+
+- `water?: object | null;`
+
+  A starhermit:water `Ocean`, `Pond` or `WaterMaterial`.
+
+- `level?: number;`
+
+  The surface's height where no heightfield says otherwise (default 0, or the water's).
+
+- `heightfield?: { texture: Texture; bounds: [number, number, number, number]; height?: number; depth?: number | null; dry?: number; outsideDry?: boolean } | null;`
+
+  Heights in a texture over a rectangle (row 0 at min z, bilinear between texels): `height` the channel holding them (0..3, default 0 red), `depth` the channel holding the water's depth (null: water everywhere) with the water dry at or below `dry` (default 0), and `outsideDry` (default false: the level holds outside `bounds`). A FloatType or HalfFloatType DataTexture or render target.
+
+- `bounds?: [number, number, number, number] | null;`
+
+  Without a heightfield: the level's water lies only inside these \[minX, minZ, maxX, maxZ\] (default unbounded, or a Pond's).
+
+- `absorption?: [number, number, number];`
+
+  Per unit, red, green and blue (0..100; default the water's, else \[0.45, 0.07, 0.04\]): absorption, and scattering (\[0.002, 0.006, 0.007\]); light is dimmed by exp(−(absorption + scattering) · length) and scattering is what lights the water.
+
+- `scattering?: [number, number, number];`
+
+- `sunDirection?: Vector3 | [number, number, number];`
+
+  Toward the sun (default the water's, else (0.3, 0.8, 0.5)); its light, linear with its intensity (default the water's, else \[3, 2.85, 2.63\]); the sky's light in the water (default the water's, else \[0.24, 0.38, 0.62\]). Below the horizon the sun adds nothing.
+
+- `sunColor?: Color | [number, number, number];`
+- `skyColor?: Color | [number, number, number];`
+
+- `shafts?: number;`
+
+  The sun's scattered light's scale (light shafts; default 1).
+
+- `caustics?: number;`
+
+  The caustics' strength (0..16, default 1: as the surface's curvature focuses the refracted sun; 0 even light).
+
+- `anisotropy?: number;`
+
+  Henyey-Greenstein's anisotropy, 0..0.95 (default 0.6).
+
+- `ripples?: { scale?: number; speed?: number; direction?: number } | null;`
+
+  starhermit:water's WaterMaterial ripples on the surface (its five trains at a wind `speed` and `direction` in radians, `scale` 0..16, default 1), null for none (default: the water's).
+
+- `motes?: boolean | { density?: number; size?: number };`
+
+  Motes catching the sun near the eye: true, `{ density (0..1, default 0.02), size (default 0.005) }`, or false (the default).
+
+- `steps?: number;`
+
+  The march's steps (1..64, default 24) and reach (default 40).
+
+- `reach?: number;`
+
+- `refractiveIndex?: number;`
+
+  default 1.33.
+
+- `resolution?: "auto" | "full" | "half";`
+
+  Since API\_MINOR 52 (`UNDERWATER_HALF_MINOR`): the march's resolution. `"half"` marches a quarter of the pixels (each the ray through the scene's pixel at twice its coordinates) and brings them back with a depth-aware upsampling (the two nearest march texels on each axis, weighted bilinearly and by how near their view depth is to the pixel's, else the nearest in depth), so a stalk or fish before far water keeps its own fog; motes, a few pixels across, soften. `"full"` marches every pixel. `"auto"` (the default) is half below the galactic graphics level and full on the Ultra levels. Older games march every pixel.
+
+- `time?: number;`
+
+  Seconds on the ripples' and motes' clock (default the water's, else the frame's time).
+
+- `margin?: number;`
+
+  How far above the surface the camera may be before nothing is drawn (default 1; only where the surface's height at the camera is known: an Ocean's, or a level without a heightfield).
+
+- `enabled?: boolean;`
+
+  default true.
+
+## Projected decals (since API\_MINOR 43, DECALS\_MINOR)
+
+Below API\_MINOR 43 none of these exist: a named import fails to link, and a namespace import's `DECALS_MINOR` is undefined.
+
+### DECALS\_MINOR
+
+*const*
+
+```ts
+export const DECALS_MINOR: number;
+```
+
+43 from host API 1.43 (undefined before).
+
+### DecalProjectorParameters
+
+*interface*
+
+A DecalProjector's look.
+
+```ts
+export interface DecalProjectorParameters { … }
+```
+
+- `map?: Texture | null;`
+
+  The decal's image (its alpha the coverage; null white). Sampled at the decal's own coordinates the way up its `flipY` says (read when given; `set` again after changing it) and sRGB-decoded by its `colorSpace`, as texture uniforms are; its `offset`, `repeat` and `wrapS/T` do not apply.
+
+- `normalMap?: Texture | null;`
+
+  Tangent-space normal map (OpenGL convention) bending the lit surface under the decal, x and y times `normalScale` (default 1).
+
+- `normalScale?: number;`
+
+- `roughnessMap?: Texture | null;`
+
+  Roughness times the map's green under the decal (lit decals).
+
+- `roughness?: number;`
+
+  Default 1 and 0.
+
+- `metalness?: number;`
+- `color?: ColorInput;`
+- `opacity?: number;`
+
+- `lit?: boolean;`
+
+  Lit by the scene's lights and shadows at the surface beneath it (default true; a MeshStandardMaterial's shading), or drawn as its color (false). Fixed when made.
+
+- `blending?: Blending;`
+
+  NormalBlending (default), AdditiveBlending or MultiplyBlending (its color fades to white with its coverage: scorch marks and tracks darken what lies under them; unlit, unfogged). Fixed when made.
+
+- `angleFade?: readonly [number, number];`
+
+  Radians between a surface's normal and the projector's +Z over which the decal fades out (default \[π/3, 5π/12\]: none past 75°, as normals rebuilt from the depth are a little noisy on surfaces seen edge-on).
+
+- `tiles?: readonly [number, number];`
+
+  Columns and rows of tiles in its maps (1 to 64; default \[1, 1\]).
+
+- `count?: number;`
+
+  Decals it holds (1 to 65,536; default 1). Fixed when made.
+
+### DecalProjector
+
+*class*
+
+ENGINE EXTENSION (since API\_MINOR 43; three.js has `DecalGeometry` but no projector): screen-space decals, as Unity's URP and HDRP draw them. Each decal is a box: the unit cube placed by its instance's matrix (`setMatrixAt`) and the projector's own transform (`scale` the box's size), projecting its map along its −Z axis onto the opaque surfaces inside it (u along +X, the image's top towards +Y). A ground decal is turned `rotation.x = -Math.PI / 2`. Each fragment of the box finds the scene's nearest opaque surface in `renderer.sceneDepth` (which the frame then draws first), its normal from the neighbouring pixels' depths, and is left out where that surface lies outside the box, has `receiveDecals` false, or faces away (`angleFade`). Lit decals are shaded at that surface's point and normal (shadows included), bent by `normalMap`, with `roughness`/`roughnessMap`.
+
+All of a projector's decals are one draw of a box each, so a battle's hundreds of scorch marks and tracks cost the pixels they cover (about six depth reads and a map read a pixel) and nothing per triangle of the ground; they draw with the transparent objects in `renderOrder` (default −1000, before others, so smoke draws over them), later decals over earlier ones. Their maps are sampled with the box's derivatives, so at a silhouette a decal may take a coarser mip level for a pixel. A RangeError or TypeError for parameters out of range.
+
+```ts
+export class DecalProjector extends InstancedMesh { … }
+```
+
+- `constructor(parameters?: DecalProjectorParameters);`
+- `readonly isDecalProjector: true;`
+- `readonly lit: boolean;`
+
+- `set(parameters: DecalProjectorParameters): this;`
+
+  Changes its look (all but `lit`, `blending` and `count`).
+
+- `setTileAt(index: number, tile: number): this;`
+
+  Decal `index`'s tile of the maps (row by row from the top left).
+
+- `setOpacityAt(index: number, opacity: number): this;`
+
+  Decal `index`'s opacity (0 to 1, default 1), times the decal's: a mark fading out over its life.
+
+### DecalGeometry
+
+*class*
+
+three.js r185's `DecalGeometry` (examples/jsm, since API\_MINOR 43): `mesh`'s triangles in world space (its `matrixWorld` as it is: update it first) clipped to the box of `size` at `position` turned by `orientation`, with uv across the box's x and y and the mesh's normals. Script work for each of the mesh's triangles.
+
+```ts
+export class DecalGeometry extends BufferGeometry { … }
+```
+
+- `constructor(mesh?: Mesh, position?: Vector3, orientation?: Euler, size?: Vector3);`
+
+## Physical materials and array uniforms (since API\_MINOR 44)
+
+### PHYSICAL\_MATERIAL\_MINOR
+
+*const*
+
+```ts
+export const PHYSICAL_MATERIAL_MINOR: number;
+```
+
+44 from host API 1.44 (undefined before): MeshPhysicalMaterial's ior, iridescence, transmission and translucency (see there).
+
+### UNIFORM\_ARRAYS\_MINOR
+
+*const*
+
+```ts
+export const UNIFORM_ARRAYS_MINOR: number;
+```
+
+44 from host API 1.44 (undefined before): three.js's array uniforms (see `ShaderUniform`) and `starhermit.h`'s `uniform_set` into arrays.
+
+## Screen-space distortion (since API\_MINOR 43, DISTORTION\_MINOR)
+
+### DISTORTION\_MINOR
+
+*const*
+
+```ts
+export const DISTORTION_MINOR: number;
+```
+
+43 from host API 1.43 (undefined before).
+
+### DistortionMaterialParameters
+
+*interface*
+
+```ts
+export interface DistortionMaterialParameters { … }
+```
+
+- `map?: Texture | null;`
+
+  Red and green push the scene behind right and up (0.5 none), alpha the coverage; sampled at the geometry's uv as stored. Null (default): a round bulge, strongest at the middle, fading to the edges.
+
+- `strength?: number;`
+
+  At a full push, this share of the screen's height at a view depth of one unit, less farther away (−10 to 10; default 0.05).
+
+- `color?: ColorInput;`
+
+  The bent scene's tint (default white).
+
+- `opacity?: number;`
+
+- `scroll?: readonly [number, number];`
+
+  Map widths a second the map scrolls (`update(seconds)` advances it).
+
+### DistortionMaterial
+
+*class*
+
+ENGINE EXTENSION (since API\_MINOR 43): a transparent ShaderMaterial drawing the scene behind it displaced (heat shimmer, shock waves, glass): `renderer.sceneColor` read at the fragment's window position pushed by its map times `strength` over the view depth, tinted, mixed in by its coverage (map alpha × `opacity` × the vertex/instance colour's alpha). It has `distortion` true and `depthWrite` false, so the colour it reads holds the transparent objects drawn before it; it is composited in the scene's linear light, before bloom, the grade and the tone mapping. Frames it draws in bring the scene-colour copy along (the post buffers and 8 bytes a pixel); where the device renders no half floats the colour stays black. GPU particle emitters take `distortion` too (`GPUParticleEmitterOptions.distortion`).
+
+```ts
+export class DistortionMaterial extends ShaderMaterial { … }
+```
+
+- `constructor(parameters?: DistortionMaterialParameters);`
+- `readonly isDistortionMaterial: true;`
+- `set(parameters: DistortionMaterialParameters): this;`
+
+- `update(seconds: number): this;`
+
+  Advances the map's scroll by `seconds`.
+
 ## Alembic caches (since API\_MINOR 42, ALEMBIC\_MINOR)
 
 Baked simulations and animated meshes (fluid surfaces, splashes, cloth) played back; the engine's own (three.js r185 has no Alembic loader). Below API\_MINOR 42 none of these exist: a named import fails to link, and a namespace import's `ALEMBIC_MINOR` is undefined, which is how a game built for older minors detects them.
@@ -2166,6 +2871,16 @@ export const ALEMBIC_MINOR: number;
 
 42 from host API 1.42 (undefined before: feature-detect with `import * as scene from "starhermit:scene"` and `scene.ALEMBIC_MINOR !== undefined`).
 
+### ALEMBIC\_INSTANCES\_MINOR
+
+*const*
+
+```ts
+export const ALEMBIC_INSTANCES_MINOR: number;
+```
+
+45 from host API 1.45 (undefined before): shared playback (`AlembicCache.clone()`, `timeOffset`, a path loaded twice shared), `alembicUsage()` and 256 caches (32 before).
+
 ### loadAlembic
 
 *function*
@@ -2175,6 +2890,56 @@ export function loadAlembic(path: string): Promise<AlembicCache>;
 ```
 
 Loads a package Alembic cache: a `.wabc` (tools/wabc.py bakes one from Blender or an OBJ sequence), or an `.abc` as Blender, Houdini and Maya export it (Ogawa, or classic HDF5 with superblock 0/1 and contiguous or compact datasets; converted as it loads, so a large one loads faster baked to `.wabc`). The file is read and parsed off the game's thread, at most 64 MiB, at most 1,048,576 vertices and 3,145,728 indices a sample and 65,536 samples a track; a game holds at most 32 caches and 256 MiB of them at once (`dispose()` frees one). Rejects with a `NotFoundError` for a missing file, a `SyntaxError` for an invalid or unsupported one and a `RangeError` past the limits. The cache starts at time 0, playing and looping.
+
+Since API\_MINOR 45 (`ALEMBIC_INSTANCES_MINOR`) a game holds 256 caches (loaded files) and loading a path that is already loaded (and not yet disposed by all its caches) does not read it again: it gives a new cache over the same samples, as `clone()` does but at time 0 with its own materials, taking no slot and no file bytes. The 256 MiB of files stands; besides, a game holds at most 1,024 AlembicCaches (loads and clones) and 256 MiB of their decoders' state (`alembicUsage()`).
+
+### AlembicUsage
+
+*interface*
+
+What the game's Alembic caches hold against their limits (since API\_MINOR 45).
+
+```ts
+export interface AlembicUsage { … }
+```
+
+- `readonly caches: number;`
+
+  Loaded files, each one however many caches play it, and their most (256).
+
+- `readonly maxCaches: number;`
+
+- `readonly players: number;`
+
+  AlembicCaches (loads and clones) and their most (1,024).
+
+- `readonly maxPlayers: number;`
+
+- `readonly fileBytes: number;`
+
+  The loaded files' bytes (each file once) and their most (256 MiB).
+
+- `readonly maxFileBytes: number;`
+
+- `readonly decoderBytes: number;`
+
+  What the caches' decoders hold (a vertex-animated track's base mesh, a surface track's last state; a whole-mesh track holds none) and its most (256 MiB; past it a sample still to decode throws a RangeError).
+
+- `readonly maxDecoderBytes: number;`
+
+- `readonly geometries: number;`
+
+  Sample geometries shown now, each shared by every cache of its file showing that sample (each counts against the mesh budget once).
+
+### alembicUsage
+
+*function*
+
+```ts
+export function alembicUsage(): AlembicUsage;
+```
+
+Since API\_MINOR 45 (`ALEMBIC_INSTANCES_MINOR`): what the game's Alembic caches hold.
 
 ### AlembicNode
 
@@ -2192,13 +2957,34 @@ export interface AlembicNode { … }
 
 - `readonly object: Mesh | Points;`
 
-  An ordinary Mesh (a MeshStandardMaterial shared by the cache's meshes at first) or Points (a PointsMaterial as wide as the cache's first point width). Assign any material (ShaderMaterial, hooks such as `light`); geometry, position, quaternion and scale are the cache's and replaced as samples change (move the cache instead).
+  An ordinary Mesh (a MeshStandardMaterial shared by the cache's meshes at first) or Points (a PointsMaterial as wide as the cache's first point width). Assign any material (ShaderMaterial, hooks such as `light`); geometry, position, quaternion and scale are the cache's and replaced as samples change (move the cache instead). Since API\_MINOR 45 `geometry` is the sample's own BufferGeometry, shared by every cache of the file showing that sample and swapped for the next sample's as the sample changes: read it, do not change it.
 
 ### AlembicCache
 
 *class*
 
 A playing Alembic cache: a Group of its nodes' objects. Each sample replaces a node's BufferGeometry attributes whole (`position`, `normal`, `uv`, the index; topology may change every sample, as a fluid's does), uploaded as any geometry and counted against the game's mesh budget. A vertex's velocity (Alembic `.velocities`, Blender's `velocity` attribute: Mantaflow speed vectors or Geometry Nodes'), when the cache has them, is the geometry's `custom` attribute (3 numbers a vertex, units a second, in the node's space; custom materials read `Vertex.custom.xyz`). A sample without vertices keeps the last arrays and draws none of them (`drawRange` count 0). Only a node whose sample changed is touched.
+
+Since API\_MINOR 45 (`ALEMBIC_INSTANCES_MINOR`) caches share: `clone()` gives another cache over the same loaded file (one of the game's 256 caches however many play it), with its own `time`, `timeOffset`, `speed`, `loop`, `playing` and transform. A sample is decoded and uploaded once while any cache of the file shows it: the caches showing it draw one BufferGeometry (a sample without vertices is an empty one drawing nothing), so ten waterfalls on the same frame cost one mesh. Each cache keeps its own decoder (a surface track decodes in order from its last sample), so caches far out of phase each decode the samples none of the others shows. Disposing a cache leaves the others playing; the file and its samples go with the last of them.
+
+```ts
+import { loadAlembic, scene } from "starhermit:scene";
+// One curtain, splash and droplet cache each, played by every fall.
+const [curtain, splash, drops] = await Promise.all(
+  ["fx/curtain.wabc", "fx/splash-low.wabc", "fx/drops.wabc"].map(loadAlembic));
+const falls = [];
+for (let i = 0; i < 10; i++) {
+  for (const layer of [curtain, splash, drops]) {
+    const fall = i === 0 ? layer : layer.clone();
+    fall.position.set(i * 12, 0, 0);
+    fall.timeOffset = i * 0.37; // out of phase: each its own sample
+    fall.speed = 0.9 + 0.02 * i;
+    scene.add(fall);
+    falls.push(fall);
+  }
+}
+// Later: each fall disposes on its own; the files go with the last.
+```
 
 ```ts
 export class AlembicCache extends Group { … }
@@ -2236,6 +3022,14 @@ export class AlembicCache extends Group { … }
 
   Shows the sample at `seconds` (wrapped when `loop`, else clamped to 0..duration). A RangeError for a non-finite time; a TypeError once disposed.
 
+- `timeOffset: number;`
+
+  Since API\_MINOR 45: seconds added to `time` to choose the sample shown (wrapped when `loop`, else clamped; default 0), so caches of one file play out of phase. `time` stays the playback clock.
+
+- `clone(recursive?: boolean): this;`
+
+  Since API\_MINOR 45: another cache over this one's loaded file (three.js's `clone`, which shares a mesh's geometry and material): at this cache's time, `timeOffset`, `speed`, `loop` and `playing`, with its transform and Object3D settings, its nodes' objects' settings and materials (shared), and clones of the game's own children unless `recursive` is false. It plays on its own from then. No file is read, no cache slot taken; a RangeError past 1,024 caches, a TypeError once disposed. Below API\_MINOR 45 a cache cannot be cloned (TypeError).
+
 - `readonly nodes: readonly AlembicNode[];`
 
 - `getNode(name: string): AlembicNode | undefined;`
@@ -2244,13 +3038,116 @@ export class AlembicCache extends Group { … }
 
 - `dispose(): void;`
 
-  Frees the cache's samples and its nodes' geometries; it stops playing (call it when done: a cache is kept until then).
+  Frees the cache's samples and its nodes' geometries; it stops playing (call it when done: a cache is kept until then). Since API\_MINOR 45 the samples other caches of the file show stay theirs, and the file goes with its last cache.
+
+### VideoTextureOptions
+
+*interface*
+
+`VideoTexture`'s options (all optional).
+
+```ts
+export interface VideoTextureOptions { … }
+```
+
+- `loop?: boolean;`
+
+  Start again at the end (default false).
+
+- `autoplay?: boolean;`
+
+  Play as soon as it can (default true); otherwise at `play()`.
+
+- `muted?: boolean;`
+
+  Leave the sound out (default false).
+
+- `volume?: number;`
+
+  The sound's gain, 0 to 16 (default 1).
+
+- `bus?: "music" | "effects" | "interface";`
+
+  The bus the sound plays on (default "effects").
+
+- `playbackRate?: number;`
+
+  0.0625 to 16 (default 1). The sound plays only at 1: at any other rate the picture plays alone.
+
+### VideoTexture
+
+*class*
+
+Since API\_MINOR 46 (VIDEO\_TEXTURE\_MINOR; undefined before): three.js r185's `VideoTexture`, playing a video file itself rather than an HTMLVideoElement, with that element's controls. Usable as any material's `map` (or any texture slot), and in hooks and custom materials as any texture.
+
+`src` is a package file or one of the game's remote files (`engine.remote.files`; it plays once its bytes are all on the device, `files.fetch` makes them so ahead of time): a \*\*WebM file of VP8 video\*\* with Opus or Vorbis sound, or none. MP4, H.264, AAC, VP9 and AV1 are not played (patent-encumbered or not yet decoded; `cargo starhermit package` refuses them in a game at 46). Convert a clip with `ffmpeg -i in.mp4 -c:v libvpx -b:v 2M -c:a libopus out.webm` (add `-auto-alt-ref 0` for live-encoded clips; 1080p30 at 2 to 4 Mbit/s plays everywhere). Up to 4096 pixels a side, 4 videos at once, files up to 512 MiB.
+
+Natively the engine's own VP8 decoder plays it off the game's thread (bit-exact with libvpx; a 1080p30 frame takes a few milliseconds on a desktop core); in browsers the browser's decoder (WebCodecs, in the game's worker; the engine's own where the browser has none). The texture shows nothing until the first frame is decoded, then, as each frame begins, the newest frame due by the video's clock: the frame time scaled by `playbackRate` while it plays, held to its sound's position while that plays (picture and sound within a frame of each other). The sound is a stream on `bus` (one of the game's 4 streams: with none left the video plays silently).
+
+Colours: Y'CbCr to R'G'B' by the file's colour description (Matroska `MatrixCoefficients`: 1 BT.709, 9 BT.2020, else BT.601, VP8's own; `Range` 2 full range, else limited 16 to 235), chroma upsampled bilinearly; the texture is RGBA8 holding those gamma-encoded values, `colorSpace` SRGBColorSpace (as browsers show video), linearly filtered without mipmaps (`generateMipmaps` false).
+
+```ts
+export class VideoTexture extends Texture { … }
+```
+
+- `constructor(src: string, options?: VideoTextureOptions);`
+- `readonly isVideoTexture: true;`
+- `readonly src: string;`
+
+- `play(): Promise<void>;`
+
+  Plays from where it is (from the start once it ended).
+
+- `pause(): void;`
+
+- `currentTime: number;`
+
+  Seconds into the video; setting it seeks (0 to `duration`; the frame showing there shows once decoded, from the key frame before it).
+
+- `readonly duration: number;`
+
+  Seconds; NaN until the file was read.
+
+- `readonly paused: boolean;`
+
+- `readonly ended: boolean;`
+
+  It played to its end (not looping).
+
+- `loop: boolean;`
+- `playbackRate: number;`
+- `muted: boolean;`
+- `volume: number;`
+
+- `readonly videoWidth: number;`
+
+  The video's size in pixels (0 until the file was read).
+
+- `readonly videoHeight: number;`
+
+- `readonly hasAudio: boolean;`
+
+  Whether the file has a sound track.
+
+- `readonly error: string | null;`
+
+  Why it cannot play (not WebM VP8, damaged, missing), else null.
+
+- `readonly readyState: number;`
+
+  4 (HAVE\_ENOUGH\_DATA) once a frame shows, else 0.
+
+- `update(): void;`
+
+  three.js's; frames upload on their own.
+
+- `dispose(): void;`
+
+  Stops the video and lets its image go.
 
 ### CanvasTexture
 
 *class*
-
-A canvas's pixels; set `needsUpdate` after drawing to show changes.
 
 ```ts
 export class CanvasTexture extends Texture { … }
@@ -2276,7 +3173,7 @@ export class DataTexture extends Texture { … }
 
 - `constructor(data: Uint8Array | Uint8ClampedArray | Uint16Array | Float32Array, width: number, height: number, format?: number, type?: number);`
 
-  The pixels reach the GPU here. Since API\_MINOR 25 float data is held as half floats, unclamped. Since API\_MINOR 34 (`FLOAT32_TEXTURES_MINOR`) `FloatType` data (a Float32Array) is held as 32-bit floats exactly, as three.js's: RGBA32F, and with `format` `RGFormat` or `RedFormat` RG32F or R32F (sampled as (r, g, 0, 1) and (r, 0, 0, 1)), 16, 8 and 4 bytes a texel against the image budget, for data such as a water kernel's spectrum that half floats would round or lose (below 6.1e-5, past 65504); `textureLoad` reads the values the game gave, and a `needsUpdate` uploads new ones exactly (new data must be a Float32Array). NaN is held as 0 and infinities as ±3.4e38. Where the device does not filter them linearly (OpenGL ES and WebGL2 without `OES_texture_float_linear`, Vulkan and Metal where the device says, WebGPU without `float32-filterable`) they sample nearest whatever the filters say; WebGPU without `float32-filterable` holds them as half floats (where `renderer.capabilities.floatRenderable` is true they are exact on every device). `HalfFloatType` with a Float32Array keeps half floats; games declaring an older minor keep half floats.
+  The pixels reach the GPU here. Since API\_MINOR 25 float data is held as half floats, unclamped. Since API\_MINOR 34 (`FLOAT32_TEXTURES_MINOR`) `FloatType` data (a Float32Array) is held as 32-bit floats exactly, as three.js's: RGBA32F, and with `format` `RGFormat` or `RedFormat` RG32F or R32F (sampled as (r, g, 0, 1) and (r, 0, 0, 1)), 16, 8 and 4 bytes a texel against the image budget, for data such as a water kernel's spectrum that half floats would round or lose (below 6.1e-5, past 65504); `textureLoad` reads the values the game gave, and a `needsUpdate` uploads new ones exactly (new data must be a Float32Array). NaN is held as 0 and infinities as ±3.4e38. Where the device does not filter them linearly (OpenGL ES without `OES_texture_float_linear`, Vulkan and Metal where the device says, WebGPU without `float32-filterable`) they sample nearest whatever the filters say; WebGPU without `float32-filterable` holds them as half floats (where `renderer.capabilities.floatRenderable` is true they are exact on every device). `HalfFloatType` with a Float32Array keeps half floats; games declaring an older minor keep half floats.
 
 - `get data(): Uint8Array | Uint16Array | Float32Array;`
 
@@ -2579,10 +3476,16 @@ export class DataArrayTexture extends DataTexture { … }
 
 - `readonly layerUpdates: Set<number>;`
 
-  Layers marked as changed (three.js); the next `needsUpdate` uploads the whole texture whichever are marked.
+  Layers marked as changed (three.js); the next `needsUpdate` uploads the whole texture whichever are marked (since API\_MINOR 43, with mipmaps, the marked layers alone, their levels made again, and the set is cleared).
 
 - `addLayerUpdate(layerIndex: number): void;`
 - `clearLayerUpdates(): void;`
+
+- `mipmaps: { data: Uint8Array | Uint8ClampedArray | Uint16Array | Float32Array; width: number; height: number }[];`
+
+  Since API\_MINOR 43 (`ARRAY_MIPMAPS_MINOR`; absent before): three.js r185's mip levels, `{ data, width, height }` each (`width` and `height` a layer's at that level, `max(1, width >> k)` and `max(1, height >> k)`; `data` of every layer, layer after layer, in the texture's format and type), level 0 first, taken as given in place of `image.data` when not empty (r185's WebGLRenderer takes them for DataTextures and compressed array textures; the engine for array textures too). Give all or the first few; set `needsUpdate` after changing them.
+
+  Mipmaps: with `generateMipmaps` (or `mipmaps` given) the texture has each layer's levels, made as it uploads (2 × 2 averages: values as they are, `SRGBColorSpace` colour in linear light), and again on `needsUpdate` (only the layers `addLayerUpdate` marked, if any). A mipmap `minFilter` (`NearestMipmapNearestFilter` and the others) then samples them in the material's WGSL: `textureSample` and `textureSampleBias` at the level the derivatives of `uv` choose, `textureSampleLevel` and `textureSampleGrad` at the level given, the nearest level or a blend of the two nearest as the filter says, clamped to the last; `textureDimensions(NAME, level)` is a level's size. Levels never blend across layers, and the engine chooses them from a layer's size (no anisotropic filtering). A layer keeps its levels down to one row tall (a layer wider than tall stops there; coarser levels sample as that one). The levels count against the image budget (about a third more). `FloatType` data (32-bit floats) has no mipmaps: the texture samples level 0. Levels are made when a material that samples the texture syncs.
 
 ### Data3DTexture
 
@@ -2655,7 +3558,7 @@ export class CubeTextureLoader { … }
 
 *class*
 
-Prefiltered environment lighting (three.js `PMREMGenerator`): image-based diffuse and specular light for standard, physical and Lambert materials, from a latitude-longitude texture (a DataTexture of linear floats for light above white, a CanvasTexture or a package image), a CubeTexture or (since API\_MINOR 16) a `RoomEnvironment`. It is made off the game's thread and lights the scene a few frames later (see `environmentReady`); a game holds at most 8 (RangeError), each counting about 1.4 MiB against the image budget, and images waiting for their prefilters hold at most 256 MiB together (RangeError; cube faces are squares of at most 2,048; a room counts 8 MiB while it is made). Since API\_MINOR 18 it is prefiltered as three.js r16x's PMREM is (its Gaussian blurs for each roughness, the light weighed by solid angle); before, light near the zenith or nadir (a ceiling's lamp, a high sun, a cube's top face) lit rough and mid-rough surfaces up to three times too brightly, which older minors keep. Since API\_MINOR 30 a surface facing straight up or down (flat ground, a floor, a box's top) reads the light at the pole, as three.js's cube PMREM does; before, it read the prefiltered image's first row at whatever longitude its normal's last bits gave, on a room environment's floor up to about 20% short of three.js's diffuse light (and varying with the mesh).
+Prefiltered environment lighting (three.js `PMREMGenerator`): image-based diffuse and specular light for standard, physical and Lambert materials, from a latitude-longitude texture (a DataTexture of linear floats for light above white, a CanvasTexture or a package image), a CubeTexture or (since API\_MINOR 16) a `RoomEnvironment`. It is made off the game's thread and lights the scene a few frames later (see `environmentReady`); a game holds at most 8 (RangeError), each counting about 1.4 MiB against the image budget, and images waiting for their prefilters hold at most 256 MiB together (RangeError; cube faces are squares of at most 2,048; a room counts 8 MiB while it is made). Since API\_MINOR 18 it is prefiltered as three.js r16x's PMREM is (its Gaussian blurs for each roughness, the light weighed by solid angle); before, light near the zenith or nadir (a ceiling's lamp, a high sun, a cube's top face) lit rough and mid-rough surfaces up to three times too brightly, which older minors keep. Since API\_MINOR 30 a surface facing straight up or down (flat ground, a floor, a box's top) reads the light at the pole, as three.js's cube PMREM does; before, it read the prefiltered image's first row at whatever longitude its normal's last bits gave, on a room environment's floor up to about 20% short of three.js's diffuse light (and varying with the mesh). Since API\_MINOR 44 (`PHYSICAL_MATERIAL_MINOR`) an image (`fromEquirectangular`, `fromCubemap`, or a texture as `scene.environment` or `envMap`) is prefiltered at its own size, as r185's `PMREMGenerator._setSize` makes it, on cube faces as its cube-UV texture lays them out, every lod kept and read as r185's `textureCubeUV` (neighbouring mips blended): faces of 2^⌊log2(width / 4)⌋ texels (a cube's own face size), 16 at least, so a surface smoother than about roughness 0.21 shows a 64-texel-wide image's own texels (before, its prefilter was made as for 256-texel faces); and a latitude-longitude texture whose `flipY` is false (a DataTexture's default) shows its first row straight down. Rooms and `fromScene` keep three's 256-texel faces.
 
 ```ts
 export class PMREMGenerator { … }
@@ -2826,9 +3729,9 @@ export interface RenderTargetOptions { … }
 
 - `type?: number;`
 
-  `UnsignedByteType` (default): RGBA8 holding what the window would show (tone mapped, sRGB-encoded). `HalfFloatType` (or `FloatType`, taken as half floats before API\_MINOR 34): linear light, not tone mapped, past 1 where it is (clamped to 0–65504, alpha 1 unless blended); where the device cannot render half floats it holds RGBA8 (a warning says so) and, since API\_MINOR 10, counts RGBA8's 4 bytes a pixel against the image budget (8 before). Built-in maps read either as sRGB-encoded images; custom materials' programs read the values as they are.
+  `UnsignedByteType` (default): RGBA8 holding what the window would show (tone mapped, sRGB-encoded). `HalfFloatType` (or `FloatType`, taken as half floats before API\_MINOR 34): linear light, not tone mapped, past 1 where it is. Before API\_MINOR 45 its passes clamp what they write to 0–65504 (negative and non-finite values 0, alpha 1 unless blended), a custom material's fragment too, so a signed value such as a distance field loses its negative half. Since API\_MINOR 45 (`HALF_FLOAT_UNCLAMPED_MINOR`) passes write it as three.js does, as they write a `FloatType` target: a custom material's fragment as it is (negative values, values past 1 and alpha included, without fog), built-in materials' light unclamped, blended as before, on every backend and with or without `generateMipmaps`; RGBA16F holds it to half-float precision (past ±65504 is ±infinity). This is the game's own targets: those the engine's modules make for themselves (the sky, weather, water and volumes) keep the clamped output, so they draw as at 44. Where the device cannot render half floats it holds RGBA8 at every minor (a warning says so), written as an `UnsignedByteType` target is (tone mapped, sRGB-encoded, clamped to 0–1: negative values are 0 there too) and, since API\_MINOR 10, counts RGBA8's 4 bytes a pixel against the image budget (8 before). Built-in maps read either as sRGB-encoded images; custom materials' programs read the values as they are.
 
-  Since API\_MINOR 34 (`FLOAT_TARGETS_MINOR`) `FloatType` holds 32-bit floats, as three.js's (RGBA32F, and with `format` RG32F or R32F: 16, 8 and 4 bytes a pixel), for data passes such as an FFT's ping-pong: passes write their color as it is (a custom material's fragment unclamped, negative values and alpha included, without fog, as three.js's ShaderMaterial; built-in materials' light unclamped), unblended on every device (a blended material's color replaces what is there: WebGPU blends no 32-bit floats and WebGL2 needs `EXT_float_blend`), and `textureLoad` reads exact values. Where the device does not filter them linearly (`renderer.capabilities .floatFilterable` false) they sample nearest whatever the filters say. Where it does not render them (`floatRenderable` false: WebGL2 and OpenGL ES without `EXT_color_buffer_float`, WebGPU without `float32-filterable`) the target holds the half floats of as many channels, still written unclamped (blended materials blend there), counting their bytes. With `generateMipmaps` an RGBA `FloatType` target holds RGBA16F on every device, written unclamped the same way (its mip chain made from that), and a `FloatType` DataTexture still holds half floats.
+  Since API\_MINOR 34 (`FLOAT_TARGETS_MINOR`) `FloatType` holds 32-bit floats, as three.js's (RGBA32F, and with `format` RG32F or R32F: 16, 8 and 4 bytes a pixel), for data passes such as an FFT's ping-pong: passes write their color as it is (a custom material's fragment unclamped, negative values and alpha included, without fog, as three.js's ShaderMaterial; built-in materials' light unclamped), unblended on every device (a blended material's color replaces what is there: WebGPU blends no 32-bit floats, nor does OpenGL ES without `EXT_float_blend`), and `textureLoad` reads exact values. Where the device does not filter them linearly (`renderer.capabilities .floatFilterable` false) they sample nearest whatever the filters say. Where it does not render them (`floatRenderable` false: OpenGL ES without `EXT_color_buffer_float`, WebGPU without `float32-filterable`) the target holds the half floats of as many channels, still written unclamped (blended materials blend there), counting their bytes. With `generateMipmaps` an RGBA `FloatType` target holds RGBA16F on every device, written unclamped the same way (its mip chain made from that), and a `FloatType` DataTexture still holds half floats.
 
 - `wrapS?: Wrapping;`
 
@@ -2848,7 +3751,7 @@ export interface RenderTargetOptions { … }
 
 - `format?: number;`
 
-  Since API\_MINOR 10, with `HalfFloatType`: `RGFormat` holds two channels (red and green, RG16F: four bytes a pixel, half of RGBA16F's budget) and `RedFormat` one (R16F: two bytes); materials sampling them read blue 0 and alpha 1, and blending writes the channels the target has. Neither takes `generateMipmaps` (TypeError). Since API\_MINOR 11, with `UnsignedByteType` (the default type), `RGFormat` is RG8 (two bytes a pixel) and `RedFormat` R8 (one byte): marks and masks (soil and burn in RG8 plus depth in R8 take 3 bytes a pixel where RGBA8 takes 4). They hold what an RGBA8 target holds in those channels (the output as the window would show it, so a value meant as data is written sRGB-decoded, `srgb_to_linear`), clamped to 0–1 by every blend equation (additive past 1 stops at 1, reverse subtract below 0 at 0), read with blue 0 (and green 0 for R8) and alpha 1, take no mipmaps, render on every device and so never fall back, counting 2 and 1 bytes a pixel against the image budget from the start (before API\_MINOR 11 `UnsignedByteType` with these formats was a TypeError). Where half floats do not render (WebGL2 without `EXT_color_buffer_float` or `EXT_color_buffer_half_float`, OpenGL ES likewise) RG16F and R16F hold RGBA8 with a warning, as RGBA16F targets do, and count its 4 bytes a pixel. Targets made before the game's first frame (the runtime may not know the device yet) count the larger of the two (R16F 4 bytes), and are counted again at the first frame. Other formats hold RGBA, as before.
+  Since API\_MINOR 10, with `HalfFloatType`: `RGFormat` holds two channels (red and green, RG16F: four bytes a pixel, half of RGBA16F's budget) and `RedFormat` one (R16F: two bytes); materials sampling them read blue 0 and alpha 1, and blending writes the channels the target has. Neither takes `generateMipmaps` (TypeError). Since API\_MINOR 11, with `UnsignedByteType` (the default type), `RGFormat` is RG8 (two bytes a pixel) and `RedFormat` R8 (one byte): marks and masks (soil and burn in RG8 plus depth in R8 take 3 bytes a pixel where RGBA8 takes 4). They hold what an RGBA8 target holds in those channels (the output as the window would show it, so a value meant as data is written sRGB-decoded, `srgb_to_linear`), clamped to 0–1 by every blend equation (additive past 1 stops at 1, reverse subtract below 0 at 0), read with blue 0 (and green 0 for R8) and alpha 1, take no mipmaps, render on every device and so never fall back, counting 2 and 1 bytes a pixel against the image budget from the start (before API\_MINOR 11 `UnsignedByteType` with these formats was a TypeError). Where half floats do not render (OpenGL ES without `EXT_color_buffer_float` or `EXT_color_buffer_half_float`) RG16F and R16F hold RGBA8 with a warning, as RGBA16F targets do, and count its 4 bytes a pixel. Targets made before the game's first frame (the runtime may not know the device yet) count the larger of the two (R16F 4 bytes), and are counted again at the first frame. Other formats hold RGBA, as before.
 
 - `colorSpace?: string;`
 
@@ -2927,7 +3830,7 @@ NAME: texture_depth_2d, NAME_sampler: sampler_comparison
   device filters it).
 ```
 
-A material binds depth textures among its first five textures (the engine orders them first). A draw whose depth texture's target is gone draws nothing, and a pass cannot sample the depth of the target it draws into (it draws without it). Built-in materials' maps and `draw.image` show nothing for one. It counts with its target (the target's depth, 4 bytes a pixel, against the image budget; no further image). Natively Vulkan samples a target's depth in place, OpenGL ES a DEPTH\_COMPONENT24 texture, Direct3D 12 a typeless depth's R32 or R24 view and Metal its Depth32Float texture; in browsers WebGL2 a DEPTH\_COMPONENT24 texture and WebGPU a depth24plus one.
+A material binds depth textures among its first five textures (the engine orders them first). A draw whose depth texture's target is gone draws nothing, and a pass cannot sample the depth of the target it draws into (it draws without it). Built-in materials' maps and `draw.image` show nothing for one. It counts with its target (the target's depth, 4 bytes a pixel, against the image budget; no further image). Natively Vulkan samples a target's depth in place, OpenGL ES a DEPTH\_COMPONENT24 texture, Direct3D 12 a typeless depth's R32 or R24 view and Metal its Depth32Float texture; in browsers WebGPU a depth24plus one.
 
 ```ts
 export class DepthTexture extends Texture { … }
@@ -2994,7 +3897,7 @@ export class WebGL3DRenderTarget extends RenderTarget { … }
 
 *class*
 
-Loads package images (PNG or WebP; an animated WebP's first frame) through the engine's decoders. Loads requested at once read their files side by side, each holding its file's size of the 64 MiB the engine keeps for files being read; past that they wait for the ones before them rather than fail. Their decoded pixels count against the engine's decoded-asset budget (64 MiB unless the player changed it) until each becomes a texture: at most 8 decode at once and the rest wait their turn, and a load that finds the budget full of the others' images waits for one of them and decodes again, so loads requested together never fail the budget (until host API 1.25 they failed with an EncodingError "asset budget exceeded").
+Loads package images (PNG or WebP; an animated WebP's first frame; since API\_MINOR 43, `JPEG_IMAGES_MINOR`, JPEG too: `.jpg`, `.jpeg`, `.jpe` and `.jfif`, baseline or progressive, turned by their Exif orientation as browsers show them) through the engine's decoders. Loads requested at once read their files side by side, each holding its file's size of the 64 MiB the engine keeps for files being read; past that they wait for the ones before them rather than fail. Their decoded pixels count against the engine's decoded-asset budget (64 MiB unless the player changed it) until each becomes a texture: at most 8 decode at once and the rest wait their turn, and a load that finds the budget full of the others' images waits for one of them and decodes again, so loads requested together never fail the budget (until host API 1.25 they failed with an EncodingError "asset budget exceeded").
 
 ```ts
 export class TextureLoader { … }
@@ -3010,7 +3913,7 @@ export class TextureLoader { … }
 
   From API\_MINOR 20 three.js's `load(url, onLoad, onProgress, onError)` (`onProgress` is never called). Games declaring an older minor pass `onError` third: `load(path, onLoad, onError)`.
 
-  Since API\_MINOR 40 both also load `.ktx2` files of BC blocks, as `KTX2Loader` does (an engine extension), and a PNG or WebP image for which `starhermit package` made a KTX2 file (`engine.textures.compress`, the image's path with `.ktx2` added) loads that file in its place, or the image itself where that file fails to load.
+  Since API\_MINOR 40 both also load `.ktx2` files of BC blocks, as `KTX2Loader` does (an engine extension), and a PNG or WebP image for which `starhermit package` made a KTX2 file (`engine.textures.compress`, the image's path with `.ktx2` added) loads that file in its place, or the image itself where that file fails to load. Images `engine.textures.exact` names get no KTX2 file and load byte for byte.
 
 ### GLTF
 
@@ -3037,7 +3940,7 @@ export interface GLTF { … }
 
 *class*
 
-three.js's GLTFLoader for package `.glb` and `.gltf` files, read off the game's thread (since API\_MINOR 5). Each node becomes an `Object3D` with the node's name and transform: a `Mesh` for a mesh of one primitive, otherwise a `Group` holding a `Mesh` per primitive (the mesh's name on each). Materials are `MeshStandardMaterial` or `MeshBasicMaterial` for `KHR_materials_unlit` (base color only), with glTF 2.0's core material as three.js's GLTFLoader maps it: base color factor and `map`; metalness and roughness factors and the metallic-roughness texture as both `roughnessMap` and `metalnessMap`; `normalMap` with `normalScale` (scale, scale) (three.js negates y for glTF's unflipped UVs; the engine's are flipped, so it does not); `aoMap` with `aoMapIntensity` from the occlusion strength; `emissive`, `emissiveMap` and `emissiveIntensity` from `emissiveFactor` and `KHR_materials_emissive_strength`; alpha mode and cutoff; double-sided. Maps use UV set 0 only (the engine has no second UV set): one on `texCoord` 1 is left out. A primitive with `COLOR_0` gets its own copy with `vertexColors` (a four-component `color` attribute). Geometries carry `position`, `normal`, `uv` (in three.js's bottom-left convention) and 32-bit indices; a mesh used by several nodes shares its geometries. Draco-compressed primitives (`KHR_draco_mesh_compression`, as Blender and gltf-transform export them) and quantized attributes (`KHR_mesh_quantization`: 8- and 16-bit positions, normals and texture coordinates) are decoded in-house on the same thread; decoded Draco data counts toward the 128 MiB of binary data a document may hold. External buffers and images are package files beside the document (`uri` relative to it). Textures are made as three.js's GLTFLoader makes them: the glTF sampler's `magFilter`, `minFilter`, `wrapS` and `wrapT` (WebGL's codes as three.js's filter and wrapping constants; without a sampler, or for a filter it leaves unset, repeat wrapping, `LinearFilter` and `LinearMipmapLinearFilter`, with mipmaps for a mipmap minification filter), `SRGBColorSpace` for base color, and the texture's or image's name. glTF's top-left UVs are converted instead of setting three.js's `flipY = false` (the engine's textures have no `flipY`; the result looks the same). External and embedded PNG and WebP images (at most 16 MiB encoded) decode off the game's thread as textures, not canvases, so the canvas bounds do not apply: an image past 4,096 pixels on a side, or past what the game's image budget has left (`engine.limits.image_mib`; a 4096 × 4096 image with mipmaps takes 85 MiB of the default 56), is halved until it fits, as three.js and browsers resize a texture past the GPU's largest, with a console warning naming the image and the limit; one past the decoders' bounds (16,384 pixels on a side, 16,777,216 in all) or with no image budget left rejects the load with a RangeError naming the image and the limit. JPEG images are not decoded (the engine decodes PNG and WebP only); one, or an image that fails to decode or is missing, leaves its maps out. `EXT_texture_webp`, required or optional, is read as three.js reads it: the texture's WebP image first, its core `source` when that fails (named in the warning). `KHR_lights_punctual` (since API\_MINOR 22) makes lights as three.js r185's GLTFLoader does: a `DirectionalLight`, `PointLight` or `SpotLight` of the light's linear color at each node placing it (the node itself, named by the node when it has a name and else by the light or `light_N`; a node with a mesh too is a `Group` of the mesh and the light), `range` as `distance` (0 without), `decay` 2, a spot's `angle` its outer cone and `penumbra` 1 − inner / outer, and a directional or spot light aiming down the node's −Z at a `target` it holds at (0, 0, −1). Its `intensity` is the file's from API\_MINOR 23 (three.js r155+'s light units), and the file's over π at API\_MINOR 22, whose legacy units are π times those (spec rendering-and-quality.html#light-units): either way the model lights as three.js r185 lights it. A game declaring an older minor loads the model without its lights (named in the warning), whether the file uses or requires the extension (a required one failed to load before 1.20). Not applied: JPEG and other image formats (`KHR_texture_basisu`), `KHR_texture_transform`, UV sets past 0, other material extensions (clearcoat, transmission, sheen, …), cameras, animations, skins and morph targets (since host API 1.40 morph targets load as three.js r185's GLTFLoader loads them: each primitive's POSITION and NORMAL targets, sparse or not, as relative `morphAttributes`, the mesh's `weights` and `extras.targetNames` as its influences and dictionary, a node's `weights` over them, and `weights` channels as `NAME.morphTargetInfluences` tracks). The rest of the model loads, and one console warning per model names all that was not applied (also in `ignored`), never silently. A file and its buffers are at most 64 MiB, and the document within the reader's limits (1,048,576 vertices and 3,145,728 indices per primitive, 4,096 primitives, 16,384 nodes, 256 images, 128 MiB of decoded buffers). Remote files (the document and its external buffers) are fetched first (since API\_MINOR 7, see `files`). Rejects with a TypeError for a bad path, `NotFoundError` for a missing file, `SyntaxError` for a document it cannot read (or a required extension it lacks), and a RangeError with 128 loads already waiting.
+three.js's GLTFLoader for package `.glb` and `.gltf` files, read off the game's thread (since API\_MINOR 5). Each node becomes an `Object3D` with the node's name and transform: a `Mesh` for a mesh of one primitive, otherwise a `Group` holding a `Mesh` per primitive (the mesh's name on each). Materials are `MeshStandardMaterial` or `MeshBasicMaterial` for `KHR_materials_unlit` (base color only), with glTF 2.0's core material as three.js's GLTFLoader maps it: base color factor and `map`; metalness and roughness factors and the metallic-roughness texture as both `roughnessMap` and `metalnessMap`; `normalMap` with `normalScale` (scale, scale) (three.js negates y for glTF's unflipped UVs; the engine's are flipped, so it does not); `aoMap` with `aoMapIntensity` from the occlusion strength; `emissive`, `emissiveMap` and `emissiveIntensity` from `emissiveFactor` and `KHR_materials_emissive_strength`; alpha mode and cutoff; double-sided. Maps use UV set 0 only (the engine has no second UV set): one on `texCoord` 1 is left out. A primitive with `COLOR_0` gets its own copy with `vertexColors` (a four-component `color` attribute). Geometries carry `position`, `normal`, `uv` (in three.js's bottom-left convention) and 32-bit indices; a mesh used by several nodes shares its geometries. Draco-compressed primitives (`KHR_draco_mesh_compression`, as Blender and gltf-transform export them) and quantized attributes (`KHR_mesh_quantization`: 8- and 16-bit positions, normals and texture coordinates) are decoded in-house on the same thread; decoded Draco data counts toward the 128 MiB of binary data a document may hold. External buffers and images are package files beside the document (`uri` relative to it). Textures are made as three.js's GLTFLoader makes them: the glTF sampler's `magFilter`, `minFilter`, `wrapS` and `wrapT` (WebGL's codes as three.js's filter and wrapping constants; without a sampler, or for a filter it leaves unset, repeat wrapping, `LinearFilter` and `LinearMipmapLinearFilter`, with mipmaps for a mipmap minification filter), `SRGBColorSpace` for base color, and the texture's or image's name. glTF's top-left UVs are converted instead of setting three.js's `flipY = false` (the engine's textures have no `flipY`; the result looks the same). External and embedded PNG and WebP images (at most 16 MiB encoded) decode off the game's thread as textures, not canvases, so the canvas bounds do not apply: an image past 4,096 pixels on a side, or past what the game's image budget has left (`engine.limits.image_mib`; a 4096 × 4096 image with mipmaps takes 85 MiB of the default 56), is halved until it fits, as three.js and browsers resize a texture past the GPU's largest, with a console warning naming the image and the limit; one past the decoders' bounds (16,384 pixels on a side, 16,777,216 in all) or with no image budget left rejects the load with a RangeError naming the image and the limit. JPEG images (baseline and progressive) decode the same way since API\_MINOR 43 (`JPEG_IMAGES_MINOR`), their Exif orientation applied as `createImageBitmap` applies it, pixels as libjpeg-turbo decodes them; below 43 they are not decoded (the engine decodes PNG and WebP only); one, or an image that fails to decode or is missing, leaves its maps out. `EXT_texture_webp`, required or optional, is read as three.js reads it: the texture's WebP image first, its core `source` when that fails (named in the warning). `KHR_lights_punctual` (since API\_MINOR 22) makes lights as three.js r185's GLTFLoader does: a `DirectionalLight`, `PointLight` or `SpotLight` of the light's linear color at each node placing it (the node itself, named by the node when it has a name and else by the light or `light_N`; a node with a mesh too is a `Group` of the mesh and the light), `range` as `distance` (0 without), `decay` 2, a spot's `angle` its outer cone and `penumbra` 1 − inner / outer, and a directional or spot light aiming down the node's −Z at a `target` it holds at (0, 0, −1). Its `intensity` is the file's from API\_MINOR 23 (three.js r155+'s light units), and the file's over π at API\_MINOR 22, whose legacy units are π times those (spec rendering-and-quality.html#light-units): either way the model lights as three.js r185 lights it. A game declaring an older minor loads the model without its lights (named in the warning), whether the file uses or requires the extension (a required one failed to load before 1.20). Not applied: JPEG (before API\_MINOR 43) and other image formats (`KHR_texture_basisu`), `KHR_texture_transform` (before 1.44), UV sets past 0, other material extensions (clearcoat, transmission, sheen, … before 1.44), cameras, animations, skins and morph targets (since host API 1.40 morph targets load as three.js r185's GLTFLoader loads them: each primitive's POSITION and NORMAL targets, sparse or not, as relative `morphAttributes`, the mesh's `weights` and `extras.targetNames` as its influences and dictionary, a node's `weights` over them, and `weights` channels as `NAME.morphTargetInfluences` tracks). The rest of the model loads, and one console warning per model names all that was not applied (also in `ignored`), never silently. A file and its buffers are at most 64 MiB, and the document within the reader's limits (1,048,576 vertices and 3,145,728 indices per primitive, 4,096 primitives, 16,384 nodes, 256 images, 128 MiB of decoded buffers). From host API 1.44 (`PHYSICAL_MATERIAL_MINOR`) GLTFLoader is three.js r185's for physical materials: a material with KHR\_materials\_clearcoat, \_dispersion, \_iridescence, \_sheen, \_transmission, \_volume, \_ior, \_specular or \_anisotropy (and not unlit) is a `MeshPhysicalMaterial` with r185's settings for each (clearcoatFactor, clearcoatRoughnessFactor and their maps, clearcoatNormalMap with `clearcoatNormalScale` (scale, scale); dispersion (default 0); iridescence, iridescenceIOR, the thickness range (default \[100, 400\]) and maps; sheen 1 with sheenColor (default black), sheenRoughness (default 0) and maps; transmission and its map; thickness (default 0), thicknessMap, attenuationDistance (default Infinity) and attenuationColor; ior (default 1.5, 0 read as 1000); specularIntensity (default 1), specularColor and the specularIntensityMap and specularColorMap; anisotropy, anisotropyRotation and anisotropyMap), sheenColorMap and specularColorMap in `SRGBColorSpace` and the rest linear, as r185 sets them; such extensions may be required. A map's `KHR_texture_transform` gives it a texture of its own (r185's clone; each texture, transform and colour space loaded once more) with the transform's offset, rotation and scale as `offset`, `rotation` and `repeat`, and moves its `texCoord`. UVs are glTF's as written, every texture's `flipY` false; a primitive's `TANGENT` is its geometry's `tangent` (the physical program's vertex tangent, skinned as r185 skins it); and each primitive's material is r185's assignFinalMaterial's: without `TANGENT` a clone whose `normalScale.y` (and a physical one's `clearcoatNormalScale.y`) is negated, with `COLOR_0` one with `vertexColors`, one clone for each material and need; a material with a normal map on a primitive with `TANGENT` draws through the engine's physical program, which reads the vertex tangent (the built-in material derives its frame from the UVs). Below 1.44 these extensions, transforms and tangents are noted as not applied, and refused when required, as before. Remote files (the document and its external buffers) are fetched first (since API\_MINOR 7, see `files`). Rejects with a TypeError for a bad path, `NotFoundError` for a missing file, `SyntaxError` for a document it cannot read (or a required extension it lacks), and a RangeError with 128 loads already waiting.
 
 ```ts
 export class GLTFLoader { … }
@@ -3048,6 +3951,10 @@ export class GLTFLoader { … }
 - `setPath(path: string): this;`
 
   A prefix for the paths given to `load` and `loadAsync`.
+
+- `setKTX2Loader(loader: KTX2Loader | null): this;`
+
+  three.js r185's: the KTX2Loader for `KHR_texture_basisu` images (since host API 1.43; undefined before). The engine reads KTX2 images itself, so the loader given changes nothing and none is needed: from host API 1.43 GLTFLoader loads KTX2 images of BC1, BC3, BC4, BC5 and BC7 blocks without supercompression (a texture's `KHR_texture_basisu` image first, then its WebP and core images where one fails, as Basis Universal ETC1S and UASTC images do), held as blocks where the device samples the format and unpacked to RGBA8 where not, counting what they hold (mips included) against the image budget; it loads the copy `starhermit package` made of a `.glb` or `.gltf` with `engine.textures.compress=bc` (`<file>.glb.ktx2.glb` or `<file>.gltf.ktx2.gltf`, e.g. `car.glb.ktx2.glb`, its embedded images compressed) in its place, and the KTX2 file packaged beside an external PNG or WebP image (`<image>.ktx2`) in the image's.
 
 - `loadAsync(path: string): Promise<GLTF>;`
 - `load(path: string, onLoad?: (gltf: GLTF) => void, onProgress?: unknown, onError?: (error: Error) => void): void;`
@@ -4390,6 +5297,14 @@ export abstract class Material { … }
 
   Since API\_MINOR 42 (`DOUBLE_SIDE_PASSES_MINOR`; absent before): three.js r185's `forceSinglePass` (default false). A transparent `DoubleSide` material draws each object twice, its back faces and then its front faces, so its far side shows through its near side as three.js draws it; true draws it once with both sides, as older games' do. Shadow maps draw it once either way.
 
+- `receiveDecals: boolean;`
+
+  Since API\_MINOR 43 (`DECALS_MINOR`; absent before), ENGINE EXTENSION: whether `DecalProjector`s land on this material's surfaces (default true). False (units over a scorched ground) marks its opaque surfaces in the scene-depth prepass (blue 1 in `renderer.sceneDepth`, 0 elsewhere), which decals read to leave them alone.
+
+- `distortion: boolean;`
+
+  Since API\_MINOR 43 (`DISTORTION_MINOR`; absent before), ENGINE EXTENSION: the material distorts what lies behind it (default false). For a transparent material sampling `renderer.sceneColor`: when every object of a frame sampling it has `distortion`, the colour is copied before the first of them instead of before the first transparent object, so it holds the transparent objects drawn before them too (heat shimmer bending fire and smoke). Objects that sample it without `distortion` keep the older copy for all. See `DistortionMaterial`.
+
 - `depthFunc: DepthModes;`
 
   Since engine 1.20.2 (any minor): see `MaterialParameters.depthFunc`. Reads the default the game's minor takes until one is set.
@@ -4437,7 +5352,7 @@ export abstract class Material { … }
 
 ## Custom materials (since API\_MINOR 6)
 
-A game's WGSL (the WebGPU shading language; the subset starhermit-shader compiles: no switch, while, pointers or atomics) joined with the engine's mesh stages and compiled for every backend (SPIR-V, HLSL, GLSL ES 3.00, WGSL), so the same code draws on Vulkan, Direct3D 12, OpenGL ES, WebGPU and WebGL2. It is sandboxed: a part declares structs, constants and functions only (no variables, bindings, entry points or attributes, no names the engine declares, nothing starting with `_`), reads no engine globals but `uniforms` and its textures, and loops only with `for (var i = A; i < B; i++)` over constant bounds and step (any of &lt;, &lt;=, &gt;, &gt;=, ++, --, += k, -= k; at most 65,536 iterations, nested loops together); WGSL has no recursion. Derivatives (dpdx, dpdy, fwidth), textureSample and textureSampleBias stay in uniform control flow (outside branches and loops on per-pixel values; branching on `uniforms` and constants is fine), as WebGPU requires; vertex code samples with textureSampleLevel or textureSampleGrad and cannot discard. textureSampleBias, textureSampleGrad (explicit gradients, so anywhere) and textureDimensions (a texture's size, or a mip level's) work on every backend since API\_MINOR 8. Each part is at most 64 KiB. Errors name the part and its own line and column.
+A game's WGSL (the WebGPU shading language; the subset starhermit-shader compiles: no while, pointers or atomics; `switch` since engine 1.43, at every API\_MINOR) joined with the engine's mesh stages and compiled for every backend (SPIR-V, HLSL, GLSL ES 3.00, WGSL), so the same code draws on Vulkan, Direct3D 12, Metal, OpenGL ES and WebGPU. A material's parts (its hooks, or a ShaderMaterial's vertexShader, fragmentShader and fogShader) are one module, each stage compiled from all of them: a struct, const or helper function declared in one part is visible in the others and is declared once (a second declaration of the name is an error, "declared twice in one scope"). It is sandboxed: a part declares structs, constants and functions only (no variables, bindings, entry points or attributes, no names the engine declares, nothing starting with `_`), reads no engine globals but `uniforms` and its textures, and loops only with `for (var i = A; i < B; i++)` over constant bounds and step (any of &lt;, &lt;=, &gt;, &gt;=, ++, --, += k, -= k; at most 65,536 iterations, nested loops together); WGSL has no recursion. Derivatives (dpdx, dpdy, fwidth), textureSample and textureSampleBias stay in uniform control flow (outside branches and loops on per-pixel values; branching on `uniforms` and constants is fine), as WebGPU requires; vertex code samples with textureSampleLevel or textureSampleGrad and cannot discard. textureSampleBias, textureSampleGrad (explicit gradients, so anywhere) and textureDimensions (a texture's size, or a mip level's) work on every backend since API\_MINOR 8. Each part is at most 64 KiB. Errors name the part and its own line and column.
 
 What the engine declares for a game's code:
 
@@ -4446,25 +5361,42 @@ struct Vertex { position: vec3f, normal: vec3f, uv: vec2f,
   color: vec4f, custom: vec4f, instance: vec4f, clip: vec4f,
   v0: vec4f, v1: vec4f, v2: vec4f, v3: vec4f,
   instance_color: vec4f, vertex_color: vec4f,
-  instance1: vec4f, instance2: vec4f, instance3: vec4f }
-  position and normal in object space; color the instance color times
+  instance1: vec4f, instance2: vec4f, instance3: vec4f,
+  skin_index: vec4u, skin_weight: vec4f, bind_position: vec3f }
+  position and normal in object space (skinned already on a
+  skinned mesh); color the instance color times
   the vertex color (when the material has vertexColors; white
   otherwise), each also given alone (instance_color, which includes
   the InstancedMesh's color, 0..65504, and vertex_color: a game may
   carry data in them and set color itself); custom the
   geometry's `custom` attribute (zeros without one); instance the
   InstancedMesh's `instanceCustom` slot 0 and instance1..3 its slots
-  1 to 3 (zeros otherwise); clip zero, or
+  1 to 3 (zeros otherwise; an animated InstancedSkinnedMesh's
+  slot 3 is its animation state, see InstancedSkinnedMesh);
+  skin_index and skin_weight the geometry's `skinIndex` (whole
+  numbers 0..65535) and `skinWeight` (0..1, in 1/65535 steps) on a
+  SkinnedMesh or an InstancedSkinnedMesh (since API_MINOR 43,
+  SKIN_ATTRIBUTES_MINOR; zeros on other meshes); bind_position
+  (since API_MINOR 45, HOOK_BIND_POSITION_MINOR; before it the
+  member is the game's error) the geometry's position before
+  skinning and morph targets on a SkinnedMesh or an
+  InstancedSkinnedMesh (`position` itself elsewhere): a hook may
+  mix the rest pose in, or key effects to it; clip zero, or
   set by the hook (w not 0) to place the vertex in clip space itself
   (depth -1..1 as view_projection() gives; the shadow pass ignores
   it); v0..v3 four varyings for the fragment stage.
 struct Surface { base_color: vec4f, emissive: vec3f, metalness: f32,
   roughness: f32, normal: vec3f, occlusion: f32, world: vec3f,
   uv: vec2f, color: vec4f, v0..v3: vec4f, front: bool }
+  (A MeshPhysicalMaterial's since API_MINOR 44 also has iridescence,
+  iridescence_thickness (nm), transmission and thickness: f32, its
+  settings times its maps, which the hook may change.)
   base_color linear after the map, color, opacity and vertex colors;
   emissive linear after its intensity and map; normal in world space
   after the normal map; occlusion 0..1 (1 none). The rest describe the
-  fragment (read-only).
+  fragment (read-only), but v0..v3, which arrive as the vertex
+  hook's varyings and go on, as the hook leaves them, to the light
+  hook's Light.
 struct Fragment { world: vec3f, normal: vec3f, uv: vec2f, color: vec4f,
   v0..v3: vec4f, front: bool, coord: vec4f }
   coord the fragment's window position (WGSL @builtin(position);
@@ -4481,7 +5413,22 @@ struct Light { sun: vec3f, shadow: f32, direct: vec3f,
   surface's. The rest read-only: sun_direction toward the primary
   light, its color, the ambient color, and the fragment (normal the
   shading normal facing the viewer, the surface's base color and
-  varyings).
+  varyings). The primary light is the main light (see
+  main_light_direction): its direction, color and shadow come apart
+  here, and `shadow` already holds the light's `shadow.intensity`
+  (three.js r185's LightShadow.intensity: mix(1, shadow, intensity)),
+  so a partly shadowed main light needs no second, unshadowed fill
+  light. Since API_MINOR 43 (`HOOK_ACCESS_MINOR`) Light also has
+  `sun_diffuse: vec3f, sun_specular: vec3f` (before `ambient`): sun's
+  diffuse part (the standard BRDF's (1 - metalness) × base, Lambert's
+  and Phong's base, all of a toon surface's, times n·l and the light)
+  and the rest, its specular highlight; read-only (sun is what is
+  summed: `o.sun = l.sun_diffuse` drops the highlight, as URP's
+  _SPECULARHIGHLIGHTS_OFF). The environment's reflection stays in
+  `indirect`. v0..v3 are the surface hook's: what it writes to its
+  Surface's v0..v3 (from the vertex varyings, or set there) the
+  light hook reads (every minor), e.g. a mask kept apart from
+  base_color's alpha.
 struct Fog { color: vec3f, amount: f32, world: vec3f, depth: f32,
   coord: vec4f, camera: vec3f }               (since API_MINOR 9)
   color linear and amount 0 (none) to 1 (full): the scene's fog
@@ -4523,15 +5470,153 @@ fn tone_mapped(c: vec3f) -> vec3f  a linear color tone mapped as
                                    tone mapping and exposure; c for
                                    a material not tone mapped; since
                                    API_MINOR 40)
+fn fog_amount(world: vec3f) -> f32 the scene's fog at a world point as
+                                   the pass fogs this material: 0
+                                   (none, and for `fog` false) to 1;
+                                   Fog's smoothstep from near to far
+                                   or FogExp2's 1 - exp(-(density ×
+                                   depth)²) of the view depth (an
+                                   engine function every minor has;
+                                   a fog hook's changes are not in it)
 ```
 
-Textures are RGBA8 as uploaded (a Uint8Array DataTexture's bytes as they are, read as 0..1; since API\_MINOR 25 a float or half-float DataTexture's values as they are, below 0 and above 1, in half-float precision): for exact texels (data, animation frames), use NearestFilter and sample texel centers, (i + 0.5) / size, with textureSampleLevel, which vertex code also uses; or, since API\_MINOR 10, read one exactly, whatever the filter, with
+The game's clock, since API\_MINOR 49 (`HOOK_TIME_MINOR`; older games' programs neither have nor reserve these names: a hook calling one is refused as for any unknown name):
+
+```text
+fn frame_time() -> f32             seconds of game time since the
+                                   first frame: frame().time in the
+                                   frame drawn (what onUpdate and
+                                   onRender read; paused while the
+                                   game is suspended), as an f32, so
+                                   a hook animated by it draws as one
+                                   reading a uniform the game set to
+                                   frame().time each frame, with no
+                                   uniform to set. Not wrapped: an
+                                   f32 holds it to about 1 ms after
+                                   2.3 hours and 8 ms after a day; a
+                                   game that needs finer steps in long
+                                   sessions keeps a wrapped uniform
+fn frame_delta() -> f32            seconds since the frame before
+                                   (frame().delta; 0 on the first)
+                                   Both the same in every hook (vertex,
+                                   surface, light, fog and a
+                                   ShaderMaterial's), both stages and
+                                   every pass a hook runs in: the lit
+                                   pass, shadow maps, the depth and
+                                   normal prepasses, render targets.
+                                   Motion vectors draw the mesh's own
+                                   placement there (no hook runs), so a
+                                   vertex hook's motion by time is not
+                                   in them, as with any vertex hook.
+                                   A caster marked static keeps its
+                                   cached shadow (its hook's time is
+                                   not watched, as uniforms are not)
+```
+
+The lights, since API\_MINOR 43 (`HOOK_ACCESS_MINOR`; older games' programs neither have nor reserve these names):
+
+```text
+struct PunctualLight { direction: vec3f, radiance: vec3f }
+fn main_light_direction() -> vec3f toward the main light (Light's
+                                   sun_direction): the scene's first
+                                   directional light, shadow-casting
+                                   or not
+fn main_light_color() -> vec3f     its color × intensity (three.js's
+                                   directLight.color; Light's
+                                   sun_color); black without one
+fn main_light_shadow(world: vec3f) -> f32
+                                   its shadow at any world point (1
+                                   lit, 0 shadowed): the cascade
+                                   holding the point, filtered as the
+                                   receivers' lookups are (the shadow
+                                   map type, radius, bias and
+                                   intensity; PCF's noise and the
+                                   receiver plane's slope this
+                                   fragment's), with no normal offset
+                                   (normalBias); 1 where it casts no
+                                   shadow, outside its maps or
+                                   without a main light, whatever the
+                                   material's receiveShadow. At the
+                                   fragment's own world point it is
+                                   Light's `shadow` when normalBias
+                                   is 0.
+fn punctual_light_count() -> u32   the other lights' slots the pass
+                                   takes (Light's `direct`:
+                                   directional, point, spot and
+                                   hemisphere lights after the main
+                                   light, a slot each, and a
+                                   LightProbe, two slots, in the
+                                   scene's order: the 16 light slots'
+                                   first, then the up to 64 clustered
+                                   point and spot lights; at most 80,
+                                   the engine's limit, past which
+                                   lights are left out). The main
+                                   light (the first directional
+                                   light: the sun) is never among
+                                   them, so slot 0 is the next light
+                                   the scene holds. It is the same
+                                   for every pixel of a draw (read
+                                   from the pass's uniforms). A loop
+                                   runs to a constant, so loop to 80u
+                                   and leave at the count:
+                                     let count = punctual_light_count();
+                                     for (var i = 0u; i < 80u; i++) {
+                                       if (i >= count) { break; }
+                                       let p = punctual_light(i, l.world);
+                                       ...
+                                     }
+                                   (a break on a uniform value keeps
+                                   control flow uniform, so
+                                   textureSample and derivatives
+                                   after the loop still work; runtimes
+                                   before 1.44.0 refused them, at
+                                   every minor. A break on a
+                                   per-pixel value, such as a light's
+                                   radiance, does not: skip a light
+                                   by multiplying by 0 instead). Lights
+                                   past the count give zero
+                                   radiance. Unlike the engine's own
+                                   lighting, which culls the
+                                   clustered lights per screen tile,
+                                   such a loop visits every light
+fn punctual_light(i: u32, world: vec3f) -> PunctualLight
+                                   light i at a world point: the
+                                   direction toward it and its
+                                   radiance (color × intensity times
+                                   the distance decay, the distance
+                                   window and a spot's cone, as the
+                                   engine lights a surface; no
+                                   shadow). A hemisphere light's slot
+                                   and i past the count give zero
+                                   radiance, and from API_MINOR 44
+                                   (`HOOK_ACCESS_FIXES_MINOR`) a
+                                   LightProbe's two slots too (older
+                                   games' read its coefficients as a
+                                   point light's, light where none
+                                   is lit). A point light at
+                                   intensity 0 keeps its slot and
+                                   gives zero. Lambert diffuse in
+                                   three.js's units is base / PI ×
+                                   max(dot(n, direction), 0) ×
+                                   radiance; add main_light_*'s for
+                                   the main light.
+fn punctual_light_shadow(i: u32, world: vec3f) -> f32
+                                   light i's shadow at a point, as
+                                   main_light_shadow's (point, spot
+                                   and directional lights' maps, a
+                                   clustered spot's in the shadow
+                                   atlas); 1 for a light without one
+                                   (and from API_MINOR 44 for a
+                                   LightProbe's slots)
+```
+
+The shadow functions read the shadow maps, which only the lit pass has: they are for the light and fog hooks and a ShaderMaterial's fragment (and functions those call); the vertex and surface hooks, which the shadow pass also runs, may not call them (a SyntaxError naming the part). The rest work in every hook. All of a material's parts (vertex, surface, light, fog; vertexShader, fragmentShader, fogShader) compile as one WGSL module with the engine's: a struct, constant or function one part declares is seen by the others and is declared once, and no part may declare a name the engine declares (the structs, functions and constants above and the engine's own, e.g. `decode`, `tone`, `PI`, which code may call) or a name the shading languages' generated code takes: one starting with `_` or `p_`, or `a`, `l`, `o` or `v` and a digit (module-scope names; locals and members may). WGSL's keywords and reserved words (the WGSL specification's list, e.g. `patch`, `target`, `set`, `filter`, `type`) name nothing, as browsers' WebGPU refuses them. Uniform, texture and define names also may not be `sampler`, `texture_2d`, `ptr`, `atomic` or a WGSL type name, contain `__`, end in `_` or pass 64 bytes. WGSL's `radians(x)` and `degrees(x)` work at every minor. Textures are RGBA8 as uploaded (a Uint8Array DataTexture's bytes as they are, read as 0..1; since API\_MINOR 25 a float or half-float DataTexture's values as they are, below 0 and above 1, in half-float precision): for exact texels (data, animation frames), use NearestFilter and sample texel centers, (i + 0.5) / size, with textureSampleLevel, which vertex code also uses; or, since API\_MINOR 10, read one exactly, whatever the filter, with
 
 ```text
 textureLoad(NAME, vec2i(x, y), 0) -> vec4f   (vec2u too)
 ```
 
-level 0 only (the literal 0); x and y are clamped into the texture on every runtime (WebGPU included), so outside it they read the texel at its edge. Texture coordinates are WGSL's: (0, 0) is the image's first row as uploaded (an image file's top, a DataTexture's first row of data) and v grows down it. The geometry's uv arrives turned to that convention (Vertex.uv, Surface.uv and Fragment.uv are three.js's uv with v replaced by 1 - v), so sampling with them shows a texture as a built-in map does; coordinates a hook computes itself (an atlas cell, a texel of data) count rows from the first. Ported three.js GLSL that computes v upward from the bottom (or reads vUv.y) uses 1 - v. Porting three.js GLSL, two differences to watch:
+level 0 only (the literal 0); x and y are clamped into the texture on every runtime (WebGPU included), so outside it they read the texel at its edge. Color spaces: since API\_MINOR 43 (`HOOK_ACCESS_MINOR`), as three.js r185's WebGLRenderer uploads an SRGBColorSpace texture as SRGB8\_ALPHA8, a texture uniform whose `colorSpace` is SRGBColorSpace is sampled sRGB-decoded (linear, decoded texel by texel before filtering, as built-in maps are; the GPU holds an sRGB copy of its texels while a material samples it so), and others as stored; read when the material syncs, so a changed `colorSpace` applies from the next frame. A block-compressed texture (KTX2 or `starhermit package`'s BC images) decodes too, so a hook reads the same linear values in a packaged build as from the PNG in development (within the blocks' loss): its blocks in the sRGB block format where the device samples it (BC1, BC3, BC7), else unpacked into an sRGB copy (BC4, BC5, or no such format), both decoded before filtering. The sRGB copy takes image memory beside the texture's own; where the renderer has no room left for it (a game near its image budget), the texture's reads (textureSample\*, textureLoad) are decoded after filtering instead, as built-in maps are then (the same within filtering's blend of encoded texels); runtimes before 1.44.0 read it as stored there, at every minor. Float and render-target textures and depth and 3D textures have no sRGB copy and read as stored. Before 43 every texture reads as stored (an image's sRGB bytes undecoded: decode with srgb\_to\_linear). Texture coordinates are WGSL's: (0, 0) is the image's first row as uploaded (an image file's top, a DataTexture's first row of data) and v grows down it. The geometry's uv arrives turned to that convention (Vertex.uv, Surface.uv and Fragment.uv are three.js's uv with v replaced by 1 - v), so sampling with them shows a texture as a built-in map does; coordinates a hook computes itself (an atlas cell, a texel of data) count rows from the first. Ported three.js GLSL that computes v upward from the bottom (or reads vUv.y) uses 1 - v. Porting three.js GLSL, two differences to watch:
 
 ```text
 - vUv.y is 1.0 - uv.y here (uv.x is the same): a gradient, stripe or
@@ -4594,13 +5679,18 @@ Programs with identical sources, defines and uniform types share one; a game hol
 
 *interface*
 
-A uniform: `value` is read every frame. Its type follows the value: a number is `f32`; Vector2, Vector3 (or Color, linear) and Vector4 (or Quaternion) are `vec2f`, `vec3f`, `vec4f`; a Matrix4 `mat4x4f`; an array of Vector4 or Matrix4, or a Float32Array of 4n numbers, an `array<vec4f, n>` or `array<mat4x4f, n>`; a Texture (or null, the white texture) a texture and sampler (at most 5 a material since API\_MINOR 9, 4 before: with the material's own maps and the shadow maps that is the 16 a WebGL2 fragment stage is sure to sample; since API\_MINOR 34 a `ShaderMaterial`, which replaces the material's maps, up to 12, the sixth on taking the maps' places, all readable in both stages; hooks keep 5; API\_MINOR 35 keeps 12: with the four shadow maps a fragment stage then samples the 16 WebGPU, WebGL2, OpenGL ES and Vulkan are sure of, so pack more as the layers of an array texture or the channels of one). A `DataArrayTexture` (since API\_MINOR 25) or a `WebGLArrayRenderTarget`'s texture (since 34) is a `texture_2d_array<f32>`; a `Data3DTexture` or a `WebGL3DRenderTarget`'s texture (since 35) a `texture_3d<f32>`, one of the textures. Each member takes whole vec4 slots, 16,384 bytes in all since API\_MINOR 10 (4,096 before; 1,024 vec4s, 256 matrices: WebGL2's least uniform block): a larger block is refused (`compile()` throws a SyntaxError, the material draws without its program).
+A uniform: `value` is read every frame. Its type follows the value: a number is `f32`; Vector2, Vector3 (or Color, linear) and Vector4 (or Quaternion) are `vec2f`, `vec3f`, `vec4f`; a Matrix4 `mat4x4f`; an array of Vector4 or Matrix4, or a Float32Array of 4n numbers, an `array<vec4f, n>` or `array<mat4x4f, n>`; a Texture (or null, the white texture) a texture and sampler (at most 5 a material since API\_MINOR 9, 4 before: with the material's own maps and the shadow maps that is the 16 a WebGL2 fragment stage is sure to sample; since API\_MINOR 34 a `ShaderMaterial`, which replaces the material's maps, up to 12, the sixth on taking the maps' places, all readable in both stages; hooks keep 5 at every minor, as a hooked material's fragment stage already samples its seven map slots, five textures and four shadow maps, the 16 WebGL2 promises; API\_MINOR 35 keeps 12: with the four shadow maps a fragment stage then samples the 16 WebGPU, WebGL2, OpenGL ES and Vulkan are sure of, so pack more as the layers of an array texture or the channels of one). A `DataArrayTexture` (since API\_MINOR 25) or a `WebGLArrayRenderTarget`'s texture (since 34) is a `texture_2d_array<f32>`; a `Data3DTexture` or a `WebGL3DRenderTarget`'s texture (since 35) a `texture_3d<f32>`, one of the textures. Each member takes whole vec4 slots, 16,384 bytes in all since API\_MINOR 10 (4,096 before; 1,024 vec4s, 256 matrices: WebGL2's least uniform block): a larger block is refused (`compile()` throws a SyntaxError, the material draws without its program).
+
+Since API\_MINOR 44 (`UNIFORM_ARRAYS_MINOR`), three.js's other array values too: a Float32Array of any length and an array of numbers are packed four floats to a vec4 (`array<vec4f, ⌈n / 4⌉>`, element `i` read as `u[i / 4][i % 4]`), and an array of Vector2, Vector3, Color (linear) or Vector4 takes a vec4 each (`array<vec4f, n>`, their components first). Every array is read afresh each frame, so changing its elements in place (`value[3] = 1`, `value.set(floats)`, `value[1].copy(v)`) shows the next frame, as in three.js. Older games refuse those values (a TypeError naming the uniform).
 
 ```ts
 export interface ShaderUniform { … }
 ```
 
-- `value: number | Vector2 | Vector3 | Vector4 | Color | Quaternion | Matrix4 | Texture | null | readonly Vector4[] | readonly Matrix4[] | Float32Array;`
+- ```ts
+  value: number | Vector2 | Vector3 | Vector4 | Color | Quaternion | Matrix4 | Texture | null | readonly Vector4[] | readonly Matrix4[] | Float32Array
+    | readonly number[] | readonly (Vector2 | Vector3 | Color | Vector4)[];
+  ```
 
 ### MaterialHooks
 
@@ -4647,11 +5737,11 @@ export interface ShaderMaterialParameters extends MaterialParameters { … }
 
 - `vertexShader?: string;`
 
-  WGSL declaring `fn vertex(v: Vertex) -> Vertex` (optional).
+  WGSL declaring `fn vertex(v: Vertex) -> Vertex` (optional). It joins `fragmentShader` (and `fogShader`) in one module, as hooks' parts do: helpers, structs and consts declared in either are visible in both and declared once, not in each.
 
 - `fragmentShader?: string;`
 
-  WGSL declaring `fn fragment(f: Fragment) -> vec4f`. Since API\_MINOR 38 (`MRT_MINOR`) it may instead return a struct the same code declares, each member a `vec4f` with one `@location(n)` (`n` 0 to 7, each once, 0 among them; the only attributes a game's WGSL carries): a `WebGLRenderTarget` with `count` gets texture `n` from member `n` (see there); elsewhere location 0 alone is drawn.
+  WGSL declaring `fn fragment(f: Fragment) -> vec4f`, in one module with `vertexShader` (see there). Since API\_MINOR 38 (`MRT_MINOR`) it may instead return a struct the same code declares, each member a `vec4f` with one `@location(n)` (`n` 0 to 7, each once, 0 among them; the only attributes a game's WGSL carries): a `WebGLRenderTarget` with `count` gets texture `n` from member `n` (see there); elsewhere location 0 alone is drawn.
 
 - `fogShader?: string;`
 
@@ -4685,6 +5775,24 @@ export class ShaderMaterial extends Material { … }
 
   Since API\_MINOR 36 (`STRAIGHT_TONE_MINOR`; older games' materials have no such property), default false. With `premultipliedAlpha` the fragment still gives its color premultiplied, and the renderer divides it by its alpha, tone maps, encodes and fogs that straight color, then multiplies it by the alpha again: three.js's order for a shader ending in `tonemapping_fragment`, `colorspace_fragment`, `fog_fragment` and `premultiplied_alpha_fragment`, so a thin edge (small alpha) is not brighter than the body behind it. Light given at alpha 0 is output as given (it has no straight color). Without it the premultiplied color is tone mapped and encoded as given (a three.js shader writing premultiplied color before those chunks), as before. Post effects tone map the composite either way.
 
+### TangentSpaceNormalMap
+
+*const*
+
+```ts
+export const TangentSpaceNormalMap: 0;
+```
+
+`normalMapType`'s values (three.js's; since API\_MINOR 44).
+
+### ObjectSpaceNormalMap
+
+*const*
+
+```ts
+export const ObjectSpaceNormalMap: 1;
+```
+
 ### MeshStandardMaterialParameters
 
 *interface*
@@ -4692,6 +5800,23 @@ export class ShaderMaterial extends Material { … }
 ```ts
 export interface MeshStandardMaterialParameters extends MaterialParameters { … }
 ```
+
+- `underwater?: boolean | MaterialUnderwater | null;`
+
+  Since API\_MINOR 51 (`MATERIAL_UNDERWATER_MINOR`); see the class.
+
+- `lightMap?: Texture | null;`
+
+  Since API\_MINOR 44; see the class.
+
+- `lightMapIntensity?: number;`
+- `alphaMap?: Texture | null;`
+- `alphaHash?: boolean;`
+- `displacementMap?: Texture | null;`
+- `displacementScale?: number;`
+- `displacementBias?: number;`
+- `normalMapType?: number;`
+- `envMapRotation?: Euler;`
 
 - `metalness?: number;`
 
@@ -4751,7 +5876,11 @@ export class MeshStandardMaterial extends Material { … }
 ```
 
 - `constructor(parameters?: MeshStandardMaterialParameters);`
+
 - `metalness: number;`
+
+  Since API\_MINOR 44 (`PHYSICAL_MATERIAL_MINOR`) a metalness between 0 and 1 draws through the physical program, for three.js r185's image-based light (its dielectric and metallic scattering apart; the built-in split sum is r185's at 0 and 1).
+
 - `roughness: number;`
 - `emissive: Color;`
 - `emissiveMap: Texture | null;`
@@ -4759,7 +5888,7 @@ export class MeshStandardMaterial extends Material { … }
 
 - `normalMap: Texture | null;`
 
-  Tangent-space normals (OpenGL convention: green up), x and y scaled by `normalScale` (default (1, 1); flip y for maps with green down); the tangent frame comes from screen-space derivatives.
+  Tangent-space normals (OpenGL convention: green up), x and y scaled by `normalScale` (default (1, 1); flip y for maps with green down); the tangent frame comes from screen-space derivatives. z is read from blue, except that since API\_MINOR 43 a map of BC5 blocks (red and green alone: a `RED_GREEN_RGTC2_Format` `CompressedTexture`, or the KTX2 file `starhermit package` makes of an `engine.textures.normals` image) has its z rebuilt from the unscaled x and y, `sqrt(max(0, 1 − x² − y²))`, for every material that takes a normal map and their hooks. three.js r185's `WebGLRenderer` reads such a map's z from blue (0, so its normals point into the surface); its node materials rebuild it only for a map marked `NormalRGPacking`. Before 43 BC5 maps draw as they did, z −1.
 
 - `normalScale: Vector2;`
 
@@ -4800,6 +5929,45 @@ export class MeshStandardMaterial extends Material { … }
 - `wireframeLinecap: string;`
 - `wireframeLinejoin: string;`
 
+- `lightMap: Texture | null;`
+
+  Since API\_MINOR 44: a light map (default null) whose rgb times `lightMapIntensity` (default 1) is indirect diffuse irradiance, as three.js r185's lights\_fragment\_maps adds it (its UVs, `uv`, and its own transform; sRGB-decoded when its colorSpace says so). Kept and not drawn before 44.
+
+- `lightMapIntensity: number;`
+
+- `alphaMap: Texture | null;`
+
+  Since API\_MINOR 44: opacity times the map's green (alphamap\_fragment; default null), before `alphaTest` and in the shadow maps.
+
+- `alphaHash: boolean;`
+
+  Since API\_MINOR 44: three.js r185's alpha hashing (default false): a fragment whose alpha is below a stable hash of its object-space position (`getAlphaHashThreshold`) is discarded, in the shadow maps too.
+
+- `displacementMap: Texture | null;`
+
+  Since API\_MINOR 44: moves each vertex along its normal by the map's red (level 0) times `displacementScale` (default 1) plus `displacementBias` (default 0), before a vertex hook, in every pass (displacementmap\_vertex). The normals are not changed (as in three.js).
+
+- `displacementScale: number;`
+- `displacementBias: number;`
+
+- `normalMapType: number;`
+
+  Since API\_MINOR 44: `TangentSpaceNormalMap` (0, the default) or `ObjectSpaceNormalMap` (1): the map's normals in the object's space, turned by its normal matrix (normal\_fragment\_maps).
+
+- `envMapRotation: Euler;`
+
+  Since API\_MINOR 44: turns the material's own `envMap` (not `scene.environment`, which `scene.environmentRotation` turns) as three.js r185 does (the Euler's rotation, transposed; a CubeTexture mirrored in x). One for each material.
+
+- `underwater: boolean | MaterialUnderwater | null;`
+
+  ENGINE EXTENSION (three.js r185 has none), since API\_MINOR 51 (`MATERIAL_UNDERWATER_MINOR`; absent before): `true` (or `MaterialUnderwater`) lights the material as the water of `renderer.underwater` lights what lies in it, seen from above the surface or below it; null or false (the default) draws it exactly as before. Each frame, with `renderer.underwater` set and enabled (wherever the camera is: its `margin` is the screen pass's alone), a fragment under its wet water (its level or heightfield, plus starhermit:water's ripples; dry where the heightfield's depth says so or outside its bounds) takes the same optics as the underwater light's screen pass:
+
+  - the primary light it reflects (`Light.sun`; the scene's main light, its direction else the water's `sunDirection`) dimmed by exp(−(absorption + scattering) · path) along that light's beam refracted by `refractiveIndex` from the surface down to it, and on faces looking up (by smoothstep(0.05, 0.85, n.y)) focused into caustics as the surface's curvature (the heightfield's and the ripples') bends the beam, times `caustics` and the setting's own;
+  - its sky, ambient and environment light (`Light.indirect`) dimmed by the depth above it; its other lights (`Light.direct`) as they are; seen from above, both dimmings by the `sun` share (by default none for an opaque material under a starhermit:water body, whose surface dims it once; the caustics kept);
+  - seen from above the water (the camera not under its surface), all its light dimmed along `view`'s share of the view's path from the surface down to it, and the light the water scatters toward the eye along it added (the sun's, Henyey-Greenstein's, and the sky's). A camera under the surface leaves that path to the screen pass.
+
+  It applies after the material's light hook, in the lit pass only. The material draws through a program of the engine's (as hooks do) with `shUnderwater` and `shUnderwaterField` among its uniforms (the engine's names there), the heightfield taking one of its five texture slots. A non-boolean is checked as `MaterialUnderwater` (TypeError, RangeError). A MeshStandardMaterial with neither hooks nor physical settings draws the built-in shading with it.
+
 ### MeshPhysicalMaterialParameters
 
 *interface*
@@ -4816,11 +5984,71 @@ export interface MeshPhysicalMaterialParameters extends MeshStandardMaterialPara
 
   0–1 (default 0).
 
+- `ior?: number;`
+
+  Since API\_MINOR 44 (`PHYSICAL_MATERIAL_MINOR`); see the class.
+
+- `iridescence?: number;`
+- `iridescenceIOR?: number;`
+- `iridescenceThicknessRange?: [number, number];`
+- `iridescenceMap?: Texture | null;`
+- `iridescenceThicknessMap?: Texture | null;`
+- `transmission?: number;`
+- `transmissionMap?: Texture | null;`
+- `thickness?: number;`
+- `thicknessMap?: Texture | null;`
+- `attenuationColor?: ColorInput;`
+- `attenuationDistance?: number;`
+- `dispersion?: number;`
+- `translucency?: number;`
+- `translucencyColor?: ColorInput;`
+- `translucencyDistortion?: number;`
+- `translucencyPower?: number;`
+- `translucencyScale?: number;`
+- `translucencyAmbient?: number;`
+- `translucencyWrap?: number;`
+- `translucencyShadow?: number;`
+- `subsurface?: number;`
+- `subsurfaceColor?: ColorInput;`
+- `subsurfaceRadius?: Vector3 | Color;`
+- `subsurfaceRadiusScale?: number;`
+- `subsurfacePostScatter?: number;`
+- `subsurfaceTransmission?: number;`
+- `subsurfaceMethod?: SubsurfaceMethod;`
+
+- `tissueFallback?: TissueFallback;`
+
+  Since API\_MINOR 51 (`TISSUE_FALLBACK_MINOR`); see the class.
+
+- `sheen?: number;`
+- `sheenColor?: ColorInput;`
+- `sheenColorMap?: Texture | null;`
+- `sheenRoughness?: number;`
+- `sheenRoughnessMap?: Texture | null;`
+- `specularIntensity?: number;`
+- `specularIntensityMap?: Texture | null;`
+- `specularColor?: ColorInput;`
+- `specularColorMap?: Texture | null;`
+- `anisotropy?: number;`
+- `anisotropyRotation?: number;`
+- `anisotropyMap?: Texture | null;`
+- `clearcoatMap?: Texture | null;`
+- `clearcoatRoughnessMap?: Texture | null;`
+- `clearcoatNormalMap?: Texture | null;`
+- `clearcoatNormalScale?: Vector2;`
+- `reflectivity?: number;`
+
 ### MeshPhysicalMaterial
 
 *class*
 
-A standard material with a clear coat over it (three.js `MeshPhysicalMaterial`: `clearcoat`, `clearcoatRoughness`; its other physical properties are kept but not drawn: sheen, iridescence, transmission, thickness, specular and anisotropy are not supported, so `sheen`, `iridescence` and their colors, maps and ranges change nothing).
+A standard material with three.js r185's physical extensions (`MeshPhysicalMaterial`): a clear coat (`clearcoat`, `clearcoatRoughness`) at every minor; since API\_MINOR 44 (`PHYSICAL_MATERIAL_MINOR`) also `ior` (and `reflectivity`, its alias), iridescence, transmission, sheen, specular intensity and colour, anisotropy and the clearcoat's maps as r185 draws them, and the engine's thin-tissue translucency.
+
+Before API\_MINOR 44 none of the settings past the clear coat are drawn (and they have no defaults: undefined until set).
+
+From API\_MINOR 44 a physical material whose `ior` is not 1.5 or whose `iridescence`, `transmission` or `translucency` is above 0, that has `hooks`, or that has any of the sheen, specular, anisotropy or clearcoat map settings (or MeshStandardMaterial's light map, alpha map, alphaHash, displacement map, normalMapType or envMapRotation) set off its default (a colour, vector or rotation once read), draws through a program of the engine's (as hooks do): its settings in a uniform named `shPhysical`, its maps (`shPhysicalMaps…`, each distinct texture once, and `shPhysicalAtlas`) and, with transmission, `renderer.sceneColor` among its textures; those uniform names are the engine's there. The program binds five textures of its own, the hooks' first: the maps' distinct textures take what the hooks' and the scene's colour leave, and when they are more, the last of those slots is one atlas holding the rest (a render target the engine draws them into, a cell each of the largest map's side (a power of two, at most 1024; the atlas at most 4096), 8 bits a channel (sRGB-encoded, read decoded; the alpha the sheen roughness and specular intensity maps read in a cell of its own), with a mip chain, read as each map's transform, wrapping and filters say: filtering does not cross a repeating map's edge, and anisotropic filtering is not applied), drawn before the frame's sync the first time a material needs it and again when one of its maps changes (a material's first frame shows its atlas maps the next frame). So a fully mapped physical material fits with up to three hook textures with transmission and four without (with five hook textures, or four and transmission, its maps are not drawn). A hooked physical material's surface hook may read and change the `Surface`'s `iridescence`, `iridescence_thickness` (nm), `transmission`, `thickness`, `sheen_color` (sheenColor × sheen), `sheen_roughness`, `specular_color`, `specular_intensity`, `anisotropy` (the vector: strength × direction in the tangent frame), `clearcoat`, `clearcoat_roughness` and `clearcoat_normal` (world, as the surface's front faces), set from the settings and maps before it runs, e.g. a thickness from a varying.
+
+Tangents (three.js USE\_TANGENT): from API\_MINOR 44 a geometry's `tangent` attribute (four floats, w the handedness; what `computeTangents` makes) is uploaded as its custom attribute when it has none (so hooks read it as `Vertex.custom`), and such a material without hooks takes it as the vertex tangent for its normal map, anisotropy and clearcoat normal map where it has a normal map or anisotropy, as three.js does (not skinned or morphed: three.js skins it); else the frame comes from screen-space derivatives (getTangentFrame). A material without hooks drawn on a geometry with a custom attribute of its own reads that as the tangent.
 
 ```ts
 export class MeshPhysicalMaterial extends MeshStandardMaterial { … }
@@ -4829,6 +6057,168 @@ export class MeshPhysicalMaterial extends MeshStandardMaterial { … }
 - `constructor(parameters?: MeshPhysicalMaterialParameters);`
 - `clearcoat: number;`
 - `clearcoatRoughness: number;`
+
+- `ior: number;`
+
+  Since API\_MINOR 44: the index of refraction (default 1.5), 1 to 2.333: the dielectric specular color is ((ior − 1) / (ior + 1))² (0.04 at 1.5), and transmission refracts by it.
+
+- `iridescence: number;`
+
+  Since API\_MINOR 44: a thin film's strength, 0–1 (default 0), as three.js r185's iridescence\_fragment draws it (`evalIridescence`: Belcour and Barla's thin-film interference, the film over a dielectric base of the ior's specular color and a metallic base of the base color, mixed by metalness), its Fresnel taking the place of Schlick's in direct and image-based specular light. Times `iridescenceMap`'s red.
+
+- `iridescenceIOR: number;`
+
+  Since API\_MINOR 44: the film's index of refraction (default 1.3).
+
+- `iridescenceThicknessRange: [number, number];`
+
+  Since API\_MINOR 44: the film's thickness in nanometres (default \[100, 400\]): the second without `iridescenceThicknessMap`, else from the first to the second by its green. A thickness of 0 shows no film.
+
+- `iridescenceMap: Texture | null;`
+- `iridescenceThicknessMap: Texture | null;`
+
+- `transmission: number;`
+
+  Since API\_MINOR 44: how much light passes through, 0–1 (default 0; times `transmissionMap`'s red), as three.js r185's transmission\_fragment draws it: the diffuse light mixed toward the scene behind, read where the refracted view ray leaves the volume (`thickness` along it), times the base color, Beer–Lambert attenuation and one minus the environment BRDF. Above 0 the material draws after the opaque objects and before the transparent ones (three.js's transmissive list, whatever `transparent` says), reading the scene through `renderer.sceneColor` (see there: render targets read the last frame's, and a device without half-float color reads black). As three.js r185's transmission pass, the frame first draws the background and the opaque objects into a transmission target of its own (four samples whatever the frame's, half floats, with a mip chain), then double-sided transmissive objects' back faces (transparent ones blended); transmissive materials read it as r185 reads its target (`textureBicubic` at log2(width) × roughness × clamp(2 ior − 2, 0, 1)), so rough transmission blurs, while `renderer.sceneColor`'s other readers keep its copy and sampler. The thickness is scaled by the object's scale (its world matrix's columns; an InstancedMesh's object's, not its instances'), and the output's alpha is multiplied by r185's transmitted alpha (1 − (1 − alpha behind) × the mean transmittance, mixed by transmission). Difference from three.js r185: over a clear alpha below 1 without a background, what is behind where nothing opaque is drawn is the clear colour (r185's target: white at alpha 0.5).
+
+- `transmissionMap: Texture | null;`
+
+- `thickness: number;`
+
+  Since API\_MINOR 44: the volume's thickness (default 0; times `thicknessMap`'s green), for transmission's refraction and attenuation and for translucency's attenuation.
+
+- `thicknessMap: Texture | null;`
+
+- `attenuationColor: Color;`
+
+  Since API\_MINOR 44: the color white light becomes after `attenuationDistance` through the volume (default white; Beer–Lambert: the transmittance over a distance d is attenuationColor^(d / attenuationDistance)). One for each material, as three.js's.
+
+- `attenuationDistance: number;`
+
+  Since API\_MINOR 44: default Infinity (no attenuation).
+
+- `dispersion: number;`
+
+  Since API\_MINOR 44: default 0. With transmission, red, green and blue refract by iors spread (ior − 1) × 0.025 × dispersion apart (three.js r185's USE\_DISPERSION: three samples of what is behind), fringing what is seen through thick glass.
+
+- `translucency: number;`
+
+  ENGINE EXTENSION (three.js r185 has none in core; its SubsurfaceScatteringShader addon's lobe as material settings), since API\_MINOR 44: thin-tissue translucency for leaves, petals, fins and ears, default 0 (none). Each light (the main light, the light slots and the clustered lights) also lights the surface from behind: `translucency × base color × translucencyColor × T × (behind × (translucencyAmbient + lobe) + wrap) × light`, where T is the Beer–Lambert transmittance over `thickness` (`attenuationColor`, `attenuationDistance`), behind is how much the light reaches the other side (max(0, −n·l)), the lobe is the addon's pow(saturate(v · −normalize(l + n × translucencyDistortion)), translucencyPower) × translucencyScale (strongest looking toward the light through the surface), and wrap is diffuse wrapped past the terminator, max(0, saturate((n·l + w) / (1 + w)) − saturate(n·l)) for w = `translucencyWrap`. The light's shadow dims it by `translucencyShadow` (1: fully, as other light; 0.75 keeps a quarter of it through the surface's own shadow). It is direct light (the light hook's `direct`).
+
+- `translucencyColor: Color;`
+
+  Since API\_MINOR 44 (engine extension): default white. One for each material.
+
+- `translucencyDistortion: number;`
+
+  Since API\_MINOR 44 (engine extension): default 0.1.
+
+- `translucencyPower: number;`
+
+  Since API\_MINOR 44 (engine extension): default 2.
+
+- `translucencyScale: number;`
+
+  Since API\_MINOR 44 (engine extension): default 1.
+
+- `translucencyAmbient: number;`
+
+  Since API\_MINOR 44 (engine extension): default 0.
+
+- `translucencyWrap: number;`
+
+  Since API\_MINOR 44 (engine extension): default 0.
+
+- `translucencyShadow: number;`
+
+  Since API\_MINOR 44 (engine extension): default 1.
+
+- `subsurface: number;`
+
+  ENGINE EXTENSION (three.js r185 has none), since API\_MINOR 48 (`SUBSURFACE_MINOR`; absent before): subsurface scattering's weight, 0..1 (default 0: none, the material draws exactly as before). Light diffuses under the surface through Christensen and Burley's normalized diffusion profile (skin, wax, marble, jade, milk): each channel's shape distance is its mean free path (`subsurfaceRadius × subsurfaceRadiusScale`, at most 64 world units) over the profile's shape factor for its scatter albedo (`subsurfaceColor`). Where the frame runs the screen-space pass (`renderer.subsurface`; Vulkan, Direct3D 12, Metal and the browser's WebGPU on the High and Ultra graphics levels by default) the material's diffuse light (its direct, ambient, hemisphere, probe, light-map and environment light) is blurred across the surface by the profile in world units, its specular, sheen, clearcoat and emission sharp; elsewhere each light's diffuse n·l takes the pre-integrated profile (Penner's lookup of the same profile by the surface's curvature, from screen derivatives), so light wraps past the terminator and reddens there. The weight mixes between Lambert's and the scattered light. Anything but a number reads as 0.
+
+- `subsurfaceColor: Color;`
+
+  Since API\_MINOR 48 (engine extension): the profile's scatter albedo (default white), its shape per channel, and the transmitted light's tint. One for each material.
+
+- `subsurfaceRadius: Vector3 | Color;`
+
+  Since API\_MINOR 48 (engine extension): each channel's mean free path in radius units, as a Vector3 (x red, y green, z blue) or a Color (its linear r, g, b); default (1, 0.37, 0.3) (a skin-like falloff). Negative and non-finite values read as 0. One for each material.
+
+- `subsurfaceRadiusScale: number;`
+
+  Since API\_MINOR 48 (engine extension): world units per radius unit, default 0.01 (centimetres in a scene of metres); 0..64.
+
+- `subsurfacePostScatter: number;`
+
+  Since API\_MINOR 48 (engine extension): the share of the base colour applied after the scattering, 0..1 (default 0.5: half before, half after, as a square root each side). 1 keeps the colour map's detail sharp under the scattered light; 0 blurs it with the light. Only the screen-space pass tells them apart.
+
+- `subsurfaceTransmission: number;`
+
+  Since API\_MINOR 48 (engine extension): the light passing through thin parts toward the camera (ears, nostrils, fingers, leaves of wax), 0..1 (default 0: none): each light adds the profile's slab transmittance `(e^(−t/d) + 3e^(−t/3d)) / 4` per channel through the thickness t toward it, times the scatter albedo, the diffuse colour and `saturate(0.3 − n·l)`, after Jimenez et al.'s skin translucency. The thickness comes from the light's shadow map (how far toward the light points stay in its shadow) where the surface receives that light's shadows; elsewhere, and for clustered lights, it is the material's `thickness` (times `thicknessMap`'s green).
+
+- `subsurfaceMethod: SubsurfaceMethod;`
+
+  Since API\_MINOR 48 (engine extension): "auto" (the default: the screen-space pass where the graphics level and backend run it, else pre-integrated), "screen" (the pass wherever the backend runs it, whatever the level; pre-integrated where it does not) or "preintegrated" (never the pass). Anything else is a TypeError.
+
+- `tissueFallback: TissueFallback;`
+
+  ENGINE EXTENSION, since API\_MINOR 51 (`TISSUE_FALLBACK_MINOR`; absent before): how thin tissue (a `translucency` or `subsurface` above 0) draws. "auto" (the default): at the phone graphics levels (`frame().levelIndex` 3, cellular, and below: the Low and Balanced tiers, every phone) through the engine's cheap fallback, elsewhere through the physical program; "always": the fallback at every level; "never": the physical program at every level, as before 51. Anything else is a TypeError.
+
+  The fallback is the built-in standard shading (its clearcoat too) with the physical surface's fields, so the material's hooks run as they are (a surface hook's `thickness` and `transmission` are read; the other physical fields and the physical maps are not drawn), and each light (the main light, the light slots and the clustered lights) adds through the surface, times the base colour, its shadow by `translucencyShadow`: the translucency as the physical program draws it; the transmission as diffuse light through it (`transmission × T × max(0, −n·l)`, T the Beer–Lambert transmittance over `thickness`; the scene behind is not read and the material is not transmissive, so the frame draws no transmission pass for it); and the subsurface profile's light wrapped half way past the terminator, tinted by `subsurfaceColor` (times `subsurface`), and its slab transmittance through the thickness (times `subsurfaceTransmission`), without the screen-space pass. A material with neither (glass) draws through the physical program whatever this says.
+
+- `sheen: number;`
+
+  Since API\_MINOR 44: the sheen layer's strength (default 0: none), three.js r185's (Estevez and Kulla's Charlie sheen: D\_Charlie and V\_Neubelt for each light, IBLSheenBRDF of the environment's irradiance, and the layer's albedo taken from the light beneath), its colour `sheenColor × sheen` (times `sheenColorMap`'s rgb).
+
+- `sheenColor: Color;`
+
+  Since API\_MINOR 44: default black. One for each material.
+
+- `sheenColorMap: Texture | null;`
+
+- `sheenRoughness: number;`
+
+  Since API\_MINOR 44: default 1 (clamped to 1e-4 to 1, then times `sheenRoughnessMap`'s alpha).
+
+- `sheenRoughnessMap: Texture | null;`
+
+- `specularIntensity: number;`
+
+  Since API\_MINOR 44: the dielectric specular's strength (default 1; times `specularIntensityMap`'s alpha): the specular colour min(((ior − 1) / (ior + 1))² × specularColor, 1) × specularIntensity and its grazing reflectance (F90) mix(specularIntensity, 1, metalness), as r185's lights\_physical\_fragment makes them.
+
+- `specularIntensityMap: Texture | null;`
+
+- `specularColor: Color;`
+
+  Since API\_MINOR 44: default white (times `specularColorMap`'s rgb). One for each material.
+
+- `specularColorMap: Texture | null;`
+
+- `anisotropy: number;`
+
+  Since API\_MINOR 44: anisotropic GGX (default 0: isotropic), its direction `anisotropyRotation` radians from the tangent (default 0), turned and scaled by `anisotropyMap` (red and green a direction, blue the strength), as r185 draws it (V\_GGX\_SmithCorrelated\_Anisotropic, D\_GGX\_Anisotropic, and image-based light along its bent normal).
+
+- `anisotropyRotation: number;`
+- `anisotropyMap: Texture | null;`
+
+- `clearcoatMap: Texture | null;`
+
+  Since API\_MINOR 44: the clearcoat times the map's red.
+
+- `clearcoatRoughnessMap: Texture | null;`
+
+  Since API\_MINOR 44: the clearcoat's roughness times the map's green.
+
+- `clearcoatNormalMap: Texture | null;`
+
+  Since API\_MINOR 44: the clear coat's own tangent-space normal map, x and y scaled by `clearcoatNormalScale` (default (1, 1); one for each material).
+
+- `clearcoatNormalScale: Vector2;`
+
+- `reflectivity: number;`
+
+  Since API\_MINOR 44: three.js's alias of `ior` as a specular strength, clamp(2.5 (ior − 1) / (ior + 1), 0, 1); setting it sets `ior`.
 
 ### MeshLambertMaterialParameters
 
@@ -5326,11 +6716,21 @@ export class Object3D { … }
 
 - `noAO: boolean;`
 
-  Leaves the object and its descendants out of `renderer.ao` (default false; since API\_MINOR 4): they cast no ambient occlusion, and where they are drawn the occlusion of what lies behind them applies (sky domes, light cones, nets). Sprites and points never take part.
+  Leaves the object and its descendants out of `renderer.ao` (default false; since API\_MINOR 4): they cast no ambient occlusion, and where they are drawn the occlusion of what lies behind them applies (sky domes, light cones, nets). Sprites and points never take part. Since API\_MINOR 45 (`VELOCITY_PASS_MINOR`) neither do blended (transparent) objects nor ones whose material writes no depth: the occlusion prepass that `renderer.ao`, `ssr` and `ssgi` read draws a mesh's whole triangles (a game fragment's `discard` aside), so before 45 a transparent quad darkened, and reflected, its whole square there (set `noAO` on it to leave it out).
 
 - `movable: boolean | null;`
 
   \*Engine extension\*\* (host API 1.42, `engine.minor=42`; UE's Mobility, ThreeRT's `Object3D.movable`; three.js has none): whether the object, and what is under it, moves. `null` (the default) leaves the renderer to its own heuristics, as before 1.42. `false` marks it static: the renderer keeps it in shadow maps' cached layers from its first frame (`shadow.cascades.cached` takes it at once instead of after 30 still frames; a directional or spot light's map drawn every frame keeps its static casters while its view holds, once they draw at least 8 million indices, below which drawing them is cheaper than the copy), custom materials' vertex code included, which a static object promises gives the same output every frame. `true` marks it movable: never cached, so a mover that pauses does not make the cache draw again when it stops and starts. A movable object makes everything under it movable; a static one under an unset parent is static. Pixels are the same either way: a static object that moves (placing a new object is not a move) is promoted to movable at its first move, with what is under it, the cached shadows drawn again once, and a console line names it (by its `name` when `movable` was set, else its `id`; one line a frame, counting any others promoted with it). Edits (geometry, material) and removal redraw the cache once. Anything other than `true`, `false`, `null` or `undefined` throws a TypeError. `copy` and `clone` take it. Older games' objects have no such property.
+
+  Since API\_MINOR 49 (`STATIC_SYNC_MINOR`) a still object is taken at its word: the scene's sync reads its position, rotation, scale and own matrix (`matrixAutoUpdate = false`) once it is added to a parent and then only once the game says it moved, by setting `matrixWorldNeedsUpdate = true` or calling `updateMatrix()`, `updateMatrixWorld()` or `updateWorldMatrix()` on it or on an object above it, or by setting `movable` again; a move without a word is not drawn (nor promoted). Its visibility, shadows, layers, render order, geometry and material are read every frame as before, and a movable object under it moves as ever. A large still scene's sync then reads a few fields an object instead of all of them.
+
+- `motionVectors: "object" | "camera" | null;`
+
+  Since API\_MINOR 47 (`MOTION_VECTORS_MINOR`; an engine extension, Unity's `Renderer.motionVectorGenerationMode`; absent before): what its motion vectors (and so motion blur, temporal anti-aliasing, upscalers and `renderer.sceneVelocity`) take of its motion. "object": its own motion and the camera's (what every object does by default). "camera": the camera's motion alone (Unity's `Camera` mode): it is drawn as if it had not moved since the last frame, its skin's bones and an `InstancedSkinnedMesh`'s baked animation included, so a running unit stays crisp under motion blur while the camera's pans still blur it with the rest. null (the default): its parent's, so setting it on a glTF scene's root (or a unit's `Group`) sets it for every mesh under it that sets none of its own; the scene's objects are "object". Anything else is a TypeError. `copy` and `clone` take it.
+
+- `motionScale: number | null;`
+
+  Since API\_MINOR 47 (`MOTION_SCALE_MINOR`; an engine extension; absent before): the share of its own motion its motion vectors take, 0..1 (its placement and skin the frame before taken that share of the way back from where they are now: 0.33 blurs a third as long), or null (the default) for its parent's, as `motionVectors` inherits; the scene's objects take 1. "camera" stands for 0 whatever this is. An `InstancedMesh` instance's own share (`setMotionScaleAt`) multiplies it. Outside 0..1 is a RangeError, a non-number a TypeError. `copy` and `clone` take it.
 
 - `readonly parent: Object3D | null;`
 - `readonly children: readonly Object3D[];`
@@ -5392,6 +6792,11 @@ Since API\_MINOR 18.
 
 - `readonly up: Vector3;`
 - `matrixAutoUpdate: boolean;`
+
+- `matrixWorldNeedsUpdate: boolean;`
+
+  Since API\_MINOR 49 (`STATIC_SYNC_MINOR`; older games' objects have no such property): three.js's flag, which tells the engine a still object (`movable = false`) moved. `updateMatrix()`, `updateMatrixWorld()`, `updateWorldMatrix()`, `add` (on the object added) and setting `movable` set it; the scene's sync reads the object's transform, and what is under it, and sets it false again (as three.js's `updateMatrixWorld` does). See `movable`.
+
 - `getObjectById(id: number): Object3D | undefined;`
 - `getObjectByProperty(name: string, value: unknown): Object3D | undefined;`
 - `getObjectsByProperty(name: string, value: unknown, result?: Object3D[]): Object3D[];`
@@ -6677,7 +8082,7 @@ export class InstancedMesh extends Mesh<Material> { … }
 
 - `count: number;`
 
-  Instances drawn, at most the constructor's count.
+  Instances drawn, at most the constructor's count. From host API 1.49 (`INSTANCE_COUNT_SENDS_MINOR`) an attribute sent whole (`needsUpdate` without update ranges) sends these instances alone, and those `count` grows over are sent as it grows: an instance beyond `count` shows as its attribute holds it then.
 
 - `readonly instanceMatrix: BufferAttribute;`
 
@@ -6705,6 +8110,14 @@ export class InstancedMesh extends Mesh<Material> { … }
   Multiplies the material color (default white).
 
 - `getColorAt(index: number, target: Color): void;`
+
+- `setMotionScaleAt(index: number, scale: number): this;`
+
+  Since API\_MINOR 47 (`MOTION_SCALE_MINOR`; an engine extension; absent before): an instance's own share of its motion in the motion vectors, 0..1 (default 1), times the mesh's (`motionScale`, 0 for `motionVectors = "camera"`): 0 moves it with the camera alone (a baked skin's animation too), between 0 and 1 takes its placement the frame before that share of the way back (a baked skin's animation as it is). So the units sharing a batch stay crisp while wrecks and debris in it blur. Sent with the frame; an index outside the capacity is a RangeError. An InstancedMesh with levels of detail (`setLevels`) draws its levels with the mesh's share alone. Returns this.
+
+- `getMotionScaleAt(index: number): number;`
+
+  The instance's own share (`setMotionScaleAt`; 1 by default).
 
 - `setCustomAt(index: number, value: Vector4, slot?: number): void;`
 
@@ -6742,6 +8155,229 @@ export interface InstanceLevel { … }
 - `readonly material?: Material;`
 - `readonly distance: number;`
 - `readonly hysteresis?: number;`
+
+## Instanced skinning (since API\_MINOR 43)
+
+ENGINE EXTENSION: three.js r185 has no instanced skinning in core (its SkinnedMesh is one skeleton each; crowds take a mesh and a skeleton update apiece). The engine bakes clips once into a bone matrix texture and skins each instance of an InstancedSkinnedMesh from it in the vertex stage of every pass (colour, shadows of every light kind and cascade, the depth and normal prepasses, motion vectors), so a crowd of one geometry is one mesh, one draw a pass and no skeleton updates. Before API\_MINOR 43 none of this is exported.
+
+```text
+const baked = bakeSkinnedAnimations(robot, gltf.animations, { fps: 30 });
+const crowd = new InstancedSkinnedMesh(robot.geometry, robot.material, 200, baked);
+for (let i = 0; i < 200; i++) {
+  crowd.setMatrixAt(i, placement[i]);
+  crowd.setAnimationAt(i, "walk", t + i * 0.1, "shoot", t, fade[i]);
+}
+crowd.instanceMatrix.needsUpdate = true;
+```
+
+The texture (`BakedSkinnedAnimations.texture`): RGBA8, 3,072 texels wide (`starhermit_sys::MESH_SKIN_BAKED_WIDTH`), each texel the little-endian bytes of an f32 (exact on every backend; float textures are half floats on WebGPU devices without float32-filterable). Row 0 is a header: the bone count and the frame count (u32), the fps (f32) and 0x4b425348. Frame f's bone b is cell f × bones + b, 256 cells a row from row 1, each twelve texels: the first three rows of bindMatrixInverse × bone world × boneInverse × bindMatrix (the SkinnedMesh vertex stage's matrix), the mesh's own space. Limits: bones × frames ≤ 1,048,320 (4,095 rows; 12 KiB a row, 48 MiB at most, counted against the image budget like any texture: 30 bones at 30 fps is 1,165 s of clips), at most 1,024 clips, fps 1 to 240. A clip of duration d has ceil(d × fps) + 1 frames, evenly spaced over 0..d, both ends included (1 frame for d 0).
+
+### BakedSkinnedClip
+
+*interface*
+
+One baked clip: its frames from `start` among all the frames.
+
+```ts
+export interface BakedSkinnedClip { … }
+```
+
+- `readonly name: string;`
+- `readonly clip: AnimationClip;`
+
+- `readonly duration: number;`
+
+  Seconds (the clip's, 0 for none).
+
+- `readonly start: number;`
+- `readonly frames: number;`
+
+### BakedSkinnedAnimations
+
+*class*
+
+ENGINE EXTENSION (since API\_MINOR 43): `bakeSkinnedAnimations`'s result.
+
+```ts
+export class BakedSkinnedAnimations { … }
+```
+
+- `readonly isBakedSkinnedAnimations: true;`
+
+- `readonly texture: DataTexture;`
+
+  The bone matrices (the layout above): an InstancedSkinnedMesh binds it; a custom material may read it too (`textureLoad`).
+
+- `readonly clips: readonly BakedSkinnedClip[];`
+- `readonly bones: number;`
+
+- `readonly frames: number;`
+
+  All the clips' frames together.
+
+- `readonly fps: number;`
+
+- `readonly boundingSphere: Sphere;`
+
+  The sphere every baked pose's vertices lie in, in the mesh's own space (each joint's matrices applied to the geometry's sphere): InstancedSkinnedMesh culls by it.
+
+- `clipIndex(clip: number | string | AnimationClip): number;`
+
+  A clip's index by index, name or the AnimationClip baked; -1 for none.
+
+- `frameAt(clip: number | string | AnimationClip, time: number): number;`
+
+  Where `time` (seconds) of a clip lies among all the frames: its `start` plus the frames into it (a fraction between two). Times wrap as a LoopRepeat action's, the duration exactly being the last frame. A RangeError for a clip not baked.
+
+- `readonly boneNames: readonly string[];`
+
+  Since API\_MINOR 44 (INSTANCED\_BONE\_OVERRIDES\_MINOR): the baked skeleton's bone names by index (what `setBoneOverrideJoints` takes); empty for animations baked by an older game.
+
+- `matrixTable(): Float32Array;`
+
+  Since API\_MINOR 45 (BAKED\_MATRIX\_TABLES\_MINOR): the bone matrix table, a copy: frames × bones matrices of 12 numbers (the layout above without the header and the rows: frame after frame, clip after clip, bone after bone), what `fromMatrices` takes. A TypeError once the texture is disposed or its data released.
+
+- ```ts
+  static fromMatrices(
+      matrices: Float32Array,
+      options: {
+        bones: number;
+        clips: readonly {
+          name?: string;
+          frames: number;
+          duration?: number;
+          clip?: AnimationClip;
+        }[];
+        fps?: number;
+        boundingSphere?: Sphere;
+        geometry?: BufferGeometry;
+        mesh?: SkinnedMesh;
+      },
+    ): BakedSkinnedAnimations;
+  ```
+
+  Since API\_MINOR 45 (BAKED\_MATRIX\_TABLES\_MINOR): baked animations from a bone matrix table the game holds (`matrixTable()`'s layout, say a bake kept from an earlier run, or matrices worked out by the game), without sampling clips on a SkinnedMesh. `clips` gives each clip's frames in order (and its name, its duration, default the AnimationClip's or (frames − 1) / fps, and the AnimationClip, made empty when left out); `fps` (default 30) is kept in the header. `boundingSphere` is the sphere every pose lies in (copied); without it one is made from `geometry` (or the mesh's) moved by every matrix, as the bake makes it, else it is empty (no culling). `mesh`, the SkinnedMesh the table was baked from (its skeleton of `bones` bones), keeps the skeleton for bone overrides and `boneNames`; without it `setBoneOverrideJoints` is a TypeError. The numbers are not checked one by one (a NaN draws nothing). A TypeError for a table that is not a Float32Array; a RangeError for `bones` outside 1–65,536, a clip's frames that are not a whole number of at least 1, a table of another length than frames × bones × 12 or past bakeSkinnedAnimations' limits.
+
+- `dispose(): void;`
+
+### bakeSkinnedAnimations
+
+*function*
+
+```ts
+export function bakeSkinnedAnimations(
+    mesh: SkinnedMesh,
+    clips: readonly AnimationClip[],
+    options?: { fps?: number; root?: Object3D },
+  ): BakedSkinnedAnimations;
+```
+
+ENGINE EXTENSION (since API\_MINOR 43, INSTANCED\_SKINNING\_MINOR): samples each clip on `mesh` (a SkinnedMesh bound to its skeleton) with an AnimationMixer on `root` (default the mesh's topmost ancestor below a Scene, else the mesh) at `fps` (default 30) and keeps each frame's bone matrices in a texture. Each frame's matrices are what the SkinnedMesh's vertex stage would use posed by a mixer at that time (LoopOnce, clamped at the end). The pose of everything under `root` is put back. It runs in script once (each frame a mixer update and a skeleton walk: bake at load). Errors: a RangeError past the limits above, a TypeError for a mesh without a skeleton or a clip that is not an AnimationClip.
+
+### InstancedSkinnedMesh
+
+*class*
+
+ENGINE EXTENSION (since API\_MINOR 43, SKIN\_ATTRIBUTES\_MINOR and INSTANCED\_SKINNING\_MINOR): an InstancedMesh with a skin. Its geometry's `skinIndex` and `skinWeight` reach custom materials' vertex hooks as `Vertex.skin_index` and `Vertex.skin_weight`. With `bakedAnimations` each instance is skinned where `setAnimationAt` put it, in every pass, built-in materials and hooks alike (a hook's `Vertex.position` and `normal` arrive skinned, as on a SkinnedMesh); without them the vertices are not moved. Its place in the animations is the instance's custom slot 3 (`instanceCustom` becomes 16 numbers an instance, `customSlots` 4; slots 0 to 2 stay the game's, and `setCustomAt(i, v, 3)` is a RangeError; hooks read slot 3 as `Vertex.instance3`: x the frame of the first clip, y the second's, z the second's weight, w 1; since API\_MINOR 44 w is 2 + the instance's index, its bone overrides' row). It culls by the animations' sphere. It has no levels of detail (`setLevels` with anything but `[]` is a TypeError). Its sync runs in script (InstancedMesh's native sync is for InstancedMesh's own). DIFFERENCES from a SkinnedMesh posed by a mixer: between baked frames the two around are blended linearly (a mixer slerps each bone: at 30 fps the poses differ by well under a pixel for most rigs), and a crossfade blends the two clips' final matrices linearly (a mixer blends each bone's transform, then walks the rig). Motion vectors take each instance's place the frame before from its kept instances, so a crowd's limbs leave no trail under temporal anti-aliasing.
+
+```ts
+export class InstancedSkinnedMesh extends InstancedMesh { … }
+```
+
+- ```ts
+  constructor(
+      geometry: BufferGeometry,
+      material: Material,
+      count: number,
+      bakedAnimations?: BakedSkinnedAnimations | null,
+    );
+  ```
+
+- `readonly isInstancedSkinnedMesh: true;`
+
+- `bakedAnimations: BakedSkinnedAnimations | null;`
+
+  The animations its instances play, or null (settable).
+
+- ```ts
+  setAnimationAt(
+      index: number,
+      clip: number | string | AnimationClip,
+      time: number,
+      clip2?: number | string | AnimationClip,
+      time2?: number,
+      weight?: number,
+    ): this;
+  ```
+
+  Instance `index` at `time` seconds of `clip` (an index, a name or the AnimationClip baked), crossfading toward `time2` of `clip2` by `weight` (0 to 1; none with -1 or a weight of 0). Times wrap as `frameAt`'s. Sets `instanceCustom.needsUpdate`. A TypeError without animations, a RangeError for an instance or clip that is not there.
+
+#### Bone overrides (since API\_MINOR 44, INSTANCED\_BONE\_OVERRIDES\_MINOR)
+
+ENGINE EXTENSION: per-instance local rotations of a few joints on top of the shared clip (foot placement and foot locking on slopes, a head turned toward a target), applied after the clip's sample and before the bone hierarchy: a joint's descendants follow it, in every pass (colour, shadows, prepasses, motion vectors), built-in materials and hooks alike, on every backend.
+
+```text
+crowd.setBoneOverrideJoints(["thigh.L", "shin.L", "foot.L", "thigh.R", "shin.R", "foot.R"]);
+const legs = new Float32Array(crowd.count * 6 * 4); // instance-major, joint, xyzw
+// each frame: solve each robot's leg IK into `legs`, then
+crowd.setBoneOverrides(legs);
+```
+
+A joint's local transform is its parent bone's world inverse times its own world, read from the baked pose where the instance stands (frames and crossfade blended as the vertex stage blends them; a bone without a parent bone is local to the mesh's own space). "replace" sets its rotation (three.js `bone.quaternion.copy(q)`), "multiply" turns the clip's by it (`bone.quaternion.multiply(q)`); its position and scale stay the clip's. Nested joints compose down the chain whatever order they are listed in. A quaternion of four zeros is no override (the clip's pose); others are normalized.
+
+COST: the runtime turns each frame's quaternions into one 3×4 correction a joint an instance (about 0.25 ms of one CPU core a frame for 200 instances × 6 joints, none for instances without overrides), sent to the GPU as a texture of 48 bytes a correction (61 KB for 200 × 6; 1,536 texels a row) that the vertex stage reads only for bones under an overridden joint. `setBoneOverrides` charges 1 fuel unit a number (4 a quaternion), as instance custom data does. The texture rides with the instances (not the image budget), as instance buffers do. DIFFERENCES from posing a SkinnedMesh's bones: the corrected joint's matrix is the blended baked one turned rigidly, so between frames and mid-crossfade it carries the blend's slight shear as the clip's own pose does; the culling sphere stays the baked poses' (an override reaching far outside it may be culled early); motion vectors take this frame's corrections for the frame before. Copies and clones start without overrides.
+
+- `readonly boneOverrideJoints: readonly number[];`
+
+  The declared joints (baked skeleton bone indices), in the order the overrides' data takes them; empty before `setBoneOverrideJoints`.
+
+- `readonly boneOverrideMode: "replace" | "multiply";`
+
+  How an override takes its joint's rotation.
+
+- ```ts
+  setBoneOverrideJoints(
+      joints: readonly (number | string)[] | null,
+      mode?: "replace" | "multiply",
+      options?: { root?: number | string | boolean | null },
+    ): this;
+  ```
+
+  Declares 1 to 16 joints (bone indices or `boneNames`) whose local rotation each instance may override, every override cleared, and sets each instance's custom slot 3's w to 2 + its index (its row); `null` takes the overrides away (so do new `bakedAnimations`). A TypeError without baked animations (or ones baked below 1.44) or for a mode that is neither; a RangeError for an unknown or repeated joint, past 16 joints or past 522,752 overrides (capacity × joints).
+
+- `setBoneOverrides(data: Float32Array | null, first?: number): this;`
+
+  Writes overrides from instance `first` (default 0): for each instance in turn, for each declared joint in order, a quaternion's x, y, z, w (`data.length` a multiple of 4, at most (capacity − first) × joints × 4; zeros: none). `null` clears every override. The one call a frame for a whole crowd: the numbers are copied, so the array may be reused. A RangeError for numbers past the capacity, a length not whole quaternions or a NaN or infinite number (nothing written); a TypeError before `setBoneOverrideJoints` or for anything but a Float32Array.
+
+- ```ts
+  setBoneOverrideAt(
+      index: number,
+      joint: number | string,
+      quaternion: Quaternion | null,
+    ): this;
+  ```
+
+  One instance's override of one declared joint (its place in `boneOverrideJoints`, or its bone name); null for none.
+
+- `clearBoneOverrides(): this;`
+
+  Every instance's overrides cleared (the joints kept).
+
+#### Root offsets (since API\_MINOR 45, INSTANCED\_ROOT\_OFFSETS\_MINOR)
+
+ENGINE EXTENSION: a per-instance translation of a root joint beside the rotation overrides (a crouch, a stagger, a hip bob, root motion taken out of a clip), named by `setBoneOverrideJoints(joints, mode, { root })`: `true` for the baked skeleton's first bone without a parent bone, or a bone index or name; the joints may then be `[]`. Each instance's offset is added to that joint's local translation (in its parent bone's space; the mesh's own for a root bone) after the clip's sample and its rotation override, so everything below it follows, in every pass on every backend. A root that is not among the joints takes a correction slot of its own (the texture and the cost above count it as a joint). Offsets are cleared with the joints; `setBoneOverrides(null)` and `clearBoneOverrides` leave them.
+
+- `readonly rootOffsetJoint: number;`
+
+  The root joint (bone index) `setRootOffsets` moves; -1 without.
+
+- `setRootOffsets(data: Float32Array | null, first?: number): this;`
+
+  Writes root offsets from instance `first` (default 0): x, y, z an instance (`data.length` a multiple of 3, at most (capacity − first) × 3; zeros: none); `null` clears them. 1 fuel unit a number. A RangeError for numbers past the capacity, a length not whole vectors or a NaN or infinite number (nothing written); a TypeError without a root joint or for anything but a Float32Array.
+
+- `setRootOffsetAt(index: number, offset: Vector3 | null): this;`
+
+  One instance's root offset; null for none.
 
 ## Levels of detail generation (since API\_MINOR 40)
 
@@ -6796,6 +8432,14 @@ export interface GenerateLodsOptions { … }
 
   Each level's hysteresis, as `LOD.addLevel` takes it (default 0).
 
+- `lockBorders?: boolean;`
+
+  Since API\_MINOR 48 (`LOD_OPEN_BORDERS_MINOR`; older games' is not read): false lets open borders, and seams where three or more triangles meet, move along themselves, their movement counted as error, so a mesh of open pieces (leaf cards, open shells, sheets meeting at seams) simplifies past the floor its locked borders set, each piece down to one triangle (default true: they stay where they are). A crown of separate small pieces thins better with `thin`.
+
+- `impostor?: boolean | { size?: number };`
+
+  Since API\_MINOR 48 (`LOD_IMPOSTOR_MINOR`; older games' is not read): a last level of three crossed cards through the centre of the mesh's bounds (two upright at right angles and one level), textured with the mesh as seen straight at each, baked on the CPU into one atlas of `size`-texel square tiles (8 to 256, default 64), drawn alpha tested by a `MeshStandardMaterial` of its own (the level's `material`, its `shadowSide` `BackSide`: each upright card is a pair of triangles a side and the level card faces up, casting nothing onto them; its geometry's `userData.impostor` true; 10 triangles). A texel takes the nearest surface's colour: vertex colours times the material's `color`, times its `map` where that is a `DataTexture` of RGBA8 data (other maps are not read: the colour alone). Its `lodError` is the farthest the mesh lies from the cards (at least the level before's), so in a `LodBudget` it draws where that is within `errorPx`, or where the budget runs out. For foliage seen from afar; an InstancedMesh's impostor counts among its 7 levels.
+
 ### generateLods
 
 *function*
@@ -6811,6 +8455,107 @@ For a Mesh: a three.js `LOD` taking the mesh's name and transform, level 0 a mes
 ```ts
 export function generateLods(target: Mesh | BufferGeometry, options?: GenerateLodsOptions): LOD;
 ```
+
+## The levels of detail's triangle budget (since API\_MINOR 45)
+
+### LOD\_BUDGET\_MINOR
+
+*const*
+
+```ts
+export const LOD_BUDGET_MINOR: number;
+```
+
+45 from host API 1.45 (undefined before: feature-detect with `import * as scene from "starhermit:scene"` and `scene.LOD_BUDGET_MINOR !== undefined`): `LodBudget` and `renderer.lodBudget`.
+
+### LodBudgetOptions
+
+*interface*
+
+`new LodBudget(options)`'s options (since API\_MINOR 45).
+
+```ts
+export interface LodBudgetOptions { … }
+```
+
+- `triangles?: number;`
+
+  The most triangles the members draw a frame: 0 or more, `Infinity` for no limit (default 1,000,000). Every visible instance draws at least its coarsest level, whose triangles count even past it.
+
+- `errorPx?: number;`
+
+  The floor in pixels: no instance refines past a level whose projected error is at most this (finite, 0 or more; default 1).
+
+- `hysteresis?: number;`
+
+  How far, as a fraction, an instance's error must fall below what won it a finer level before it gives the level back (finite, 0 or more; default 0.1).
+
+- `screenHeight?: number | null;`
+
+  The viewport height errors are measured on, in pixels (default null: the renderer's drawing buffer's).
+
+### LodBudget
+
+*class*
+
+ENGINE EXTENSION (since API\_MINOR 45; absent before): a scene-wide triangle budget over levels of detail. Its members are three.js `LOD`s whose levels are meshes and `InstancedMesh`es with levels (`setLevels`), each level's geometry carrying its error in world units as `userData.lodError` (as `generateLods` makes them; level 0's may be left out and counts as 0). A level's triangles are its geometry's index count (or position count) over 3.
+
+While it is `renderer.lodBudget`, each frame (in the scene's sync, once the camera is known, before shadows and drawing) it chooses its members' levels for `renderer.camera` in place of their distances: every visible instance starts at its coarsest level, and the instance whose level shows the largest projected error is refined to its next finer level first, until the next refinement would pass `triangles` or every error is at most `errorPx`. The projected error of a level is `lodError × scale × screenHeight × zoom / (2 tan(fov / 2) × distance)` pixels for a PerspectiveCamera (`scale` the instance's largest world axis scale, `distance` from the camera to its geometry's bounding sphere's center) and `lodError × scale × screenHeight × zoom / (top - bottom)` for an OrthographicCamera; ties go to the member added first, then the lower instance index. Instances out of the camera's frustum (their geometry's bounding sphere, for a `frustumCulled` member) cost nothing and draw their coarsest level (and cast its shadow).
+
+Hysteresis: an instance that drew finer than a level last frame counts that level's error `1 + hysteresis` times, for the floor and for the order, so a refinement is kept until its error falls that fraction below what won it and two instances near the same error do not trade levels frame after frame. With `hysteresis` 0 each frame is chosen afresh.
+
+The choice runs natively (the same Rust in browsers, so the same levels), in O(n log n) for n member instances, its buffers kept from frame to frame; it is charged to the frame's fuel by its instances and refinements. Render-target passes draw the levels the frame chose. A member that is not drawn (invisible or under an invisible parent, not in the scene, not on the camera's layers, or an LOD whose `autoUpdate` is false) is left out and keeps its own levels; so is one whose levels lose their `lodError` after it was added (with a console warning). An LOD in the budget shows its chosen level as `getCurrentLevel()` and its levels' `visible`; its `update(camera)` called by the game is three.js's as ever. Out of a budget, or with `renderer.lodBudget` null, LODs and InstancedMeshes choose by distance as before.
+
+```ts
+export class LodBudget { … }
+```
+
+- `constructor(options?: LodBudgetOptions);`
+- `readonly isLodBudget: true;`
+
+- `triangles: number;`
+
+  See `LodBudgetOptions` (RangeError outside its range).
+
+- `errorPx: number;`
+- `hysteresis: number;`
+- `screenHeight: number | null;`
+
+- `add(...objects: (LOD | InstancedMesh)[]): this;`
+
+  Adds members (an LOD whose levels are not all meshes with known errors, or anything else, is a TypeError); a member of another budget moves to this one.
+
+- `remove(...objects: (LOD | InstancedMesh)[]): this;`
+
+  Takes members out: they go back to their own levels.
+
+- `has(object: unknown): boolean;`
+
+- `readonly members: readonly (LOD | InstancedMesh)[];`
+
+  The members in the order they were added (a frozen copy).
+
+- `readonly trianglesUsed: number;`
+
+  Last frame's triangles drawn by the members.
+
+- `readonly thresholdPx: number;`
+
+  Last frame's effective threshold: the largest projected error, in pixels, of any drawn instance's level (at most `errorPx` when the floor stopped the refining, above it when the budget did).
+
+- `readonly drawn: number;`
+
+  Last frame's member instances drawn (in view) and culled.
+
+- `readonly culled: number;`
+
+- `readonly refinements: number;`
+
+  Last frame's refinements.
+
+- `readonly limitedBy: "none" | "floor" | "budget";`
+
+  What stopped last frame's refining: `"budget"` (the next refinement would pass `triangles`), `"floor"` (every error within `errorPx`) or `"none"` (every instance at its finest, or no frame yet).
 
 ### Points
 
@@ -7259,7 +9004,7 @@ export class ParticleEmitter extends Object3D { … }
 
 - `burst(count?: number, at?: ParticleVector, options?: ParticleBurstOptions): this;`
 
-  Spawns `count` particles (default 1) at the next step, at `at` in the emitter's space (default its origin) plus the shape's offset. Past the capacity they are dropped. At most 256 bursts wait for a step: since API\_MINOR 40 one more is a RangeError (before, it was dropped).
+  Spawns `count` particles (default 1) at the next step, at `at` in the emitter's space (default its origin) plus the shape's offset. Past the capacity they are dropped. At most 256 bursts wait for a step: since API\_MINOR 40 one more is a RangeError (before, it was dropped). Since API\_MINOR 43 (`PARTICLE_FLIPBOOK_MINOR`) as many as its capacity wait (each burst spawns at least one particle, so a step's work stays within what the emitter holds; each call is charged as script).
 
 - `prewarm(seconds: number): this;`
 
@@ -7733,6 +9478,10 @@ export class OrthographicCamera extends Camera { … }
 
 Intensities (top of file) are three.js r155+'s from API\_MINOR 23, so a port keeps three.js's; before it they are the engine's legacy ones, π times those, and a port from r155+ divides every light's `intensity` here by `Math.PI`. At most 16 lights besides ambient light draw, and four shadow-casting lights: the first four directional or spot lights (in scene order) with `castShadow` cast, each with its own shadow map; other lights' shadows are ignored.
 
+Since API\_MINOR 43 (games declaring `engine.minor=43` or later) point and spot lights are clustered, as Unity URP's Forward+ lights its additional lights: up to 64 a frame besides the 16 light slots (which keep directional, hemisphere and probe lights and point lights whose shadow takes a shadow map), so 80 lights besides ambient light draw (`budgets().lights`). The engine culls them per screen tile (16 × 9 over the view) and depth bin (32 along it): a pixel shades only the lights whose reach (`distance`, and a spot's cone) can touch it, each with exactly the falloff, cone and reflection three.js r185 gives it. A light with no `distance` (0) reaches everywhere and costs every pixel; give lights a `distance` to keep them cheap. Past 64 clustered lights, the rest (in scene order) are left out and counted in `stats().skippedObjects`.
+
+Spot lights' shadows (`castShadow`, `shadow.mapSize` and the rest of `SpotLightShadow`, as in three.js) go to a shadow atlas, as URP's additional-lights shadow atlas: up to 8 spots a frame, each map 64 to 1024 texels a side (`mapSize` clamped), side by side in one of the four shadow maps (a grid of cells as wide as the largest map: 1, 2×2 or 3×3). The atlas takes the map after the directional lights' (with three cascades, the fourth); point lights' maps come after it. When more spots cast than fit, 8 win: those whose reach (the cone's range) meets the camera's view, then the nearest the camera, then scene order; the others light unshadowed. `shadow.autoUpdate` false and `needsUpdate` work as in three.js: a kept spot keeps the view its map was drawn with until `needsUpdate`, and while every spot in the atlas is kept and nothing changed the whole atlas is kept (not drawn). When any spot draws (autoUpdate true, needsUpdate, a spot joining or leaving the atlas, or one moving to another cell), the whole atlas is drawn again, each kept spot from its kept view: the same map as three.js keeps unless that spot's casters moved meanwhile (three.js would still show them where they were). Lookups are three.js's PCF or basic (`receiverPlane` takes PCF). Older games' spot lights take one of the four maps each, as before.
+
 ### Light
 
 *class*
@@ -7925,6 +9674,106 @@ export class HemisphereLight extends Light { … }
 - `constructor(skyColor?: ColorInput, groundColor?: ColorInput, intensity?: number);`
 - `groundColor: Color;`
 
+## Post programs' access (since API\_MINOR 43, POST\_ACCESS\_MINOR)
+
+### POST\_ACCESS\_MINOR
+
+*const*
+
+```ts
+export const POST_ACCESS_MINOR: number;
+```
+
+43 from host API 1.43 (undefined before: feature-detect with `import * as scene from "starhermit:scene"` and `scene.POST_ACCESS_MINOR !== undefined`): `renderer.post` programs may call `main_light_shadow(world)` and read `renderer.post.texture` (see `PostShader`), and `renderer.contactShadows` draw under `renderer.post`.
+
+### SCENE\_DEPTH\_PRECISION\_MINOR
+
+*const*
+
+```ts
+export const SCENE_DEPTH_PRECISION_MINOR: number;
+```
+
+43 from host API 1.43 (undefined before: feature-detect with `import * as scene from "starhermit:scene"` and `scene.SCENE_DEPTH_PRECISION_MINOR !== undefined`): `renderer.sceneDepth` holds the depth at full precision (red plus green) and `renderer.sceneDepthPrecision` reads `"full"`.
+
+## Light probes (since API\_MINOR 43, LIGHT\_PROBE\_MINOR)
+
+three.js r185's `SphericalHarmonics3` and `LightProbe`. Below API\_MINOR 43 none of these exist: a named import fails to link, and a namespace import's `LIGHT_PROBE_MINOR` is undefined.
+
+### LIGHT\_PROBE\_MINOR
+
+*const*
+
+```ts
+export const LIGHT_PROBE_MINOR: number;
+```
+
+43 from host API 1.43 (undefined before: feature-detect with `import * as scene from "starhermit:scene"` and `scene.LIGHT_PROBE_MINOR !== undefined`).
+
+### SphericalHarmonics3
+
+*class*
+
+L2 spherical harmonics (bands 0 to 2) of RGB light, three.js r185's: `coefficients[i]` holds basis function i's red, green and blue (x, y, z), in three.js's order and normalization (the basis is `getBasisAt`'s: 0.282095; 0.488603 × y, z, x; 1.092548 × xy, yz; 0.315392 × (3z² − 1); 1.092548 × xz; 0.546274 × (x² − y²)).
+
+```ts
+export class SphericalHarmonics3 { … }
+```
+
+- `constructor();`
+- `readonly isSphericalHarmonics3: true;`
+
+- `coefficients: Vector3[];`
+
+  Nine coefficients.
+
+- `set(coefficients: Vector3[]): this;`
+- `zero(): this;`
+
+- `getAt(normal: Vector3, target: Vector3): Vector3;`
+
+  The radiance in the direction of the unit `normal`, into `target`.
+
+- `getIrradianceAt(normal: Vector3, target: Vector3): Vector3;`
+
+  The irradiance in the direction of the unit `normal` (the radiance convolved with the cosine lobe: 0.886227, 1.023328, 0.858086, 0.743125 z² − 0.247708 and 0.429043 times the bands' terms), into `target`: what a `LightProbe` of intensity 1 lights a surface facing `normal` with.
+
+- `add(sh: SphericalHarmonics3): this;`
+- `addScaledSH(sh: SphericalHarmonics3, s: number): this;`
+- `scale(s: number): this;`
+- `lerp(sh: SphericalHarmonics3, alpha: number): this;`
+- `equals(sh: SphericalHarmonics3): boolean;`
+- `copy(sh: SphericalHarmonics3): this;`
+- `clone(): SphericalHarmonics3;`
+
+- `fromArray(array: ArrayLike<number>, offset?: number): this;`
+
+  The coefficients from 27 numbers (each one's r, g, b in turn) at `offset`.
+
+- `toArray<T extends { [index: number]: number } = number[]>(array?: T, offset?: number): T;`
+
+- `static getBasisAt(normal: Vector3, shBasis: number[]): void;`
+
+  The nine basis functions at the unit `normal`, into `shBasis`.
+
+### LightProbe
+
+*class*
+
+Irradiance from spherical harmonics, three.js r185's `LightProbe`: the scene's probes add up (each coefficient times its probe's `intensity`; `color` is unused, the position and rotation too) and every lit material (standard, physical, Lambert, Phong, toon, and custom materials' `light` hooks as indirect light) takes `sh.getIrradianceAt(normal) × intensity` along its world normal (the shading normal, normal maps included) per pixel as indirect diffuse light, as ambient light: through `BRDF_Lambert` of the diffuse color, ambient occlusion applied. The coefficients are linear light, any sign, within ±65,504 (others throw when the scene syncs). A scene's probes take two of its 16 extra light slots; a custom material that reads the frame's lights itself sees them as kinds 4 and 5. `LightProbeGenerator` is not offered.
+
+```ts
+export class LightProbe extends Light { … }
+```
+
+- `constructor(sh?: SphericalHarmonics3, intensity?: number);`
+- `readonly isLightProbe: true;`
+- `sh: SphericalHarmonics3;`
+
+- `toJSON(meta?: unknown): { metadata?: { version: number; type: string; generator: string }; object: Record<string, unknown> };`
+
+  three.js's JSON of the probe (Object3D's fields without children, `color`, `intensity` and `sh`, the coefficients' 27 numbers); its `type` is `"Light"`, as three.js r185 writes it.
+
 ## Fog and the scene
 
 ### Fog
@@ -8044,9 +9893,45 @@ export interface BloomSettings { … }
 
   @deprecated The strength's earlier name.
 
-- `model?: "r185" | "r176" | "r160";`
+- `model?: "r185" | "r176" | "r160" | "urp";`
 
   Since API\_MINOR 30 (a RangeError before): which three.js release's `UnrealBloomPass` to follow, default "r185". "r176" is the bloom of API\_MINOR 28 and older: kernel radii 3, 5, 7, 9 and 11 with a sigma of the radius, normalized (nearly flat, so a small bright light spreads into a broad, squarish haze), the weighted sum added by its alpha (3 × strength² times the levels). "r160" is r176's with the high pass weighing light by Rec. 601 luma (0.299, 0.587, 0.114) where r176 and r185 take Rec. 709's. A port of a page on three.js r160 sets "r160" and keeps the page's strength as it is (not squared).
+
+ENGINE EXTENSION (since API\_MINOR 46, URP\_BLOOM\_MODEL\_MINOR; a TypeError before): `model: "urp"` is Unity URP's whole bloom as URP 2022.3 draws it, for ports of URP looks, set as a URP Bloom volume is: `threshold` (gamma, default 0.9; converted and kneed as `prefilter: "urp"` does), `intensity` (default 0, URP's: no bloom until set; `strength` is read as its other name), `scatter`, `clamp`, `tint`, `highQualityFiltering`, `downscale` and `maxIterations` below. URP's prefilter (High Quality Filtering's 13-tap, or one bilinear tap; the colour at most `clamp`; the soft knee) runs at the frame's size halved (`downscale` "half") or quartered, into floor(log2(max(w, h))) − 1 levels within 1..maxIterations, each half the one before (rounded down), each blurred by a 9-tap Gaussian across and a 5-tap linear-sampled one down; the levels are upsampled from the lowest as lerp(level, below, lerp(0.05, 0.95, scatter)) (the level below bicubic with High Quality Filtering) and the result is added to the light before the grade and tone mapping as bloom × intensity × tint (the tint divided by its luminance, as URP's uber pass does; bicubic with High Quality Filtering). `radius` and `resolution` are not used; `prefilter` may only be "urp". URP's lens dirt is not drawn. The tiers do not scale it: its downscale is the game's. Every backend draws it.
+
+- `scatter?: number;`
+
+  Since API\_MINOR 46, with `model: "urp"`: URP's Scatter, 0–1, default 0.7 (lerped to 0.05–0.95 as URP's `SetupBloom` does).
+
+- `clamp?: number;`
+
+  Since API\_MINOR 46, with `model: "urp"`: URP's Clamp, the most light a pixel brings to the bloom, 0–65504, default 65472.
+
+- `tint?: ColorInput;`
+
+  Since API\_MINOR 46, with `model: "urp"`: URP's Tint, default white: a Color (linear light), a 0xRRGGBB number or CSS color (sRGB, converted as three.js converts it: URP's `tint.linear`) or \[r, g, b\] (linear), each 0–65504; divided by its luminance as URP does, so it colours the bloom without brightening it (black is white).
+
+- `highQualityFiltering?: boolean;`
+
+  Since API\_MINOR 46, with `model: "urp"`: URP's High Quality Filtering, default false: the 13-tap prefilter and bicubic upsampling and composite.
+
+- `downscale?: "half" | "quarter";`
+
+  Since API\_MINOR 46, with `model: "urp"`: URP's Downscale, the first level's size, "half" (the default) or "quarter" of the frame.
+
+- `maxIterations?: number;`
+
+  Since API\_MINOR 46, with `model: "urp"`: URP's Max Iterations, the most levels, a whole number 1–16, default 6.
+
+- `prefilter?: "three" | "urp";`
+
+  ENGINE EXTENSION (since API\_MINOR 45, BLOOM\_PREFILTER\_MINOR; not read before): the bright pass. "three" (the default) is three.js's luminosity high pass (luma past `threshold`, a 0.01 smooth step). "urp" is Unity URP's soft-knee prefilter, for ports of URP looks: brightness b = max(r, g, b), soft = clamp(b − threshold + knee, 0, 2·knee)² / (4·knee + 1e-5), and the colour times max(soft, b − threshold) / max(b, 1e-4) (light just under the threshold glows a little, and hue is kept). The blurs and the sum are the `model`'s. Every backend draws it. Another string is a TypeError.
+
+  Since API\_MINOR 46 (URP\_BLOOM\_GAMMA\_MINOR) "urp" takes `threshold` as a URP Bloom volume sets it: URP converts it with Unity's `Mathf.GammaToLinearSpace` (x/12.92 up to 0.04045, the sRGB curve below 1, x^2.2 from 1; 1.2 is 1.4937 linear) and hard-codes the knee at half the converted threshold, and its soft knee divides by 4·knee + 1e-4; the engine does the same, so a URP volume's threshold is copied as it is. Before 46 the threshold and knee are linear light (multiply a URP threshold by about 1.25–1.5 there).
+
+- `knee?: number;`
+
+  Since API\_MINOR 45: "urp"'s knee, 0–65504, default threshold × 0.5 (0: a hard threshold). Checked with "three" too, and unused there. URP has no such setting (its knee is always half the threshold); since API\_MINOR 46 a knee given here is in the threshold's units and converted with it (scaled by linear threshold / threshold, or 1/12.92 at 0), so threshold × 0.5 stays URP's knee.
 
 ### AmbientOcclusionSettings
 
@@ -8260,7 +10145,9 @@ struct Pixel { uv: vec2f, coord: vec4f }  uv 0..1 from the top left,
                                           coord the pixel's position
 fn scene_color(uv: vec2f) -> vec4f   the scene's linear light
 fn scene_depth(uv: vec2f) -> f32     view depth of the nearest
-                                     opaque surface (65504: none)
+                                     opaque surface (65504: none;
+                                     since API_MINOR 43 at full
+                                     precision, see `sceneDepth`)
 fn world_position(uv: vec2f, depth: f32) -> vec3f
 fn camera_position() -> vec3f, fn screen_size() -> vec2f
 fn srgb_to_linear, fn linear_to_srgb
@@ -8284,9 +10171,34 @@ fn scene_velocity(uv: vec2f) -> vec3f  (since API_MINOR 40, an
                                      vertex hooks are not applied in
                                      it: their objects move as
                                      placed.
+fn main_light_shadow(world: vec3f) -> f32  (since API_MINOR 43,
+                                     POST_ACCESS_MINOR; an engine
+                                     extension) the primary light's
+                                     (the scene's first directional
+                                     light) shadow at a world point:
+                                     1 lit, 0 in shadow, from its
+                                     last cascade's map (the one
+                                     reaching farthest), the four
+                                     texels around the point compared
+                                     and blended bilinearly (no PCF
+                                     disk, no normal offset; the
+                                     light's bias and intensity
+                                     apply). 1 outside the map, past
+                                     its far plane, and where the
+                                     light casts no shadow: fog god
+                                     rays march it along the view ray
+fn post_texture(uv: vec2f) -> vec4f, fn post_texture_size() -> vec2f,
+fn has_post_texture() -> bool  (since API_MINOR 43) `texture`
+                                     sampled linearly (on WebGL 2, before 1.44.0, with the texture's own filters: a DataTexture's nearest), its texels as
+                                     stored (an sRGB texture is not
+                                     decoded: srgb_to_linear), uv
+                                     0..1 from its first row; zero
+                                     without one
 uniforms (numbers, vectors, matrices and vec4/matrix arrays; no
 textures), 64 floats in whole vec4 slots; defines as constants.
 ```
+
+Before API\_MINOR 43 those names are the game's own.
 
 ```ts
 export interface PostShader { … }
@@ -8295,6 +10207,10 @@ export interface PostShader { … }
 - `pixel: string;`
 - `uniforms?: Record<string, ShaderUniform>;`
 - `defines?: Record<string, number | boolean>;`
+
+- `texture?: Texture | null;`
+
+  Since API\_MINOR 43 (an engine extension): one game texture the program reads (`post_texture`), a 2D texture (a 3D one is a TypeError as the frame syncs), read each frame; a water mask, a fog density map. Ignored before API\_MINOR 43.
 
 ### AntialiasMode
 
@@ -8335,10 +10251,21 @@ export interface Renderer { … }
       bias?: number;
       intensity?: number;
       steps?: number;
+      /** Since API_MINOR 49 (`CONTACT_SHADOW_FACE_ANGLE_MINOR`; ignored
+       * before): `[min, max]` in degrees, 0 <= min < max <= 90, default
+       * [20, 30]: a surface in the march's way casts in proportion to how
+       * far it turns from the pixel's, not within `min`, fully past `max`.
+       * A brush-raised heightfield whose small triangles turn more than
+       * 30° from their neighbours darkens them in dotted, straight-edged
+       * patches at the default; wider angles (e.g. [35, 50]) spare them
+       * at the default `bias`, while walls and rocks steeper than `max`
+       * still cast. The default (unset or [20, 30]) draws exactly as at
+       * API_MINOR 46. */
+      faceAngle?: [number, number];
     } | null;
   ```
 
-  ENGINE EXTENSION, not three.js (since API\_MINOR 40, after Solstice's deferred contact shadows; null, the default, for none): a short march from each pixel toward a directional light (`light`, or the first in the scene) through the scene's depth, `steps` (1–64, default 16) samples out to `length` world units (default 0.5): where a surface nearer the camera than a sample stands within `thickness` (default 0.1) past `bias` (default 0.01), the pixel's light is darkened by up to `intensity` (0–1, default 0.6), less the farther along. It draws as the post program over the scene, so it needs half-float color (otherwise it is left out with a note in Options), draws only while `renderer.post` is null, and darkens all of a pixel's light rather than the one light's: the small shadows where objects meet the ground that a shadow map's texels miss. Other values are a RangeError as the frame syncs.
+  ENGINE EXTENSION, not three.js (since API\_MINOR 40, after Solstice's deferred contact shadows; null, the default, for none): a short march from each pixel toward a directional light (`light`, or the first in the scene) through the scene's depth, `steps` (1–64, default 16) samples out to `length` world units (default 0.5): where a surface nearer the camera than a sample stands within `thickness` (default 0.1) past `bias` (default 0.01), the pixel's light is darkened by up to `intensity` (0–1, default 0.6), less the farther along. It draws as a pass over the scene's light, so it needs half-float color (otherwise it is left out with a note in Options), and darkens all of a pixel's light rather than the one light's: the small shadows where objects meet the ground that a shadow map's texels miss. Before API\_MINOR 43 it is the post program and draws only while `renderer.post` is null; from API\_MINOR 43 it runs just before `renderer.post` (which then reads the contact-shadowed light), so both draw. From API\_MINOR 45 (`CONTACT_SHADOW_FIX_MINOR`) the march starts a pixel's footprint off the surface along its normal (from the depth), pixels facing away from the light are left alone (those nearly edge-on to it fade in), `thickness` and `bias` are measured along the view ray, and a surface counts only where it stands above the pixel's tangent plane by more than its footprint and `bias`, so a lit rounded surface never shadows itself; before, it could darken in hard straight-edged patches. From API\_MINOR 46 (`CONTACT_SHADOW_FACETS_MINOR`) normals come from the depth across half `length` (following a surface's folds and ledges, not the crease where something stands on it), so they turn smoothly from triangle to triangle, and a surface found in the march's way counts in proportion to how far it turns from the pixel's: none within 20°, fully past 30°. A smooth but coarsely tessellated surface (a heightfield) under a low sun no longer darkens triangle by triangle, while walls, rocks and other things standing on it still cast them. Other values are a RangeError as the frame syncs.
 
 - `bloom: BloomSettings | null;`
 
@@ -8411,7 +10338,11 @@ Render targets (since API\_MINOR 8). The scene draws itself every frame; `render
 
 - `readonly sceneDepth: Texture;`
 
-  Since API\_MINOR 8: the scene's depth as a texture for custom materials (soft particles, shorelines): give it as a texture uniform and read red, the view depth (world units along the camera's forward axis) of the nearest opaque surface behind the fragment, at its window position: `textureSampleLevel(depth, depth_sampler, screen_uv(f.coord), 0.0).r`, compared with `view_depth(f.world)`. It holds the opaque objects (not blended, writing depth, not points, past alpha tests and vertex hooks) of the frame's scene, and 65504 where there are none. When a frame's objects sample it, the renderer first draws those opaque objects' depth (a prepass without shadows: their vertex work again, plus 12 bytes a pixel of the window); objects that sample it are not in it. Half floats keep about a two-thousandth of the distance. Render-target passes read the last frame's; where the device cannot render half floats it stays 65504. Nearest filtering by default (one object a game; disposing it does nothing).
+  Since API\_MINOR 8: the scene's depth as a texture for custom materials (soft particles, shorelines): give it as a texture uniform and read red, the view depth (world units along the camera's forward axis) of the nearest opaque surface behind the fragment, at its window position: `textureSampleLevel(depth, depth_sampler, screen_uv(f.coord), 0.0).r`, compared with `view_depth(f.world)`. It holds the opaque objects (not blended, writing depth, not points, past alpha tests and vertex hooks) of the frame's scene, and 65504 where there are none. When a frame's objects sample it, the renderer first draws those opaque objects' depth (a prepass without shadows: their vertex work again, plus 12 bytes a pixel of the window); objects that sample it are not in it. Half floats keep about a two-thousandth of the distance. Since API\_MINOR 43 (`SCENE_DEPTH_PRECISION_MINOR`) green holds the rest: red is the depth rounded to the nearest half float and red plus green the depth at full precision (about a four-millionth of it: 0.00002 at 70 units, where red alone steps 0.0625), so a waterline fade reads `let t = textureSampleLevel(...); t.r + t.g`. Keep nearest filtering: some GPUs (NVIDIA's) filter half floats at half precision, so `LinearFilter` interpolates no better than red; for a smooth depth, mix the nearest texels' sums in the shader (`mix(a, b, w)` of two reads, then `.r + .g`). Before 43 green is zero (red alone, as before). Same size and cost either way. Since API\_MINOR 43 (`DECALS_MINOR`) blue is 1 on the surfaces of materials with `receiveDecals` false, 0 elsewhere. Render-target passes read the last frame's; where the device cannot render half floats it stays 65504. Nearest filtering by default (one object a game; disposing it does nothing).
+
+- `readonly sceneDepthPrecision?: "full";`
+
+  Since API\_MINOR 43 (`SCENE_DEPTH_PRECISION_MINOR`; undefined before, where `sceneDepth` holds red alone): `"full"`, `sceneDepth`'s red plus green being the view depth at full precision. Read-only.
 
 - `readonly sceneColor: Texture | undefined;`
 
@@ -8443,7 +10374,7 @@ Render targets (since API\_MINOR 8). The scene draws itself every frame; `render
 
 - `ssr: SSRSettings | null;`
 
-  Since API\_MINOR 40 (`SCREEN_EFFECTS_MINOR`; undefined before): screen-space reflections, with three.js `SSRPass`'s settings, or null (the default). Each window frame traces, at half the scene's size, the view ray mirrored about each surface (its geometry normal, metalness and roughness factors, not its maps) through a min/max depth pyramid, takes the last frame's light where it hits (found through the motion vectors, which the effect turns on), accumulates it over frames and lays it over the scene before the post program, the temporal resolve and bloom. Misses (off screen, behind something, too far) keep the scene's own environment reflection. `opacity` (0..1, default 0.5), `maxDistance` (view units, default 180), `thickness` (how deep a surface is taken to be, view units, default 0.018), `distanceAttenuation` ((1 − distance / maxDistance)², default true) and `fresnel` ((1 + cos) / 2 of the incident and reflected rays, default true) are three.js's; `maxRoughness` (the roughest surface that reflects, 0..1, default 0.5; reflections fade out toward it) and `steps` (1..128, default 48) the engine's. Objects with `aoEnabled` false take no part (they neither reflect nor are reflected). It needs half-float color: off otherwise, noted in Options, and over the effect budget it goes after `ssgi`.
+  Since API\_MINOR 40 (`SCREEN_EFFECTS_MINOR`; undefined before): screen-space reflections, with three.js `SSRPass`'s settings, or null (the default). Each window frame traces, at half the scene's size, the view ray mirrored about each surface (its geometry normal, metalness and roughness factors, not its maps) through a min/max depth pyramid, takes the last frame's light where it hits (found through the motion vectors, which the effect turns on), accumulates it over frames and lays it over the scene before the post program, the temporal resolve and bloom. Misses (off screen, behind something, too far) keep the scene's own environment reflection. `opacity` (0..1, default 0.5), `maxDistance` (view units, default 180), `thickness` (how deep a surface is taken to be, view units, default 0.018), `distanceAttenuation` ((1 − distance / maxDistance)², default true) and `fresnel` ((1 + cos) / 2 of the incident and reflected rays, default true) are three.js's; `maxRoughness` (the roughest surface that reflects, 0..1, default 0.5; reflections fade out toward it) and `steps` (1..128, default 48) the engine's. Objects with `noAO` true take no part (they neither reflect nor are reflected). It needs half-float color: off otherwise, noted in Options, and over the effect budget it goes after `ssgi`.
 
 - `ssgi: SSGISettings | null;`
 
@@ -8464,6 +10395,42 @@ Render targets (since API\_MINOR 8). The scene draws itself every frame; `render
 - `lut?: LUTPass | null;`
 
   Since API\_MINOR 42 (`LOOK_ASSETS_MINOR`; an engine extension where three.js adds the pass to its `EffectComposer` after `OutputPass`): a `LUTPass` whose table colour-grades the shown image, or null (the default). It runs in the composite after the output (tone mapping, exposure, sRGB) and any display-space grade, before FXAA/SMAA and the finish, in window frames; it brings the post buffers along (8-bit ones too). The pass's `lut`, `intensity` and `enabled` are read each frame; its table is read again after `needsUpdate`.
+
+- `colorLut?: ColorLut | null;`
+
+  Since API\_MINOR 43 (`COLOR_LUT_MINOR`; undefined before; an engine extension, three.js r185 has none): a game's colour-grading table (`ColorLut`) that replaces `toneMapping`, or null (the default). In window frames' composite it takes the scene's linear HDR light after the linear-space grade (vignette, flash), automatic exposure and bloom, where tone mapping would run, and looks it up: the result is linear light, which the output encoding follows (sRGB, or linear with `LinearSRGBColorSpace`), then any display-space grade, `lut` (LUTPass), FXAA/SMAA, the game's post passes after the output, sharpening and grain. Game post passes before the output see the light before it. While it is set `toneMapping` is not applied. At API\_MINOR 43 `toneMappingExposure` is not applied either (bake exposure into the table); since API\_MINOR 44 (`LUT_EXPOSURE_MINOR`, as three.js r185's tone mapping multiplies it before a LUTPass after `OutputPass`) the light is multiplied by `toneMappingExposure` before the lookup unless `toneMapping` is `NoToneMapping` (r185 applies no exposure without tone mapping), so a fade needs no new table. It brings the post buffers along; a device without half-float color leaves it out and tone maps as `toneMapping` says (with a note). Its fields are read each frame.
+
+- `bokeh?: BokehSettings | null;`
+
+  Since API\_MINOR 44 (`LENS_EFFECTS_MINOR`; undefined before; an engine extension with three.js r185 `BokehPass`'s settings): the depth of field (`BokehSettings`), or null (the default). Disc bokeh over the linear light before the output, in window frames: after the temporal resolve, the underwater light and the game's post passes before the output, before automatic exposure, bloom and the composite. It brings the post buffers and the scene-depth prepass along (opaque surfaces' depth: transparent ones, water among them, take the depth behind them); a device without half-float color leaves it out (with a note). Its fields are read each frame.
+
+- `lens?: LensSettings | null;`
+
+  Since API\_MINOR 44 (`LENS_EFFECTS_MINOR`; undefined before; an engine extension): the lens after the output (`LensSettings`: barrel distortion and chromatic aberration), or null (the default). It runs on the shown image after any anti-aliasing and the game's post passes after the output, before `sharpen` and `film`.
+
+- `sensorNoise?: SensorNoiseSettings | number | null;`
+
+  Since API\_MINOR 44 (`LENS_EFFECTS_MINOR`; undefined before; an engine extension): sensor noise over the shown image, as `film`'s grain is applied (after the output, in the lens's step): a number (the intensity) or `SensorNoiseSettings`, or null (the default).
+
+- `underwater?: UnderwaterSettings | null;`
+
+  Since API\_MINOR 44 (`UNDERWATER_MINOR`; undefined before; an engine extension): the scene seen from under a water surface (`UnderwaterSettings`), or null (the default). Each frame, where a view ray starts under the surface (at the near plane), the light behind it is dimmed per channel along its way under water (red first) up to where it leaves the water through the surface, meets an opaque surface or reaches `reach` (then all the way on), and the light the water scatters toward the eye is added: the sun's (light shafts, focused into caustics by the surface's waves), the sky's, and motes. A ray that starts above the surface is left to the water's own shading (starhermit:water draws its surfaces' underside through Snell's window). Linear light, at the scene's size before temporal anti-aliasing (which settles the march's jitter). It brings the post buffers and the scene-depth prepass along; a device without half-float color leaves it out (with a note). With `water` (or a level without a heightfield) the camera well above the surface sends nothing: off costs nothing. Its fields are read each frame.
+
+- `lodBudget?: LodBudget | null;`
+
+  Since API\_MINOR 45 (`LOD_BUDGET_MINOR`; undefined before; an engine extension): the `LodBudget` choosing its members' levels each frame for `renderer.camera`, or null (the default: every LOD and InstancedMesh by its distances). Anything else is a TypeError; replacing it gives the old budget's members back their own levels.
+
+- `motionBlur?: MotionBlurSettings | null;`
+
+  Since API\_MINOR 46 (`MOTION_BLUR_MINOR`; undefined before; an engine extension): per-object, velocity-based motion blur (`MotionBlurSettings`), or null (the default). Its fields are read each frame.
+
+- `subsurface?: SubsurfaceSettings | null;`
+
+  Since API\_MINOR 48 (`SUBSURFACE_MINOR`; undefined before; an engine extension): subsurface scattering's screen-space pass (`SubsurfaceSettings`), or null (the default: the graphics level's choice). The pass draws the subsurface materials in view again after the scene-depth prepass (their diffuse light alone, and their base colour's share after the scattering), then gathers each pixel's light over a disc of its profile's importance samples, weighed by the profile at their world distance (depth included), into the scene before ambient occlusion, bloom, temporal anti-aliasing and the upscalers (motion vectors are unchanged). It runs in window frames with half-float post buffers on Vulkan, Direct3D 12, Metal and the browser's WebGPU (OpenGL ES takes the pre-integrated profile), on the ray-traced tier too (its draws reading the traced shadows, transmission's thickness from rays through the mesh), and within the effect budget and the game's image budget (else left out with a note). Its fields are read each frame. Since API\_MINOR 51 (`SUBSURFACE_WATER_COVER_MINOR`) the pixels a water surface covers (a `WaterMaterial`, a `distortion` ShaderMaterial, blended or writing no depth) are left out of the gather, as screen-space reflections leave them out: the water's own shading shows what is under it.
+
+- `readonly motionBlurActive?: boolean;`
+
+  Since API\_MINOR 47 (`MOTION_BLUR_ACTIVE_MINOR`; undefined before): whether `motionBlur` draws: it is set with an intensity above 0, the player lets games blur motion (`engine.preferences().motionBlur`: Options › Graphics › Motion blur on, Reduce motion off, and no check's `--no-motion-blur`) and the device renders half-float color. Read it each frame (it changes when the player's choices do, a `preferences` event) to make up for a blur the player turned off.
 
 - `specularAntialiasing: boolean | { variance?: number; limit?: number };`
 
@@ -8489,6 +10456,10 @@ Render targets (since API\_MINOR 8). The scene draws itself every frame; `render
       textureIndex?: number,
     ): Promise<Uint8Array | Uint16Array | Float32Array>;
   ```
+
+- `compileAsync?(scene: Object3D, camera: Camera, target?: RenderTarget | Object3D | null): Promise<Object3D>;`
+
+  Since API\_MINOR 46 (`COMPILE_ASYNC_MINOR`; undefined before): three.js r185's `compileAsync`, for render-target passes. The graph under `scene` is synced as `render` syncs it, and the pipelines a pass of it through `camera` into `target` (a RenderTarget; else the renderer's current render target, a third argument that is an Object3D being three.js's target scene) would draw with are made, for every object in it whether the camera sees it or not, cleared or not as `autoClear` says; nothing is drawn. The promise resolves with `scene` once they are made: Vulkan makes them on a background thread and WebGPU with `createRenderPipelineAsync` (frames keep coming meanwhile, and the first `render` into the target then makes none); Direct3D 12, Metal and OpenGL ES make them as the pass draws, as before, and it resolves within two frames, as it does without a GPU. It settles in a frame at least two after the call, so when depends on how long the GPU's driver takes, not on the frames alone. Without a render target (the window's passes, made by the frames as before) it resolves at once. A TypeError for an object that is not an Object3D or a camera that is not a Camera; a RangeError past 16 compiles waiting at once.
 
 ### renderer
 

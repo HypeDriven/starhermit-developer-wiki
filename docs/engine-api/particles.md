@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:particles`
 
-Engine **1.42.0** (host API 1.42), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.52.0** (host API 1.52), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:particles";
@@ -111,25 +111,127 @@ export interface GPUParticleEmitterOptions extends ParticleEmitterOptions { … 
 
   The glow's emissivity (default 1).
 
-### GPUParticleBurstOptions
+- `flipbook?: ParticleFlipbook | null;`
 
-*type*
+  Since API\_MINOR 43 (`PARTICLE_FLIPBOOK_MINOR`; ignored before): the material's `map` is a sprite sheet, each particle showing one frame at a time (null: the whole map). GPU tiers only (the CPU fallback draws the whole map).
+
+- `stretch?: number | ParticleStretch | null;`
+
+  Since API\_MINOR 43: velocity-stretched billboards (sparks, rain, tracers in flight): each quad turned along its velocity on the screen and lengthened by its speed. A number is `{ speed }`; null or 0 none. GPU tiers only.
+
+- `beam?: boolean | ParticleBeam | null;`
+
+  Since API\_MINOR 43: two-point particles (beams, laser and tracer streaks, lightning): each a quad facing the camera from where it spawned to its far end (true is `{}`; null none). GPU tiers only.
+
+- `distortion?: ParticleDistortion | null;`
+
+  Since API\_MINOR 43 (`DISTORTION_MINOR`): the particles draw the scene behind them bent rather than their colour (heat haze over fire, shock rings): as `DistortionMaterial`, the push from `map`'s red and green (or a round bulge across each quad) times `strength`, their colour a tint and their opacity ramp and material map's alpha the coverage; unlit, transparent, not depth writing, no blended flipbook frames. GPU tiers only (the CPU fallback draws them as sprites).
+
+### ParticleDistortion
+
+*interface*
+
+Since API\_MINOR 43: distorting particles' settings.
 
 ```ts
-export type GPUParticleBurstOptions = ParticleBurstOptions;
+export interface ParticleDistortion { … }
 ```
 
-A GPU emitter's burst options: ParticleEmitter's.
+- `strength?: number;`
+
+  −10 to 10 (default 0.05).
+
+- `map?: Texture | null;`
+
+### ParticleFlipbook
+
+*interface*
+
+Since API\_MINOR 43: a sprite sheet's frames, as Unity's texture sheet animation plays them.
+
+```ts
+export interface ParticleFlipbook { … }
+```
+
+- `tiles: readonly [number, number];`
+
+  Columns and rows (1 to 64 each); frames are numbered row by row from the image's top left.
+
+- `frames?: readonly [number, number];`
+
+  The first and last frame played (default every tile).
+
+- `startFrame?: number | "random";`
+
+  Each particle's first frame, counted from `frames[0]`, or "random" (default 0).
+
+- `fps?: number;`
+
+  Frames a second (0.001 to 1,000). Without it the frames play `cycles` times over each particle's life.
+
+- `cycles?: number;`
+
+  Times the frames play over a life (0 to 1,000; default 1).
+
+- `loop?: "loop" | "clamp";`
+
+  Past the last frame: "loop" (default) starts again, "clamp" holds the last.
+
+- `blend?: boolean;`
+
+  Cross-fades each frame into the next (default false): the sheet is sampled twice, sRGB-decoded as the map would be. Tiles are sampled with the map's filters, so a mipmapped sheet bleeds a little across tile edges far away (leave a margin in each tile).
+
+### ParticleStretch
+
+*interface*
+
+Since API\_MINOR 43: a stretched billboard's length in world units: the quad's height (`size` × `scale.y`) times `length` (default 1) plus the particle's speed times `speed` (default 0), at most `max` (default 1e6); its width is `size` × `scale.x`. Rotation and spin do not apply; the map's top points along the motion.
+
+```ts
+export interface ParticleStretch { … }
+```
+
+- `speed?: number;`
+- `length?: number;`
+- `max?: number;`
+
+### ParticleBeam
+
+*interface*
+
+Since API\_MINOR 43: a beam's far end is its burst's `to`, or for other spawns its spawn point plus its first velocity (velocity, speed, direction, spread) times one second; it is `size` × `scale.x` wide (the size ramp and twinkle apply over its life) and does not move (forces, colliders and depth collision are not applied). The map's u runs across it and its v from the start (the image's bottom) to the end once, or `uvPerUnit` times a world unit of its length for a repeating map (with `RepeatWrapping`).
+
+```ts
+export interface ParticleBeam { … }
+```
+
+- `uvPerUnit?: number;`
+
+### GPUParticleBurstOptions
+
+*interface*
+
+A GPU emitter's burst options: ParticleEmitter's, and since API\_MINOR 43 a beam's far end.
+
+```ts
+export interface GPUParticleBurstOptions extends ParticleBurstOptions { … }
+```
+
+- `to?: ParticleVector;`
+
+  A beam's far end in the emitter's space (see `beam`).
 
 ### GPUParticleEmitter
 
 *class*
 
-Since API\_MINOR 40: an emitter whose particles live on the GPU: their state in two float render targets (position and age, velocity and life), stepped once a frame by a fragment pass reading the last state and writing the next, before the scene's sync. New particles take the next slots of a ring; they draw as camera-facing quads (`lit`, `soft` as ParticleEmitter's), 64 an instance, as many instances as the ring's live span needs. It takes ParticleEmitter's options (rate, life, space, shape, extent, velocity, velocitySpread, speed, direction, spread, gravity, drag, size, color, colors, opacity, 1.38's twinkle, scale and scaleSpread (a quad's width and height: x and y) and burst options (`color`, `aged`), and 1.40's wind, curl, buoyancy, vortex, attract, floor, plane and heightfield colliders, sway, velocityMode, sizeSpread, lit, soft, phase, rotation, rotationSpread, spin and spinSpread: quads turn in the view as point sprites do, and `rotationAxis`, an instance's, is not used), `collision` and a glow (`temperature`). At most 16 colored bursts show their tint at once: past that the oldest's particles take the emitter's colors.
+Since API\_MINOR 40: an emitter whose particles live on the GPU: their state in two float render targets of two textures each (position and age, velocity and life; four of the game's render targets), stepped once a frame by a fragment pass reading the last state and writing the next, before the scene's sync. New particles take the next slots of a ring; they draw as camera-facing quads (`lit`, `soft` as ParticleEmitter's), 64 an instance, as many instances as the ring's live span needs. It takes ParticleEmitter's options (rate, life, space, shape, extent, velocity, velocitySpread, speed, direction, spread, gravity, drag, size, color, colors, opacity, 1.38's twinkle, scale and scaleSpread (a quad's width and height: x and y) and burst options (`color`, `aged`), and 1.40's wind, curl, buoyancy, vortex, attract, floor, plane and heightfield colliders, sway, velocityMode, sizeSpread, lit, soft, phase, rotation, rotationSpread, spin and spinSpread: quads turn in the view as point sprites do, and `rotationAxis`, an instance's, is not used), `collision` and a glow (`temperature`), and 1.43's `flipbook`, `stretch` and `beam`. At most 16 colored bursts show their tint at once: past that the oldest's particles take the emitter's colors.
 
 NOT DETERMINISTIC and NOT READABLE: the GPU's arithmetic and random numbers are its own, and nothing comes back to script (`count` is what the CPU spawned within the longest life). Gameplay must not depend on them; use ParticleEmitter for particles that matter.
 
 Where the device renders no float targets it is a ParticleEmitter child of `cpuCapacity` particles with the same settings (depth collision and the glow left out), and the game keeps working. One pass a frame each (a frame has 256), up to 64 for a prewarm. Its programs are checked on the game's thread as they are first used; the game's GPU emitters check at most one a frame between them, an emitter waiting for its own stepping and drawing nothing (its bursts kept).
+
+After a new graphics backend (`engine.stats().deviceResets`), since API\_MINOR 51 (`PARTICLE_RESET_MINOR`): the emitter keeps its passes' inputs over its longest life and runs them again into the cleared state from its next step (paused or not), so its particles are those an uninterrupted run has. The game's emitters run 128 kept passes a frame between them (a frame draws into targets at most 256 times), an emitter drawing nothing until it has caught up (its new passes kept meanwhile): a few frames for lives of seconds. It keeps at most 2,048: past that its oldest passes that spawned nothing run merged, up to 4 s a pass (exact for still particles, close for moving ones), and past that again the oldest are let go (their particles lost); depth collision runs against the scene's depth of the replay's frame. Before 51 every live particle is lost (see `deviceResets`).
 
 ```ts
 export class GPUParticleEmitter extends Object3D { … }
@@ -139,7 +241,10 @@ export class GPUParticleEmitter extends Object3D { … }
 - `readonly isGPUParticleEmitter: true;`
 - `readonly capacity: number;`
 - `material: PointsMaterial;`
+
 - `readonly tier: GPUParticleTier;`
+
+  Where its particles live. Since API\_MINOR 44 "cpu" too where its four render targets do not fit beside the game's and the engine modules' reservations (`Usage.renderTargets`), or after it let them go for an engine module made later (one console warning a game).
 
 - `readonly heldCapacity: number;`
 
@@ -164,7 +269,7 @@ export class GPUParticleEmitter extends Object3D { … }
 
 - `burst(count?: number, at?: ParticleVector, options?: GPUParticleBurstOptions): this;`
 
-  At the next step, at `at` in its space; a RangeError past 256 waiting (8 go out a step).
+  At the next step, at `at` in its space; a RangeError past 256 waiting (8 go out a step). Since API\_MINOR 43 (`PARTICLE_FLIPBOOK_MINOR`) up to its `capacity` bursts wait (a RangeError past it) and a step sends up to 65,536 of them, the rest the next: each burst is three texels of a float texture the simulation searches (about 50 bytes uploaded and a few script instructions a burst, a binary search for each new particle), so a battle's thousands of shots a second cost what they spawn; particles past the capacity in a step are left out, as before.
 
 - `prewarm(seconds: number): this;`
 

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Generates the engine API reference (docs/engine-api/) from the latest engine release's
-// starhermit.d.ts (engine/<version>/starhermit.d.ts, the newest unrevoked entry in
-// engine/versions.json). The reference always describes the latest release only.
+// starhermit.d.ts: the snapshot of the engine store's newest unrevoked release in
+// scripts/engine-store/ (latest-release.json and its starhermit.d.ts), which
+// scripts/engine-release.mjs refreshes from engine.starhermit.com after every release.
+// The reference always describes the latest release only.
 //   node scripts/build-engine-reference.mjs          write the pages
 //   node scripts/build-engine-reference.mjs --check  exit 1 if the pages are stale
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, existsSync } from 'node:fs';
@@ -12,11 +14,11 @@ import ts from 'typescript';
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = resolve(root, 'docs/engine-api');
 
+const store = resolve(root, 'scripts/engine-store');
 export function latestRelease() {
-  const { versions } = JSON.parse(readFileSync(resolve(root, 'engine/versions.json'), 'utf8'));
-  const key = v => v.split('.').map(Number).reduce((a, n) => a * 10000 + n, 0);
-  const live = versions.filter(v => !v.revoked).sort((a, b) => key(b.version) - key(a.version));
-  return { version: live[0].version, api: live[0].api };
+  // The wiki's own engine/versions.json stopped at 1.42.0: releases go to the store only.
+  const release = JSON.parse(readFileSync(resolve(store, 'latest-release.json'), 'utf8'));
+  return { version: release.version, api: release.api, date: release.date, manifest: release.web.manifest };
 }
 
 // ---- comment text to Markdown -------------------------------------------------------------
@@ -44,6 +46,16 @@ function prose(lines) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!line.trim()) { flush(); inList = false; out.push(''); continue; }
+    // A Markdown fence in the comment ("```ts" ... "```") is copied as it stands.
+    const fence = line.match(/^(`{3,})(\w*)\s*$/);
+    if (fence) {
+      flush(); inList = false;
+      if (out.length && out.at(-1) !== '') out.push('');
+      const code = [];
+      while (++i < lines.length && !lines[i].startsWith(fence[1])) code.push(lines[i]);
+      out.push(fence[1] + (fence[2] || 'text'), ...code, fence[1], '');
+      continue;
+    }
     if (/^- /.test(line)) { const wasList = inList; flush(); if (!wasList && out.length && out.at(-1) !== '') out.push(''); inList = true; para.push(line.slice(2)); continue; }
     if (inList && /^  \S/.test(line)) { para.push(line.trim()); continue; }
     if (/^  /.test(line)) {
@@ -191,7 +203,7 @@ function page(title, body) {
 }
 export function build() {
   const { version, api } = latestRelease();
-  const source = resolve(root, 'engine', version, 'starhermit.d.ts');
+  const source = resolve(store, 'starhermit.d.ts');
   const text = readFileSync(source, 'utf8');
   const sf = ts.createSourceFile('starhermit.d.ts', text, ts.ScriptTarget.Latest, true);
   const stamp = `Engine **${version}** (host API ${api.major}.${api.minor}), the latest release. Generated from the release's \`starhermit.d.ts\`; \`starhermit types\` writes the same file into your game.`;
