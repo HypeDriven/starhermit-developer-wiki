@@ -868,6 +868,36 @@ declare module "starhermit:engine" {
    * no light is added on average, and toward the sun nothing changes. */
   export const UNDERWATER_SHAFTS_MINOR: number;
 
+  // -- Host API 1.53's minors (since API_MINOR 53) ----------------------------
+  // Each is 53 for games declaring engine.minor=53 or later and undefined
+  // for older games: feature-detect through a namespace import.
+  /** Hosted AI crew runners: crew members whose agents the platform runs
+   * take seats beside the local runner's, relayed over the player's own
+   * room socket. `starhermit:platform`'s `agents` is unchanged: hosted
+   * seats come in `seats()`, `onSeats`, `crewJoined` and `onAction` as
+   * local ones do, under the same checks and paces. */
+  export const HOSTED_AGENTS_MINOR: number;
+  /** On the browser's WebGL 2 fallback a baked skin's joints
+   * (InstancedSkinnedMesh) are blended once a pass, as OpenGL ES blends
+   * them, not in every vertex stage; older games' WebGL 2 frames blend per
+   * vertex as before. */
+  export const WEBGL2_SKIN_BLEND_MINOR: number;
+  /** On the browser's WebGL 2 fallback the scene depth is made from a
+   * single-sampled window pass's own depth where its order allows it (as
+   * WebGPU and native backends make it since 1.49), not by a second pass
+   * over the opaque batches; older games' WebGL 2 frames keep that pass. */
+  export const WEBGL2_SCENE_DEPTH_MAIN_MINOR: number;
+  /** On the browser's WebGL 2 fallback a frame whose window pass needs a
+   * program the driver is still compiling is held (the canvas keeps the
+   * last whole frame, as WebGPU's does; a capture of a held frame reads
+   * that one) while the page and the game go on; older games' pages wait
+   * for the compile as before. */
+  export const WEBGL2_FRAME_HOLD_MINOR: number;
+  /** In a browser whose WebGPU adapter is a software one (SwiftShader,
+   * llvmpipe, a fallback adapter) the game draws with WebGL 2 where WebGL
+   * 2's renderer is the GPU; older games keep WebGPU there. */
+  export const WEBGL2_OVER_SOFTWARE_WEBGPU_MINOR: number;
+
   /** Removes the callback or listener it was returned for. */
   export type Unsubscribe = () => void;
   /** An sRGB color; see the conventions at the top of this file. */

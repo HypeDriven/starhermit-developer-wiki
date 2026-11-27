@@ -4,7 +4,7 @@ The **StarHermit engine is the recommended way to create games for publishing on
 You build the game once, and the same package is automatically playable in a browser and natively
 across all platforms supported by the engine. Native play offers additional performance and features.
 Availability depends on the engine release: 1.1.0 and later have a Windows runtime and a web runtime
-(1.0.0 was Windows-only), 1.8.1 and later also a Linux runtime for developers, and 1.26.2 and later macOS runtimes (Intel and Apple Silicon). This page describes engine **1.52.0**; the [engine API](../api/engine.md) lists every
+(1.0.0 was Windows-only), 1.8.1 and later also a Linux runtime for developers, and 1.26.2 and later macOS runtimes (Intel and Apple Silicon). This page describes engine **1.53.0**; the [engine API](../api/engine.md) lists every
 release.
 
 The StarHermit engine runs **script games**: a whole game written in TypeScript (or JavaScript) and
@@ -37,7 +37,7 @@ root, your TypeScript modules and your assets. Three `engine.*` lines in the man
 ```ini
 engine.api=1
 engine.entry=src/main.ts
-engine.version=1.52.0
+engine.version=1.53.0
 ```
 
 `engine.api` is the major version of the host API your code is written against, `engine.entry` the
@@ -66,7 +66,7 @@ published hashes and starts it.
 **Developers** download a release's runtime through the platform API. Ask it for the release:
 
 ```sh
-curl -s https://api.starhermit.com/api/v1/engine/releases/1.52.0
+curl -s https://api.starhermit.com/api/v1/engine/releases/1.53.0
 ```
 
 Its `native` object has one entry per platform with the URL of that platform's `native.json` and
@@ -75,28 +75,28 @@ SHA-256, and the archive sits beside it: replace `native.json` at the end of the
 archive's name. [Download the engine](../api/engine.md#download-the-engine) has a script that
 fetches and checks both. The platforms:
 
-- `windows-x86_64`: `starhermit-1.52.0-windows-x86_64.zip` (Windows 10 or 11, 64-bit).
-- `linux-x86_64`: `starhermit-1.52.0-linux-x86_64.tar.gz` (64-bit Linux with glibc 2.35 or newer:
+- `windows-x86_64`: `starhermit-1.53.0-windows-x86_64.zip` (Windows 10 or 11, 64-bit).
+- `linux-x86_64`: `starhermit-1.53.0-linux-x86_64.tar.gz` (64-bit Linux with glibc 2.35 or newer:
   Ubuntu 22.04, Debian 12 or later).
-- `macos-x86_64` and `macos-aarch64`: `starhermit-1.52.0-macos-x86_64.tar.gz` (macOS 11 or later on
-  Intel) and `starhermit-1.52.0-macos-aarch64.tar.gz` (macOS 11 or later on Apple Silicon). These are signed ad hoc and not notarized: the StarHermit
+- `macos-x86_64` and `macos-aarch64`: `starhermit-1.53.0-macos-x86_64.tar.gz` (macOS 11 or later on
+  Intel) and `starhermit-1.53.0-macos-aarch64.tar.gz` (macOS 11 or later on Apple Silicon). These are signed ad hoc and not notarized: the StarHermit
   macOS client installs them without trouble, but a tarball downloaded in a browser is quarantined and
   Gatekeeper blocks it (clear it with `xattr -dr com.apple.quarantine` on the unpacked folder). They have
   not yet been tested on real Apple hardware or with a GPU.
-- `android-aarch64` and `android-x86_64` (a preview from 1.42.0): `starhermit-1.52.0-android-aarch64.zip`
-  and `starhermit-1.52.0-android-x86_64.zip`, the runtime library `libstarhermit_runtime.so` for
+- `android-aarch64` and `android-x86_64` (a preview from 1.42.0): `starhermit-1.53.0-android-aarch64.zip`
+  and `starhermit-1.53.0-android-x86_64.zip`, the runtime library `libstarhermit_runtime.so` for
   Android 9 (API 28) or later on arm64-v8a devices and x86_64 emulators, for the StarHermit Android
   client to bundle or load. It has run only on the Android emulator, never on a real device, so treat
   it as a preview.
 
-The archive holds one folder, `starhermit-1.52.0-windows-x86_64`, with `starhermit.exe`, the
+The archive holds one folder, `starhermit-1.53.0-windows-x86_64`, with `starhermit.exe`, the
 `release.json` that tells the runtime which release it is, the release's `web-manifest.json`,
 `LICENSE-engine` and the third-party notices. It is the same engine the client installs, and it
 packages games for the release's web runtime without a network. Its size and SHA-256 are listed under
 `downloads` in the release's `native.json`; to check your copy in PowerShell, compare that `sha256` with:
 
 ```powershell
-Get-FileHash .\starhermit-1.52.0-windows-x86_64.zip -Algorithm SHA256
+Get-FileHash .\starhermit-1.53.0-windows-x86_64.zip -Algorithm SHA256
 ```
 
 Unpack the archive and open a terminal in the unpacked folder:
@@ -106,15 +106,15 @@ Unpack the archive and open a terminal in the unpacked folder:
 ```
 
 ```text
-starhermit 1.52.0 (host API 1.52, launcher 1; engine release 1.52.0)
+starhermit 1.53.0 (host API 1.53, launcher 1; engine release 1.53.0)
 ```
 
 On Linux, unpack the archive and run `starhermit` from its folder (its `native.json` lists the
 archive's SHA-256 the same way; check it with `sha256sum`):
 
 ```sh
-tar -xzf starhermit-1.52.0-linux-x86_64.tar.gz
-./starhermit-1.52.0-linux-x86_64/starhermit --version
+tar -xzf starhermit-1.53.0-linux-x86_64.tar.gz
+./starhermit-1.53.0-linux-x86_64/starhermit --version
 ```
 
 `--version`, `new`, `types`, `check` and `package` need nothing more. To play a game in a window the
@@ -132,7 +132,7 @@ starhermit new star-catcher --title "Star Catcher"
 ```
 
 ```text
-Created Star Catcher in star-catcher: a script game pinned to engine 1.52.0
+Created Star Catcher in star-catcher: a script game pinned to engine 1.53.0
 Play it: starhermit star-catcher
 Check it: starhermit check star-catcher
 For a native upload (the StarHermit Windows client plays it): starhermit package --native star-catcher
@@ -143,7 +143,7 @@ The new folder holds a playable starting point — a cube that hops when you pre
 
 ```text
 star-catcher/
-  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.52.0)
+  starhermit.txt             the manifest, pinned to the runtime's own release (engine.version=1.53.0)
   tsconfig.json              TypeScript settings for checking the game
   src/main.ts                the entry module
   .starhermit/starhermit.d.ts  the host API's declarations, for your editor and the type checker
@@ -190,7 +190,7 @@ description=Catch the falling stars before the time runs out.
 launch=index.html
 engine.api=1
 engine.entry=src/main.ts
-engine.version=1.52.0
+engine.version=1.53.0
 engine.minor=15
 engine.capabilities=platform,storage
 control.left=KeyA+ArrowLeft | Move left
@@ -624,8 +624,8 @@ starhermit package --web star-catcher --out upload
 ```text
 Web package: upload (5 files, 8620 bytes to upload; the platform takes at most 50 MiB)
 Left out (not part of the package): tsconfig.json (default rule tsconfig.json)
-Engine 1.52.0 from https://engine.starhermit.com/engine (manifest sha384-4nyyQsYOjuMEUmsIPns3jqD3I04RqxyOmI4NVXGNgkMH6nYa9vPGfigFM2WwKbFd)
-Not checked against versions.json (read offline): https://engine.starhermit.com/engine/versions.json says whether 1.52.0 is still current
+Engine 1.53.0 from https://engine.starhermit.com/engine (manifest sha384-Zh34bojuN5+ksym5E0b62w8JrUFU25SoqEbRr1dltqMtOde5tsBD/tnp4yEZ17sg)
+Not checked against versions.json (read offline): https://engine.starhermit.com/engine/versions.json says whether 1.53.0 is still current
 ```
 
 - `index.html`, the **loader page** `launch=index.html` names: markup only, no script of its own. It
