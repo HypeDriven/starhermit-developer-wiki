@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:engine`
 
-Engine **1.53.0** (host API 1.53), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.54.0** (host API 1.54), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:engine";
@@ -1278,6 +1278,50 @@ export const WEBGL2_OVER_SOFTWARE_WEBGPU_MINOR: number;
 ```
 
 In a browser whose WebGPU adapter is a software one (SwiftShader, llvmpipe, a fallback adapter) the game draws with WebGL 2 where WebGL 2's renderer is the GPU; older games keep WebGPU there.
+
+## Host API 1.54's minors (since API\_MINOR 54)
+
+Each is 54 for games declaring engine.minor=54 or later and undefined for older games: feature-detect through a namespace import.
+
+### CREW\_MAX\_CAP\_MINOR
+
+*const*
+
+```ts
+export const CREW_MAX_CAP_MINOR: number;
+```
+
+The player's AI crew (`starhermit:platform`'s `agents`) is held to the game's engine.agents.max: offers past it are refused rather than left waiting, and the player's crew voice talkers follow the same max; older games' crew is refused only past 3.
+
+### VOICE\_REST\_ROSTER\_MINOR
+
+*const*
+
+```ts
+export const VOICE_REST_ROSTER_MINOR: number;
+```
+
+`voice.status`'s participants listed while the room's connection opens carry their own mute and AI crew marks (`ai`, `ownerUserId`), and AI crew members are not listed without crew voice; older games' are listed by name only until the room's roster comes.
+
+### RESTART\_CREW\_RESET\_MINOR
+
+*const*
+
+```ts
+export const RESTART_CREW_RESET_MINOR: number;
+```
+
+A game's restart unseats the player's AI crew and drops the crew actions and voice statuses the old game had not read; older games' crew stays seated and those events reach the restarted game.
+
+### WEBGL2\_RESTORE\_SCENE\_DEPTH\_MINOR
+
+*const*
+
+```ts
+export const WEBGL2_RESTORE_SCENE_DEPTH_MINOR: number;
+```
+
+The WebGL 2 fallback links the scene depth's program again on a restored context; older games' restored contexts keep the lost one's.
 
 ### Unsubscribe
 

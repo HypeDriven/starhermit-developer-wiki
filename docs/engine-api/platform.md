@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:platform`
 
-Engine **1.53.0** (host API 1.53), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.54.0** (host API 1.54), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:platform";
@@ -813,13 +813,18 @@ Since API\_MINOR 52: as `starhermit:engine`'s.
 
 ```ts
 export const agents: {
-    /** `engine.agents.max` (1 to 3); 0 without `engine.agents=allies`. */
+    /** `engine.agents.max` (1 to 3); 0 without `engine.agents=allies`.
+     * From host API 1.54 (`CREW_MAX_CAP_MINOR`), caps both runner offers
+     * (refused past it rather than waiting) and the player's crew voice
+     * talkers. */
     readonly maxPerPlayer: number;
     /** Takes the player's crew into a room the player sits in: the
      * platform seats each on the player's team where it has room (running
      * or not), and `seats()` and the room socket's `crewJoined` follow.
      * A crew member offered later joins too, until `dismissCrew` or the
-     * player leaves the room. Another room than the last (or one after
+     * player leaves the room. From host API 1.54 (`CREW_MAX_CAP_MINOR`),
+     * seats (local and hosted together) and runner offers are held to
+     * `maxPerPlayer`. Another room than the last (or one after
      * `dismissCrew`) at most once a second (burst 2): past it the call
      * fails; the same room again is free. */
     seatCrew(roomId: string): Promise<void>;

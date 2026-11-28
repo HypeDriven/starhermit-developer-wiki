@@ -7,7 +7,7 @@ english_only: true
 
 # `starhermit:nav`
 
-Engine **1.53.0** (host API 1.53), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
+Engine **1.54.0** (host API 1.54), the latest release. Generated from the release's `starhermit.d.ts`; `starhermit types` writes the same file into your game. [All modules](index.md).
 
 ```ts
 import { … } from "starhermit:nav";

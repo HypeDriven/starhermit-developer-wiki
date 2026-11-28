@@ -898,6 +898,28 @@ declare module "starhermit:engine" {
    * 2's renderer is the GPU; older games keep WebGPU there. */
   export const WEBGL2_OVER_SOFTWARE_WEBGPU_MINOR: number;
 
+  // -- Host API 1.54's minors (since API_MINOR 54) ----------------------------
+  // Each is 54 for games declaring engine.minor=54 or later and undefined
+  // for older games: feature-detect through a namespace import.
+  /** The player's AI crew (`starhermit:platform`'s `agents`) is held to the
+   * game's engine.agents.max: offers past it are refused rather than left
+   * waiting, and the player's crew voice talkers follow the same max;
+   * older games' crew is refused only past 3. */
+  export const CREW_MAX_CAP_MINOR: number;
+  /** `voice.status`'s participants listed while the room's connection
+   * opens carry their own mute and AI crew marks (`ai`, `ownerUserId`),
+   * and AI crew members are not listed without crew voice; older games'
+   * are listed by name only until the room's roster comes. */
+  export const VOICE_REST_ROSTER_MINOR: number;
+  /** A game's restart unseats the player's AI crew and drops the crew
+   * actions and voice statuses the old game had not read; older games'
+   * crew stays seated and those events reach the restarted game. */
+  export const RESTART_CREW_RESET_MINOR: number;
+  /** The WebGL 2 fallback links the scene depth's program again on a
+   * restored context; older games' restored contexts keep the lost
+   * one's. */
+  export const WEBGL2_RESTORE_SCENE_DEPTH_MINOR: number;
+
   /** Removes the callback or listener it was returned for. */
   export type Unsubscribe = () => void;
   /** An sRGB color; see the conventions at the top of this file. */
@@ -18297,13 +18319,18 @@ declare module "starhermit:platform" {
    * Without the manifest's key every method but `seats` throws (or
    * rejects) `NotAllowedError`. */
   export const agents: {
-    /** `engine.agents.max` (1 to 3); 0 without `engine.agents=allies`. */
+    /** `engine.agents.max` (1 to 3); 0 without `engine.agents=allies`.
+     * From host API 1.54 (`CREW_MAX_CAP_MINOR`), caps both runner offers
+     * (refused past it rather than waiting) and the player's crew voice
+     * talkers. */
     readonly maxPerPlayer: number;
     /** Takes the player's crew into a room the player sits in: the
      * platform seats each on the player's team where it has room (running
      * or not), and `seats()` and the room socket's `crewJoined` follow.
      * A crew member offered later joins too, until `dismissCrew` or the
-     * player leaves the room. Another room than the last (or one after
+     * player leaves the room. From host API 1.54 (`CREW_MAX_CAP_MINOR`),
+     * seats (local and hosted together) and runner offers are held to
+     * `maxPerPlayer`. Another room than the last (or one after
      * `dismissCrew`) at most once a second (burst 2): past it the call
      * fails; the same room again is free. */
     seatCrew(roomId: string): Promise<void>;
